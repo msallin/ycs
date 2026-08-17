@@ -8,7 +8,7 @@ using System.Diagnostics;
 
 namespace Ycs
 {
-    public abstract class AbstractStruct
+    public abstract partial class AbstractStruct
     {
         protected AbstractStruct(ID id, int length)
         {

@@ -5,6 +5,7 @@
 // ------------------------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
 using System.IO;
 
 namespace Ycs
@@ -20,8 +21,14 @@ namespace Ycs
     /// <c>Insert(0, 'x')('a|bc') = 'xa|bc'</c> Where | is tehre relative position.
     /// <br/>
     /// Only one property must be defined.
+    /// <br/>
+    /// This type mirrors Yjs 13.6.32's <c>RelativePosition</c> (src/utils/RelativePosition.js). It is
+    /// public - rather than the <c>internal</c> it started as - because it is the basis for the
+    /// shared-cursor / awareness use case (y-protocols' awareness carries an encoded
+    /// <see cref="RelativePosition"/> per peer), which is unreachable from outside this assembly
+    /// otherwise.
     /// </summary>
-    internal class RelativePosition : IEquatable<RelativePosition>
+    public partial class RelativePosition : IEquatable<RelativePosition>
     {
         public readonly ID? Item;
         public readonly ID? TypeId;
@@ -126,6 +133,74 @@ namespace Ycs
             return new RelativePosition(type, type._item?.Id, assoc);
         }
 
+        /// <summary>
+        /// Yjs parity: <c>createRelativePositionFromTypeIndex(type, index, assoc)</c>. Alias for
+        /// <see cref="FromTypeIndex"/>, kept under the Yjs name for discoverability.
+        /// </summary>
+        public static RelativePosition CreateRelativePositionFromTypeIndex(AbstractType type, int index, int assoc = 0)
+            => FromTypeIndex(type, index, assoc);
+
+        /// <summary>
+        /// Yjs parity: <c>compareRelativePositions(a, b)</c>.
+        /// </summary>
+        public static bool CompareRelativePositions(RelativePosition a, RelativePosition b)
+        {
+            return ReferenceEquals(a, b) || (a != null && b != null && a.Equals(b));
+        }
+
+        /// <summary>
+        /// Yjs parity: <c>relativePositionToJSON(rpos)</c>. Mirrors the plain-object shape Yjs produces:
+        /// only the properties that are actually set are present in the result.
+        /// </summary>
+        public IDictionary<string, object> RelativePositionToJSON()
+        {
+            var json = new Dictionary<string, object>();
+
+            if (TypeId != null)
+            {
+                json["type"] = IdToJson(TypeId.Value);
+            }
+
+            if (TName != null)
+            {
+                json["tname"] = TName;
+            }
+
+            if (Item != null)
+            {
+                json["item"] = IdToJson(Item.Value);
+            }
+
+            json["assoc"] = Assoc;
+
+            return json;
+        }
+
+        /// <summary>
+        /// Yjs parity: <c>createRelativePositionFromJSON(json)</c>.
+        /// </summary>
+        public static RelativePosition CreateRelativePositionFromJSON(IDictionary<string, object> json)
+        {
+            ID? typeId = json.TryGetValue("type", out var type) && type != null ? JsonToId(type) : (ID?)null;
+            string tname = json.TryGetValue("tname", out var tn) ? tn as string : null;
+            ID? item = json.TryGetValue("item", out var it) && it != null ? JsonToId(it) : (ID?)null;
+            int assoc = json.TryGetValue("assoc", out var a) && a != null ? Convert.ToInt32(a) : 0;
+
+            return new RelativePosition(typeId, tname, item, assoc);
+        }
+
+        private static IDictionary<string, object> IdToJson(ID id) => new Dictionary<string, object>
+        {
+            ["client"] = id.Client,
+            ["clock"] = id.Clock
+        };
+
+        private static ID JsonToId(object json)
+        {
+            var dict = (IDictionary<string, object>)json;
+            return new ID(Convert.ToInt64(dict["client"]), Convert.ToInt64(dict["clock"]));
+        }
+
         public void Write(Stream writer)
         {
             if (Item != null)
@@ -198,5 +273,16 @@ namespace Ycs
                 return stream.ToArray();
             }
         }
+
+        /// <summary>
+        /// Yjs parity: <c>encodeRelativePosition(rpos)</c>. Alias for <see cref="ToArray"/> - this is the
+        /// binary form used by y-protocols' awareness.
+        /// </summary>
+        public static byte[] EncodeRelativePosition(RelativePosition rpos) => rpos.ToArray();
+
+        /// <summary>
+        /// Yjs parity: <c>decodeRelativePosition(uint8Array)</c>. Alias for <see cref="Read(byte[])"/>.
+        /// </summary>
+        public static RelativePosition DecodeRelativePosition(byte[] encoded) => Read(encoded);
     }
 }

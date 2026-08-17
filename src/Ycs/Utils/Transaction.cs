@@ -17,7 +17,7 @@ namespace Ycs
     /// the number of messages sent and the number of observer calls.
     /// If possible the user of this library should bundle as many changes as possible.
     /// </summary>
-    public class Transaction
+    public partial class Transaction
     {
         // TODO: [alekseyk] To private?
         internal readonly IList<AbstractStruct> _mergeStructs;

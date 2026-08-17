@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -9,7 +9,13 @@ using System.Diagnostics;
 
 namespace Ycs
 {
-    internal class AbsolutePosition
+    /// <summary>
+    /// Mirrors Yjs 13.6.32's <c>AbsolutePosition</c> (src/utils/RelativePosition.js). Public - rather
+    /// than the <c>internal</c> it started as - for the same reason <see cref="RelativePosition"/> is:
+    /// it is what <see cref="TryCreateFromRelativePosition"/> hands back to callers outside this
+    /// assembly.
+    /// </summary>
+    public class AbsolutePosition
     {
         public readonly AbstractType Type;
         public readonly int Index;
@@ -22,7 +28,31 @@ namespace Ycs
             Assoc = assoc;
         }
 
-        public static AbsolutePosition TryCreateFromRelativePosition(RelativePosition rpos, YDoc doc)
+        /// <summary>
+        /// Yjs parity: <c>createAbsolutePosition(type, index, assoc)</c>.
+        /// </summary>
+        public static AbsolutePosition CreateAbsolutePosition(AbstractType type, int index, int assoc = 0)
+            => new AbsolutePosition(type, index, assoc);
+
+        /// <summary>
+        /// Yjs parity: <c>createAbsolutePositionFromRelativePosition(rpos, doc, followUndoneDeletions)</c>.
+        /// Alias for <see cref="TryCreateFromRelativePosition"/>, kept under the Yjs name for
+        /// discoverability.
+        /// </summary>
+        public static AbsolutePosition CreateAbsolutePositionFromRelativePosition(RelativePosition rpos, YDoc doc, bool followUndoneDeletions = true)
+            => TryCreateFromRelativePosition(rpos, doc, followUndoneDeletions);
+
+        /// <summary>
+        /// Transform a relative position into an absolute position.
+        /// <br/>
+        /// If you want to share the relative position with other users, set <paramref name="followUndoneDeletions"/>
+        /// to <c>false</c> to get consistent results across all clients. When calculating the absolute
+        /// position, we try by default to follow "undone deletions" - this yields better results for the
+        /// user who performed the undo, but only for that user, since other users don't know which
+        /// operations recreated a deleted range of content. See https://github.com/yjs/yjs/issues/638
+        /// for more.
+        /// </summary>
+        public static AbsolutePosition TryCreateFromRelativePosition(RelativePosition rpos, YDoc doc, bool followUndoneDeletions = true)
         {
             var store = doc.Store;
             var rightId = rpos.Item;
@@ -39,7 +69,7 @@ namespace Ycs
                     return null;
                 }
 
-                var res = store.FollowRedone(rightId.Value);
+                var res = followUndoneDeletions ? store.FollowRedone(rightId.Value) : GetItemWithOffset(store, rightId.Value);
                 var right = res.item as Item;
                 if (right == null)
                 {
@@ -79,7 +109,8 @@ namespace Ycs
                         return null;
                     }
 
-                    var item = store.FollowRedone(typeId.Value).item as Item;
+                    var res = followUndoneDeletions ? store.FollowRedone(typeId.Value) : GetItemWithOffset(store, typeId.Value);
+                    var item = res.item as Item;
                     if (item != null && item.Content is ContentType)
                     {
                         type = (item.Content as ContentType).Type;
@@ -99,6 +130,16 @@ namespace Ycs
             }
 
             return new AbsolutePosition(type, index, assoc);
+        }
+
+        /// <summary>
+        /// Yjs parity: <c>getItemWithOffset(store, id)</c> - the non-redone-following counterpart to
+        /// <see cref="StructStore.FollowRedone"/>, used when <c>followUndoneDeletions</c> is <c>false</c>.
+        /// </summary>
+        private static (AbstractStruct item, int diff) GetItemWithOffset(StructStore store, ID id)
+        {
+            var item = store.Find(id);
+            return (item, (int)(id.Clock - item.Id.Clock));
         }
     }
 }

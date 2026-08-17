@@ -13,6 +13,11 @@ Yjs ⇄ Ycs interop harness
 Two Yjs versions are installed side by side (`yjs13` → 13.6.32, `yjs14` → 14.0.0-16) because
 v14 is still beta; both are exercised.
 
-The same updates are pinned as base64 fixtures in `tests/Ycs.Tests/YjsInteropTests.cs`, so
+`run.sh` also auto-discovers every `js/check-*.mjs` scenario; today that is `check-xml` (the XML
+shared types), `check-updates` (merge/diff/state-vector/format conversion), `check-positions`
+(snapshots and relative positions) and `check-types` (events, deltas, undo/redo). Each drives its own
+small console app under `Ycs.*.Interop/` and exits non-zero on any mismatch.
+
+The same updates are pinned as base64 fixtures in `tests/Ycs.Tests/`, so
 `dotnet test` catches format drift without Node. Re-generate them from the JSON that `run.sh`
 leaves in `$TMPDIR` when bumping the tested Yjs version.

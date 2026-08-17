@@ -12,7 +12,7 @@ using System.Threading;
 
 namespace Ycs
 {
-    public abstract class YArrayBase : AbstractType, IEnumerable<object>
+    public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     {
         protected sealed class ArraySearchMarker
         {

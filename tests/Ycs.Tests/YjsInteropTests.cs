@@ -108,16 +108,13 @@ namespace Ycs
         }
 
         [TestMethod]
-        public void XmlTypesFailWithAClearMessage()
+        public void ReadsTheXmlTypesProducedByYjs()
         {
-            // A y-prosemirror-shaped document: Y.XmlFragment > Y.XmlElement > Y.XmlText.
-            // Ycs does not implement those types; the failure must say so rather than
-            // surfacing as an opaque error deep inside the struct reader.
+            // A y-prosemirror-shaped document: Y.XmlFragment > Y.XmlElement("p") > Y.XmlText("hi").
             const string XmlUpdateV1 = "AQP6w//4BAAHAQN4bWwDAXAHAPrD//gEAAYEAPrD//gEAQJoaQA=";
 
-            var ex = Assert.ThrowsException<NotSupportedException>(
-                () => Apply(XmlUpdateV1, v2: false));
-            StringAssert.Contains(ex.Message, "XML");
+            var doc = Apply(XmlUpdateV1, v2: false);
+            Assert.AreEqual("<p>hi</p>", doc.GetXmlFragment("xml").ToString());
         }
 
         [TestMethod]

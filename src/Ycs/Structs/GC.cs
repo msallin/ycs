@@ -8,7 +8,7 @@ using System.Diagnostics;
 
 namespace Ycs
 {
-    public class GC : AbstractStruct
+    public partial class GC : AbstractStruct
     {
         internal const byte StructGCRefNumber = 0;
 

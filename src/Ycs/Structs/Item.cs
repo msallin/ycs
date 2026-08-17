@@ -10,7 +10,7 @@ using System.Diagnostics;
 
 namespace Ycs
 {
-    public class Item : AbstractStruct
+    public partial class Item : AbstractStruct
     {
         [Flags]
         private enum InfoEnum : int

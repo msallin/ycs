@@ -27,7 +27,7 @@ namespace Ycs
     /// <summary>
     /// A shared Map implementation.
     /// </summary>
-    public class YMap : AbstractType, IEnumerable<KeyValuePair<string, object>>
+    public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, object>>
     {
         internal const int YMapRefId = 1;
 
@@ -45,6 +45,12 @@ namespace Ycs
         }
 
         public int Count => _prelimContent?.Count ?? TypeMapEnumerate().Count();
+
+        /// <summary>
+        /// Returns the size of the YMap (count of key/value pairs). Mirrors Yjs' <c>size</c> getter;
+        /// identical to <see cref="Count"/>, provided under both names for parity.
+        /// </summary>
+        public int Size => Count;
 
         public object Get(string key)
         {
@@ -91,9 +97,70 @@ namespace Ycs
             return _map.TryGetValue(key, out var val) && !val.Deleted;
         }
 
+        /// <summary>
+        /// Returns a boolean indicating whether the specified key exists or not. Mirrors Yjs' <c>has(key)</c>;
+        /// identical to <see cref="ContainsKey"/>, provided under both names for parity.
+        /// </summary>
+        public bool Has(string key) => ContainsKey(key);
+
         public IEnumerable<string> Keys() => TypeMapEnumerate().Select(kvp => kvp.Key);
 
         public IEnumerable<object> Values() => TypeMapEnumerate().Select(kvp => kvp.Value.Content.GetContent()[kvp.Value.Length - 1]);
+
+        /// <summary>
+        /// Returns an enumerable of (key, value) pairs. Mirrors Yjs' <c>entries()</c>; C# idiom: since
+        /// <see cref="YMap"/> already implements <c>IEnumerable&lt;KeyValuePair&lt;string,object&gt;&gt;</c>
+        /// (and is therefore directly usable in a <c>foreach</c>, matching Yjs' <c>[Symbol.iterator]</c>
+        /// which delegates to <c>entries()</c>), this is simply that same sequence under the Yjs-familiar name.
+        /// </summary>
+        public IEnumerable<KeyValuePair<string, object>> Entries() => this;
+
+        /// <summary>
+        /// Executes a provided function once on every key-value pair. Mirrors Yjs' <c>forEach(f)</c>.
+        /// </summary>
+        public void ForEach(System.Action<object, string, YMap> f)
+        {
+            foreach (var kvp in TypeMapEnumerateValues())
+            {
+                f(kvp.Value, kvp.Key, this);
+            }
+        }
+
+        /// <summary>
+        /// Removes all elements from this YMap. Mirrors Yjs' <c>clear()</c>.
+        /// </summary>
+        public void Clear()
+        {
+            if (Doc != null)
+            {
+                Doc.Transact(tr =>
+                {
+                    foreach (var key in Keys().ToList())
+                    {
+                        TypeMapDelete(tr, key);
+                    }
+                });
+            }
+            else
+            {
+                _prelimContent.Clear();
+            }
+        }
+
+        /// <summary>
+        /// Transforms this Shared Type to a JSON-compatible <see cref="IDictionary{TKey,TValue}"/>. Mirrors Yjs' <c>toJSON()</c>.
+        /// </summary>
+        public override object ToJson()
+        {
+            var result = new Dictionary<string, object>();
+
+            foreach (var kvp in TypeMapEnumerateValues())
+            {
+                result[kvp.Key] = kvp.Value is AbstractType at ? at.ToJson() : kvp.Value;
+            }
+
+            return result;
+        }
 
         public YMap Clone() => InternalClone() as YMap;
 
@@ -106,10 +173,13 @@ namespace Ycs
         {
             var map = new YMap();
 
-            foreach (var kvp in TypeMapEnumerate())
+            foreach (var kvp in TypeMapEnumerateValues())
             {
-                // TODO: [alekseyk] Yjs checks for the AbstractType here, but _map can only have 'Item' values. Might be an error?
-                map.Set(kvp.Key, kvp.Value);
+                // Bug fix vs. the original port: `TypeMapEnumerate()` yields raw `Item`s, not their
+                // content values, so cloning used to store the `Item` itself as the value. Use
+                // `TypeMapEnumerateValues()` (actual values) and recursively clone nested shared types,
+                // matching Yjs' `clone()`: `map.set(key, value instanceof AbstractType ? value.clone() : value)`.
+                map.Set(kvp.Key, kvp.Value is AbstractType at ? at.InternalClone() : kvp.Value);
             }
 
             return map;

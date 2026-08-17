@@ -14,3 +14,9 @@ for V in yjs13 yjs14; do
   "$DOTNET" run --project Ycs.Interop/Ycs.Interop.csproj -v q -- "$OUT/$V-js.json" > "$OUT/$V-cs.json"
   node js/verify.mjs "$V" "$OUT/$V-js.json" "$OUT/$V-cs.json"
 done
+
+# Additional self-contained scenarios; each exits non-zero on failure.
+for CHECK in js/check-*.mjs; do
+  [ -e "$CHECK" ] || continue
+  DOTNET="$DOTNET" node "$CHECK"
+done

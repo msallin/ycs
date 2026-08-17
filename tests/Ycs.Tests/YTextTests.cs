@@ -82,9 +82,10 @@ namespace Ycs
             Assert.AreEqual(1, text0Delta?.Count);
             Assert.AreEqual("bc", text0Delta[0].Insert);
             Assert.AreEqual(true, text0Delta[0].Attributes["bold"]);
-            Assert.AreEqual(2, delta?.Count);
+            // Yjs drops a trailing retain that assigns no attributes, so this is one op, not two.
+            // Verified against yjs 13.6.32: [{delete:1}].
+            Assert.AreEqual(1, delta?.Count);
             Assert.AreEqual(1, delta[0].Delete);
-            Assert.AreEqual(2, delta[1].Retain);
             delta = null;
 
             text0.Delete(1, 1);
@@ -104,10 +105,10 @@ namespace Ycs
             Assert.AreEqual(1, text0Delta?.Count);
             Assert.AreEqual("zb", text0Delta[0].Insert);
             Assert.AreEqual(true, text0Delta[0].Attributes["bold"]);
-            Assert.AreEqual(2, delta?.Count);
+            // yjs 13.6.32: [{insert:'z',attributes:{bold:true}}] - the trailing bare retain is dropped.
+            Assert.AreEqual(1, delta?.Count);
             Assert.AreEqual("z", delta[0].Insert);
             Assert.AreEqual(true, delta[0].Attributes["bold"]);
-            Assert.AreEqual(1, delta[1].Retain);
             delta = null;
 
             // Check that there are no duplicate markers inserted.
@@ -121,10 +122,10 @@ namespace Ycs
             Assert.IsNull(text0Delta[0].Attributes);
             Assert.AreEqual("zb", text0Delta[1].Insert);
             Assert.AreEqual(true, text0Delta[1].Attributes["bold"]);
-            Assert.AreEqual(2, delta?.Count);
+            // yjs 13.6.32: [{insert:'y'}].
+            Assert.AreEqual(1, delta?.Count);
             Assert.AreEqual("y", delta[0].Insert);
             Assert.IsNull(delta[0].Attributes);
-            Assert.AreEqual(2, delta[1].Retain);
             delta = null;
 
             text0.Format(0, 2, new Dictionary<string, object> { { "bold", null } });
@@ -135,11 +136,12 @@ namespace Ycs
             Assert.IsNull(text0Delta[0].Attributes);
             Assert.AreEqual("b", text0Delta[1].Insert);
             Assert.AreEqual(true, text0Delta[1].Attributes["bold"]);
-            Assert.AreEqual(3, delta?.Count);
+            // yjs 13.6.32: [{retain:1},{retain:1,attributes:{bold:null}}] - the retain that *does*
+            // assign attributes survives, the bare one after it does not.
+            Assert.AreEqual(2, delta?.Count);
             Assert.AreEqual(1, delta[0].Retain);
             Assert.AreEqual(1, delta[1].Retain);
             Assert.AreEqual(null, delta[1].Attributes["bold"]);
-            Assert.AreEqual(1, delta[2].Retain);
 
             CompareUsers();
         }

@@ -105,12 +105,6 @@ namespace Ycs
             Type.Write(encoder);
         }
 
-        // Yjs type refs Ycs does not implement; recognised only to fail with a clear message.
-        internal const uint YXmlElementRefId = 3;
-        internal const uint YXmlFragmentRefId = 4;
-        internal const uint YXmlHookRefId = 5;
-        internal const uint YXmlTextRefId = 6;
-
         internal static ContentType Read(IUpdateDecoder decoder)
         {
             var typeRef = decoder.ReadTypeRef();
@@ -125,13 +119,18 @@ namespace Ycs
                 case YText.YTextRefId:
                     var text = YText.Read(decoder);
                     return new ContentType(text);
-                case YXmlElementRefId:
-                case YXmlFragmentRefId:
-                case YXmlHookRefId:
-                case YXmlTextRefId:
-                    throw new NotSupportedException(
-                        $"Ycs does not implement the Yjs XML types yet (type ref {typeRef}). " +
-                        "Documents produced by y-prosemirror / y-quill and friends cannot be decoded.");
+                case YXmlElement.YXmlElementRefId:
+                    var xmlElement = YXmlElement.Read(decoder);
+                    return new ContentType(xmlElement);
+                case YXmlFragment.YXmlFragmentRefId:
+                    var xmlFragment = YXmlFragment.Read(decoder);
+                    return new ContentType(xmlFragment);
+                case YXmlHook.YXmlHookRefId:
+                    var xmlHook = YXmlHook.Read(decoder);
+                    return new ContentType(xmlHook);
+                case YXmlText.YXmlTextRefId:
+                    var xmlText = YXmlText.Read(decoder);
+                    return new ContentType(xmlText);
                 default:
                     throw new NotSupportedException($"Unknown Yjs type ref: {typeRef}");
             }
