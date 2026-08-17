@@ -86,9 +86,22 @@ namespace Ycs
 
         private readonly IDictionary<string, AbstractType> _share;
 
+        /// <summary>
+        /// Yjs uses a random 32-bit client id (see 'generateNewClientId' in Doc.js). It has to be
+        /// unpredictable across processes: 'new Random()' is seeded from the clock on the
+        /// .NET Framework targets, so two documents created in the same tick - or two server
+        /// processes started together - would share a client id and silently corrupt the merge.
+        /// </summary>
         internal static int GenerateNewClientId()
         {
-            return new Random().Next(0, int.MaxValue);
+            var buffer = new byte[4];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(buffer);
+            }
+
+            // Non-negative, to stay within the int-typed ClientId; the wire format writes it as a uint.
+            return BitConverter.ToInt32(buffer, 0) & int.MaxValue;
         }
 
         /// <param name="gc">Disable garbage collection.</param>
