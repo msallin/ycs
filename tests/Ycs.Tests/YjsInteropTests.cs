@@ -120,6 +120,46 @@ namespace Ycs
             StringAssert.Contains(ex.Message, "XML");
         }
 
+        [TestMethod]
+        public void ClientIdsDoNotCollideWhenDocumentsAreCreatedTogether()
+        {
+            // A clock-seeded Random hands the same client id to every document created in the same
+            // tick, so two peers would share an id and silently corrupt the merge. NOTE: 'new Random()'
+            // stopped being clock-seeded in .NET 6, so this test cannot reproduce the original failure
+            // on the TFM it runs under - the hazard is real for the netstandard2.0 consumers (.NET
+            // Framework, Unity). It stands as a guard on the invariant itself: ids must not repeat.
+            var ids = new HashSet<int>();
+            for (int i = 0; i < 512; i++)
+            {
+                ids.Add(new YDoc().ClientId);
+            }
+
+            Assert.AreEqual(512, ids.Count, "duplicate client ids");
+        }
+
+        [TestMethod]
+        public void OverlappingDeleteRangesAreCoalesced()
+        {
+            // Yjs' sortAndMergeDeleteSet collapses ranges that overlap, not just ranges that touch
+            // (src/utils/DeleteSet.js). Coalescing only exact neighbours leaves a delete set with
+            // duplicate coverage, which is both larger on the wire and not what a JS peer produces.
+            var ds = new DeleteSet();
+            ds.Add(client: 1, clock: 0, length: 5);     // 0..5
+            ds.Add(client: 1, clock: 3, length: 5);     // 3..8, overlaps
+            ds.Add(client: 1, clock: 8, length: 2);     // 8..10, adjacent
+            ds.Add(client: 1, clock: 2, length: 2);     // 2..4, fully contained
+            ds.Add(client: 1, clock: 20, length: 1);    // 20..21, disjoint
+
+            ds.SortAndMergeDeleteSet();
+
+            var ranges = ds.Clients[1];
+            Assert.AreEqual(2, ranges.Count, "overlapping ranges were not coalesced");
+            Assert.AreEqual(0, ranges[0].Clock);
+            Assert.AreEqual(10, ranges[0].Length);
+            Assert.AreEqual(20, ranges[1].Clock);
+            Assert.AreEqual(1, ranges[1].Length);
+        }
+
         private static YDoc Apply(string base64Update, bool v2)
         {
             var doc = new YDoc();
