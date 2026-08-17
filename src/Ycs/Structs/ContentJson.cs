@@ -84,7 +84,7 @@ namespace Ycs
                 var jsonStr = decoder.ReadString();
                 object jsonObj = string.Equals(jsonStr, "undefined")
                     ? null
-                    : Newtonsoft.Json.JsonConvert.DeserializeObject(jsonStr);
+                    : EncodingUtils.ToPlainClr(Newtonsoft.Json.JsonConvert.DeserializeObject(jsonStr));
                 content.Add(jsonObj);
             }
 

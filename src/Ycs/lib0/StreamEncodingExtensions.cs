@@ -162,7 +162,7 @@ namespace Ycs
                     stream.WriteByte(123);
                     stream.Write(dBytes, 0, dBytes.Length);
                     break;
-#elif NETSTANDARD2_1
+#else // Span-capable TFMs: netstandard2.1, net8.0, net10.0
                     Span<byte> dBytes = stackalloc byte[8];
                     if (!BitConverter.TryWriteBytes(dBytes, d))
                     {
@@ -186,7 +186,7 @@ namespace Ycs
                     stream.WriteByte(124);
                     stream.Write(fBytes, 0, fBytes.Length);
                     break;
-#elif NETSTANDARD2_1
+#else // Span-capable TFMs: netstandard2.1, net8.0, net10.0
                     Span<byte> fBytes = stackalloc byte[4];
                     if (!BitConverter.TryWriteBytes(fBytes, f))
                     {

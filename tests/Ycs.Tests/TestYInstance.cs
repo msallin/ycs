@@ -60,7 +60,7 @@ namespace Ycs
 
                 using (var stream = new MemoryStream())
                 {
-                    SyncProtocol.WriteSyncStep1(stream, this);
+                    SyncProtocol.WriteSyncStep1(stream, this, v2: true);
 
                     // Publish SyncStep1
                     BroadcastMessage(this, stream.ToArray());
@@ -70,7 +70,7 @@ namespace Ycs
                         if (remoteYInstance != this)
                         {
                             stream.SetLength(0);
-                            SyncProtocol.WriteSyncStep1(stream, remoteYInstance);
+                            SyncProtocol.WriteSyncStep1(stream, remoteYInstance, v2: true);
 
                             Receive(stream.ToArray(), remoteYInstance);
                         }

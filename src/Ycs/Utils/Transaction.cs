@@ -265,6 +265,7 @@ namespace Ycs
                     // @todo: Merge all the transactions into one and provide send the data as a single update message.
                     doc.InvokeOnAfterTransactionCleanup(transaction);
 
+                    doc.InvokeUpdateV1(transaction);
                     doc.InvokeUpdateV2(transaction);
 
                     foreach (var subDoc in transaction.SubdocsAdded)

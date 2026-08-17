@@ -43,7 +43,7 @@ namespace Ycs
             {
                 using (var reader = new MemoryStream(m))
                 {
-                    SyncProtocol.ReadSyncMessage(reader, writer, receiver, receiver._tc);
+                    SyncProtocol.ReadSyncMessage(reader, writer, receiver, receiver._tc, v2: true);
                 }
 
                 if (writer.Length > 0)
