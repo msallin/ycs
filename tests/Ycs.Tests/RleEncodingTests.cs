@@ -32,6 +32,83 @@ namespace Ycs
             TestEncoder(new IntDiffOptRleEncoder(), s => new IntDiffOptRleDecoder(s));
         }
 
+        /// <summary>
+        /// The existing round-trip above only ever writes ascending values, so the encoder's negative
+        /// branch is never exercised. These cases cover it, and check the bytes against lib0's reader
+        /// rather than our own — a codec can be self-consistent and still disagree with Yjs.
+        /// </summary>
+        [TestMethod]
+        public void TestIntDiffOptRleEncoderDescendingRuns()
+        {
+            var sequences = new[]
+            {
+                new long[] { 0, 1, 2, 3 },
+                new long[] { 10, 8, 6, 4 },
+                new long[] { 10, 8 },
+                new long[] { 5, 3, 1, 1, 1, 9, 6, 3 },
+                new long[] { 0, 100, 99, 98, 97, 200 },
+            };
+
+            foreach (var values in sequences)
+            {
+                byte[] data;
+                using (var encoder = new IntDiffOptRleEncoder())
+                {
+                    foreach (var value in values)
+                    {
+                        encoder.Write(value);
+                    }
+
+                    data = encoder.ToArray();
+                }
+
+                CollectionAssert.AreEqual(values, ReadLikeLib0(data, values.Length),
+                    $"lib0 would read [{string.Join(", ", values)}] back differently");
+
+                using (var stream = new MemoryStream(data))
+                using (var decoder = new IntDiffOptRleDecoder(stream))
+                {
+                    foreach (var value in values)
+                    {
+                        Assert.AreEqual(value, decoder.Read());
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// lib0's <c>IntDiffOptRleDecoder.read()</c>, transcribed: the payload is
+        /// <c>diff * 2 + hasCount</c>, and the diff is recovered with <c>Math.floor(payload / 2)</c>,
+        /// which rounds away from zero for negatives.
+        /// </summary>
+        private static long[] ReadLikeLib0(byte[] encoded, int count)
+        {
+            var values = new List<long>(count);
+            long state = 0;
+            long diff = 0;
+            uint remaining = 0;
+
+            using (var stream = new MemoryStream(encoded))
+            {
+                for (int i = 0; i < count; i++)
+                {
+                    if (remaining == 0)
+                    {
+                        var payload = stream.ReadVarInt().Value;
+                        var hasCount = (payload & 0x1) != 0;
+                        diff = payload >= 0 ? payload >> 1 : -((-payload + 1) >> 1);
+                        remaining = hasCount ? stream.ReadVarUint() + 2 : 1;
+                    }
+
+                    state += diff;
+                    remaining--;
+                    values.Add(state);
+                }
+            }
+
+            return values.ToArray();
+        }
+
         [TestMethod]
         public void TestIntDiffEncoder()
         {
