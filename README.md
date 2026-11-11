@@ -57,7 +57,10 @@ Upstream was last tested against Yjs 13.4.14 and had never been able to talk to 
 * v1 update encoder/decoder — upstream implemented only v2, which no JS provider speaks.
 * v2 `writeJSON`/`readJSON` now uses the `any` encoding, as Yjs does. The previous JSON-string
   encoding made every formatted text run and every embed unreadable by Yjs.
-* `ReadJson` yields plain CLR values instead of `Newtonsoft.Json.Linq` tokens.
+* `ReadJson` yields plain CLR values (`Dictionary<string, object>`, `List<object>`, `long`/`double`,
+  `string`, `bool`, `null`), and JSON in the v1 format is written by `JSON.stringify`'s rules
+  (`Utils/YJson.cs`: `1` not `1.0`, ISO-looking strings stay strings) on System.Text.Json — no
+  Newtonsoft.Json dependency.
 * The XML shared types, the `updates.js` operations, `PermanentUserData`, and the missing parts of
   the `Snapshot` / `RelativePosition` / `YMap` / `YArray` / `YText` / `YEvent` / `UndoManager` APIs.
 * `RelativePosition` and `AbsolutePosition` are public — they were `internal`, which put shared
@@ -80,14 +83,14 @@ Upstream was last tested against Yjs 13.4.14 and had never been able to talk to 
 * `ContentFormat.GetContent` threw instead of returning an empty list.
 
 **Build**
-* Retargeted to `netstandard2.0;net8.0;net10.0`, MSTest 3, Newtonsoft.Json 13.
+* Retargeted to `netstandard2.0;net8.0;net10.0`, MSTest 3; no third-party runtime dependency (System.Text.Json is a package only on netstandard2.0).
 * The 3.1-era `samples/YcsSample` is no longer part of the solution (stale SPA toolchain).
 
 Running the checks
 -------
 
 ```bash
-dotnet test tests/Ycs.Tests/Ycs.Tests.csproj   # 272 tests, no Node needed
+dotnet test tests/Ycs.Tests/Ycs.Tests.csproj   # 296 tests, no Node needed
 ./interop/run.sh                                # live round-trips against yjs 13.6.32 + 14 beta
 ```
 

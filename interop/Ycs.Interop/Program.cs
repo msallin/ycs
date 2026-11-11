@@ -5,13 +5,16 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Ycs;
 
-var input = JObject.Parse(File.ReadAllText(args[0]));
+var jsonOptions = new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+var input = JsonNode.Parse(File.ReadAllText(args[0]));
 var doc = new YDoc();
-doc.ApplyUpdateV1(Convert.FromBase64String(input["updateV1"].Value<string>()));
+doc.ApplyUpdateV1(Convert.FromBase64String(input["updateV1"].GetValue<string>()));
 
 // Ycs writes into the same document, the way a .NET server would.
 doc.Transact(_ =>
@@ -32,7 +35,7 @@ static object Plain(object value) => value switch
 
 var map = doc.GetMap("map").Keys().ToDictionary(k => k, k => Plain(doc.GetMap("map").Get(k)));
 
-Console.WriteLine(JsonConvert.SerializeObject(new
+Console.WriteLine(JsonSerializer.Serialize(new
 {
     readBack = new
     {
@@ -44,5 +47,5 @@ Console.WriteLine(JsonConvert.SerializeObject(new
     updateV2 = Convert.ToBase64String(doc.EncodeStateAsUpdateV2()),
     // proof the diffing path works too: only what the JS peer is missing
     diffAgainstJsStateVector = Convert.ToBase64String(
-        doc.EncodeStateAsUpdateV1(Convert.FromBase64String(input["stateVectorV1"].Value<string>())))
-}, Formatting.Indented));
+        doc.EncodeStateAsUpdateV1(Convert.FromBase64String(input["stateVectorV1"].GetValue<string>())))
+}, jsonOptions));

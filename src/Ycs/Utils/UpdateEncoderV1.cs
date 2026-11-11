@@ -137,7 +137,7 @@ namespace Ycs
 
         public void WriteJson<T>(T any)
         {
-            var jsonString = Newtonsoft.Json.JsonConvert.SerializeObject(any, typeof(T), null);
+            var jsonString = YJson.Stringify(any);
             RestWriter.WriteVarString(jsonString);
         }
     }

@@ -6,17 +6,20 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Ycs;
 
-var input = JObject.Parse(File.ReadAllText(args[0]));
+var jsonOptions = new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
+
+var input = JsonNode.Parse(File.ReadAllText(args[0]));
 
 static byte[] B64ToBytes(string s) => Convert.FromBase64String(s);
 static string BytesToB64(byte[] b) => Convert.ToBase64String(b);
 
-static List<byte[]> ReadUpdates(JToken token) =>
-    token.Select(t => B64ToBytes(t.Value<string>())).ToList();
+static List<byte[]> ReadUpdates(JsonNode token) =>
+    token.AsArray().Select(t => B64ToBytes(t.GetValue<string>())).ToList();
 
 // --- Scenario 1: merge updates from several independent docs (inserts, deletes, and a GC'd doc). ---
 
@@ -35,8 +38,8 @@ var s1SvFromMergedV2 = UpdateOperations.EncodeStateVectorFromUpdateV2(s1MergedV2
 var s2 = input["scenario2"];
 var s2UpdatesV1 = ReadUpdates(s2["updatesV1"]);
 var s2UpdatesV2 = ReadUpdates(s2["updatesV2"]);
-var s2PartialSvV1 = B64ToBytes(s2["partialStateVectorV1"].Value<string>());
-var s2PartialSvV2 = B64ToBytes(s2["partialStateVectorV2"].Value<string>());
+var s2PartialSvV1 = B64ToBytes(s2["partialStateVectorV1"].GetValue<string>());
+var s2PartialSvV2 = B64ToBytes(s2["partialStateVectorV2"].GetValue<string>());
 
 var s2MergedAllV1 = UpdateOperations.MergeUpdates(s2UpdatesV1);
 var s2MergedAllV2 = UpdateOperations.MergeUpdatesV2(s2UpdatesV2);
@@ -58,7 +61,7 @@ if (string.IsNullOrWhiteSpace(s2Described) || s2Decoded.Structs.Count == 0)
 
 var meta = UpdateOperations.ParseUpdateMeta(s2MergedAllV1);
 
-Console.WriteLine(JsonConvert.SerializeObject(new
+Console.WriteLine(JsonSerializer.Serialize(new
 {
     scenario1 = new
     {
@@ -78,4 +81,4 @@ Console.WriteLine(JsonConvert.SerializeObject(new
         parseUpdateMetaFrom = meta.From.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
         parseUpdateMetaTo = meta.To.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
     },
-}, Formatting.Indented));
+}, jsonOptions));

@@ -7,8 +7,12 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Newtonsoft.Json;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Ycs;
+
+var jsonOptions = new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
 void Fail(string message)
 {
@@ -39,7 +43,7 @@ Check(paragraph.Parent == frag, "paragraph.Parent does not point back to the fra
 
 var attrs = paragraph.GetAttributes();
 Check(attrs.Count == 2 && Equals(attrs["align"], "center") && Equals(attrs["class"], "intro"),
-    $"paragraph attributes mismatch: {JsonConvert.SerializeObject(attrs)}");
+    $"paragraph attributes mismatch: {JsonSerializer.Serialize(attrs, jsonOptions)}");
 
 var children = paragraph.ToArray();
 Check(children.Count == 2, $"expected 2 children under <paragraph>, got {children.Count}");
@@ -87,7 +91,7 @@ doc.Transact(_ =>
 
 var toStringAfterEdit = frag.ToString();
 
-Console.WriteLine(JsonConvert.SerializeObject(new
+Console.WriteLine(JsonSerializer.Serialize(new
 {
     readTree = new
     {
@@ -101,4 +105,4 @@ Console.WriteLine(JsonConvert.SerializeObject(new
     toStringAfterEdit,
     updateV1 = Convert.ToBase64String(doc.EncodeStateAsUpdateV1()),
     updateV2 = Convert.ToBase64String(doc.EncodeStateAsUpdateV2())
-}, Formatting.Indented));
+}, jsonOptions));

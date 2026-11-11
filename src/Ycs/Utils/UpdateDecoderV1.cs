@@ -153,9 +153,9 @@ namespace Ycs
         {
             CheckDisposed();
             var jsonString = Reader.ReadVarString();
-            // Plain CLR values, not JTokens: the same content may be re-encoded with the
-            // v2 encoder, which writes it through WriteAny.
-            return EncodingUtils.ToPlainClr(Newtonsoft.Json.JsonConvert.DeserializeObject(jsonString));
+            // Plain CLR values: the same content may be re-encoded with the v2 encoder,
+            // which writes it through WriteAny.
+            return YJson.Parse(jsonString);
         }
 
     }

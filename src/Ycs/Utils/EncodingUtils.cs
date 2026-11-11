@@ -27,39 +27,6 @@ namespace Ycs
     /// </summary>
     internal static class EncodingUtils
     {
-        /// <summary>
-        /// Converts a Newtonsoft token tree into plain CLR values (Dictionary/List/primitives),
-        /// which is what the rest of Ycs - and the v2 'any' encoder - expects.
-        /// </summary>
-        public static object ToPlainClr(object token)
-        {
-            switch (token)
-            {
-                case Newtonsoft.Json.Linq.JValue v:
-                    return v.Value;
-                case Newtonsoft.Json.Linq.JArray a:
-                    {
-                        var list = new System.Collections.Generic.List<object>(a.Count);
-                        foreach (var item in a)
-                        {
-                            list.Add(ToPlainClr(item));
-                        }
-                        return list;
-                    }
-                case Newtonsoft.Json.Linq.JObject o:
-                    {
-                        var dict = new System.Collections.Generic.Dictionary<string, object>();
-                        foreach (var prop in o)
-                        {
-                            dict[prop.Key] = ToPlainClr(prop.Value);
-                        }
-                        return dict;
-                    }
-                default:
-                    return token;
-            }
-        }
-
         public static IContent ReadItemContent(IUpdateDecoder decoder, byte info)
         {
             switch (info & Bits.Bits5)
