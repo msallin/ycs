@@ -20,15 +20,17 @@ internal sealed class RleIntDiffEncoder : AbstractStreamEncoder<long>
     private long _state;
     private uint _count;
 
+    private readonly long _start;
+
     public RleIntDiffEncoder(long start)
     {
+        _start = start;
         _state = start;
     }
 
     /// <inheritdoc/>
-    public override void Write(long value)
+    protected override void WriteValue(long value)
     {
-
         if (_state == value && _count > 0)
         {
             _count++;
@@ -45,5 +47,12 @@ internal sealed class RleIntDiffEncoder : AbstractStreamEncoder<long>
             _count = 1;
             _state = value;
         }
+    }
+
+    public override void Reset()
+    {
+        base.Reset();
+        _state = _start;
+        _count = 0;
     }
 }

@@ -21,9 +21,9 @@ namespace Ycs;
 /// swapping out the encoder's 'rest' stream for a fresh one every time the writer moves to a
 /// new client, stashing the bytes written so far as a fragment, then re-assembling
 /// '# clients, then (count, fragment) per client' once everything is known
-/// (<see cref="Finish"/>). <see cref="IUpdateEncoder.RestWriter"/> only exposes a getter, so
-/// instead of swapping the writer we clear the same <see cref="Lib0Writer"/> after capturing
-/// its bytes.
+/// (<see cref="Finish"/>). Here the fragments stay where they were written, in
+/// <see cref="IUpdateEncoder.RestWriter"/>, and only their ends are recorded; <see cref="Finish"/>
+/// moves them behind the counts through one pooled copy.
 /// </summary>
 internal sealed class LazyStructWriter
 {
@@ -32,7 +32,7 @@ internal sealed class LazyStructWriter
         Encoder = encoder;
         CurrClient = 0;
         Written = 0;
-        ClientStructs = new List<(int Written, byte[] Fragment)>();
+        ClientStructs = new List<(int Written, int End)>();
     }
 
     public IUpdateEncoder Encoder { get; }
@@ -40,11 +40,12 @@ internal sealed class LazyStructWriter
     public int Written { get; set; }
 
     /// <summary>
-    /// One entry per client written so far: how many structs, and the raw bytes that client's
-    /// structs wrote to <see cref="IUpdateEncoder.RestWriter"/> (everything past the
-    /// struct-count, i.e. the start clock plus any inline content bytes).
+    /// One entry per client written so far: how many structs, and where the bytes that client's
+    /// structs wrote to <see cref="IUpdateEncoder.RestWriter"/> end (they start where the previous
+    /// entry's end; they are everything past the struct-count, i.e. the start clock plus any inline
+    /// content bytes).
     /// </summary>
-    public List<(int Written, byte[] Fragment)> ClientStructs { get; }
+    public List<(int Written, int End)> ClientStructs { get; }
 
     /// <summary>
     /// Writes one struct (with the given clock offset into it) to the lazy writer, starting a
@@ -81,19 +82,31 @@ internal sealed class LazyStructWriter
     {
         Flush(lazyWriter);
 
-        // This is empty, because 'Flush' just cleared it.
         var restWriter = lazyWriter.Encoder.RestWriter;
-
-        // Write # states that were updated - i.e. the clients.
-        restWriter.WriteVarUint((uint)lazyWriter.ClientStructs.Count);
-
-        foreach (var part in lazyWriter.ClientStructs)
+        var length = restWriter.Length;
+        var fragments = BufferPool<byte>.Rent(length);
+        try
         {
-            // Write # encoded structs.
-            restWriter.WriteVarUint((uint)part.Written);
+            restWriter.WrittenSpan.CopyTo(fragments);
+            restWriter.Clear();
 
-            // Write the rest of the fragment.
-            restWriter.WriteBytes(part.Fragment);
+            // Write # states that were updated - i.e. the clients.
+            restWriter.WriteVarUint((uint)lazyWriter.ClientStructs.Count);
+
+            var start = 0;
+            foreach (var (written, end) in lazyWriter.ClientStructs)
+            {
+                // Write # encoded structs.
+                restWriter.WriteVarUint((uint)written);
+
+                // Write the rest of the fragment.
+                restWriter.WriteBytes(fragments.AsSpan(start, end - start));
+                start = end;
+            }
+        }
+        finally
+        {
+            BufferPool<byte>.Return(fragments);
         }
     }
 
@@ -104,15 +117,7 @@ internal sealed class LazyStructWriter
             return;
         }
 
-        var restWriter = lazyWriter.Encoder.RestWriter;
-        var fragment = restWriter.ToArray();
-
-        lazyWriter.ClientStructs.Add((lazyWriter.Written, fragment));
-
-        // Truncate back to empty so unrelated later writes (the next client's fragment, or -
-        // once we're done - the delete set) don't see these bytes again.
-        restWriter.Clear();
-
+        lazyWriter.ClientStructs.Add((lazyWriter.Written, lazyWriter.Encoder.RestWriter.Length));
         lazyWriter.Written = 0;
     }
 }

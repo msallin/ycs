@@ -20,6 +20,14 @@ internal interface IDSEncoder
     void WriteTo(IBufferWriter<byte> destination);
 
     /// <summary>
+    /// Makes the encoder as new, so one encoder can write any number of updates: forgets what was
+    /// written and all running state. A pooled encoder returns its buffers to the pool (it must be
+    /// reset on every path, exceptions included); an unpooled one keeps a buffer up to 64 KiB for the
+    /// next update. Resetting twice is harmless.
+    /// </summary>
+    void Reset();
+
+    /// <summary>
     /// Resets the ds value to 0.
     /// The v2 encoder uses this information to reset the initial diff value.
     /// </summary>

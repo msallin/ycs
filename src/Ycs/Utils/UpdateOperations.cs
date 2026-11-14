@@ -94,7 +94,7 @@ public static class UpdateOperations
     {
         ArgumentNullException.ThrowIfNull(updates);
 
-        return YUpdateException.Decode(() => MergeUpdatesCore(updates, s => new UpdateDecoderV1(s), () => new UpdateEncoderV1()));
+        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: false, trusted: false));
     }
 
     /// <summary>
@@ -104,7 +104,7 @@ public static class UpdateOperations
     {
         ArgumentNullException.ThrowIfNull(updates);
 
-        return YUpdateException.Decode(() => MergeUpdatesCore(updates, s => new UpdateDecoderV2(s), () => new UpdateEncoderV2()));
+        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: true, trusted: false));
     }
 
     /// <summary>
@@ -120,7 +120,7 @@ public static class UpdateOperations
             for (var i = 0; i < updates.Count; i += GroupSize)
             {
                 var group = updates.GetRange(i, Math.Min(GroupSize, updates.Count - i));
-                next.Add(MergeUpdatesCore(group, s => new UpdateDecoderV2(s, trusted: true), () => new UpdateEncoderV2()));
+                next.Add(MergeUpdatesCore(group, v2: true, trusted: true));
             }
 
             updates = next;
@@ -129,25 +129,59 @@ public static class UpdateOperations
         return updates[0];
     }
 
-    private static byte[] MergeUpdatesCore(IList<byte[]> updates, Func<Lib0Reader, IUpdateDecoder> newDecoder, Func<IUpdateEncoder> newEncoder)
+    private static byte[] MergeUpdatesCore(IList<byte[]> updates, bool v2, bool trusted)
     {
         if (updates.Count == 1)
         {
             return updates[0];
         }
 
-        var updateDecoders = updates
-            .Select(u => newDecoder(new Lib0Reader(u)))
-            .ToList();
+        var updateDecoders = new List<IUpdateDecoder>(updates.Count);
+        var lazyStructDecoders = new List<LazyStructReader>(updates.Count);
+        foreach (var update in updates)
+        {
+            var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(new Lib0Reader(update), trusted) : new UpdateDecoderV1(new Lib0Reader(update));
+            updateDecoders.Add(decoder);
+            lazyStructDecoders.Add(new LazyStructReader(decoder, filterSkips: true));
+        }
 
-        var lazyStructDecoders = updateDecoders
-            .Select(d => new LazyStructReader(d, filterSkips: true))
-            .ToList();
+        IUpdateEncoder updateEncoder = v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
+        try
+        {
+            MergeStructs(lazyStructDecoders, new LazyStructWriter(updateEncoder));
 
+            // Every decoder above was drained (Curr == null) before the loop could exit, so
+            // each one's stream is now positioned right at the start of its delete set.
+            var deleteSets = new List<DeleteSet>(updateDecoders.Count);
+            foreach (var decoder in updateDecoders)
+            {
+                deleteSets.Add(DeleteSet.Read(decoder));
+            }
+
+            new DeleteSet(deleteSets).Write(updateEncoder);
+            return updateEncoder.ToArray();
+        }
+        finally
+        {
+            ReturnEncoder(updateEncoder);
+        }
+    }
+
+    private static void ReturnEncoder(IUpdateEncoder encoder)
+    {
+        if (encoder is UpdateEncoderV2 v2)
+        {
+            v2.Return();
+        }
+        else
+        {
+            ((UpdateEncoderV1)encoder).Return();
+        }
+    }
+
+    private static void MergeStructs(List<LazyStructReader> lazyStructDecoders, LazyStructWriter lazyStructEncoder)
+    {
         WriteState currWrite = null;
-
-        var updateEncoder = newEncoder();
-        var lazyStructEncoder = new LazyStructWriter(updateEncoder);
 
         // Note: we need to ensure that all lazyStructDecoders are fully consumed.
         // Note: should merge document updates whenever possible - even from different updates.
@@ -155,8 +189,8 @@ public static class UpdateOperations
         while (true)
         {
             // Write higher clients first - sort by clientID & clock and remove decoders without content.
-            lazyStructDecoders = lazyStructDecoders.Where(dec => dec.Curr != null).ToList();
-            lazyStructDecoders.Sort((dec1, dec2) =>
+            lazyStructDecoders.RemoveAll(static dec => dec.Curr == null);
+            lazyStructDecoders.Sort(static (dec1, dec2) =>
             {
                 if (dec1.Curr.Id.Client == dec2.Curr.Id.Client)
                 {
@@ -278,14 +312,6 @@ public static class UpdateOperations
         }
 
         LazyStructWriter.Finish(lazyStructEncoder);
-
-        // Every decoder above was drained (Curr == null) before the loop could exit, so
-        // each one's stream is now positioned right at the start of its delete set.
-        var deleteSets = updateDecoders.Select(DeleteSet.Read).ToList();
-        var mergedDeleteSet = MergeDeleteSets(deleteSets);
-        mergedDeleteSet.Write(updateEncoder);
-
-        return updateEncoder.ToArray();
     }
 
     /// <summary>
@@ -317,90 +343,6 @@ public static class UpdateOperations
         }
     }
 
-    /// <summary>
-    /// Merges several delete sets into one, exactly like real Yjs' <c>mergeDeleteSets</c> +
-    /// <c>sortAndMergeDeleteSet</c> (src/utils/DeleteSet.js).
-    /// <br/>
-    /// We can't just call the constructor <see cref="DeleteSet(IList{DeleteSet})"/> here: its
-    /// merge step (<see cref="DeleteSet.SortAndMergeDeleteSet"/>, a file we don't own) only
-    /// coalesces ranges that are exactly adjacent (<c>left.Clock + left.Length == right.Clock</c>),
-    /// not ranges that overlap or duplicate one another
-    /// (<c>left.Clock + left.Length &gt;= right.Clock</c>, as real Yjs checks). Overlaps are
-    /// exactly what merging the SAME logical delete range from more than one update produces -
-    /// e.g. merging updates that were themselves already merged - so this reimplements the
-    /// correct algorithm instead of relying on that constructor.
-    /// </summary>
-    private static DeleteSet MergeDeleteSets(IList<DeleteSet> deleteSets)
-    {
-        var merged = new DeleteSet();
-
-        for (var dssIndex = 0; dssIndex < deleteSets.Count; dssIndex++)
-        {
-            foreach (var kvp in deleteSets[dssIndex].Clients)
-            {
-                var client = kvp.Key;
-                if (merged.Clients.ContainsKey(client))
-                {
-                    // Write all missing keys from the current ds and all following ones. If
-                    // 'merged' already contains 'client', the current ds has already been added.
-                    continue;
-                }
-
-                var dels = new List<DeleteSet.DeleteItem>(kvp.Value);
-                for (var i = dssIndex + 1; i < deleteSets.Count; i++)
-                {
-                    if (deleteSets[i].Clients.TryGetValue(client, out var appends))
-                    {
-                        dels.AddRange(appends);
-                    }
-                }
-
-                merged.Clients[client] = dels;
-            }
-        }
-
-        SortAndMergeDeleteSetItems(merged);
-        return merged;
-    }
-
-    private static void SortAndMergeDeleteSetItems(DeleteSet ds)
-    {
-        foreach (var dels in ds.Clients.Values)
-        {
-            dels.Sort((a, b) => a.Clock.CompareTo(b.Clock));
-
-            // Merge items without filtering or splicing the array.
-            // i is the current pointer.
-            // j refers to the current insert position for the pointed item.
-            // Try to merge dels[i] into dels[j-1], or set dels[j] = dels[i].
-            int i, j;
-            for (i = 1, j = 1; i < dels.Count; i++)
-            {
-                var left = dels[j - 1];
-                var right = dels[i];
-
-                if (left.Clock + left.Length >= right.Clock)
-                {
-                    dels[j - 1] = new DeleteSet.DeleteItem(left.Clock, Math.Max(left.Length, right.Clock + right.Length - left.Clock));
-                }
-                else
-                {
-                    if (j < i)
-                    {
-                        dels[j] = right;
-                    }
-
-                    j++;
-                }
-            }
-
-            if (j < dels.Count)
-            {
-                dels.RemoveRange(j, dels.Count - j);
-            }
-        }
-    }
-
     #endregion
 
     #region DiffUpdate
@@ -416,9 +358,16 @@ public static class UpdateOperations
         ArgumentNullException.ThrowIfNull(stateVector);
         return YUpdateException.Decode(() =>
         {
-            var encoder = new UpdateEncoderV1();
-            DiffUpdateCore(new UpdateDecoderV1(new Lib0Reader(update)), stateVector, encoder);
-            return encoder.ToArray();
+            var encoder = UpdateEncoderV1.Rent();
+            try
+            {
+                DiffUpdateCore(new UpdateDecoderV1(new Lib0Reader(update)), stateVector, encoder);
+                return encoder.ToArray();
+            }
+            finally
+            {
+                encoder.Return();
+            }
         });
     }
 
@@ -431,9 +380,16 @@ public static class UpdateOperations
         ArgumentNullException.ThrowIfNull(stateVector);
         return YUpdateException.Decode(() =>
         {
-            var encoder = new UpdateEncoderV2();
-            DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(update)), stateVector, encoder);
-            return encoder.ToArray();
+            var encoder = UpdateEncoderV2.Rent();
+            try
+            {
+                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(update)), stateVector, encoder);
+                return encoder.ToArray();
+            }
+            finally
+            {
+                encoder.Return();
+            }
         });
     }
 
@@ -636,9 +592,16 @@ public static class UpdateOperations
         ArgumentNullException.ThrowIfNull(update);
         return YUpdateException.Decode(() =>
         {
-            var encoder = new UpdateEncoderV2();
-            ConvertUpdateFormatCore(new UpdateDecoderV1(new Lib0Reader(update)), encoder);
-            return encoder.ToArray();
+            var encoder = UpdateEncoderV2.Rent();
+            try
+            {
+                ConvertUpdateFormatCore(new UpdateDecoderV1(new Lib0Reader(update)), encoder);
+                return encoder.ToArray();
+            }
+            finally
+            {
+                encoder.Return();
+            }
         });
     }
 
@@ -650,9 +613,16 @@ public static class UpdateOperations
         ArgumentNullException.ThrowIfNull(update);
         return YUpdateException.Decode(() =>
         {
-            var encoder = new UpdateEncoderV1();
-            ConvertUpdateFormatCore(new UpdateDecoderV2(new Lib0Reader(update)), encoder);
-            return encoder.ToArray();
+            var encoder = UpdateEncoderV1.Rent();
+            try
+            {
+                ConvertUpdateFormatCore(new UpdateDecoderV2(new Lib0Reader(update)), encoder);
+                return encoder.ToArray();
+            }
+            finally
+            {
+                encoder.Return();
+            }
         });
     }
 

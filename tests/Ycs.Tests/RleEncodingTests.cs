@@ -123,7 +123,7 @@ public class RleEncodingTests
             encoder.Write(v);
         }
 
-        var data = encoder.GetWrittenSpan().ToArray();
+        var data = encoder.ToArray();
         var stream = new Lib0Reader(data);
         var decoder = new StringDecoder(stream);
 
@@ -144,7 +144,7 @@ public class RleEncodingTests
             encoder.Write(string.Empty);
         }
 
-        var data = encoder.GetWrittenSpan().ToArray();
+        var data = encoder.ToArray();
         var stream = new Lib0Reader(data);
         var decoder = new StringDecoder(stream);
 

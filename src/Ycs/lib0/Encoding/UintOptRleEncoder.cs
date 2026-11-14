@@ -18,13 +18,13 @@ internal class UintOptRleEncoder : AbstractStreamEncoder<uint>
     private uint _state;
     private uint _count;
 
-    public UintOptRleEncoder()
+    public UintOptRleEncoder(bool pooled = false)
+        : base(pooled)
     {
-        // Do nothing.
     }
 
     /// <inheritdoc/>
-    public override void Write(uint value)
+    protected override void WriteValue(uint value)
     {
 
         if (_state == value)
@@ -38,6 +38,13 @@ internal class UintOptRleEncoder : AbstractStreamEncoder<uint>
             _count = 1;
             _state = value;
         }
+    }
+
+    public override void Reset()
+    {
+        base.Reset();
+        _state = 0;
+        _count = 0;
     }
 
     protected override void Flush()
