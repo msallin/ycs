@@ -517,7 +517,7 @@ public partial class Item : AbstractStruct
     {
         return snap == null
             ? !Deleted
-            : snap.StateVector.ContainsKey(Id.Client) && snap.StateVector[Id.Client] > Id.Clock && !snap.DeleteSet.IsDeleted(Id);
+            : snap.StateVector.TryGetValue(Id.Client, out long value) && value > Id.Clock && !snap.DeleteSet.IsDeleted(Id);
     }
 
     internal override void Write(IUpdateEncoder encoder, int offset)

@@ -23,10 +23,7 @@ public partial class YDoc
     /// </example>
     public YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc newDoc = null)
     {
-        if (snapshot == null)
-        {
-            throw new ArgumentNullException(nameof(snapshot));
-        }
+        ArgumentNullException.ThrowIfNull(snapshot);
 
         if (Gc)
         {

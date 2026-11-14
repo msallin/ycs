@@ -92,10 +92,7 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] MergeUpdates(IList<byte[]> updates)
     {
-        if (updates == null)
-        {
-            throw new ArgumentNullException(nameof(updates));
-        }
+        ArgumentNullException.ThrowIfNull(updates);
 
         return MergeUpdatesCore(updates, s => new UpdateDecoderV1(s), () => new UpdateEncoderV1());
     }
@@ -105,10 +102,7 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] MergeUpdatesV2(IList<byte[]> updates)
     {
-        if (updates == null)
-        {
-            throw new ArgumentNullException(nameof(updates));
-        }
+        ArgumentNullException.ThrowIfNull(updates);
 
         return MergeUpdatesCore(updates, s => new UpdateDecoderV2(s), () => new UpdateEncoderV2());
     }

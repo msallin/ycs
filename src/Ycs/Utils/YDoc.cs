@@ -65,10 +65,10 @@ public class YDocOptions
         var dict = (IDictionary<string, object>)decoder.ReadAny();
 
         var result = new YDocOptions();
-        result.Gc = dict.ContainsKey("gc") ? (bool)dict["gc"] : true;
-        result.Guid = dict.ContainsKey("guid") ? dict["guid"].ToString() : System.Guid.NewGuid().ToString("D");
-        result.Meta = dict.ContainsKey("meta") ? dict["meta"] as Dictionary<string, string> : null;
-        result.AutoLoad = dict.ContainsKey("autoLoad") ? (bool)dict["autoLoad"] : false;
+        result.Gc = dict.TryGetValue("gc", out object value) ? (bool)value : true;
+        result.Guid = dict.TryGetValue("guid", out object value1) ? value1.ToString() : System.Guid.NewGuid().ToString("D");
+        result.Meta = dict.TryGetValue("meta", out object value2) ? value2 as Dictionary<string, string> : null;
+        result.AutoLoad = dict.TryGetValue("autoLoad", out object value3) ? (bool)value3 : false;
 
         return result;
     }

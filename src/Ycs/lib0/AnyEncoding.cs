@@ -294,7 +294,7 @@ internal static class AnyEncoding
             : throw new ArgumentOutOfRangeException("value", bi, "A BigInt value must fit into 64 bits.");
 
     internal static ArgumentOutOfRangeException OutOfRange(object value) =>
-        new("value", value, "Integers beyond ±(2^53 - 1) have no exact JavaScript number. Use System.Numerics.BigInteger for a BigInt.");
+        new(nameof(value), value, "Integers beyond ±(2^53 - 1) have no exact JavaScript number. Use System.Numerics.BigInteger for a BigInt.");
 
     private static ArgumentException NotAStringKey(object? key) =>
         new($"Object keys must be strings, not '{key?.GetType().Name ?? "null"}'.", "value");

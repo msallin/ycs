@@ -376,20 +376,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             end += Length;
         }
 
-        if (start < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(start));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(start);
 
-        if (end < 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(end));
-        }
+        ArgumentOutOfRangeException.ThrowIfNegative(end);
 
-        if (start > end)
-        {
-            throw new ArgumentOutOfRangeException(nameof(end));
-        }
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(start, end);
 
         int length = end - start;
         Debug.Assert(length >= 0);
