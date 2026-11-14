@@ -1,0 +1,175 @@
+{
+ "name": "client-ids-uint32",
+ "description": "Client ids 0, 2^31-1, 2^31 and 2^32-1 editing text and racing on one map key.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  },
+  {
+   "name": "map",
+   "type": "map",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQH/////DwAEAQR0ZXh0AXkA",
+   "v2": "AAAFv////x8AAAEECAV0ZXh0eQQBAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQGAgICACAAEAQR0ZXh0AyB4dwA=",
+   "v2": "AAAFgICAgBAAAAEECgd0ZXh0IHh3BAMBAQAAAQEAAA=="
+  },
+  {
+   "v1": "AQH/////BwAEAQR0ZXh0AUIA",
+   "v2": "AAAFv////w8AAAEECAV0ZXh0QgQBAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQEAAAQBBHRleHQBZQA=",
+   "v2": "AAABAAAAAQQIBXRleHRlBAEBAQAAAQEAAA=="
+  },
+  {
+   "v1": "AQH/////DwHE/////wcAgICAgAgAAS4A",
+   "v2": "AAAPv////x+/////D4CAgIAQAQABAAHEAwEuAQAAAAEBAQA="
+  },
+  {
+   "v1": "AQGAgICACAPEgICAgAgC/////w8AA3djaQA=",
+   "v2": "AAALwICAgBAAv////x8BBAEAAcQFA3djaQMAAAABAQMA"
+  },
+  {
+   "v1": "AAP/////DwEAAYCAgIAIAQAD/////wcBAAE=",
+   "v2": "AAAAAAAAAQAAAAAAA/////8PAQAAgICAgAgBAAL/////BwEAAA=="
+  },
+  {
+   "v1": "AQEAAYT/////DwACcmkA",
+   "v2": "AAAGAL////8fAQAAAYQEAnJpAgAAAAEBAQA="
+  },
+  {
+   "v1": "AQH/////DwLEgICAgAgDgICAgAgEBG5BdmgA",
+   "v2": "AAALv////x/AgICAEAABBgEIAcQGBG5BdmgEAAAAAQECAA=="
+  },
+  {
+   "v1": "AQGAgICACAbEAAEAAgNhYmYA",
+   "v2": "AAAHgICAgBBAAAECAQQBxAUDYWJmAwAAAAEBBgA="
+  },
+  {
+   "v1": "AQH/////BwHEgICAgAgEgICAgAgFBHNmZ2EA",
+   "v2": "AAALv////w/AgICAEAABCAEKAcQGBHNmZ2EEAAAAAQEBAA=="
+  },
+  {
+   "v1": "AQEAA8SAgICACAOAgICACAQEcUF1dgA=",
+   "v2": "AAAHAMCAgIAQAAEGAQgBxAYEcUF1dgQAAAABAQMA"
+  },
+  {
+   "v1": "AAEAAQYB",
+   "v2": "AAAAAAAAAQAAAAAAAQABBgA="
+  },
+  {
+   "v1": "AQGAgICACAnE/////w8D/////w8EBHlmZ2EA",
+   "v2": "AAALgICAgBD/////HwABBgEIAcQGBHlmZ2EEAAAAAQEJAA=="
+  },
+  {
+   "v1": "AAL/////DwECAQABBQI=",
+   "v2": "AAAAAAAAAQAAAAAAAv////8PAQIAAAEFAQ=="
+  },
+  {
+   "v1": "AAH/////BwEBBA==",
+   "v2": "AAAAAAAAAQAAAAAAAf////8HAQED"
+  },
+  {
+   "v1": "AQH/////DwYoAQNtYXADd2hvAXcDbWF4AA==",
+   "v2": "AAAFv////x8AAAEoCQZtYXB3aG9DAAEBAAEBAQEGdwNtYXgA"
+  },
+  {
+   "v1": "AQGAgICACA0oAQNtYXADd2hvAXcEMl4zMQA=",
+   "v2": "AAAFgICAgBAAAAEoCQZtYXB3aG9DAAEBAAEBAQENdwQyXjMxAA=="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "e.wqAAyfgavhcirabfi"
+   },
+   "map": {
+    "json": {
+     "who": "max"
+    }
+   }
+  },
+  "stateVector": {
+   "0": 7,
+   "2147483647": 5,
+   "2147483648": 14,
+   "4294967295": 7
+  },
+  "deleteSet": {
+   "0": [
+    [
+     5,
+     2
+    ]
+   ],
+   "2147483647": [
+    [
+     0,
+     5
+    ]
+   ],
+   "2147483648": [
+    [
+     0,
+     3
+    ],
+    [
+     13,
+     1
+    ]
+   ],
+   "4294967295": [
+    [
+     0,
+     1
+    ],
+    [
+     2,
+     1
+    ]
+   ]
+  },
+  "stateV1": "BAb/////DwABAQR0ZXh0AcT/////BwCAgICACAABLsGAgICACAOAgICACAQBxP////8PAoCAgIAIBAFBxP////8PA4CAgIAIBAJ2aCgBA21hcAN3aG8BdwNtYXgHgICAgAgAAQEEdGV4dAPEgICAgAgC/////w8AAXfEgICAgAgD/////w8AAWPEgICAgAgE/////w8AAWnEAAEAAgNhYmbE/////w8D/////w8EBHlmZ2EhAQNtYXADd2hvAQL/////BwABAQR0ZXh0AcGAgICACASAgICACAUEBQAABAEEdGV4dAFlhP////8PAAFyhAABAWnEgICAgAgDgICAgAgEAnFBwQAEgICAgAgEAgT/////DwIAAQIBgICAgAgCAAMNAf////8HAQAFAAEFAg==",
+  "stateV2": "AABkv////x+/////D8CAgIAQAb////8fgICAgBC/////H8CAgIAQAb////8fgICAgBC/////H4CAgIAQv////x9AAP////8fAL////8PwICAgBAAAL////8fAMCAgIAQAACAgICAEA4ABkICQgMARgQCSAIEAgwACAEASAEABQACQgAbAQDEAMEAxAEoAAEAxAQhAAEAwQAEAIQBxADBQi90ZXh0LkF2aG1hcHdob3RleHR3Y2lhYmZ5ZmdhbWFwd2hvdGV4dHRleHRlcmlxQQRBAAJDAARBAQMEQwBEAEEBAgEBAAdBAQNBAAQCBAYAdwNtYXgHAAIABQAE/////w8CAAABAICAgIAIAgACCgD/////BwEABAABBQE=",
+  "stateVectorV1": "BP////8PB4CAgIAIDv////8HBQAH"
+ },
+ "diff": {
+  "prefix": 9,
+  "stateVector": "BP////8PBoCAgIAIBv////8HAQAD",
+  "stateVectorMap": {
+   "0": 3,
+   "2147483647": 1,
+   "2147483648": 6,
+   "4294967295": 6
+  },
+  "updateV1": "BAH/////DwYoAQNtYXADd2hvAXcDbWF4A4CAgIAIBsQAAQACA2FiZsT/////DwP/////DwQEeWZnYSEBA21hcAN3aG8BAf////8HAcGAgICACASAgICACAUEAgADxICAgIAIA4CAgIAIBAJxQcEABICAgIAIBAIE/////w8CAAECAYCAgIAIAgADDQH/////BwEABQABBQI=",
+  "updateV2": "AAAqv////x+AgICAEEAA/////x8Av////w/AgICAEAAAwICAgBAAAICAgIAQBQIEAkICBQUAAkIACygAxAEhAMEAxADBHBVtYXB3aG9hYmZ5ZmdhbWFwd2hvcUFDAQRDAAIBAQAEQQAEAgQBBncDbWF4AwYBAQIDBP////8PAgAAAQCAgICACAIAAgoA/////wcBAAQAAQUB",
+  "from": {
+   "0": 3,
+   "2147483647": 1,
+   "2147483648": 6,
+   "4294967295": 6
+  },
+  "to": {
+   "0": 7,
+   "2147483647": 5,
+   "2147483648": 14,
+   "4294967295": 7
+  }
+ },
+ "merged": {
+  "v1": "BAT/////DwAEAQR0ZXh0AXnE/////wcAgICAgAgAAS7EgICAgAgDgICAgAgEBG5BdmgoAQNtYXADd2hvAXcDbWF4BYCAgIAIAAQBBHRleHQDIHh3xICAgIAIAv////8PAAN3Y2nEAAEAAgNhYmbE/////w8D/////w8EBHlmZ2EoAQNtYXADd2hvAXcEMl4zMQL/////BwAEAQR0ZXh0AULEgICAgAgEgICAgAgFBHNmZ2EDAAAEAQR0ZXh0AWWE/////w8AAnJpxICAgIAIA4CAgIAIBARxQXV2BP////8PAgABAgGAgICACAEAA/////8HAQAFAAEFAg==",
+  "v2": "AAA0v////x+/////D8CAgIAQA7////8fQAD/////HwC/////D8CAgIAQAAC/////H8CAgIAQAAgABkEABAJIBgcACEgFAAJCFQQAxAEoAAQAxAIoAAQAxAAEAIQAxE87dGV4dHkubkF2aG1hcHdob3RleHQgeHd3Y2lhYmZ5ZmdhbWFwd2hvdGV4dEJzZmdhdGV4dGVyaXFBdXYEQQAEQwAEQwEEQwAEAUQAAQIEAQEAAkEABAQAdwNtYXgFAHcEMl4zMQIAAwAE/////w8CAAABAICAgIAIAQAC/////wcBAAQAAQUB"
+ }
+}

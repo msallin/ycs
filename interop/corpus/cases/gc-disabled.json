@@ -1,0 +1,78 @@
+{
+ "name": "gc-disabled",
+ "description": "The same edits with gc: false on every doc, so deleted content stays as ContentDeleted / kept items.",
+ "yjs": "13.6.32",
+ "gc": false,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  },
+  {
+   "name": "map",
+   "type": "map",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQoBAAQBBHRleHQKa2VlcCB0aGlzLIQBCQsgZHJvcCB0aGlzLIQBFAoga2VlcCB0aGF0JwEDbWFwA3N1YgEoAAEfAWEBdwphYWFhYWFhYWFhJwABHwNhcnIACAABIQN3AXh3AXl3AXooAQNtYXALb3ZlcndyaXR0ZW4BdwlvbGQgdmFsdWWoASUBdwluZXcgdmFsdWVEAQABPgEBAgoLHwc=",
+   "v2": "AAACQQYGEhcAAAQIAQARBACEAScAKAAnAAgAKACoAERIPHRleHRrZWVwIHRoaXMsIGRyb3AgdGhpcywga2VlcCB0aGF0bWFwc3ViYWFycm1hcG92ZXJ3cml0dGVuPgQKCwpDAAFDAAsBBQEBAAIBAgEABAEDQQABCgB3CmFhYWFhYWFhYWF3AXh3AXl3AXp3CW9sZCB2YWx1ZXcJbmV3IHZhbHVlAQECCgoKBg=="
+  },
+  {
+   "v1": "AQECAIQBHgE8AA==",
+   "v2": "AAACAgEBPAABhAMBPAEAAAABAQAA"
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": ">keep this, keep that<"
+   },
+   "map": {
+    "json": {
+     "overwritten": "new value"
+    }
+   }
+  },
+  "stateVector": {
+   "1": 40,
+   "2": 1
+  },
+  "deleteSet": {
+   "1": [
+    [
+     10,
+     11
+    ],
+    [
+     31,
+     7
+    ]
+   ]
+  },
+  "stateV1": "AgECAIQBHgE8CgEABAEEdGV4dAprZWVwIHRoaXMshAEJCyBkcm9wIHRoaXMshAEUCiBrZWVwIHRoYXQnAQNtYXADc3ViASgAAR8BYQF3CmFhYWFhYWFhYWEnAAEfA2FycgAIAAEhA3cBeHcBeXcBeigBA21hcAtvdmVyd3JpdHRlbgF3CW9sZCB2YWx1ZagBJQF3CW5ldyB2YWx1ZUQBAAE+AQECCgsfBw==",
+  "stateV2": "AAADAkEHBzxqFwAABAgBABOEAAQAhAEnACgAJwAIACgAqABESj08dGV4dGtlZXAgdGhpcywgZHJvcCB0aGlzLCBrZWVwIHRoYXRtYXBzdWJhYXJybWFwb3ZlcndyaXR0ZW4+AQQKCwpDAAFDAAsBBQEBAAIBAgEABAEDQQACAQAKAHcKYWFhYWFhYWFhYXcBeHcBeXcBencJb2xkIHZhbHVldwluZXcgdmFsdWUBAQIKCgoG",
+  "stateVectorV1": "AgIBASg="
+ },
+ "diff": {
+  "prefix": 1,
+  "stateVector": "AQEo",
+  "stateVectorMap": {
+   "1": 40
+  },
+  "updateV1": "AQECAIQBHgE8AQECCgsfBw==",
+  "updateV2": "AAACAgEBPAABhAMBPAEAAAABAQABAQIKCgoG",
+  "from": {
+   "2": 0
+  },
+  "to": {
+   "2": 1
+  }
+ },
+ "merged": {
+  "v1": "AgECAIQBHgE8CgEABAEEdGV4dAprZWVwIHRoaXMshAEJCyBkcm9wIHRoaXMshAEUCiBrZWVwIHRoYXQnAQNtYXADc3ViASgAAR8BYQF3CmFhYWFhYWFhYWEnAAEfA2FycgAIAAEhA3cBeHcBeXcBeigBA21hcAtvdmVyd3JpdHRlbgF3CW9sZCB2YWx1ZYgBJQF3CW5ldyB2YWx1ZUQBAAE+AQECCgsfBw==",
+  "v2": "AAADAkEHBzxqFwAABAgBABOEAAQAhAEnACgAJwAIACgAiABESj08dGV4dGtlZXAgdGhpcywgZHJvcCB0aGlzLCBrZWVwIHRoYXRtYXBzdWJhYXJybWFwb3ZlcndyaXR0ZW4+AQQKCwpDAAFDAAsBBQEBAAIBAgEABAEDQQACAQAKAHcKYWFhYWFhYWFhYXcBeHcBeXcBencJb2xkIHZhbHVldwluZXcgdmFsdWUBAQIKCgoG"
+ }
+}

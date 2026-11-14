@@ -1,0 +1,128 @@
+{
+ "name": "nested-types",
+ "description": "Y.Map holding Y.Array of Y.Map, a Y.Text in a map and in an array, and edits racing a delete of their parent.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "root",
+   "type": "map",
+   "delta": false
+  },
+  {
+   "name": "top",
+   "type": "array",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQcBACcBBHJvb3QEbGlzdAAHAAEAASgAAQEFdGl0bGUBdwVmaXJzdCcBBHJvb3QEYm9keQIEAAEDC25lc3RlZCB0ZXh0JwEEcm9vdAZkb29tZWQBKAABDwFrAXcBdgA=",
+   "v2": "AAACQQMEAAIEGAANJwAHACgAJwAEACcAKDUrcm9vdGxpc3R0aXRsZXJvb3Rib2R5bmVzdGVkIHRleHRyb290ZG9vbWVka0QABUQACwQGAQsBAAABAQAAAAEAAAQAAQIBAkEAAQcAdwVmaXJzdHcBdgA="
+  },
+  {
+   "v1": "AQEBEYgBAQF2AQRqc29ueAA=",
+   "v2": "AAACQQABAgABiAEAAAABAQEBEXYBBGpzb254AA=="
+  },
+  {
+   "v1": "AQQCAEcBAQEoAAIABXRpdGxlAXcGc2Vjb25kJwACAAVpbm5lcgAIAAICAXcEZGVlcAA=",
+   "v2": "AAAEAgFCAQMBAAQBAgdHACgAJwAIDQp0aXRsZWlubmVyRQABAAIBAAJBAAEEAHcGc2Vjb25kdwRkZWVwAA=="
+  },
+  {
+   "v1": "AQEBEkQBBAJBIAA=",
+   "v2": "AAACQQAAAQgBRAQCQSACAAAAAQESAA=="
+  },
+  {
+   "v1": "AQECBIQBDgEhAA==",
+   "v2": "AAACAgEBHAABhAMBIQEAAAABAQQA"
+  },
+  {
+   "v1": "AAEBAQ8C",
+   "v2": "AAAAAAAAAQAAAAAAAQEBDwE="
+  },
+  {
+   "v1": "AQECBSgAAQ8CazIBdxNlZGl0ZWQgYWZ0ZXIgZGVsZXRlAA==",
+   "v2": "AAACAgEBHgABKAQCazICAQAAAQEBAQV3E2VkaXRlZCBhZnRlciBkZWxldGUA"
+  },
+  {
+   "v1": "AQICBgcBA3RvcAIEAAIGDXRleHQgaW4gYXJyYXkA",
+   "v2": "AAACQgABDAADBwAEExB0b3B0ZXh0IGluIGFycmF5Aw0DAQAAAQIAAQIGAA=="
+  },
+  {
+   "v1": "AQEBFIgCAwF3BmRlZXBlcgA=",
+   "v2": "AAACAQIBBgABiAEAAAABAQEBFHcGZGVlcGVyAA=="
+  }
+ ],
+ "expected": {
+  "content": {
+   "root": {
+    "json": {
+     "body": "A nested text!",
+     "list": [
+      {
+       "inner": [
+        "deep",
+        "deeper"
+       ],
+       "title": "second"
+      },
+      {
+       "title": "first"
+      },
+      {
+       "json": true
+      }
+     ]
+    }
+   },
+   "top": {
+    "json": [
+     "text in array"
+    ]
+   }
+  },
+  "stateVector": {
+   "1": 21,
+   "2": 20
+  },
+  "deleteSet": {
+   "1": [
+    [
+     15,
+     2
+    ]
+   ],
+   "2": [
+    [
+     5,
+     1
+    ]
+   ]
+  },
+  "stateV1": "AggCAEcBAQEoAAIABXRpdGxlAXcGc2Vjb25kJwACAAVpbm5lcgAIAAICAXcEZGVlcIQBDgEhAAEHAQN0b3ACBAACBg10ZXh0IGluIGFycmF5CgEAJwEEcm9vdARsaXN0AAcAAQABKAABAQV0aXRsZQF3BWZpcnN0JwEEcm9vdARib2R5AgQAAQMLbmVzdGVkIHRleHQhAQRyb290BmRvb21lZAEAAYgBAQF2AQRqc29ueEQBBAJBIIgCAwF3BmRlZXBlcgICAQUBAQEPAg==",
+  "stateV2": "AAAJAgFCAQECQQQCCgEABBhQTAIERAQCAgYjRwAoACcACACEAAAABwAEACcABwAoACcABAAhAAAAiABEAIhWR3RpdGxlaW5uZXIhdG9wdGV4dCBpbiBhcnJheXJvb3RsaXN0dGl0bGVyb290Ym9keW5lc3RlZCB0ZXh0cm9vdGRvb21lZEEgRQABAw1EAAVEAAsEBgIPAAIBAAAAAQAAAQEAAAABBgEAAgABAgJBBgIIAHcGc2Vjb25kdwRkZWVwCgB3BWZpcnN0dgEEanNvbnh3BmRlZXBlcgICAQUAAQEPAQ==",
+  "stateVectorV1": "AgIUARU="
+ },
+ "diff": {
+  "prefix": 4,
+  "stateVector": "AgIEARQ=",
+  "stateVectorMap": {
+   "1": 20,
+   "2": 4
+  },
+  "updateV1": "AgQCBIQBDgEhAAEHAQN0b3ACBAACBg10ZXh0IGluIGFycmF5AQEUiAIDAXcGZGVlcGVyAgIBBQEBAQ8C",
+  "updateV2": "AAAFAgECAQIDHFBGAAmEAAAABwAEAIgVESF0b3B0ZXh0IGluIGFycmF5AQMNAwEAAAECAkEAAgQEARR3BmRlZXBlcgICAQUAAQEPAQ==",
+  "from": {
+   "1": 20,
+   "2": 4
+  },
+  "to": {
+   "1": 21,
+   "2": 20
+  }
+ },
+ "merged": {
+  "v1": "AggCAEcBAQEoAAIABXRpdGxlAXcGc2Vjb25kJwACAAVpbm5lcgAIAAICAXcEZGVlcIQBDgEhKAABDwJrMgF3E2VkaXRlZCBhZnRlciBkZWxldGUHAQN0b3ACBAACBg10ZXh0IGluIGFycmF5CgEAJwEEcm9vdARsaXN0AAcAAQABKAABAQV0aXRsZQF3BWZpcnN0JwEEcm9vdARib2R5AgQAAQMLbmVzdGVkIHRleHQnAQRyb290BmRvb21lZAEoAAEPAWsBdwF2iAEBAXYBBGpzb254RAEEAkEgiAIDAXcGZGVlcGVyAQEBDwI=",
+  "v2": "AAAKAgFCAUEAAkEFAgwBAAQYAlJMAgQYXAQCAgYjRwAoACcACACEACgABwAEACcABwAoACcABAAnACgAiABEAIhbSnRpdGxlaW5uZXIhazJ0b3B0ZXh0IGluIGFycmF5cm9vdGxpc3R0aXRsZXJvb3Rib2R5bmVzdGVkIHRleHRyb290ZG9vbWVka0EgRQABAgMNRAAFRAALBAYBAhEAAwEAAAABAAABAQAAAAEAAAcBAAIAAQIBAkEFAggAdwZzZWNvbmR3BGRlZXB3E2VkaXRlZCBhZnRlciBkZWxldGUKAHcFZmlyc3R3AXZ2AQRqc29ueHcGZGVlcGVyAQEBDwE="
+ }
+}

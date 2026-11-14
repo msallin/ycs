@@ -1,0 +1,158 @@
+{
+ "name": "array-basics",
+ "description": "Y.Array inserts, pushes, range deletes and concurrent inserts at the same index.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "array",
+   "type": "array",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEEAAgBBWFycmF5CH0BfQJ9A3cEZm91cnYBBGZpdmV9BXUBfQZ4fgA=",
+   "v2": "AAABBAAAAQgHBWFycmF5BQEBAAEIAQEAfQF9An0DdwRmb3VydgEEZml2ZX0FdQF9Bnh+AA=="
+  },
+  {
+   "v1": "AAEEAQYC",
+   "v2": "AAAAAAAAAQAAAAAAAQQBBgE="
+  },
+  {
+   "v1": "AAEEAQEB",
+   "v2": "AAAAAAAAAQAAAAAAAQQBAQA="
+  },
+  {
+   "v1": "AAEEAQQB",
+   "v2": "AAAAAAAAAQAAAAAAAQQBBAA="
+  },
+  {
+   "v1": "AAEEAgICBQE=",
+   "v2": "AAAAAAAAAQAAAAAAAQQCAgEBAA=="
+  },
+  {
+   "v1": "AQEFAMgEAAQBAncEYzEuMX0LAA==",
+   "v2": "AAADBUQAAQABAgHIAQAAAAECAQEAdwRjMS4xfQsA"
+  },
+  {
+   "v1": "AQEGAIgEBwF3BHAyLjEA",
+   "v2": "AAACBgQBDgABiAEAAAABAQEBAHcEcDIuMQA="
+  },
+  {
+   "v1": "AQEECMgEAAUAAncEYzAuMn0UAA==",
+   "v2": "AAADRAAFAQABAAHIAQAAAAECAQEIdwRjMC4yfRQA"
+  },
+  {
+   "v1": "AQEFAsgEAAUAAncEYzEuMn0VAA==",
+   "v2": "AAADBQQFAQABAAHIAQAAAAECAQECdwRjMS4yfRUA"
+  },
+  {
+   "v1": "AQEGAcgEAAUAAncEYzIuMn0WAA==",
+   "v2": "AAADBgQFAQABAAHIAQAAAAECAQEBdwRjMi4yfRYA"
+  },
+  {
+   "v1": "AQEECsgEAAQIAncEYzAuM30eAA==",
+   "v2": "AAACRAEBAAEQAcgBAAAAAQIBAQp3BGMwLjN9HgA="
+  },
+  {
+   "v1": "AAEEAQgC",
+   "v2": "AAAAAAAAAQAAAAAAAQQBCAE="
+  },
+  {
+   "v1": "AAEFAQIB",
+   "v2": "AAAAAAAAAQAAAAAAAQUBAgA="
+  },
+  {
+   "v1": "AQEEDMgEAAQKAncEYzAuNH0oAA==",
+   "v2": "AAACRAEBAAEUAcgBAAAAAQIBAQx3BGMwLjR9KAA="
+  },
+  {
+   "v1": "AAMGAQEBBQEDAQQBCwE=",
+   "v2": "AAAAAAAAAQAAAAAAAwYBAQAFAQMABAELAA=="
+  },
+  {
+   "v1": "AQEGA8gEAAQKAncEYzIuNH0qAA==",
+   "v2": "AAADBkQAAQABFAHIAQAAAAECAQEDdwRjMi40fSoA"
+  },
+  {
+   "v1": "AAIGAQMBBAENAQ==",
+   "v2": "AAAAAAAAAQAAAAAAAgYBAwAEAQ0A"
+  },
+  {
+   "v1": "AAEFAQAC",
+   "v2": "AAAAAAAAAQAAAAAAAQUBAAE="
+  },
+  {
+   "v1": "AAMGAQIBBQEAAQQBCgE=",
+   "v2": "AAAAAAAAAQAAAAAAAwYBAgAFAQAABAEKAA=="
+  }
+ ],
+ "expected": {
+  "content": {
+   "array": {
+    "json": [
+     1,
+     "c0.4",
+     42,
+     "p2.1"
+    ]
+   }
+  },
+  "stateVector": {
+   "4": 14,
+   "5": 4,
+   "6": 5
+  },
+  "deleteSet": {
+   "4": [
+    [
+     1,
+     11
+    ],
+    [
+     13,
+     1
+    ]
+   ],
+   "5": [
+    [
+     0,
+     4
+    ]
+   ],
+   "6": [
+    [
+     1,
+     3
+    ]
+   ]
+  },
+  "stateV1": "AwQGAIgEBwF3BHAyLjHBBAAFAALBBAAECgHIBgMECgF9KgIFAMEEAAQBAsEEAAUAAgYEAAgBBWFycmF5AX0BgQQAB8EEAAUAAsEEAAQIAsgEAAQKAXcEYzAuNMEEDAQKAQMGAQEDBQEABAQCAQsNAQ==",
+  "stateV2": "AAARBkQABUQABgQFRAEFRAEFRAQIDk4ABkYBAxgJABQAUkIAEAQAEYgAwQHIAMEBCACBAMEByADBBwVhcnJheQUBAQAMAQJBAEIAAQdCAEEAAwQAdwRwMi4xfSoCAAYAfQF3BGMwLjQDBgEBAgUBAAMEAgEKAQA=",
+  "stateVectorV1": "AwYFBQQEDg=="
+ },
+ "diff": {
+  "prefix": 9,
+  "stateVector": "AwYBBQQECg==",
+  "stateVectorMap": {
+   "4": 10,
+   "5": 4,
+   "6": 1
+  },
+  "updateV1": "AgMGAcEEAAUAAsEEAAQKAcgGAwQKAX0qAwQKwQQABAgCyAQABAoBdwRjMC40wQQMBAoBAwYBAQMFAQAEBAIBCw0B",
+  "updateV2": "AAAIBgQFRAAGRAYGAQAGRgAYBgAUAEQEAAnBAcgAwQDIAMEBAAAABgJBAAJBAAIDAX0qAwp3BGMwLjQDBgEBAgUBAAMEAgEKAQA=",
+  "from": {
+   "4": 10,
+   "6": 1
+  },
+  "to": {
+   "4": 14,
+   "6": 5
+  }
+ },
+ "merged": {
+  "v1": "AwMGAIgEBwF3BHAyLjHIBAAFAAJ3BGMyLjJ9FsgEAAQKAncEYzIuNH0qAgUAyAQABAECdwRjMS4xfQvIBAAFAAJ3BGMxLjJ9FQQEAAgBBWFycmF5CH0BfQJ9A3cEZm91cnYBBGZpdmV9BXUBfQZ4fsgEAAUAAncEYzAuMn0UyAQABAgCdwRjMC4zfR7IBAAECgJ3BGMwLjR9KAMGAQEDBQEABAQCAQsNAQ==",
+  "v2": "AAAPBkQABUQABUQBBUQABUQCBA5OAQQHABRSQgAQBAeIAMgDCADIBwVhcnJheQUBAQAGAUICCEIBAwMAdwRwMi4xdwRjMi4yfRZ3BGMyLjR9KgIAdwRjMS4xfQt3BGMxLjJ9FQQAfQF9An0DdwRmb3VydgEEZml2ZX0FdQF9Bnh+dwRjMC4yfRR3BGMwLjN9HncEYzAuNH0oAwYBAQIFAQADBAIBCgEA"
+ }
+}

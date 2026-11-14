@@ -1,0 +1,128 @@
+{
+ "name": "text-concurrent-same-position-2",
+ "description": "2 clients (ids 7, 3) insert concurrently at the start, the end and the same inner position; three rounds.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEHAAQBBHRleHQCYWIA",
+   "v2": "AAABBwAAAQQJBnRleHRhYgQCAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQEHAsQHAAcBBVswLjBdAA==",
+   "v2": "AAACRwEBAAECAcQHBVswLjBdBQAAAAEBAgA="
+  },
+  {
+   "v1": "AQEHB0QHAAEwAA==",
+   "v2": "AAACRwAAAQABRAMBMAEAAAABAQcA"
+  },
+  {
+   "v1": "AQEHCIQHAQM8MD4A",
+   "v2": "AAACRwABAgABhAUDPDA+AwAAAAEBCAA="
+  },
+  {
+   "v1": "AQEDAMQHAAcBBVsxLjBdAA==",
+   "v2": "AAADA0cAAQABAgHEBwVbMS4wXQUAAAABAQAA"
+  },
+  {
+   "v1": "AQEDBUQHAAExAA==",
+   "v2": "AAACAwcAAQABRAMBMQEAAAABAQUA"
+  },
+  {
+   "v1": "AQEDBoQHAQM8MT4A",
+   "v2": "AAACAwcBAgABhAUDPDE+AwAAAAEBBgA="
+  },
+  {
+   "v1": "AQEHC8QDBQcHBVswLjFdAA==",
+   "v2": "AAADBwMHAQoBDgHEBwVbMC4xXQUAAAABAQsA"
+  },
+  {
+   "v1": "AQEHEEQDBQEwAA==",
+   "v2": "AAACBwMAAQoBRAMBMAEAAAABARAA"
+  },
+  {
+   "v1": "AQEHEYQHCgM8MD4A",
+   "v2": "AAACRwABFAABhAUDPDA+AwAAAAEBEQA="
+  },
+  {
+   "v1": "AQEDCcQDBQcHBVsxLjFdAA==",
+   "v2": "AAADQwAHAQoBDgHEBwVbMS4xXQUAAAABAQkA"
+  },
+  {
+   "v1": "AQEDDkQDBQExAA==",
+   "v2": "AAACQwAAAQoBRAMBMQEAAAABAQ4A"
+  },
+  {
+   "v1": "AQEDD4QHCgM8MT4A",
+   "v2": "AAACAwcBFAABhAUDPDE+AwAAAAEBDwA="
+  },
+  {
+   "v1": "AQEHFMQDDgcQBVswLjJdAA==",
+   "v2": "AAADBwMHARwBIAHEBwVbMC4yXQUAAAABARQA"
+  },
+  {
+   "v1": "AQEHGUQDDgEwAA==",
+   "v2": "AAACBwMAARwBRAMBMAEAAAABARkA"
+  },
+  {
+   "v1": "AQEHGoQHEwM8MD4A",
+   "v2": "AAACRwABJgABhAUDPDA+AwAAAAEBGgA="
+  },
+  {
+   "v1": "AQEDEsQDDgcQBVsxLjJdAA==",
+   "v2": "AAADQwAHARwBIAHEBwVbMS4yXQUAAAABARIA"
+  },
+  {
+   "v1": "AQEDF0QDDgExAA==",
+   "v2": "AAACQwAAARwBRAMBMQEAAAABARcA"
+  },
+  {
+   "v1": "AQEDGIQHEwM8MT4A",
+   "v2": "AAACAwcBJgABhAUDPDE+AwAAAAEBGAA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "101[1.2][0.2]01[1.1][0.1]0a[1.0][0.0]b<1><0><1><0><1><0>"
+   }
+  },
+  "stateVector": {
+   "3": 27,
+   "7": 29
+  },
+  "deleteSet": {},
+  "stateV1": "AgsHAAQBBHRleHQBYYQHAAFixAcABwEFWzAuMF1EBwABMIQHAQM8MD7EAwUHBwVbMC4xXUQDBQEwhAcKAzwwPsQDDgcQBVswLjJdRAMOATCEBxMDPDA+CQMAxAcABwEFWzEuMF1EBwABMYQHAQM8MT7EAwUHBwVbMS4xXUQDBQExhAcKAzwxPsQDDgcQBVsxLjJdRAMOATGEBxMDPDE+AA==",
+  "stateV2": "AAAVRwQDBwMHAwcDBwNHAgMHAwcDBwMHDQEAAggKCApmAggKCAoMAkIORBZEWkIORBZEJwQAhADEAEQAhADEAEQAhADEAEQAhADEAEQAhADEAEQAhADEAEQAhFI8dGV4dGFiWzAuMF0wPDA+WzAuMV0wPDA+WzAuMl0wPDA+WzEuMF0xPDE+WzEuMV0xPDE+WzEuMl0xPDE+BEEABQEDBQEDBQEDBQEDBQEDBQEDAQEAAAILAAkAAA==",
+  "stateVectorV1": "AgcdAxs="
+ },
+ "diff": {
+  "prefix": 9,
+  "stateVector": "AgcRAwk=",
+  "stateVectorMap": {
+   "3": 9,
+   "7": 17
+  },
+  "updateV1": "AgQHEYQHCgM8MD7EAw4HEAVbMC4yXUQDDgEwhAcTAzwwPgYDCcQDBQcHBVsxLjFdRAMFATGEBwoDPDE+xAMOBxAFWzEuMl1EAw4BMYQHEwM8MT4A",
+  "updateV2": "AAAPRwADBwMHQwAHAwcDBwMHBxQIClwKCAoGIERORBZEE4QAxABEAIQAxABEAIQAxABEAIQpHjwwPlswLjJdMDwwPlsxLjFdMTwxPlsxLjJdMTwxPgMFAQMFAQMFAQMAAAACBBEGCQA=",
+  "from": {
+   "3": 9,
+   "7": 17
+  },
+  "to": {
+   "3": 27,
+   "7": 29
+  }
+ },
+ "merged": {
+  "v1": "AgoHAAQBBHRleHQCYWLEBwAHAQVbMC4wXUQHAAEwhAcBAzwwPsQDBQcHBVswLjFdRAMFATCEBwoDPDA+xAMOBxAFWzAuMl1EAw4BMIQHEwM8MD4JAwDEBwAHAQVbMS4wXUQHAAExhAcBAzwxPsQDBQcHBVsxLjFdRAMFATGEBwoDPDE+xAMOBxAFWzEuMl1EAw4BMYQHEwM8MT4A",
+  "v2": "AAAVRwMDBwMHAwcDBwNHAgMHAwcDBwMHDAACCAoICmYCCAoICgwCQg5EFkRaQg5EFkQlBADEAEQAhADEAEQAhADEAEQAhADEAEQAhADEAEQAhADEAEQAhFE8dGV4dGFiWzAuMF0wPDA+WzAuMV0wPDA+WzAuMl0wPDA+WzEuMF0xPDE+WzEuMV0xPDE+WzEuMl0xPDE+BAIFAQMFAQMFAQMFAQMFAQMFAQMBAQAAAgoACQAA"
+ }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "ycs-corpus",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "node gen.mjs",
+    "roundtrip": "node roundtrip.mjs"
+  },
+  "dependencies": {
+    "yjs": "13.6.32"
+  }
+}
