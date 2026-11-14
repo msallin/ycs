@@ -1,14 +1,11 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
-    <LangVersion>latest</LangVersion>
-    <OutputType>Library</OutputType>
-    <Company>Microsoft</Company>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
     <Version>0.0.1</Version>
-    <Description>.Net implementation of the Yjs library.</Description>
+    <Description>.NET implementation of the Yjs CRDT framework.</Description>
     <Copyright>Copyright (c) 2021</Copyright>
-    <PackageLicenseExpression></PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/yjs/ycs/</PackageProjectUrl>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <RepositoryUrl>https://github.com/yjs/ycs/</RepositoryUrl>
@@ -21,21 +18,8 @@
     <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
-    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
-  </PropertyGroup>
-
   <ItemGroup>
-    <!-- JSON in the v1 update format goes through Utils/YJson.cs (JSON.stringify / JSON.parse rules) on
-         System.Text.Json, which is in the box from net8.0; only netstandard2.0 needs the package. -->
-    <PackageReference Include="System.Text.Json" Version="8.0.5" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <None Include="..\..\LICENSE">
-      <Pack>True</Pack>
-      <PackagePath></PackagePath>
-    </None>
+    <None Include="..\..\LICENSE" Pack="true" PackagePath="" />
   </ItemGroup>
 
 </Project>
