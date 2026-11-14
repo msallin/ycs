@@ -47,7 +47,7 @@ public class UpdateOperationsTests
         ParseUpdateMeta = UpdateOperations.ParseUpdateMeta,
         DiffUpdate = UpdateOperations.DiffUpdate,
         DecodeUpdate = UpdateOperations.DecodeUpdate,
-        Subscribe = (doc, handler) => doc.UpdateV1 += handler,
+        Subscribe = (doc, handler) => doc.Update += handler,
     };
 
     private static Enc EncV2 => new Enc

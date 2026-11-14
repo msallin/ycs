@@ -6,6 +6,7 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Buffers;
 using System.Diagnostics;
 
 namespace Ycs;
@@ -19,6 +20,18 @@ public class YDocOptions
     public string Guid { get; set; } = System.Guid.NewGuid().ToString("D");
     public IDictionary<string, string> Meta { get; set; } = null;
     public bool AutoLoad { get; set; } = false;
+
+    /// <summary>
+    /// The client id to start with instead of a random one; for tests and reproducible benchmarks.
+    /// Two documents that edit concurrently must never share a client id.
+    /// </summary>
+    public int? ClientId
+    {
+        get => _clientId;
+        set => _clientId = value is null or >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "A client id cannot be negative.");
+    }
+
+    private int? _clientId;
 
     internal YDocOptions Clone()
     {
@@ -92,14 +105,8 @@ public partial class YDoc
     /// </summary>
     internal static int GenerateNewClientId()
     {
-        var buffer = new byte[4];
-        using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
-        {
-            rng.GetBytes(buffer);
-        }
-
         // Non-negative, to stay within the int-typed ClientId; the wire format writes it as a uint.
-        return BitConverter.ToInt32(buffer, 0) & int.MaxValue;
+        return System.Security.Cryptography.RandomNumberGenerator.GetInt32(int.MaxValue);
     }
 
     /// <param name="gc">Disable garbage collection.</param>
@@ -109,7 +116,7 @@ public partial class YDoc
         _opts = opts ?? new YDocOptions();
         _transactionCleanups = new List<Transaction>();
 
-        ClientId = GenerateNewClientId();
+        ClientId = _opts.ClientId ?? GenerateNewClientId();
         _share = new Dictionary<string, AbstractType>();
         Store = new StructStore();
         Subdocs = new HashSet<YDoc>();
@@ -194,11 +201,14 @@ public partial class YDoc
     public event EventHandler BeforeAllTransactions;
     public event EventHandler<IList<Transaction>> AfterAllTransactions;
     /// <summary>
-    /// Fires with an update in the original ('v1') format - the one used by
-    /// 'Y.applyUpdate' and every y-protocols provider.
+    /// Fires after each transaction that changed the document, with the change as an update in the
+    /// original ('v1') format: Yjs' <c>doc.on('update')</c>, what every y-protocols provider sends.
     /// </summary>
-    public event EventHandler<(byte[] data, object origin, Transaction transaction)> UpdateV1;
+    public event EventHandler<(byte[] data, object origin, Transaction transaction)> Update;
 
+    /// <summary>
+    /// Like <see cref="Update"/>, with the update in the v2 format: Yjs' <c>doc.on('updateV2')</c>.
+    /// </summary>
     public event EventHandler<(byte[] data, object origin, Transaction transaction)> UpdateV2;
     public event EventHandler Destroyed;
     public event EventHandler<(ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed)> SubdocsChanged;
@@ -312,44 +322,32 @@ public partial class YDoc
     }
 
     /// <summary>
-    /// Read and apply a document update in the original ('v1') format,
-    /// i.e. the output of Yjs' 'Y.encodeStateAsUpdate'.
+    /// Applies an update in the original ('v1') format, the output of Yjs' <c>Y.encodeStateAsUpdate</c>
+    /// and of every y-protocols provider (Yjs' <c>Y.applyUpdate</c>).
     /// </summary>
+    /// <param name="update">The update.</param>
+    /// <param name="transactionOrigin">Stored on the transaction; observers and the undo manager see it.</param>
+    /// <param name="local">Whether the transaction counts as a local change.</param>
+    public void ApplyUpdate(byte[] update, object transactionOrigin = null, bool local = false) => ApplyUpdateV1(update, transactionOrigin, local);
+
+    /// <inheritdoc cref="ApplyUpdate(byte[], object, bool)"/>
+    public void ApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false) => ApplyUpdateV1(update, transactionOrigin, local);
+
+    /// <inheritdoc cref="ApplyUpdate(byte[], object, bool)"/>
     public void ApplyUpdateV1(byte[] update, object transactionOrigin = null, bool local = false)
     {
         ArgumentNullException.ThrowIfNull(update);
         ApplyUpdate(new UpdateDecoderV1(new Lib0Reader(update)), transactionOrigin, local);
     }
 
-    /// <inheritdoc cref="ApplyUpdateV1(byte[], object, bool)"/>
+    /// <inheritdoc cref="ApplyUpdate(byte[], object, bool)"/>
     public void ApplyUpdateV1(ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
     {
         WithPooledCopy(update, buffer => ApplyUpdate(new UpdateDecoderV1(buffer), transactionOrigin, local));
     }
 
     /// <summary>
-    /// Encode the whole document as a single 'v1' update message, optionally diffed
-    /// against a remote state vector. Feed the result to Yjs' 'Y.applyUpdate'.
-    /// </summary>
-    public byte[] EncodeStateAsUpdateV1(byte[] encodedTargetStateVector = null)
-    {
-        var encoder = new UpdateEncoderV1();
-        var targetStateVector = encodedTargetStateVector == null
-            ? new Dictionary<long, long>()
-            : EncodingUtils.DecodeStateVector(new Lib0Reader(encodedTargetStateVector));
-        WriteStateAsUpdate(encoder, targetStateVector);
-        return encoder.ToArray();
-    }
-
-    public byte[] EncodeStateVectorV1()
-    {
-        var encoder = new DSEncoderV1();
-        WriteStateVector(encoder);
-        return encoder.ToArray();
-    }
-
-    /// <summary>
-    /// Read and apply a document update in the v2 format (Yjs' 'Y.applyUpdateV2').
+    /// Applies an update in the v2 format (Yjs' <c>Y.applyUpdateV2</c>).
     /// </summary>
     public void ApplyUpdateV2(byte[] update, object transactionOrigin = null, bool local = false)
     {
@@ -362,6 +360,87 @@ public partial class YDoc
     {
         WithPooledCopy(update, buffer => ApplyUpdate(new UpdateDecoderV2(buffer), transactionOrigin, local));
     }
+
+    /// <summary>
+    /// Encodes the document as one update in the original ('v1') format (Yjs' <c>Y.encodeStateAsUpdate</c>).
+    /// With a remote state vector, only what the remote side is missing is written.
+    /// </summary>
+    /// <param name="encodedTargetStateVector">A state vector from <see cref="EncodeStateVector()"/>; empty for the whole document.</param>
+    public byte[] EncodeStateAsUpdate(ReadOnlySpan<byte> encodedTargetStateVector = default) => EncodeStateAsUpdateV1(encodedTargetStateVector);
+
+    /// <summary>
+    /// Writes the document as one update in the original ('v1') format into <paramref name="destination"/>.
+    /// </summary>
+    /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
+    public void EncodeStateAsUpdate(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default) =>
+        EncodeStateAsUpdateV1(destination, encodedTargetStateVector);
+
+    /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
+    public byte[] EncodeStateAsUpdateV1(ReadOnlySpan<byte> encodedTargetStateVector = default)
+    {
+        var encoder = new UpdateEncoderV1();
+        WriteStateAsUpdate(encoder, DecodeTargetStateVector(encodedTargetStateVector));
+        return encoder.ToArray();
+    }
+
+    /// <inheritdoc cref="EncodeStateAsUpdate(IBufferWriter{byte}, ReadOnlySpan{byte})"/>
+    public void EncodeStateAsUpdateV1(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        var encoder = new UpdateEncoderV1();
+        WriteStateAsUpdate(encoder, DecodeTargetStateVector(encodedTargetStateVector));
+        encoder.WriteTo(destination);
+    }
+
+    /// <summary>
+    /// Encodes the document as one update in the v2 format (Yjs' <c>Y.encodeStateAsUpdateV2</c>).
+    /// </summary>
+    /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
+    public byte[] EncodeStateAsUpdateV2(ReadOnlySpan<byte> encodedTargetStateVector = default)
+    {
+        var encoder = new UpdateEncoderV2();
+        WriteStateAsUpdate(encoder, DecodeTargetStateVector(encodedTargetStateVector));
+        return encoder.ToArray();
+    }
+
+    /// <summary>
+    /// Writes the document as one update in the v2 format into <paramref name="destination"/>.
+    /// </summary>
+    /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
+    public void EncodeStateAsUpdateV2(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        var encoder = new UpdateEncoderV2();
+        WriteStateAsUpdate(encoder, DecodeTargetStateVector(encodedTargetStateVector));
+        encoder.WriteTo(destination);
+    }
+
+    /// <summary>
+    /// Encodes the document's state vector (Yjs' <c>Y.encodeStateVector</c>). The state vector has the
+    /// same bytes in both update formats.
+    /// </summary>
+    public byte[] EncodeStateVector()
+    {
+        var encoder = new DSEncoderV1();
+        WriteStateVector(encoder);
+        return encoder.ToArray();
+    }
+
+    /// <inheritdoc cref="EncodeStateVector()"/>
+    public byte[] EncodeStateVectorV1() => EncodeStateVector();
+
+    /// <inheritdoc cref="EncodeStateVector()"/>
+    public byte[] EncodeStateVectorV2()
+    {
+        var encoder = new DSEncoderV2();
+        WriteStateVector(encoder);
+        return encoder.ToArray();
+    }
+
+    private static IDictionary<long, long> DecodeTargetStateVector(ReadOnlySpan<byte> encodedTargetStateVector) =>
+        encodedTargetStateVector.IsEmpty
+            ? new Dictionary<long, long>()
+            : EncodingUtils.DecodeStateVector(new Lib0Reader(encodedTargetStateVector.ToArray()));
 
     private void ApplyUpdate(IUpdateDecoder structDecoder, object transactionOrigin, bool local)
     {
@@ -378,7 +457,7 @@ public partial class YDoc
     /// </summary>
     private static void WithPooledCopy(ReadOnlySpan<byte> update, Action<Lib0Reader> read)
     {
-        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(update.Length);
+        var buffer = ArrayPool<byte>.Shared.Rent(update.Length);
         try
         {
             update.CopyTo(buffer);
@@ -386,31 +465,8 @@ public partial class YDoc
         }
         finally
         {
-            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
+            ArrayPool<byte>.Shared.Return(buffer);
         }
-    }
-
-    /// <summary>
-    /// Write all the document as a single update message that can be applied on the remote document.
-    /// If you specify the state of the remote client, it will only write the operations that are missing.
-    /// <br/>
-    /// Use 'WriteStateAsUpdate' instead if you are working with Encoder.
-    /// </summary>
-    public byte[] EncodeStateAsUpdateV2(byte[] encodedTargetStateVector = null)
-    {
-        var encoder = new UpdateEncoderV2();
-        var targetStateVector = encodedTargetStateVector == null
-            ? new Dictionary<long, long>()
-            : EncodingUtils.DecodeStateVector(new Lib0Reader(encodedTargetStateVector));
-        WriteStateAsUpdate(encoder, targetStateVector);
-        return encoder.ToArray();
-    }
-
-    public byte[] EncodeStateVectorV2()
-    {
-        var encoder = new DSEncoderV2();
-        WriteStateVector(encoder);
-        return encoder.ToArray();
     }
 
     /// <summary>
@@ -470,7 +526,7 @@ public partial class YDoc
 
     internal void InvokeUpdateV1(Transaction transaction)
     {
-        var handler = UpdateV1;
+        var handler = Update;
         if (handler != null)
         {
             var encoder = new UpdateEncoderV1();

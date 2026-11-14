@@ -45,9 +45,9 @@ internal static class Program
 
         Measure("replay", runs, () =>
         {
-            var doc = new YDoc();
+            var doc = new YDoc(new YDocOptions { ClientId = 123456789 });
             var collected = new List<byte[]>(txnStarts.Count);
-            doc.UpdateV1 += (s, e) => collected.Add(e.data);
+            doc.Update += (s, e) => collected.Add(e.data);
             var text = doc.GetText("text");
             for (int t = 0; t + 1 < txnStarts.Count; t++)
             {

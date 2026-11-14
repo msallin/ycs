@@ -64,14 +64,15 @@ public partial class AbstractType
     public virtual object ToJson() { throw new NotImplementedException(); }
 
     /// <summary>
-    /// Observe all events that are created on this type (mirrors Yjs' <c>observe(f)</c>).
-    /// <br/>
-    /// C# idiom note: <see cref="EventHandler"/> is a regular .NET event, so subscribing with
-    /// <c>+=</c>/<c>-=</c> already works. <see cref="Observe"/>/<see cref="Unobserve"/> are thin,
-    /// symmetrical wrappers over the same event provided for callers who prefer the Yjs-style
-    /// method-call API (and for parity with <c>ObserveDeep</c>/<c>UnobserveDeep</c> below).
+    /// Observe all events that are created on this type (Yjs' <c>observe(f)</c>). Disposing the
+    /// result unsubscribes, which is handy for lambdas; <c>+=</c>/<c>-=</c> on <see cref="EventHandler"/>
+    /// and <see cref="Unobserve"/> work as well.
     /// </summary>
-    public void Observe(EventHandler<YEventArgs> handler) => EventHandler += handler;
+    public IDisposable Observe(EventHandler<YEventArgs> handler)
+    {
+        EventHandler += handler;
+        return new Subscription(() => EventHandler -= handler);
+    }
 
     /// <summary>
     /// Unregister an observer function previously registered with <see cref="Observe"/> (or <c>+=</c>).
@@ -79,14 +80,30 @@ public partial class AbstractType
     public void Unobserve(EventHandler<YEventArgs> handler) => EventHandler -= handler;
 
     /// <summary>
-    /// Observe all events that are created by this type and its children (mirrors Yjs' <c>observeDeep(f)</c>).
+    /// Observe all events that are created by this type and its children (Yjs' <c>observeDeep(f)</c>).
+    /// Disposing the result unsubscribes.
     /// </summary>
-    public void ObserveDeep(EventHandler<YDeepEventArgs> handler) => DeepEventHandler += handler;
+    public IDisposable ObserveDeep(EventHandler<YDeepEventArgs> handler)
+    {
+        DeepEventHandler += handler;
+        return new Subscription(() => DeepEventHandler -= handler);
+    }
 
     /// <summary>
     /// Unregister a deep observer function previously registered with <see cref="ObserveDeep"/> (or <c>+=</c>).
     /// </summary>
     public void UnobserveDeep(EventHandler<YDeepEventArgs> handler) => DeepEventHandler -= handler;
+
+    private sealed class Subscription(Action unsubscribe) : IDisposable
+    {
+        private Action _unsubscribe = unsubscribe;
+
+        public void Dispose()
+        {
+            _unsubscribe?.Invoke();
+            _unsubscribe = null;
+        }
+    }
 
     /// <summary>
     /// Call event listeners with an event. This will also add an event to all parents
