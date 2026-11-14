@@ -243,6 +243,14 @@ public partial class YDoc
     internal StructStore Store { get; private set; }
 
     /// <summary>
+    /// Whether received structs or deletions wait for an update this document has not received (Yjs'
+    /// <c>doc.store.pendingStructs</c> and <c>pendingDs</c>). What waits is not in the document yet, and
+    /// <see cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/> leaves it out; it is integrated when the
+    /// missing update arrives. Updates that do not depend on it are integrated meanwhile.
+    /// </summary>
+    public bool HasPending => Store.Pending != null || Store.PendingDs.Count != 0;
+
+    /// <summary>
     /// Changes that happen inside of a transaction are bundled.
     /// This means that the observer fires _after_ the transaction is finished and that
     /// all changes that happened inside of the transaction are sent as one message to the

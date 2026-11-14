@@ -315,6 +315,7 @@ class Ycs.YDoc
     YXmlText GetXmlText(string name = "")
     bool AutoLoad { get; }
     bool Gc { get; }
+    bool HasPending { get; }
     bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
     bool TryApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
     byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
@@ -395,6 +396,7 @@ class Ycs.YText : YArrayBase
     YText Clone()
     YText()
     YText(string str)
+    bool RemoveNonText()
     int CleanupFormatting()
     object GetAttribute(string name)
     override object ToJson()

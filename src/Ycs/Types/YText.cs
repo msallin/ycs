@@ -756,6 +756,50 @@ public partial class YText : YArrayBase
         }
     }
 
+    /// <summary>
+    /// Makes this text plain text: deletes, in one transaction, every embed, nested type and other
+    /// content that is not a string, and every formatting attribute. Afterwards <c>Length</c> is the
+    /// length of <see cref="ToString"/>, and an index into one is an index into the other. For a peer
+    /// that shows the text in a plain-text editor (a textarea), where such content would shift every
+    /// later position. Strings are left as they are.
+    /// </summary>
+    /// <returns>Whether anything was deleted; when not, no transaction is started.</returns>
+    /// <exception cref="InvalidOperationException">The text is not in a document yet.</exception>
+    public bool RemoveNonText()
+    {
+        if (Doc == null)
+        {
+            throw new InvalidOperationException("The text is not in a document yet; add it to one first. Nothing was changed.");
+        }
+
+        List<Item> remove = null;
+        for (var n = _start; n != null; n = n.Right as Item)
+        {
+            if (!n.Deleted && (n.Content is ContentFormat || (n.Countable && n.Content is not ContentString)))
+            {
+                (remove ??= new List<Item>()).Add(n);
+            }
+        }
+
+        if (remove == null)
+        {
+            return false;
+        }
+
+        Doc.Transact(tr =>
+        {
+            foreach (var item in remove)
+            {
+                item.Delete(tr);
+            }
+
+            // The items are deleted directly, not by index, so the markers' indexes no longer hold.
+            ClearSearchMarkers();
+        });
+
+        return true;
+    }
+
     public override string ToString()
     {
         // TODO: [aleskeyk] Can use cached builder.
