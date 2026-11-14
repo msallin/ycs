@@ -315,7 +315,9 @@ internal class DeleteSet
     {
         encoder.RestWriter.WriteVarUint((uint)Clients.Count);
 
-        foreach (var kvp in Clients)
+        // Highest client id first: Yjs' writeDeleteSet sorts "to ensure that the delete set is
+        // written in a deterministic order".
+        foreach (var kvp in Clients.OrderByDescending(kvp => kvp.Key))
         {
             var client = kvp.Key;
             var dsItems = kvp.Value;
