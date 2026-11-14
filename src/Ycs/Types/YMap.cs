@@ -44,7 +44,7 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
         _prelimContent = entries != null ? new Dictionary<string, object>(entries) : new Dictionary<string, object>();
     }
 
-    public int Count => _prelimContent?.Count ?? TypeMapCount();
+    public int Count => _prelimContent?.Count ?? _mapCount;
 
     /// <summary>
     /// Returns the size of the YMap (count of key/value pairs). Mirrors Yjs' <c>size</c> getter;
@@ -66,10 +66,7 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
     {
         if (Doc != null)
         {
-            Doc.Transact(tr =>
-            {
-                TypeMapSet(tr, key, value);
-            });
+            Doc.Transact((self: this, key, value), static (s, tr) => s.self.TypeMapSet(tr, s.key, s.value));
         }
         else
         {
@@ -81,10 +78,7 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
     {
         if (Doc != null)
         {
-            Doc.Transact(tr =>
-            {
-                TypeMapDelete(tr, key);
-            });
+            Doc.Transact((self: this, key), static (s, tr) => s.self.TypeMapDelete(tr, s.key));
         }
         else
         {

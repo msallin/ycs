@@ -276,7 +276,7 @@ public class YXmlFragment : YArrayBase
     {
         if (Doc != null)
         {
-            Doc.Transact(tr => InsertGenerics(tr, index, content));
+            Doc.Transact((self: this, index, content), static (s, tr) => s.self.InsertGenerics(tr, s.index, s.content));
         }
         else
         {
@@ -291,7 +291,7 @@ public class YXmlFragment : YArrayBase
     {
         if (Doc != null)
         {
-            Doc.Transact(tr => InsertGenericsAfter(tr, refItem?._item, content));
+            Doc.Transact((self: this, item: refItem?._item, content), static (s, tr) => s.self.InsertGenericsAfter(tr, s.item, s.content));
         }
         else
         {
@@ -320,7 +320,7 @@ public class YXmlFragment : YArrayBase
     {
         if (Doc != null)
         {
-            Doc.Transact(tr => Delete(tr, index, length));
+            Doc.Transact((self: this, index, length), static (s, tr) => s.self.Delete(tr, s.index, s.length));
         }
         else
         {

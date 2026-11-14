@@ -38,6 +38,9 @@ public partial class AbstractType
     internal Item _start = null;
     internal Dictionary<string, Item> _map = new Dictionary<string, Item>();
 
+    // How many keys of _map have a value that is not deleted, kept by Item.Integrate and Item.Delete.
+    internal int _mapCount;
+
     public event EventHandler<YEventArgs> EventHandler;
     public event EventHandler<YDeepEventArgs> DeepEventHandler;
 
@@ -54,6 +57,10 @@ public partial class AbstractType
         Doc = doc;
         _item = item;
         Depth = item?.Parent is AbstractType parent ? parent.Depth + 1 : 0;
+
+        // A root type that was read from an update before it was defined takes over the map of
+        // its placeholder (YDoc.Get).
+        _mapCount = TypeMapCount();
     }
 
     /// <summary>Throws when a type inserted into this one would be nested deeper than <see cref="Limits.MaxDepth"/>.</summary>
@@ -290,7 +297,7 @@ public partial class AbstractType
     internal static object ValueAt(IContent content, int index) =>
         content is ContentAny any ? any.ValueAt(index) : content.GetContent()[index];
 
-    /// <summary>How many keys have a value that is not deleted; walks the map without allocating.</summary>
+    /// <summary>How many keys have a value that is not deleted, by walking the map (<see cref="_mapCount"/> is kept instead).</summary>
     internal int TypeMapCount()
     {
         var count = 0;

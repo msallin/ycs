@@ -226,6 +226,11 @@ public partial class Item : AbstractStruct
                 parent.Length -= Length;
             }
 
+            if (ParentSub != null && parent._map.TryGetValue(ParentSub, out var current) && current == this)
+            {
+                parent._mapCount--;
+            }
+
             MarkDeleted();
             transaction.DeleteSet.Add(Id.Client, Id.Clock, Length);
             transaction.AddChangedTypeToTransaction(parent, ParentSub);
@@ -246,6 +251,9 @@ public partial class Item : AbstractStruct
 
         if (Parent != null)
         {
+            AbstractType mapParent = null;
+            var previousCounted = false;
+
             if ((Left == null && (Right == null || (Right as Item)?.Left != null)) || (Left != null && (Left as Item)?.Right != Right))
             {
                 var left = Left;
@@ -378,7 +386,9 @@ public partial class Item : AbstractStruct
             else if (ParentSub != null)
             {
                 // Set as current parent value if right == null and this is parentSub.
-                (Parent as AbstractType)._map[ParentSub] = this;
+                mapParent = (AbstractType)Parent;
+                previousCounted = mapParent._map.TryGetValue(ParentSub, out var previous) && !previous.Deleted;
+                mapParent._map[ParentSub] = this;
                 // This is the current attribute value of parent. Delete right.
                 Left?.Delete(transaction);
             }
@@ -392,6 +402,12 @@ public partial class Item : AbstractStruct
 
             transaction.Doc.Store.AddStruct(this);
             Content.Integrate(transaction, this);
+
+            // Counted once its content is integrated: deleted content marks the item deleted.
+            if (mapParent != null)
+            {
+                mapParent._mapCount += (Deleted ? 0 : 1) - (previousCounted ? 1 : 0);
+            }
 
             // Add parent to transaction.changed.
             transaction.AddChangedTypeToTransaction(Parent as AbstractType, ParentSub);

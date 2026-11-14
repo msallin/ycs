@@ -97,6 +97,7 @@ public class ContentType : IContentEx
         }
 
         Type._map.Clear();
+        Type._mapCount = 0;
     }
 
     void IContentEx.Write(IUpdateEncoder encoder, int offset)

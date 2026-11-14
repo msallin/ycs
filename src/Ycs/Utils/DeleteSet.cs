@@ -272,7 +272,7 @@ internal class DeleteSet
 
     private void CreateDeleteSetFromStructStore(StructStore ss)
     {
-        foreach (var (client, structs) in EncodingUtils.ClientsOf(ss))
+        foreach (var (client, structs) in ss.Clients)
         {
             List<DeleteItem> dsItems = null;
             for (var i = 0; NextDeletedRange(structs, ref i, out var clock, out var length);)
@@ -379,7 +379,7 @@ internal class DeleteSet
     /// </summary>
     public static void WriteFromStore(IDSEncoder encoder, StructStore store)
     {
-        var clientStructs = EncodingUtils.ClientsOf(store);
+        var clientStructs = store.Clients;
         var capacity = clientStructs.Count;
         long[] rentedClients = null;
         long[] rentedCounts = null;

@@ -695,8 +695,7 @@ public partial class YText : YArrayBase
         var doc = Doc;
         if (doc != null)
         {
-            // TODO: Transact<TState>((this, index, text, attributes), static (tr, s) => s.Item1.InsertInTransaction(tr, s.index, s.text, s.attributes)) avoids this closure.
-            doc.Transact(tr => InsertInTransaction(tr, index, text, attributes));
+            doc.Transact((self: this, index, text, attributes), static (s, tr) => s.self.InsertInTransaction(tr, s.index, s.text, s.attributes));
         }
         else
         {
@@ -722,10 +721,10 @@ public partial class YText : YArrayBase
 
         if (Doc != null)
         {
-            Doc.Transact(tr =>
+            Doc.Transact((self: this, index, embed, attributes), static (s, tr) =>
             {
-                var pos = FindPosition(tr, index, useSearchMarker: false);
-                InsertText(tr, ref pos, embed, attributes);
+                var pos = s.self.FindPosition(tr, s.index, useSearchMarker: false);
+                s.self.InsertText(tr, ref pos, s.embed, s.attributes);
             });
         }
         else
@@ -743,8 +742,7 @@ public partial class YText : YArrayBase
 
         if (Doc != null)
         {
-            // TODO: Transact<TState>((this, index, length), static (tr, s) => s.Item1.DeleteInTransaction(tr, s.index, s.length)) avoids this closure.
-            Doc.Transact(tr => DeleteInTransaction(tr, index, length));
+            Doc.Transact((self: this, index, length), static (s, tr) => s.self.DeleteInTransaction(tr, s.index, s.length));
         }
         else
         {
@@ -767,15 +765,15 @@ public partial class YText : YArrayBase
 
         if (Doc != null)
         {
-            Doc.Transact(tr =>
+            Doc.Transact((self: this, index, length, attributes), static (s, tr) =>
             {
-                var pos = FindPosition(tr, index, useSearchMarker: false);
+                var pos = s.self.FindPosition(tr, s.index, useSearchMarker: false);
                 if (pos.Right == null)
                 {
                     return;
                 }
 
-                FormatText(tr, ref pos, length, attributes);
+                s.self.FormatText(tr, ref pos, s.length, s.attributes);
             });
         }
         else
@@ -920,10 +918,7 @@ public partial class YText : YArrayBase
     {
         if (Doc != null)
         {
-            Doc.Transact(tr =>
-            {
-                TypeMapDelete(tr, name);
-            });
+            Doc.Transact((self: this, name), static (s, tr) => s.self.TypeMapDelete(tr, s.name));
         }
         else
         {
@@ -935,10 +930,7 @@ public partial class YText : YArrayBase
     {
         if (Doc != null)
         {
-            Doc.Transact(tr =>
-            {
-                TypeMapSet(tr, name, value);
-            });
+            Doc.Transact((self: this, name, value), static (s, tr) => s.self.TypeMapSet(tr, s.name, s.value));
         }
         else
         {

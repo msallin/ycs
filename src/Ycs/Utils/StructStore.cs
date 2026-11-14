@@ -82,14 +82,19 @@ internal sealed partial class StructStore
     public IDictionary<long, long> GetStateVector()
     {
         var result = new Dictionary<long, long>(Clients.Count);
+        GetStateVector(result);
+        return result;
+    }
 
+    /// <summary>Writes the state vector into <paramref name="into"/>, which is cleared first.</summary>
+    internal void GetStateVector(Dictionary<long, long> into)
+    {
+        into.Clear();
         foreach (var kvp in Clients)
         {
             var str = kvp.Value[kvp.Value.Count - 1];
-            result[kvp.Key] = str.Id.Clock + str.Length;
+            into[kvp.Key] = str.Id.Clock + str.Length;
         }
-
-        return result;
     }
 
     public long GetState(long clientId)

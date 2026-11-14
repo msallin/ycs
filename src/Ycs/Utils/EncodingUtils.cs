@@ -79,11 +79,6 @@ internal static class EncodingUtils
     /// <summary>Up to this many clients, the client lists of the encoders are sorted on the stack.</summary>
     internal const int StackClients = 64;
 
-    /// <summary>
-    /// The store's structs by client. <see cref="StructStore.Clients"/> is always a <see cref="Dictionary{TKey, TValue}"/>;
-    /// enumerating it as one does not box the enumerator.
-    /// </summary>
-    internal static Dictionary<long, List<AbstractStruct>> ClientsOf(StructStore store) => (Dictionary<long, List<AbstractStruct>>)store.Clients;
 
     /// <summary>
     /// Writes the structs of every client the store has more of than <paramref name="sm"/> says,
@@ -91,7 +86,7 @@ internal static class EncodingUtils
     /// </summary>
     public static void WriteClientsStructs(IUpdateEncoder encoder, StructStore store, IDictionary<long, long> sm)
     {
-        var clientStructs = ClientsOf(store);
+        var clientStructs = store.Clients;
         var capacity = clientStructs.Count;
         long[] rentedClients = null;
         long[] rentedClocks = null;
@@ -455,7 +450,7 @@ internal static class EncodingUtils
     /// <summary>Writes the state vector of <paramref name="store"/> without building it.</summary>
     public static void WriteStateVector(IDSEncoder encoder, StructStore store)
     {
-        var clientStructs = ClientsOf(store);
+        var clientStructs = store.Clients;
         var capacity = clientStructs.Count;
         long[] rentedClients = null;
         long[] rentedClocks = null;

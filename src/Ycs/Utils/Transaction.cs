@@ -169,7 +169,7 @@ public partial class Transaction
         _deleteSet ??= new DeleteSet();
         _afterState ??= new Dictionary<long, long>();
         _beforeState ??= new Dictionary<long, long>();
-        GetStateVector(_doc.Store, _beforeState);
+        _doc.Store.GetStateVector(_beforeState);
     }
 
     /// <summary>
@@ -236,18 +236,6 @@ public partial class Transaction
         }
     }
 
-    // Like StructStore.GetStateVector, into a dictionary that is reused.
-    private static void GetStateVector(StructStore store, Dictionary<long, long> into)
-    {
-        into.Clear();
-        foreach (var kvp in store.Clients)
-        {
-            var structs = kvp.Value;
-            var last = structs[structs.Count - 1];
-            into[kvp.Key] = last.Id.Clock + last.Length;
-        }
-    }
-
     internal ID GetNextId()
     {
         return new ID(_doc.ClientId, _doc.Store.GetState(_doc.ClientId));
@@ -262,13 +250,13 @@ public partial class Transaction
         var item = type._item;
         if (item == null || (_beforeState.TryGetValue(item.Id.Client, out var clock) && item.Id.Clock < clock && !item.Deleted))
         {
-            if (!_changed.TryGetValue(type, out var set))
+            // Most changed types are lists, which share one read-only set (ChangedKeys.ChildList).
+            _changed.TryGetValue(type, out var set);
+            var updated = ChangedKeys.Add(set, parentSub);
+            if (!ReferenceEquals(updated, set))
             {
-                set = new HashSet<string>();
-                _changed[type] = set;
+                _changed[type] = updated;
             }
-
-            set.Add(parentSub);
         }
     }
 
@@ -343,7 +331,7 @@ public partial class Transaction
         try
         {
             ds.SortAndMergeDeleteSet();
-            GetStateVector(store, transaction._afterState);
+            store.GetStateVector(transaction._afterState);
 
             try
             {

@@ -102,7 +102,7 @@ public class YXmlElement : YXmlFragment
     {
         if (Doc != null)
         {
-            Doc.Transact(tr => TypeMapDelete(tr, attributeName));
+            Doc.Transact((self: this, attributeName), static (s, tr) => s.self.TypeMapDelete(tr, s.attributeName));
         }
         else
         {
@@ -117,7 +117,7 @@ public class YXmlElement : YXmlFragment
     {
         if (Doc != null)
         {
-            Doc.Transact(tr => TypeMapSet(tr, attributeName, attributeValue));
+            Doc.Transact((self: this, attributeName, attributeValue), static (s, tr) => s.self.TypeMapSet(tr, s.attributeName, s.attributeValue));
         }
         else
         {

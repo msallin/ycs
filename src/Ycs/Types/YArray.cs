@@ -127,10 +127,7 @@ public partial class YArray : YArrayBase
     {
         if (Doc != null)
         {
-            Doc.Transact((tr) =>
-            {
-                InsertGenerics(tr, index, content);
-            });
+            Doc.Transact((self: this, index, content), static (s, tr) => s.self.InsertGenerics(tr, s.index, s.content));
         }
         else
         {
@@ -158,10 +155,7 @@ public partial class YArray : YArrayBase
     {
         if (Doc != null)
         {
-            Doc.Transact((tr) =>
-            {
-                Delete(tr, index, length);
-            });
+            Doc.Transact((self: this, index, length), static (s, tr) => s.self.Delete(tr, s.index, s.length));
         }
         else
         {
