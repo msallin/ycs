@@ -1,0 +1,472 @@
+class Ycs.AbsolutePosition
+    AbsolutePosition(AbstractType type, int index, int assoc = 0)
+    readonly AbstractType Type
+    readonly int Assoc
+    readonly int Index
+    static AbsolutePosition CreateAbsolutePosition(AbstractType type, int index, int assoc = 0)
+    static AbsolutePosition CreateAbsolutePositionFromRelativePosition(RelativePosition rpos, YDoc doc, bool followUndoneDeletions = true)
+    static AbsolutePosition TryCreateFromRelativePosition(RelativePosition rpos, YDoc doc, bool followUndoneDeletions = true)
+abstract class Ycs.AbstractStruct
+    ID Id { get; protected set; }
+    abstract bool Deleted { get; }
+    int Length { get; protected set; }
+    protected AbstractStruct(ID id, int length)
+class Ycs.AbstractType
+    AbstractType Parent { get; }
+    AbstractType()
+    System.Collections.Generic.IDictionary<string, object> GetAllSnapshot(Snapshot snapshot)
+    System.IDisposable Observe(System.EventHandler<YEventArgs> handler)
+    System.IDisposable ObserveDeep(System.EventHandler<YDeepEventArgs> handler)
+    YDoc Doc { get; protected set; }
+    event System.EventHandler<YDeepEventArgs> DeepEventHandler
+    event System.EventHandler<YEventArgs> EventHandler
+    object GetSnapshot(string key, Snapshot snapshot)
+    protected System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, Item>> TypeMapEnumerate()
+    protected System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> TypeMapEnumerateValues()
+    protected bool TryTypeMapGet(string key, out object value)
+    protected object TypeMapGetSnapshot(string key, Snapshot snapshot)
+    protected void TypeMapDelete(Transaction transaction, string key)
+    protected void TypeMapSet(Transaction transaction, string key, object value)
+    virtual int Length { get; }
+    virtual object ToJson()
+    void Unobserve(System.EventHandler<YEventArgs> handler)
+    void UnobserveDeep(System.EventHandler<YDeepEventArgs> handler)
+enum Ycs.ChangeAction : int
+    Add = 0
+    Delete = 2
+    Update = 1
+class Ycs.ChangeKey
+    ChangeAction Action
+    ChangeKey()
+    object OldValue
+class Ycs.ChangesCollection
+    ChangesCollection()
+    System.Collections.Generic.IDictionary<string, ChangeKey> Keys
+    System.Collections.Generic.IList<Delta> Delta
+    System.Collections.Generic.ISet<Item> Added
+    System.Collections.Generic.ISet<Item> Deleted
+class Ycs.ContentAny : IContent
+    IContent Copy()
+    IContent Splice(int offset)
+    System.Collections.Generic.IReadOnlyList<object> GetContent()
+    bool Countable { get; }
+    bool MergeWith(IContent right)
+    int Length { get; }
+class Ycs.ContentBinary : IContent
+    IContent Copy()
+    IContent Splice(int offset)
+    System.Collections.Generic.IReadOnlyList<object> GetContent()
+    bool Countable { get; }
+    bool MergeWith(IContent right)
+    int Length { get; }
+class Ycs.ContentEmbed : IContent
+    IContent Copy()
+    IContent Splice(int offset)
+    System.Collections.Generic.IReadOnlyList<object> GetContent()
+    bool Countable { get; }
+    bool MergeWith(IContent right)
+    int Length { get; }
+    readonly object Embed
+class Ycs.ContentFormat : IContent
+    IContent Copy()
+    IContent Splice(int offset)
+    System.Collections.Generic.IReadOnlyList<object> GetContent()
+    bool Countable { get; }
+    bool MergeWith(IContent right)
+    int Length { get; }
+    readonly object Value
+    readonly string Key
+class Ycs.ContentJson : IContent
+    IContent Copy()
+    IContent Splice(int offset)
+    System.Collections.Generic.IReadOnlyList<object> GetContent()
+    bool Countable { get; }
+    bool MergeWith(IContent right)
+    int Length { get; }
+class Ycs.ContentString : IContent
+    IContent Copy()
+    IContent Splice(int offset)
+    System.Collections.Generic.IReadOnlyList<object> GetContent()
+    bool Countable { get; }
+    bool MergeWith(IContent right)
+    int Length { get; }
+    string GetString()
+class Ycs.ContentType : IContent
+    AbstractType Type { get; }
+    IContent Copy()
+    IContent Splice(int offset)
+    System.Collections.Generic.IReadOnlyList<object> GetContent()
+    bool Countable { get; }
+    bool MergeWith(IContent right)
+    int Length { get; }
+sealed class Ycs.DecodedUpdate
+    System.Collections.Generic.IReadOnlyDictionary<long, System.Collections.Generic.IReadOnlyList<DeletedRange>> DeleteSet { get; }
+    System.Collections.Generic.IReadOnlyList<AbstractStruct> Structs { get; }
+readonly struct Ycs.DeletedRange
+    DeletedRange(long clock, long length)
+    long Clock { get; }
+    long Length { get; }
+class Ycs.Delta
+    Delta()
+    System.Collections.Generic.IDictionary<string, object> Attributes
+    int? Delete
+    int? Retain
+    object Insert
+class Ycs.GC : AbstractStruct
+    override bool Deleted { get; }
+interface Ycs.IContent
+    IContent Copy()
+    IContent Splice(int offset)
+    System.Collections.Generic.IReadOnlyList<object> GetContent()
+    bool Countable { get; }
+    bool MergeWith(IContent right)
+    int Length { get; }
+struct Ycs.ID : System.IEquatable<ID>
+    ID(long client, long clock)
+    bool Equals(ID other)
+    long Client
+    long Clock
+    static bool Equals(ID? a, ID? b)
+class Ycs.Item : AbstractStruct
+    AbstractStruct Left { get; }
+    AbstractStruct Next { get; }
+    AbstractStruct Prev { get; }
+    AbstractStruct Right { get; }
+    ID LastId { get; }
+    ID? LeftOrigin { get; }
+    ID? Redone { get; }
+    ID? RightOrigin { get; }
+    Item SplitItem(Transaction transaction, int diff)
+    bool Countable { get; }
+    bool Keep { get; }
+    bool Marker { get; }
+    object Parent { get; }
+    override bool Deleted { get; }
+    string ParentSub { get; }
+sealed class Ycs.PermanentUserData
+    PermanentUserData(YDoc doc, YMap storeType = null)
+    readonly YDoc Doc
+    readonly YMap YUsers
+    string GetUserByClientId(int clientId)
+    string GetUserByDeletedId(ID id)
+    void SetUserMapping(YDoc doc, int clientId, string userDescription, System.Func<Transaction, bool> filter = null)
+class Ycs.RelativePosition : System.IEquatable<RelativePosition>
+    RelativePosition(AbstractType type, ID? item, int assoc = 0)
+    System.Collections.Generic.IDictionary<string, object> RelativePositionToJSON()
+    bool Equals(RelativePosition other)
+    byte[] ToArray()
+    int Assoc
+    readonly ID? Item
+    readonly ID? TypeId
+    readonly string TName
+    static RelativePosition CreateRelativePositionFromJSON(System.Collections.Generic.IDictionary<string, object> json)
+    static RelativePosition CreateRelativePositionFromTypeIndex(AbstractType type, int index, int assoc = 0)
+    static RelativePosition DecodeRelativePosition(byte[] encoded)
+    static RelativePosition FromTypeIndex(AbstractType type, int index, int assoc = 0)
+    static RelativePosition Read(byte[] encodedPosition)
+    static bool CompareRelativePositions(RelativePosition a, RelativePosition b)
+    static byte[] EncodeRelativePosition(RelativePosition rpos)
+sealed class Ycs.Skip : AbstractStruct
+    override bool Deleted { get; }
+sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
+    YDoc RestoreDocument(YDoc originDoc, YDocOptions opts = null)
+    bool Equals(Snapshot other)
+    bool SnapshotContainsUpdate(byte[] update)
+    bool SnapshotContainsUpdateV2(byte[] update)
+    byte[] EncodeSnapshot()
+    byte[] EncodeSnapshotV2()
+    static Snapshot DecodeSnapshot(byte[] buf)
+    static Snapshot DecodeSnapshotV2(byte[] buf)
+    static bool EqualSnapshots(Snapshot snap1, Snapshot snap2)
+    static readonly Snapshot Empty
+class Ycs.StackItem
+    System.Collections.Generic.IDictionary<long, long> AfterState
+    System.Collections.Generic.IDictionary<long, long> BeforeState
+    System.Collections.Generic.IDictionary<string, object> Meta
+static class Ycs.SyncProtocol
+    const uint MessageYjsSyncStep1 = 0
+    const uint MessageYjsSyncStep2 = 1
+    const uint MessageYjsUpdate = 2
+    static uint ReadSyncMessage(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, object transactionOrigin, bool v2 = false)
+    static void ReadSyncStep1(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, bool v2 = false)
+    static void ReadSyncStep2(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false)
+    static void ReadUpdate(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false)
+    static void WriteSyncStep1(System.IO.Stream stream, YDoc doc, bool v2 = false)
+    static void WriteSyncStep2(System.IO.Stream stream, YDoc doc, byte[] encodedStateVector, bool v2 = false)
+    static void WriteUpdate(System.IO.Stream stream, byte[] update)
+class Ycs.Transaction
+    System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.IList<YEvent>> ChangedParentTypes { get; }
+    System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.ISet<string>> Changed { get; }
+    System.Collections.Generic.IDictionary<long, long> AfterState { get; }
+    System.Collections.Generic.IDictionary<long, long> BeforeState { get; }
+    System.Collections.Generic.IDictionary<string, object> Meta { get; }
+    System.Collections.Generic.ISet<YDoc> SubdocsAdded { get; }
+    System.Collections.Generic.ISet<YDoc> SubdocsLoaded { get; }
+    System.Collections.Generic.ISet<YDoc> SubdocsRemoved { get; }
+    YDoc Doc { get; }
+    bool Local { get; }
+    object Origin { get; }
+class Ycs.UndoManager
+    StackItem Redo()
+    StackItem Undo()
+    System.Collections.Generic.IReadOnlyList<object> Scope { get; }
+    UndoManager(AbstractType typeScope)
+    UndoManager(System.Collections.Generic.IEnumerable<object> scope, int captureTimeout = 500, System.Func<Item, bool> deleteFilter = null, System.Collections.Generic.ISet<object> trackedOrigins = null)
+    UndoManager(System.Collections.Generic.IList<AbstractType> typeScopes, int captureTimeout, System.Func<Item, bool> deleteFilter, System.Collections.Generic.ISet<object> trackedOrigins)
+    UndoManager(YDoc doc, int captureTimeout = 500, System.Func<Item, bool> deleteFilter = null, System.Collections.Generic.ISet<object> trackedOrigins = null)
+    YDoc Doc { get; }
+    bool CanRedo()
+    bool CanUndo()
+    event System.EventHandler<UndoManager.StackClearedEventArgs> StackCleared
+    event System.EventHandler<UndoManager.StackEventArgs> StackItemAdded
+    event System.EventHandler<UndoManager.StackEventArgs> StackItemPopped
+    int Count { get; }
+    void AddToScope(System.Collections.Generic.IEnumerable<object> scopeEntries)
+    void AddToScope(object scopeEntry)
+    void AddTrackedOrigin(object origin)
+    void Clear()
+    void Clear(bool clearUndoStack, bool clearRedoStack)
+    void Destroy()
+    void RemoveTrackedOrigin(object origin)
+    void StopCapturing()
+enum Ycs.UndoManager.OperationType : int
+    Redo = 1
+    Undo = 0
+class Ycs.UndoManager.StackClearedEventArgs : System.EventArgs
+    StackClearedEventArgs(bool undoStackCleared, bool redoStackCleared)
+    bool RedoStackCleared { get; }
+    bool UndoStackCleared { get; }
+class Ycs.UndoManager.StackEventArgs : System.EventArgs
+    StackEventArgs(StackItem item, UndoManager.OperationType type, System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.IList<YEvent>> changedParentTypes, object origin)
+    StackItem StackItem { get; }
+    System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.IList<YEvent>> ChangedParentTypes { get; }
+    UndoManager.OperationType Type { get; }
+    object Origin { get; }
+sealed class Ycs.UpdateMeta
+    System.Collections.Generic.IReadOnlyDictionary<long, long> From { get; }
+    System.Collections.Generic.IReadOnlyDictionary<long, long> To { get; }
+static class Ycs.UpdateOperations
+    static DecodedUpdate DecodeUpdate(byte[] update)
+    static DecodedUpdate DecodeUpdateV2(byte[] update)
+    static UpdateMeta ParseUpdateMeta(byte[] update)
+    static UpdateMeta ParseUpdateMetaV2(byte[] update)
+    static byte[] ConvertUpdateFormatV1ToV2(byte[] update)
+    static byte[] ConvertUpdateFormatV2ToV1(byte[] update)
+    static byte[] DiffUpdate(byte[] update, byte[] stateVector)
+    static byte[] DiffUpdateV2(byte[] update, byte[] stateVector)
+    static byte[] EncodeStateVectorFromUpdate(byte[] update)
+    static byte[] EncodeStateVectorFromUpdateV2(byte[] update)
+    static byte[] MergeUpdates(System.Collections.Generic.IList<byte[]> updates)
+    static byte[] MergeUpdatesV2(System.Collections.Generic.IList<byte[]> updates)
+    static string DescribeUpdate(byte[] update)
+    static string DescribeUpdateV2(byte[] update)
+    static void LogUpdate(byte[] update)
+    static void LogUpdateV2(byte[] update)
+class Ycs.YArray : YArrayBase
+    System.Collections.Generic.IList<object> ToArray()
+    System.Collections.Generic.IReadOnlyList<object> Slice(int start = 0)
+    System.Collections.Generic.IReadOnlyList<object> Slice(int start, int end)
+    System.Collections.Generic.List<TResult> Map<TResult>(System.Func<object, int, YArray, TResult> f)
+    YArray Clone()
+    YArray()
+    YArray(System.Collections.Generic.IEnumerable<object> prelimContent = null)
+    const byte YArrayRefId = 0
+    object Get(int index)
+    object this[int index] { get; }
+    override int Length { get; }
+    override object ToJson()
+    static YArray From(System.Collections.Generic.IEnumerable<object> items)
+    void Add(System.Collections.Generic.ICollection<object> content)
+    void Delete(int index, int length = 1)
+    void ForEach(System.Action<object, int, YArray> f)
+    void Insert(int index, System.Collections.Generic.ICollection<object> content)
+    void Push(System.Collections.Generic.ICollection<object> content)
+    void Unshift(System.Collections.Generic.ICollection<object> content)
+abstract class Ycs.YArrayBase : AbstractType, System.Collections.Generic.IEnumerable<object>, System.Collections.IEnumerable
+    System.Collections.Generic.IEnumerator<object> GetEnumerator()
+    System.Collections.Generic.IList<object> ToArraySnapshot(Snapshot snapshot)
+    protected System.Collections.Generic.IEnumerable<object> EnumerateContent()
+    protected System.Collections.Generic.IReadOnlyList<object> InternalSlice(int start, int end)
+    protected YArrayBase(bool useSearchMarkers = true)
+    protected YArrayBase.ArraySearchMarker FindMarker(int index)
+    protected YArrayBase.ArraySearchMarkerCollection _searchMarkers
+    protected void Delete(Transaction transaction, int index, int length)
+    protected void ForEach(System.Action<object, int, YArrayBase> fun)
+    protected void ForEachSnapshot(System.Action<object, int, YArrayBase> fun, Snapshot snapshot)
+    protected void InsertGenerics(Transaction transaction, int index, System.Collections.Generic.ICollection<object> content)
+    protected void InsertGenericsAfter(Transaction transaction, Item referenceItem, System.Collections.Generic.ICollection<object> content)
+class Ycs.YArrayEvent : YEvent
+class Ycs.YDeepEventArgs
+    System.Collections.Generic.IList<YEvent> Events { get; }
+    Transaction Transaction { get; }
+class Ycs.YDoc
+    Snapshot CreateSnapshot()
+    System.Collections.Generic.IDictionary<string, string> Meta { get; }
+    System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
+    System.Predicate<Item> GcFilter { get; }
+    T Get<T>(string name) where T : AbstractType, new()
+    YArray GetArray(string name = "")
+    YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc newDoc = null)
+    YDoc(YDocOptions opts = null)
+    YMap GetMap(string name = "")
+    YText GetText(string name = "")
+    YXmlElement GetXmlElement(string name = "")
+    YXmlFragment GetXmlFragment(string name = "")
+    YXmlText GetXmlText(string name = "")
+    bool AutoLoad { get; }
+    bool Gc { get; }
+    byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    byte[] EncodeStateAsUpdateV1(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    byte[] EncodeStateAsUpdateV2(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    byte[] EncodeStateVector()
+    byte[] EncodeStateVectorV1()
+    byte[] EncodeStateVectorV2()
+    event System.EventHandler BeforeAllTransactions
+    event System.EventHandler Destroyed
+    event System.EventHandler<System.Collections.Generic.IList<Transaction>> AfterAllTransactions
+    event System.EventHandler<System.ValueTuple<System.Collections.Generic.ISet<YDoc>, System.Collections.Generic.ISet<YDoc>, System.Collections.Generic.ISet<YDoc>>> SubdocsChanged
+    event System.EventHandler<System.ValueTuple<byte[], object, Transaction>> Update
+    event System.EventHandler<System.ValueTuple<byte[], object, Transaction>> UpdateV2
+    event System.EventHandler<Transaction> AfterTransaction
+    event System.EventHandler<Transaction> AfterTransactionCleanup
+    event System.EventHandler<Transaction> BeforeObserverCalls
+    event System.EventHandler<Transaction> BeforeTransaction
+    int ClientId { get; }
+    string Guid { get; }
+    void ApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
+    void ApplyUpdate(byte[] update, object transactionOrigin = null, bool local = false)
+    void ApplyUpdateV1(System.ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
+    void ApplyUpdateV1(byte[] update, object transactionOrigin = null, bool local = false)
+    void ApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
+    void ApplyUpdateV2(byte[] update, object transactionOrigin = null, bool local = false)
+    void Destroy()
+    void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    void EncodeStateAsUpdateV1(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    void EncodeStateAsUpdateV2(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    void Load()
+    void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
+class Ycs.YDocOptions
+    System.Collections.Generic.IDictionary<string, string> Meta { get; set; }
+    System.Predicate<Item> GcFilter { get; set; }
+    YDocOptions()
+    bool AutoLoad { get; set; }
+    bool Gc { get; set; }
+    int? ClientId { get; set; }
+    string Guid { get; set; }
+class Ycs.YEvent
+    AbstractType CurrentTarget { get; set; }
+    AbstractType Target { get; set; }
+    ChangesCollection Changes { get; }
+    System.Collections.Generic.IDictionary<string, ChangeKey> Keys { get; }
+    System.Collections.Generic.IReadOnlyCollection<object> Path { get; }
+    Transaction Transaction { get; set; }
+    bool Adds(AbstractStruct str)
+    bool Deletes(AbstractStruct str)
+    virtual System.Collections.Generic.IList<Delta> Delta { get; }
+class Ycs.YEventArgs
+    Transaction Transaction { get; }
+    YEvent Event { get; }
+class Ycs.YMap : AbstractType, System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>>, System.Collections.IEnumerable
+    System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> Entries()
+    System.Collections.Generic.IEnumerable<object> Values()
+    System.Collections.Generic.IEnumerable<string> Keys()
+    System.Collections.Generic.IEnumerator<System.Collections.Generic.KeyValuePair<string, object>> GetEnumerator()
+    YMap Clone()
+    YMap()
+    YMap(System.Collections.Generic.IDictionary<string, object> entries)
+    bool ContainsKey(string key)
+    bool Has(string key)
+    int Count { get; }
+    int Size { get; }
+    object Get(string key)
+    override object ToJson()
+    void Clear()
+    void Delete(string key)
+    void ForEach(System.Action<object, string, YMap> f)
+    void Set(string key, object value)
+class Ycs.YMapEvent : YEvent
+    readonly System.Collections.Generic.ISet<string> KeysChanged
+class Ycs.YText : YArrayBase
+    System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> GetAttributes()
+    System.Collections.Generic.IList<Delta> ToDelta(Snapshot snapshot = null, Snapshot prevSnapshot = null, System.Func<YText.YTextChangeType, ID, YText.YTextChangeAttributes> computeYChange = null)
+    YText Clone()
+    YText()
+    YText(string str)
+    int CleanupFormatting()
+    object GetAttribute(string name)
+    override object ToJson()
+    override string ToString()
+    static int CleanupYTextFormatting(YText type)
+    void ApplyDelta(System.Collections.Generic.IList<Delta> delta, bool sanitize = true)
+    void Delete(int index, int length)
+    void Format(int index, int length, System.Collections.Generic.IDictionary<string, object> attributes)
+    void Insert(int index, string text, System.Collections.Generic.IDictionary<string, object> attributes = null)
+    void InsertEmbed(int index, object embed, System.Collections.Generic.IDictionary<string, object> attributes = null)
+    void RemoveAttribute(string name)
+    void SetAttribute(string name, object value)
+class Ycs.YText.YTextChangeAttributes
+    YText.YTextChangeType State { get; set; }
+    YText.YTextChangeType Type { get; set; }
+    YTextChangeAttributes()
+    int User { get; set; }
+enum Ycs.YText.YTextChangeType : int
+    Added = 0
+    Removed = 1
+class Ycs.YTextEvent : YEvent
+    System.Collections.Generic.ISet<string> KeysChanged { get; }
+    bool ChildListChanged { get; }
+    override System.Collections.Generic.IList<Delta> Delta { get; }
+class Ycs.YXmlElement : YXmlFragment
+    System.Collections.Generic.IDictionary<string, object> GetAttributes(Snapshot snapshot = null)
+    YXmlElement Clone()
+    YXmlElement()
+    YXmlElement(string nodeName)
+    bool HasAttribute(string attributeName)
+    object GetAttribute(string attributeName)
+    object NextSibling { get; }
+    object PrevSibling { get; }
+    override string ToString()
+    string NodeName { get; }
+    void RemoveAttribute(string attributeName)
+    void SetAttribute(string attributeName, object attributeValue)
+class Ycs.YXmlEvent : YEvent
+    System.Collections.Generic.ISet<string> AttributesChanged { get; }
+    bool ChildListChanged { get; }
+class Ycs.YXmlFragment : YArrayBase
+    System.Collections.Generic.IEnumerable<YXmlElement> QuerySelectorAll(string query)
+    System.Collections.Generic.IList<object> ToArray()
+    System.Collections.Generic.IReadOnlyList<object> Slice(int start = 0)
+    System.Collections.Generic.IReadOnlyList<object> Slice(int start, int end)
+    YXmlElement QuerySelector(string query)
+    YXmlFragment Clone()
+    YXmlFragment()
+    YXmlTreeWalker CreateTreeWalker(System.Func<AbstractType, bool> filter = null)
+    object FirstChild { get; }
+    object Get(int index)
+    override int Length { get; }
+    override object ToJson()
+    override string ToString()
+    void Delete(int index, int length = 1)
+    void ForEach(System.Action<object, int, YXmlFragment> f)
+    void Insert(int index, System.Collections.Generic.ICollection<object> content)
+    void InsertAfter(AbstractType refItem, System.Collections.Generic.ICollection<object> content)
+    void Push(System.Collections.Generic.ICollection<object> content)
+    void Unshift(System.Collections.Generic.ICollection<object> content)
+class Ycs.YXmlHook : YMap
+    YXmlHook Clone()
+    YXmlHook(string hookName)
+    string HookName { get; }
+class Ycs.YXmlText : YText
+    YXmlText Clone()
+    YXmlText()
+    YXmlText(string str)
+    object NextSibling { get; }
+    object PrevSibling { get; }
+    override object ToJson()
+    override string ToString()
+sealed class Ycs.YXmlTreeWalker : System.Collections.Generic.IEnumerable<AbstractType>, System.Collections.Generic.IEnumerator<AbstractType>, System.Collections.IEnumerable, System.Collections.IEnumerator, System.IDisposable
+    AbstractType Current { get; }
+    System.Collections.Generic.IEnumerator<AbstractType> GetEnumerator()
+    bool MoveNext()
+    void Dispose()
+    void Reset()
