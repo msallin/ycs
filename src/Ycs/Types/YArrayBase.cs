@@ -12,44 +12,38 @@ namespace Ycs;
 
 public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 {
-    protected sealed class ArraySearchMarker
+    internal sealed class ArraySearchMarker
     {
-        // Assigned to '-1', so the first timestamp is '0'.
-        internal static long _globalSearchMarkerTimestamp = -1;
-
-        public ArraySearchMarker(Item p, int index)
+        public ArraySearchMarker(Item p, int index, long timestamp)
         {
             P = p;
             Index = index;
             P.Marker = true;
-
-            RefreshTimestamp();
+            Timestamp = timestamp;
         }
 
         public Item P { get; internal set; }
         public int Index { get; internal set; }
         public long Timestamp { get; internal set; }
 
-        public void RefreshTimestamp()
-        {
-            Timestamp = Interlocked.Increment(ref _globalSearchMarkerTimestamp);
-        }
-
-        public void Update(Item p, int index)
+        public void Update(Item p, int index, long timestamp)
         {
             P.Marker = false;
 
             P = p;
             P.Marker = true;
             Index = index;
-
-            RefreshTimestamp();
+            Timestamp = timestamp;
         }
     }
 
-    protected sealed class ArraySearchMarkerCollection
+    internal sealed class ArraySearchMarkerCollection
     {
         internal readonly List<ArraySearchMarker> _searchMarkers = new List<ArraySearchMarker>();
+
+        // Yjs stamps markers from one global counter; only their order within a collection matters
+        // (the oldest one is replaced), so a counter per collection gives the same choices.
+        private long _clock;
 
         public int Count => _searchMarkers.Count;
 
@@ -58,19 +52,30 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             _searchMarkers.Clear();
         }
 
+        public long NextTimestamp() => _clock++;
+
         public ArraySearchMarker MarkPosition(Item p, int index)
         {
             if (_searchMarkers.Count >= MaxSearchMarkers)
             {
-                // Override oldest marker (we don't want to create more objects).
-                var marker = _searchMarkers.Aggregate((a, b) => a.Timestamp < b.Timestamp ? a : b);
-                marker.Update(p, index);
+                // Override oldest marker (we don't want to create more objects). As Yjs' reduce, a
+                // tie goes to the later one.
+                var marker = _searchMarkers[0];
+                for (var i = 1; i < _searchMarkers.Count; i++)
+                {
+                    if (!(marker.Timestamp < _searchMarkers[i].Timestamp))
+                    {
+                        marker = _searchMarkers[i];
+                    }
+                }
+
+                marker.Update(p, index, NextTimestamp());
                 return marker;
             }
             else
             {
                 // Create a new marker.
-                var pm = new ArraySearchMarker(p, index);
+                var pm = new ArraySearchMarker(p, index, NextTimestamp());
                 _searchMarkers.Add(pm);
                 return pm;
             }
@@ -132,7 +137,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// Yjs only enables them for Y.Array and Y.Text, and disables them for a text as soon as it
     /// holds formatting (see <see cref="ContentFormat"/>).
     /// </summary>
-    protected ArraySearchMarkerCollection _searchMarkers;
+    private protected ArraySearchMarkerCollection _searchMarkers;
 
     protected YArrayBase(bool useSearchMarkers = true)
     {
@@ -278,9 +283,9 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         {
             if (jsonContent.Count > 0)
             {
-                left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, new ContentAny(jsonContent.ToList()));
+                left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, ContentAny.Own(jsonContent));
                 left.Integrate(transaction, 0);
-                jsonContent.Clear();
+                jsonContent = new List<object>();
             }
         }
 
@@ -500,14 +505,24 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// <br/>
     /// This function always returns a refreshed marker (updated timestamp).
     /// </summary>
-    protected ArraySearchMarker FindMarker(int index)
+    private protected ArraySearchMarker FindMarker(int index)
     {
         if (_start == null || index == 0 || _searchMarkers == null)
         {
             return null;
         }
 
-        var marker = _searchMarkers.Count == 0 ? null : _searchMarkers._searchMarkers.Aggregate((a, b) => Math.Abs(index - a.Index) < Math.Abs(index - b.Index) ? a : b);
+        // The marker closest to index; as Yjs' reduce, a tie goes to the later one.
+        var markers = _searchMarkers._searchMarkers;
+        var marker = markers.Count == 0 ? null : markers[0];
+        for (var i = 1; i < markers.Count; i++)
+        {
+            if (!(Math.Abs(index - marker.Index) < Math.Abs(index - markers[i].Index)))
+            {
+                marker = markers[i];
+            }
+        }
+
         var p = _start;
         int pIndex = 0;
 
@@ -517,7 +532,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             pIndex = marker.Index;
 
             // We used it, we might need to use it again.
-            marker.RefreshTimestamp();
+            marker.Timestamp = _searchMarkers.NextTimestamp();
         }
 
         // Iterate to right if possible.
@@ -569,7 +584,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         if (marker != null && Math.Abs(marker.Index - pIndex) < ((p.Parent as AbstractType).Length / MaxSearchMarkers))
         {
             // Adjust existing marker.
-            marker.Update(p, pIndex);
+            marker.Update(p, pIndex, _searchMarkers.NextTimestamp());
             return marker;
         }
         else

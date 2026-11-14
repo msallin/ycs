@@ -227,7 +227,7 @@ public partial class AbstractType
 
         if (value == null)
         {
-            content = new ContentAny(new object[] { value });
+            content = ContentAny.Single(null);
         }
         else
         {
@@ -245,7 +245,7 @@ public partial class AbstractType
                     break;
                 default:
                     AnyEncoding.Validate(value);
-                    content = new ContentAny(new[] { value });
+                    content = ContentAny.Single(value);
                     break;
             }
         }

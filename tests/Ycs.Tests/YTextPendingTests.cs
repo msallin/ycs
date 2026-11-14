@@ -1,0 +1,59 @@
+using System.Collections.Generic;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Ycs;
+
+/// <summary>Changes to a text before it is in a document are replayed, in order, when it is added.</summary>
+[TestClass]
+public class YTextPendingTests
+{
+    [TestMethod]
+    public void Integrate_PendingChanges_GiveTheSameTextAsDirectChanges()
+    {
+        var direct = new YDoc(new YDocOptions { ClientId = 1 }).GetText("text");
+        Edit(direct);
+        var prelim = new YText("ab");
+        Edit(prelim, skipFirstInsert: true);
+
+        new YDoc(new YDocOptions { ClientId = 1 }).GetMap("map").Set("text", prelim);
+
+        Assert.AreEqual(direct.ToString(), prelim.ToString());
+        Assert.AreEqual(Describe(direct.ToDelta()), Describe(prelim.ToDelta()));
+        Assert.AreEqual("en", prelim.GetAttribute("lang"));
+        Assert.IsNull(prelim.GetAttribute("gone"));
+    }
+
+    private static void Edit(YText text, bool skipFirstInsert = false)
+    {
+        if (!skipFirstInsert)
+        {
+            text.Insert(0, "ab");
+        }
+
+        text.Insert(1, "xyz", new Dictionary<string, object> { ["bold"] = true });
+        text.InsertEmbed(0, new Dictionary<string, object> { ["image"] = "i.png" });
+        text.Format(2, 2, new Dictionary<string, object> { ["italic"] = true });
+        text.Delete(3, 1);
+        text.ApplyDelta(new List<Delta> { new() { Retain = 1 }, new() { Insert = "q" } });
+        text.SetAttribute("lang", "en");
+        text.SetAttribute("gone", 1);
+        text.RemoveAttribute("gone");
+    }
+
+    private static string Describe(IList<Delta> delta)
+    {
+        var parts = new List<string>();
+        foreach (var op in delta)
+        {
+            var attributes = new List<string>();
+            foreach (var kvp in op.Attributes ?? new Dictionary<string, object>())
+            {
+                attributes.Add($"{kvp.Key}={kvp.Value}");
+            }
+
+            parts.Add($"{(op.Insert is string s ? s : "<embed>")}[{string.Join(",", attributes)}]");
+        }
+
+        return string.Join(" ", parts);
+    }
+}

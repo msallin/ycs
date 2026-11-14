@@ -288,8 +288,6 @@ abstract class Ycs.YArrayBase : AbstractType, System.Collections.Generic.IEnumer
     protected System.Collections.Generic.IEnumerable<object> EnumerateContent()
     protected System.Collections.Generic.IReadOnlyList<object> InternalSlice(int start, int end)
     protected YArrayBase(bool useSearchMarkers = true)
-    protected YArrayBase.ArraySearchMarker FindMarker(int index)
-    protected YArrayBase.ArraySearchMarkerCollection _searchMarkers
     protected void Delete(Transaction transaction, int index, int length)
     protected void ForEach(System.Action<object, int, YArrayBase> fun)
     protected void ForEachSnapshot(System.Action<object, int, YArrayBase> fun, Snapshot snapshot)

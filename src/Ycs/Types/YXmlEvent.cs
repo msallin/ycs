@@ -11,10 +11,10 @@ namespace Ycs;
 /// </summary>
 public class YXmlEvent : YEvent
 {
-    private readonly ISet<string> _subs;
-    private ISet<string> _attributesChanged;
+    private readonly ISet<string?>? _subs;
+    private ISet<string>? _attributesChanged;
 
-    internal YXmlEvent(AbstractType target, ISet<string> subs, Transaction transaction)
+    internal YXmlEvent(AbstractType target, ISet<string?>? subs, Transaction transaction)
         : base(target, transaction)
     {
         _subs = subs;
