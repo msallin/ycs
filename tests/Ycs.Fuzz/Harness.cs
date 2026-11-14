@@ -55,22 +55,12 @@ internal sealed record FuzzInput(bool Gc, bool V2, byte[] BaseState, byte[] Upda
 internal sealed class Harness : IDisposable
 {
     /// <summary>
-    /// The exception types applying a damaged update throws today, measured by soaks of a few million
-    /// inputs. Only the first two come from the decoders' own checks; the rest are whatever the code
-    /// throws when it uses a decoded value unchecked. Hardening should shrink this to one type.
+    /// The one exception type applying a damaged update may throw: the decoders' own
+    /// <see cref="YUpdateException"/>, which leaves the document unchanged.
     /// </summary>
     public static readonly IReadOnlySet<string> AllowedExceptionTypes = new HashSet<string>(StringComparer.Ordinal)
     {
-        "System.IO.EndOfStreamException",       // Lib0Reader: input ended early
-        "System.IO.InvalidDataException",       // Lib0Reader, AnyEncoding: malformed var-int, unknown 'any' tag
-        "System.ArgumentOutOfRangeException",   // a decoded count or offset used unchecked (List capacity, FindIndexSS, Splice, WriteDsLength)
-        "System.DivideByZeroException",         // StructStore.FindIndexSS on a struct of length 0
-        "System.Exception",                     // StructStore.Find / FindIndexSS / GetItemCleanEnd, Item.GetMissing: "Unexpected"
-        "System.InvalidCastException",          // YDocOptions.Read: a subdocument's options of the wrong type
-        "System.InvalidOperationException",     // ReadItemContent: unknown content ref; YJson: invalid UTF-8
-        "System.NotSupportedException",         // ContentType.Read: unknown type ref
-        "System.NullReferenceException",        // YDocOptions.Read: null options
-        "System.Text.Json.JsonReaderException", // YJson.Parse / ReadValue: JSON content that is not JSON
+        "Ycs.YUpdateException",
     };
 
     /// <summary>Per input, generous: a valid update of this size applies in well under a millisecond.</summary>

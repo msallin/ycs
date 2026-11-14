@@ -24,8 +24,7 @@ huge values, random bytes. For each input (`Harness.cs`):
 * it allocates at most 64 MiB (for an input over 4 KiB, 16 KiB per input byte). The test process runs with a
   512 MiB GC heap limit (`runtimeconfig.template.json`), so a decoder that trusts a huge length
   fails at once with `OutOfMemoryException`, and the throw site names the allocation;
-* it throws nothing outside `Harness.AllowedExceptionTypes`: today's set, ten types. The goal of
-  the decoder hardening is one type; shrink the set as the decoders get there;
+* it throws nothing but `YUpdateException` (`Harness.AllowedExceptionTypes`);
 * when it throws, the document's text, state vector and v1 encoding are unchanged.
 
 A violation is identified by its signature: the verdict, the exception type and the innermost Ycs
@@ -43,9 +42,10 @@ The output lists the verdicts and exception types seen and the seed used, so any
 repeated. A violation with a signature that is not in `KnownFailures.cs` fails the run and is
 printed minimized, as the fields of a `PinnedCase`, ready to paste.
 
-`KnownFailures.cs` holds the violations found and not fixed, each with its minimal input. The
-fuzz run tolerates their signatures; `PinnedCase_FailsCleanly` replays each one and reports it as
-inconclusive while it still fails, and fails once it passes: remove the entry with the fix.
+`KnownFailures.cs` holds the violations found and not fixed, each with its minimal input (empty
+today). The fuzz run tolerates their signatures; `PinnedCases_StillFailAsPinned` replays them and is
+inconclusive while one still fails, and fails once it passes: move the entry to `FixedFailures.cs`
+with the fix, where `FixedCase_FailsCleanly` keeps it as a regression test.
 
 ## Public API (`tests/Ycs.Tests/PublicApi.txt`)
 

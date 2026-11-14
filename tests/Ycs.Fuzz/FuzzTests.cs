@@ -91,23 +91,45 @@ public sealed class FuzzTests
         Assert.IsEmpty(unknown, $"{unknown.Count} violation(s) not in KnownFailures; pin each one there with its minimal input:{Environment.NewLine}{report}");
     }
 
-    public static IEnumerable<object[]> Pinned => KnownFailures.All.Select(k => new object[] { k.Name });
-
+    /// <summary>
+    /// Replays every entry of <see cref="KnownFailures"/>: inconclusive while one still fails as pinned,
+    /// failing once it fails differently or passes (then move it to <see cref="FixedFailures"/>).
+    /// </summary>
     [TestMethod]
-    [DynamicData(nameof(Pinned))]
-    public void PinnedCase_FailsCleanly(string name)
+    public void PinnedCases_StillFailAsPinned()
     {
-        var pinned = KnownFailures.All.Single(k => k.Name == name);
         using var harness = new Harness();
-        var outcome = harness.Run(pinned.Input);
-
-        if (outcome.Signature == pinned.Signature)
+        var stillFailing = new List<string>();
+        foreach (var pinned in KnownFailures.All)
         {
-            Assert.Inconclusive($"KNOWN FAILURE {name}: {pinned.Reason} ({outcome.Signature}; {outcome.Detail})");
+            var outcome = harness.Run(pinned.Input);
+            if (outcome.Signature == pinned.Signature)
+            {
+                stillFailing.Add($"KNOWN FAILURE {pinned.Name}: {pinned.Reason} ({outcome.Signature}; {outcome.Detail})");
+                continue;
+            }
+
+            Assert.IsFalse(outcome.IsViolation, $"{pinned.Name} now fails differently: {outcome.Signature} ({outcome.Detail})");
+            Assert.Fail($"{pinned.Name} is listed in KnownFailures but now fails cleanly ({outcome.Verdict}); move it to FixedFailures.");
         }
 
-        Assert.IsFalse(outcome.IsViolation, $"{name} now fails differently: {outcome.Signature} ({outcome.Detail})");
-        Assert.Fail($"{name} is listed in KnownFailures but now fails cleanly ({outcome.Verdict}); remove the entry.");
+        if (stillFailing.Count > 0)
+        {
+            Assert.Inconclusive(string.Join(Environment.NewLine, stillFailing));
+        }
+    }
+
+    public static IEnumerable<object[]> Fixed => FixedFailures.All.Select(k => new object[] { k.Name });
+
+    [TestMethod]
+    [DynamicData(nameof(Fixed))]
+    public void FixedCase_FailsCleanly(string name)
+    {
+        var fixedCase = FixedFailures.All.Single(k => k.Name == name);
+        using var harness = new Harness();
+        var outcome = harness.Run(fixedCase.Input);
+
+        Assert.IsFalse(outcome.IsViolation, $"{name} ({fixedCase.Signature} before the fix) fails again: {outcome.Signature} ({outcome.Detail})");
     }
 
     private static void Count(SortedDictionary<string, int> counts, string key) =>
