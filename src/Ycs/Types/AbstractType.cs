@@ -119,6 +119,31 @@ public partial class AbstractType
     }
 
     /// <summary>
+    /// Whether an event for a change of this type in <paramref name="transaction"/> reaches anyone: a
+    /// handler on this type, a deep handler on it or an ancestor, or a document-level transaction
+    /// listener (<see cref="YDoc.HasTransactionListeners"/>). When not, <see cref="CallObserver"/>
+    /// builds no event, and the type and its ancestors are not added to
+    /// <see cref="Transaction.ChangedParentTypes"/>.
+    /// </summary>
+    internal bool IsObserved(Transaction transaction)
+    {
+        if (EventHandler != null || transaction.Doc.HasTransactionListeners)
+        {
+            return true;
+        }
+
+        for (var type = this; type != null; type = type._item?.Parent as AbstractType)
+        {
+            if (type.DeepEventHandler != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Call event listeners with an event. This will also add an event to all parents
     /// for observeDeep handlers.
     /// </summary>

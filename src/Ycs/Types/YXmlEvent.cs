@@ -11,32 +11,22 @@ namespace Ycs;
 /// </summary>
 public class YXmlEvent : YEvent
 {
-    /// <summary>
-    /// Whether the children changed.
-    /// </summary>
-    public bool ChildListChanged { get; private set; }
-
-    /// <summary>
-    /// The set of all changed attributes.
-    /// </summary>
-    public ISet<string> AttributesChanged { get; } = new HashSet<string>();
+    private readonly ISet<string> _subs;
+    private ISet<string> _attributesChanged;
 
     internal YXmlEvent(AbstractType target, ISet<string> subs, Transaction transaction)
         : base(target, transaction)
     {
-        if (subs != null)
-        {
-            foreach (var sub in subs)
-            {
-                if (sub == null)
-                {
-                    ChildListChanged = true;
-                }
-                else
-                {
-                    AttributesChanged.Add(sub);
-                }
-            }
-        }
+        _subs = subs;
     }
+
+    /// <summary>
+    /// Whether the children changed.
+    /// </summary>
+    public bool ChildListChanged => _subs?.Contains(null) ?? false;
+
+    /// <summary>
+    /// The set of all changed attributes.
+    /// </summary>
+    public ISet<string> AttributesChanged => _attributesChanged ??= ChangedKeys.WithoutChildList(_subs);
 }

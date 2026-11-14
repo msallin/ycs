@@ -114,7 +114,10 @@ public partial class YArray : YArrayBase
     internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
     {
         base.CallObserver(transaction, parentSubs);
-        CallTypeObservers(transaction, new YArrayEvent(this, transaction));
+        if (IsObserved(transaction))
+        {
+            CallTypeObservers(transaction, new YArrayEvent(this, transaction));
+        }
     }
 
     /// <summary>

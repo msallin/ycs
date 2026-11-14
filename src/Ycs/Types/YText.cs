@@ -23,39 +23,24 @@ public class YTextEvent : YEvent
     }
 
     private readonly ISet<string> _subs;
+    private ISet<string> _keysChanged;
     private IList<Delta> _delta = null;
 
     internal YTextEvent(YText arr, Transaction transaction, ISet<string> subs)
         : base(arr, transaction)
     {
         _subs = subs;
-        KeysChanged = new HashSet<string>();
-
-        if (_subs?.Count > 0)
-        {
-            foreach (var sub in _subs)
-            {
-                if (sub == null)
-                {
-                    ChildListChanged = true;
-                }
-                else
-                {
-                    KeysChanged.Add(sub);
-                }
-            }
-        }
     }
 
     /// <summary>
     /// Gets the changed attribute names.
     /// </summary>
-    public ISet<string> KeysChanged { get; }
+    public ISet<string> KeysChanged => _keysChanged ??= ChangedKeys.WithoutChildList(_subs);
 
     /// <summary>
     /// Gets whether the children keys changed.
     /// </summary>
-    public bool ChildListChanged { get; }
+    public bool ChildListChanged => _subs?.Contains(null) ?? false;
 
     /// <summary>
     /// Compute the changes in the delta format. Overrides <see cref="YEvent.Delta"/> — for
@@ -890,7 +875,6 @@ public partial class YText : YArrayBase
     {
         base.CallObserver(transaction, parentSubs);
 
-        var evt = new YTextEvent(this, transaction, parentSubs);
         var doc = transaction.Doc;
 
         // If a remote change happened, we try to cleanup potential formatting duplicates. As in
@@ -977,7 +961,10 @@ public partial class YText : YArrayBase
             });
         }
 
-        CallTypeObservers(transaction, evt);
+        if (IsObserved(transaction))
+        {
+            CallTypeObservers(transaction, new YTextEvent(this, transaction, parentSubs));
+        }
     }
 
     private ItemTextListPosition FindPosition(Transaction transaction, int index, bool useSearchMarker)

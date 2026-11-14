@@ -199,7 +199,10 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
 
     internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
     {
-        CallTypeObservers(transaction, new YMapEvent(this, transaction, parentSubs));
+        if (IsObserved(transaction))
+        {
+            CallTypeObservers(transaction, new YMapEvent(this, transaction, parentSubs));
+        }
     }
 
     internal override void Write(IUpdateEncoder encoder)
