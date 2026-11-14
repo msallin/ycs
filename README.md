@@ -110,7 +110,7 @@ does. In short:
 * The 'any' encoding now follows lib0's number rules (an integral `double` is a var-int, exact
   floats are float32, JavaScript's canonical NaN), so values written by Ycs have Yjs' bytes.
 
-**Performance** (the automerge-paper editing trace, 260k edits, `tests/Ycs.Benchmarks`,
+**Performance** (the automerge-paper editing trace, 260k edits, `bench/Ycs.Benchmarks`,
 median of 5 runs on the same machine, before = upstream PRs merged, after = this branch)
 
 | | before | after |
@@ -122,8 +122,8 @@ median of 5 runs on the same machine, before = upstream PRs merged, after = this
 | decode the final document, v1, 10× | 217 ms, 87.7 MiB | 65 ms, 36.6 MiB |
 | decode the final document, v2, 10× | 258 ms, 89.6 MiB | 68 ms, 38.6 MiB |
 
-Run it with `tests/Ycs.Benchmarks/get-trace.sh` and
-`dotnet run -c Release --project tests/Ycs.Benchmarks -- <trace.json.gz>`.
+Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
+`dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`.
 
 **From the upstream pull requests** (#12, #13 by Yuriy Habarov; #14 by Kieren Johnstone): the v1
 format, the XML types, `UpdateOperations`, `PermanentUserData`, snapshots and relative positions,
