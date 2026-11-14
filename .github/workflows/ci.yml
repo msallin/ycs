@@ -27,10 +27,24 @@ jobs:
       - name: Yjs corpus
         run: dotnet test tests/Ycs.Corpus -c Release --no-build
 
+      - name: Fuzz the decoders
+        run: dotnet test tests/Ycs.Fuzz -c Release --no-build
+
+      - name: Allocation and time budgets
+        run: dotnet test tests/Ycs.Budgets -c Release --no-build --logger "console;verbosity=detailed"
+
+      - name: Pack
+        run: dotnet pack src/Ycs -c Release --no-build -o out/pack
+
       - name: Native AOT sample
         run: |
           dotnet publish samples/Ycs.AotSample -c Release -o out/aot
           ./out/aot/Ycs.AotSample
+
+      - name: Browser-wasm sample (no workload)
+        run: |
+          dotnet publish samples/Ycs.WasmSample -c Release -o out/wasm
+          node out/wasm/wwwroot/main.mjs
 
       - name: Interop against real Yjs
         run: |

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <!--
+    A browser-wasm smoke test: the Native AOT sample's program, published for WebAssembly with
+    the SDK alone (no wasm-tools workload, so no native relinking or AOT). It must publish
+    without trim warnings; CI runs it in Node: node <publish>/wwwroot/main.mjs.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\Ycs.AotSample\Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ycs\Ycs.csproj" />
+  </ItemGroup>
+
+</Project>
