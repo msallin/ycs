@@ -11,6 +11,11 @@ Node at test time.
   state-vector diff against a prefix of the updates, `mergeUpdates`/`V2`, and the item list of
   each sequence root (ids in list order, tombstones included). Deterministic: seeded PRNG, fixed
   client ids, no clocks; re-running it gives identical files.
+- The `text-format-*` cases are scripted (`Sim.ops`): besides the updates, they record what each
+  client did and received, as data (`script`), and where each client ended up (`clients`).
+  `ClientReplayTests.cs` replays them with a Ycs document per client, so Ycs' own formatting and
+  its cleanup after remote changes (which an observer never runs on formats of its own) are
+  compared with Yjs byte for byte.
 - The `adversarial-*` cases are the interleavings the Lean proof of Yjs' integrate
   ([lean-yjs](https://github.com/iasakura/lean-yjs)) treats as hard: the scenario behind the
   YATA-pseudocode discrepancy, same origin with different right origins, inserts between an item

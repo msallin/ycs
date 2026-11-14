@@ -328,7 +328,7 @@ public partial class YText : YArrayBase
         public Item Left;
         public Item Right;
         public int Index;
-        public Dictionary<string, object> CurrentAttributes;
+        public OrderedDictionary<string, object> CurrentAttributes;
 
         public ItemTextListPosition(Item left, Item right, int index)
         {
@@ -401,7 +401,7 @@ public partial class YText : YArrayBase
         /// <summary>
         /// Negate applied formats.
         /// </summary>
-        public void InsertNegatedAttributes(Transaction transaction, AbstractType parent, Dictionary<string, object> negatedAttributes)
+        public void InsertNegatedAttributes(Transaction transaction, AbstractType parent, OrderedDictionary<string, object> negatedAttributes)
         {
             // Check if we really need to remove attributes.
             while (
@@ -430,16 +430,15 @@ public partial class YText : YArrayBase
 
             var doc = transaction.Doc;
             var ownClientId = doc.ClientId;
-            var left = Left;
-            var right = Right;
 
             foreach (var kvp in negatedAttributes)
             {
-                left = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, parent, null, new ContentFormat(kvp.Key, kvp.Value));
-                left.Integrate(transaction, 0);
-
-                (CurrentAttributes ??= new Dictionary<string, object>())[kvp.Key] = kvp.Value;
-                UpdateCurrentAttributes(ref CurrentAttributes, left.Content as ContentFormat);
+                var left = Left;
+                var right = Right;
+                var nextFormat = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, parent, null, new ContentFormat(kvp.Key, kvp.Value));
+                nextFormat.Integrate(transaction, 0);
+                Right = nextFormat;
+                Forward();
             }
         }
 
@@ -993,95 +992,17 @@ public partial class YText : YArrayBase
     {
         base.CallObserver(transaction, parentSubs);
 
-        var doc = transaction.Doc;
-
-        // If a remote change happened, we try to cleanup potential formatting duplicates. As in
-        // Yjs 13.6, only a text that has held formatting can have any; the others skip the second
-        // transaction this needs.
-        if (!transaction.Local && HasFormatting)
-        {
-            // Check if another formatting item was inserted.
-            var foundFormattingItem = false;
-            foreach (var kvp in transaction.AfterState)
-            {
-                var client = kvp.Key;
-                var afterClock = kvp.Value;
-
-                if (!transaction.BeforeState.TryGetValue(kvp.Key, out var clock))
-                {
-                    clock = 0;
-                }
-
-                if (afterClock == clock)
-                {
-                    continue;
-                }
-
-                transaction.Doc.Store.IterateStructs(transaction, doc.Store.Clients[client], clock, afterClock, item =>
-                {
-                    if (item is Item it && !it.Deleted && it.Content is ContentFormat)
-                    {
-                        foundFormattingItem = true;
-
-                        // Stop loop.
-                        return false;
-                    }
-
-                    return true;
-                });
-
-                if (foundFormattingItem)
-                {
-                    break;
-                }
-            }
-
-            if (!foundFormattingItem)
-            {
-                transaction.DeleteSet.IterateDeletedStructs(transaction, item =>
-                {
-                    var it = item as Item;
-                    if (it != null && it.Parent == this && it.Content is ContentFormat)
-                    {
-                        foundFormattingItem = true;
-
-                        // Don't iterate further.
-                        return false;
-                    }
-
-                    return true;
-                });
-            }
-
-            doc.Transact(tr =>
-            {
-                if (foundFormattingItem)
-                {
-                    // If a formatting item was inserted, we simply clean the whole type.
-                    // We need to compuyte currentAttributes for the current position anyway.
-                    CleanupFormatting();
-                }
-                else
-                {
-                    // If no formatting attribute was inserted, we can make due with contextless formatting cleanups.
-                    // Contextless: it is not necessary to compute currentAttributes for the affected position.
-                    tr.DeleteSet.IterateDeletedStructs(tr, item =>
-                    {
-                        var it = item as Item;
-                        if (it != null && it.Parent == this)
-                        {
-                            CleanupContextlessFormattingGap(tr, it);
-                        }
-
-                        return true;
-                    });
-                }
-            });
-        }
-
         if (IsObserved(transaction))
         {
             CallTypeObservers(transaction, new YTextEvent(this, transaction, parentSubs));
+        }
+
+        // If a remote change happened, potential formatting duplicates are cleaned up once the
+        // transaction's observers and AfterTransaction handlers ran (CleanupAfterTransaction). As in
+        // Yjs 13.6, only a text that has held formatting can have any.
+        if (!transaction.Local && HasFormatting)
+        {
+            transaction._needFormattingCleanup = true;
         }
     }
 
@@ -1104,7 +1025,7 @@ public partial class YText : YArrayBase
     }
 
     /// <returns>The attributes to negate after the content (null for none).</returns>
-    private Dictionary<string, object> InsertAttributes(Transaction transaction, ref ItemTextListPosition currPos, IDictionary<string, object> attributes)
+    private OrderedDictionary<string, object> InsertAttributes(Transaction transaction, ref ItemTextListPosition currPos, IDictionary<string, object> attributes)
     {
         if (attributes == null)
         {
@@ -1113,7 +1034,7 @@ public partial class YText : YArrayBase
 
         var doc = transaction.Doc;
         var ownClientId = doc.ClientId;
-        Dictionary<string, object> negatedAttributes = null;
+        OrderedDictionary<string, object> negatedAttributes = null;
 
         // Insert format-start items.
         foreach (var kvp in attributes)
@@ -1125,7 +1046,7 @@ public partial class YText : YArrayBase
             if (!EqualAttrs(currentVal, value))
             {
                 // Save negated attribute (set null if currentVal is not set).
-                (negatedAttributes ??= new Dictionary<string, object>())[key] = currentVal;
+                (negatedAttributes ??= new OrderedDictionary<string, object>())[key] = currentVal;
 
                 currPos.Right = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Left?.LastId, currPos.Right, currPos.Right?.Id, this, null, new ContentFormat(key, value));
                 currPos.Right.Integrate(transaction, 0);
@@ -1175,11 +1096,13 @@ public partial class YText : YArrayBase
         var ownClientId = doc.ClientId;
 
         curPos.MinimizeAttributeChanges(attributes);
-        var negatedAttributes = InsertAttributes(transaction, ref curPos, attributes) ?? new Dictionary<string, object>();
+        var negatedAttributes = InsertAttributes(transaction, ref curPos, attributes) ?? new OrderedDictionary<string, object>();
 
-        // Iterate until first non-format or null is found.
-        // Delete all formats with attributes[format.Key] != null
-        while (length > 0 && curPos.Right != null)
+        // Iterate until the first non-format or null is found, and delete all formats with
+        // attributes[format.Key] != null. Also check the formats after the formatted range, so that
+        // no redundant negated attributes are inserted there.
+        while (curPos.Right != null &&
+            (length > 0 || (negatedAttributes.Count > 0 && (curPos.Right.Deleted || curPos.Right.Content is ContentFormat))))
         {
             if (!curPos.Right.Deleted)
             {
@@ -1194,17 +1117,29 @@ public partial class YText : YArrayBase
                             }
                             else
                             {
+                                if (length == 0)
+                                {
+                                    // No need to extend negatedAttributes further.
+                                    goto InsertNegated;
+                                }
+
                                 negatedAttributes[cf.Key] = cf.Value;
                             }
 
                             curPos.Right.Delete(transaction);
                         }
+                        else
+                        {
+                            (curPos.CurrentAttributes ??= new OrderedDictionary<string, object>())[cf.Key] = cf.Value;
+                        }
+
                         break;
                     default:
                         if (length < curPos.Right.Length)
                         {
                             transaction.Doc.Store.GetItemCleanStart(transaction, new ID(curPos.Right.Id.Client, curPos.Right.Id.Clock + length));
                         }
+
                         length -= curPos.Right.Length;
                         break;
                 }
@@ -1218,53 +1153,74 @@ public partial class YText : YArrayBase
         // inserted - i.e. when length is bigger than type.length.
         if (length > 0)
         {
-            var newLines = new string('\n', length - 1);
-            curPos.Right = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Left?.LastId, curPos.Right, curPos.Right?.Id, this, null, new ContentString(newLines));
+            curPos.Right = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Left?.LastId, curPos.Right, curPos.Right?.Id, this, null, new ContentString(new string('\n', length)));
             curPos.Right.Integrate(transaction, 0);
             curPos.Forward();
         }
 
+    InsertNegated:
         curPos.InsertNegatedAttributes(transaction, this, negatedAttributes);
     }
 
     /// <summary>
-    /// Call this function after string content has been deleted in order to clean up formatting Items.
+    /// Call this function after string content has been deleted in order to clean up formatting
+    /// items (Yjs 13.6's <c>cleanupFormattingGap</c>): between <paramref name="start"/> and the next
+    /// countable item that is not deleted, a format is deleted when a later one in the gap sets the
+    /// same key, or when the attribute already had its value at <paramref name="start"/>.
     /// </summary>
+    /// <param name="curr">Exclusive end of the part of the gap before the position; <paramref name="currAttributes"/> is corrected for what is deleted there.</param>
     /// <param name="startAttributes">The attributes at <paramref name="start"/>; null for none.</param>
-    /// <param name="endAttributes">The attributes at <paramref name="end"/>, updated while it moves on; null for none.</param>
-    private static int CleanupFormattingGap(Transaction transaction, Item start, Item end, Dictionary<string, object> startAttributes, Dictionary<string, object> endAttributes)
+    /// <param name="currAttributes">The attributes at <paramref name="curr"/>; null for none.</param>
+    /// <returns>The number of formatting items deleted.</returns>
+    private static int CleanupFormattingGap(Transaction transaction, Item start, Item curr, OrderedDictionary<string, object> startAttributes, ref OrderedDictionary<string, object> currAttributes)
     {
-        while (end != null && !(end.Content is ContentString) && !(end.Content is ContentEmbed))
+        var end = start;
+        Dictionary<string, ContentFormat> endFormats = null;
+        while (end != null && (!end.Countable || end.Deleted))
         {
-            if (!end.Deleted && end.Content is ContentFormat cf)
+            if (!end.Deleted && end.Content is ContentFormat format)
             {
-                UpdateCurrentAttributes(ref endAttributes, cf);
+                (endFormats ??= new Dictionary<string, ContentFormat>())[format.Key] = format;
             }
 
             end = end.Right as Item;
         }
 
-        int cleanups = 0;
+        var cleanups = 0;
+        var reachedCurr = false;
         while (start != end)
         {
-            if (!start.Deleted)
+            if (curr == start)
             {
-                var content = start.Content;
-                switch (content)
+                reachedCurr = true;
+            }
+
+            if (!start.Deleted && start.Content is ContentFormat cf)
+            {
+                var key = cf.Key;
+                var value = cf.Value;
+                var startAttrValue = GetAttribute(startAttributes, key);
+                if (endFormats == null || !endFormats.TryGetValue(key, out var endFormat) || endFormat != cf || StrictEquals(startAttrValue, value))
                 {
-                    case ContentFormat cf:
-                        var endVal = GetAttribute(endAttributes, cf.Key);
-                        var startVal = GetAttribute(startAttributes, cf.Key);
-
-                        if ((endVal != cf.Value || !(endVal?.Equals(cf.Value) ?? false) ||
-                            (startVal == cf.Value || (startVal?.Equals(cf.Value) ?? false))))
+                    // Either this format is overwritten or it is not necessary because the attribute already existed.
+                    start.Delete(transaction);
+                    cleanups++;
+                    if (!reachedCurr && StrictEquals(GetAttribute(currAttributes, key), value) && !StrictEquals(startAttrValue, value))
+                    {
+                        if (startAttrValue == null)
                         {
-                            // Either this format is overwritten or it is not necessary because the attribute already existed.
-                            start.Delete(transaction);
-                            cleanups++;
+                            currAttributes?.Remove(key);
                         }
+                        else
+                        {
+                            (currAttributes ??= new OrderedDictionary<string, object>())[key] = startAttrValue;
+                        }
+                    }
+                }
 
-                        break;
+                if (!reachedCurr && !start.Deleted)
+                {
+                    UpdateCurrentAttributes(ref currAttributes, cf);
                 }
             }
 
@@ -1274,34 +1230,26 @@ public partial class YText : YArrayBase
         return cleanups;
     }
 
-    private void CleanupContextlessFormattingGap(Transaction transaction, Item item)
+    /// <summary>
+    /// Yjs 13.6's <c>cleanupContextlessFormattingGap</c>: in the run of deleted and uncountable items
+    /// around <paramref name="item"/>, deletes every format whose key a later format of the run sets.
+    /// </summary>
+    private static void CleanupContextlessFormattingGap(Transaction transaction, Item item)
     {
         // Iterate until item.Right is null or content.
-        while (item != null && item.Right != null && (item.Right.Deleted || (
-            !((item.Right as Item).Content is ContentString) && !((item.Right as Item).Content is ContentEmbed)
-            )))
+        while (item?.Right is Item right && (right.Deleted || !right.Countable))
         {
-            item = item.Right as Item;
+            item = right;
         }
 
-        var attrs = new HashSet<object>();
+        HashSet<string> attrs = null;
 
         // Iterate back until a content item is found.
-        while (item != null && (item.Deleted || (
-            !(item.Content is ContentString) && !(item.Content is ContentEmbed)
-            )))
+        while (item != null && (item.Deleted || !item.Countable))
         {
-            if (!item.Deleted && item.Content is ContentFormat cf)
+            if (!item.Deleted && item.Content is ContentFormat cf && !(attrs ??= new HashSet<string>()).Add(cf.Key))
             {
-                var key = cf.Key;
-                if (attrs.Contains(key))
-                {
-                    item.Delete(transaction);
-                }
-                else
-                {
-                    attrs.Add(key);
-                }
+                item.Delete(transaction);
             }
 
             item = item.Left as Item;
@@ -1320,14 +1268,14 @@ public partial class YText : YArrayBase
     /// <returns>How many formatting attributes have been cleaned up.</returns>
     public int CleanupFormatting()
     {
-        int res = 0;
+        var res = 0;
 
         Doc.Transact(transaction =>
         {
             var start = _start;
             var end = _start;
-            var startAttributes = new Dictionary<string, object>();
-            var currentAttributes = new Dictionary<string, object>();
+            OrderedDictionary<string, object> startAttributes = null;
+            OrderedDictionary<string, object> currentAttributes = null;
 
             while (end != null)
             {
@@ -1336,11 +1284,11 @@ public partial class YText : YArrayBase
                     switch (end.Content)
                     {
                         case ContentFormat cf:
-                            UpdateCurrentAttributes(currentAttributes, cf);
+                            UpdateCurrentAttributes(ref currentAttributes, cf);
                             break;
                         default:
-                            res += CleanupFormattingGap(transaction, start, end, startAttributes, currentAttributes);
-                            startAttributes = new Dictionary<string, object>(currentAttributes);
+                            res += CleanupFormattingGap(transaction, start, end, startAttributes, ref currentAttributes);
+                            startAttributes = Copy(currentAttributes);
                             start = end;
                             break;
                     }
@@ -1351,6 +1299,86 @@ public partial class YText : YArrayBase
         });
 
         return res;
+    }
+
+    /// <summary>
+    /// Yjs 13.6's <c>cleanupYTextAfterTransaction</c>: once per transaction that changed a text with
+    /// formatting remotely (<see cref="Transaction._needFormattingCleanup"/>), after its
+    /// <see cref="YDoc.AfterTransaction"/> handlers, and in a transaction of its own. A text that got a
+    /// format, or lost one, is cleaned up as a whole; around other deleted items, the formats without
+    /// effect are deleted.
+    /// </summary>
+    internal static void CleanupAfterTransaction(Transaction transaction)
+    {
+        var doc = transaction.Doc;
+        var store = doc.Store;
+        List<YText> needFullCleanup = null;
+
+        // Check if another formatting item was inserted.
+        foreach (var (client, afterClock) in transaction.AfterState)
+        {
+            var clock = transaction.BeforeState.TryGetValue(client, out var before) ? before : 0;
+            if (afterClock == clock)
+            {
+                continue;
+            }
+
+            // As Yjs, with the end clock as the length: to the end of the client's structs.
+            store.IterateStructs(transaction, store.Clients[client], clock, afterClock, str =>
+            {
+                if (str is Item { Deleted: false, Content: ContentFormat, Parent: YText text })
+                {
+                    AddOnce(ref needFullCleanup, text);
+                }
+
+                return true;
+            });
+        }
+
+        // Cleanup in a new transaction.
+        doc.Transact(t =>
+        {
+            transaction.DeleteSet.IterateDeletedStructs(transaction, str =>
+            {
+                if (str is not Item item || item.Parent is not YText { HasFormatting: true } parent || (needFullCleanup?.Contains(parent) ?? false))
+                {
+                    return true;
+                }
+
+                if (item.Content is ContentFormat)
+                {
+                    AddOnce(ref needFullCleanup, parent);
+                }
+                else
+                {
+                    // If no formatting attribute was inserted or deleted, we can make due with contextless
+                    // formatting cleanups. Contextless: it is not necessary to compute currentAttributes
+                    // for the affected position.
+                    CleanupContextlessFormattingGap(t, item);
+                }
+
+                return true;
+            });
+
+            // If a formatting item was inserted, we simply clean the whole type. We need to compute
+            // currentAttributes for the current position anyway.
+            if (needFullCleanup != null)
+            {
+                foreach (var text in needFullCleanup)
+                {
+                    text.CleanupFormatting();
+                }
+            }
+        });
+
+        static void AddOnce(ref List<YText> texts, YText text)
+        {
+            texts ??= new List<YText>();
+            if (!texts.Contains(text))
+            {
+                texts.Add(text);
+            }
+        }
     }
 
     private static void DeleteText(Transaction transaction, ref ItemTextListPosition curPos, int length)
@@ -1383,21 +1411,21 @@ public partial class YText : YArrayBase
 
         if (start != null)
         {
-            CleanupFormattingGap(transaction, start, curPos.Right, startAttrs, Copy(curPos.CurrentAttributes));
+            CleanupFormattingGap(transaction, start, curPos.Right, startAttrs, ref curPos.CurrentAttributes);
         }
 
-        var parent = (curPos.Left ?? curPos.Right).Parent as YText;
+        var parent = (curPos.Left ?? curPos.Right)?.Parent as YText;
         if (parent?._searchMarkers?.Count > 0)
         {
             parent._searchMarkers.UpdateMarkerChanges(curPos.Index, -startLength + length);
         }
     }
 
-    private static Dictionary<string, object> Copy(Dictionary<string, object> attributes) =>
-        attributes?.Count > 0 ? new Dictionary<string, object>(attributes) : null;
+    private static OrderedDictionary<string, object> Copy(OrderedDictionary<string, object> attributes) =>
+        attributes?.Count > 0 ? new OrderedDictionary<string, object>(attributes) : null;
 
     /// <summary>The value of <paramref name="key"/> in <paramref name="attributes"/> (null for none), or null.</summary>
-    private static object GetAttribute(Dictionary<string, object> attributes, string key) =>
+    private static object GetAttribute(OrderedDictionary<string, object> attributes, string key) =>
         attributes != null && attributes.TryGetValue(key, out var value) ? value : null;
 
     internal override void Write(IUpdateEncoder encoder)
@@ -1418,13 +1446,94 @@ public partial class YText : YArrayBase
     /// <returns>How many formatting attributes have been cleaned up.</returns>
     public static int CleanupYTextFormatting(YText type) => type.CleanupFormatting();
 
-    internal static bool EqualAttrs(object attr1, object attr2)
+    /// <summary>
+    /// Yjs' <c>equalAttrs</c>: <c>a === b</c>, or two objects (a map or a list) with the same own
+    /// properties, each compared with <c>===</c>.
+    /// </summary>
+    internal static bool EqualAttrs(object attr1, object attr2) =>
+        StrictEquals(attr1, attr2) ||
+        (attr1 is IDictionary<string, object> map1 && attr2 is IDictionary<string, object> map2 && EqualFlat(map1, map2)) ||
+        (attr1 is System.Collections.IList list1 && attr2 is System.Collections.IList list2 && EqualFlat(list1, list2));
+
+    private static bool EqualFlat(IDictionary<string, object> a, IDictionary<string, object> b)
     {
-        return ReferenceEquals(attr1, attr2) || (attr1?.Equals(attr2) ?? false);
+        if (a.Count != b.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in a)
+        {
+            if (!b.TryGetValue(key, out var other) || !StrictEquals(value, other))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool EqualFlat(System.Collections.IList a, System.Collections.IList b)
+    {
+        if (a.Count != b.Count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < a.Count; i++)
+        {
+            if (!StrictEquals(a[i], b[i]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// JavaScript's <c>===</c> on the values an attribute can hold: numbers by value (whatever their
+    /// CLR type), strings, booleans and big integers by value, maps, lists and byte arrays by reference.
+    /// </summary>
+    internal static bool StrictEquals(object a, object b)
+    {
+        if (ReferenceEquals(a, b))
+        {
+            return true;
+        }
+
+        switch (a)
+        {
+            case null:
+                return false;
+            case string sa:
+                return b is string sb && string.Equals(sa, sb, StringComparison.Ordinal);
+            case bool ba:
+                return b is bool bb && ba == bb;
+            case System.Numerics.BigInteger ia:
+                return b is System.Numerics.BigInteger ib && ia == ib;
+        }
+
+        return TryGetNumber(a, out var na) && TryGetNumber(b, out var nb) && na == nb;
+
+        static bool TryGetNumber(object value, out double number)
+        {
+            switch (value)
+            {
+                case int i: number = i; return true;
+                case long l: number = l; return true;
+                case double d: number = d; return true;
+                case float f: number = f; return true;
+                case short s: number = s; return true;
+                case uint u: number = u; return true;
+                case ulong ul: number = ul; return true;
+                default: number = 0; return false;
+            }
+        }
     }
 
     /// <summary>Applies <paramref name="format"/> to <paramref name="attributes"/>, which is created when a value is set.</summary>
-    private static void UpdateCurrentAttributes(ref Dictionary<string, object> attributes, ContentFormat format)
+    private static void UpdateCurrentAttributes(ref OrderedDictionary<string, object> attributes, ContentFormat format)
     {
         if (format.Value == null)
         {
@@ -1432,7 +1541,7 @@ public partial class YText : YArrayBase
         }
         else
         {
-            (attributes ??= new Dictionary<string, object>())[format.Key] = format.Value;
+            (attributes ??= new OrderedDictionary<string, object>())[format.Key] = format.Value;
         }
     }
 

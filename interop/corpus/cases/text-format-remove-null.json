@@ -1,0 +1,545 @@
+{
+ "name": "text-format-remove-null",
+ "description": "Formats removed with null, concurrently and overlapping, then all removed while one is set again (gc off).",
+ "yjs": "13.6.32",
+ "gc": false,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": true
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQUBAAQBBHRleHQQYWJjZGVmZ2hpamtsbW5vcEYBAARib2xkBHRydWXGARABAARzaXplAjEyhgEPBGJvbGQEbnVsbIYBEgRzaXplBG51bGwA",
+   "v2": "AAMAAwECQQQDIEIGAgEABwQARgDGAIYpJHRleHRhYmNkZWZnaGlqa2xtbm9wYm9sZHNpemVib2xkc2l6ZQQQRAIBAQAAAQUAeH0Mfn4A"
+  },
+  {
+   "v1": "AQIBFMYBAQECBGJvbGQEbnVsbMYBBwEIBGJvbGQEdHJ1ZQA=",
+   "v2": "AAIAAgJBAwICDAIEDAHGCwhib2xkYm9sZEQAAAAAAQIUfngA"
+  },
+  {
+   "v1": "AQQCAMYBBAEFBGJvbGQEbnVsbMYCAAEFBHNpemUEbnVsbMYBCgELBGJvbGQEdHJ1ZcYCAgELBHNpemUCMTIA",
+   "v2": "AAMAAwEIAkEAAkEBAgEECEgUUAQKAAwAAcYTEGJvbGRzaXplYm9sZHNpemVEAgAAAAEEAH5+eH0MAA=="
+  },
+  {
+   "v1": "AQIDAMYBAwEEBHNpemUCMTTGAQYBBwRzaXplAjEyAA==",
+   "v2": "AAIAAgMDQQICBwACCAYBxgsIc2l6ZXNpemVEAAAAAAECAH0OfQwA"
+  },
+  {
+   "v1": "AQECBMQBBQEGAXcA",
+   "v2": "AAADAkEAAQoBDAHEAwF3AQAAAAEBBAA="
+  },
+  {
+   "v1": "AAICAgABAgEBAxABEgEUAg==",
+   "v2": "AAAAAAAAAQAAAAAAAgICAAABAAEDEAABAAEB"
+  },
+  {
+   "v1": "AAECAQIB",
+   "v2": "AAAAAAAAAQAAAAAAAQIBAgA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "abcdefwghijklmnop",
+    "delta": [
+     {
+      "attributes": {
+       "size": 12
+      },
+      "insert": "abcd"
+     },
+     {
+      "attributes": {
+       "size": 14
+      },
+      "insert": "e"
+     },
+     {
+      "insert": "fwg"
+     },
+     {
+      "attributes": {
+       "size": 12
+      },
+      "insert": "hijk"
+     },
+     {
+      "attributes": {
+       "size": 12
+      },
+      "insert": "lmnop"
+     }
+    ]
+   }
+  },
+  "stateVector": {
+   "1": 22,
+   "2": 5,
+   "3": 2
+  },
+  "deleteSet": {
+   "1": [
+    [
+     16,
+     1
+    ],
+    [
+     18,
+     1
+    ],
+    [
+     20,
+     2
+    ]
+   ],
+   "2": [
+    [
+     0,
+     1
+    ],
+    [
+     2,
+     1
+    ]
+   ]
+  },
+  "stateV1": "AwIDAMYBAwEEBHNpemUCMTTGAQYBBwRzaXplAjEyBQIAxgEEAQUEYm9sZARudWxsxgIAAQUEc2l6ZQRudWxsxgEKAQsEYm9sZAR0cnVlxgICAQsEc2l6ZQIxMsQBBQEGAXcOAQAEAQR0ZXh0AmFihAEBAmNkhAEDAWWEAQQBZoQBBQFnhAEGAWiEAQcDaWprhAEKBWxtbm9wRgEABGJvbGQEdHJ1ZcYBEAEABHNpemUCMTKGAQ8EYm9sZARudWxshgESBHNpemUEbnVsbMYBAQECBGJvbGQEbnVsbMYBBwEIBGJvbGQEdHJ1ZQICAgABAgEBAxABEgEUAg==",
+  "stateV2": "AAMAAwkMA0ECAkEAAkEBAkESEQcAREgUUAZIBAMCBgxCBmIMCwgGRAAMAEpMAAQMD8YFxAAEAIQGRgDGAIYBxlJFc2l6ZXNpemVib2xkc2l6ZWJvbGRzaXpld3RleHRhYmNkZWZnaGlqa2xtbm9wYm9sZHNpemVib2xkc2l6ZWJvbGRib2xkRAQBBEIAQQIDBUQEAQEAAAMCAH0OfQwFAH5+eH0MDgB4fQx+fn54AgICAAABAAEDEAABAAEB",
+  "stateVectorV1": "AwMCAgUBFg==",
+  "itemOrder": {
+   "text": [
+    [
+     1,
+     16,
+     1,
+     1
+    ],
+    [
+     1,
+     17,
+     1,
+     0
+    ],
+    [
+     1,
+     0,
+     2,
+     0
+    ],
+    [
+     1,
+     20,
+     1,
+     1
+    ],
+    [
+     1,
+     2,
+     2,
+     0
+    ],
+    [
+     3,
+     0,
+     1,
+     0
+    ],
+    [
+     1,
+     4,
+     1,
+     0
+    ],
+    [
+     2,
+     0,
+     1,
+     1
+    ],
+    [
+     2,
+     1,
+     1,
+     0
+    ],
+    [
+     1,
+     5,
+     1,
+     0
+    ],
+    [
+     2,
+     4,
+     1,
+     0
+    ],
+    [
+     1,
+     6,
+     1,
+     0
+    ],
+    [
+     3,
+     1,
+     1,
+     0
+    ],
+    [
+     1,
+     7,
+     1,
+     0
+    ],
+    [
+     1,
+     21,
+     1,
+     1
+    ],
+    [
+     1,
+     8,
+     3,
+     0
+    ],
+    [
+     2,
+     2,
+     1,
+     1
+    ],
+    [
+     2,
+     3,
+     1,
+     0
+    ],
+    [
+     1,
+     11,
+     5,
+     0
+    ],
+    [
+     1,
+     18,
+     1,
+     1
+    ],
+    [
+     1,
+     19,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 3,
+  "stateVector": "AgIEARY=",
+  "stateVectorMap": {
+   "1": 22,
+   "2": 4
+  },
+  "updateV1": "AgIDAMYBAwEEBHNpemUCMTTGAQYBBwRzaXplAjEyAQIExAEFAQYBdwICAgABAgEBAxABEgEUAg==",
+  "updateV2": "AAIAAgYDQQICQQADBwBCAwgGQgPGAcQNCXNpemVzaXpld0QAAQAAAAICAH0OfQwBBAICAgAAAQABAxAAAQABAQ==",
+  "from": {
+   "2": 4,
+   "3": 0
+  },
+  "to": {
+   "2": 5,
+   "3": 2
+  }
+ },
+ "merged": {
+  "v1": "AwIDAMYBAwEEBHNpemUCMTTGAQYBBwRzaXplAjEyBQIAxgEEAQUEYm9sZARudWxsxgIAAQUEc2l6ZQRudWxsxgEKAQsEYm9sZAR0cnVlxgICAQsEc2l6ZQIxMsQBBQEGAXcHAQAEAQR0ZXh0EGFiY2RlZmdoaWprbG1ub3BGAQAEYm9sZAR0cnVlxgEQAQAEc2l6ZQIxMoYBDwRib2xkBG51bGyGARIEc2l6ZQRudWxsxgEBAQIEYm9sZARudWxsxgEHAQgEYm9sZAR0cnVlAgICAAECAQEDEAESARQC",
+  "v2": "AAMAAwkMA0ECAkEAAkEBAkELDAcAREgUUAYWQgZiDAsIBkQADABKTAAEDA3GBcQABABGAMYAhgHGTUVzaXplc2l6ZWJvbGRzaXplYm9sZHNpemV3dGV4dGFiY2RlZmdoaWprbG1ub3Bib2xkc2l6ZWJvbGRzaXplYm9sZGJvbGREBAEEEEQEAQEAAAMCAH0OfQwFAH5+eH0MBwB4fQx+fn54AgICAAABAAEDEAABAAEB"
+ },
+ "script": [
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 0,
+     "text": "abcdefghijklmnop"
+    },
+    {
+     "op": "format",
+     "root": "text",
+     "at": 0,
+     "length": 16,
+     "attributes": {
+      "bold": true,
+      "size": 12
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 0,
+   "to": 1
+  },
+  {
+   "deliver": 0,
+   "to": 2
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 2,
+     "length": 6,
+     "attributes": {
+      "bold": null
+     }
+    }
+   ]
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 5,
+     "length": 6,
+     "attributes": {
+      "bold": null,
+      "size": null
+     }
+    }
+   ]
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 4,
+     "length": 3,
+     "attributes": {
+      "size": 14
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 3,
+   "to": 0
+  },
+  {
+   "deliver": 2,
+   "to": 0
+  },
+  {
+   "deliver": 1,
+   "to": 1
+  },
+  {
+   "deliver": 3,
+   "to": 1
+  },
+  {
+   "deliver": 1,
+   "to": 2
+  },
+  {
+   "deliver": 2,
+   "to": 2
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 6,
+     "text": "w"
+    }
+   ]
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 0,
+     "length": 16,
+     "attributes": {
+      "bold": null
+     }
+    }
+   ]
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 8,
+     "length": 4,
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 5,
+   "to": 0
+  },
+  {
+   "deliver": 4,
+   "to": 0
+  },
+  {
+   "deliver": 5,
+   "to": 1
+  },
+  {
+   "deliver": 6,
+   "to": 1
+  },
+  {
+   "deliver": 4,
+   "to": 2
+  },
+  {
+   "deliver": 6,
+   "to": 2
+  }
+ ],
+ "clients": [
+  {
+   "id": 1,
+   "stateV1": "AwIDAMYBAwEEBHNpemUCMTTGAQYBBwRzaXplAjEyBQIAxgEEAQUEYm9sZARudWxsxgIAAQUEc2l6ZQRudWxsxgEKAQsEYm9sZAR0cnVlxgICAQsEc2l6ZQIxMsQBBQEGAXcOAQAEAQR0ZXh0AmFihAEBAmNkhAEDAWWEAQQBZoQBBQFnhAEGAWiEAQcDaWprhAEKBWxtbm9wRgEABGJvbGQEdHJ1ZcYBEAEABHNpemUCMTKGAQ8EYm9sZARudWxshgESBHNpemUEbnVsbMYBAQECBGJvbGQEbnVsbMYBBwEIBGJvbGQEdHJ1ZQICAgABAgEBAxABEgEUAg==",
+   "stateV2": "AAMAAwkMA0ECAkEAAkEBAkESEQcAREgUUAZIBAMCBgxCBmIMCwgGRAAMAEpMAAQMD8YFxAAEAIQGRgDGAIYBxlJFc2l6ZXNpemVib2xkc2l6ZWJvbGRzaXpld3RleHRhYmNkZWZnaGlqa2xtbm9wYm9sZHNpemVib2xkc2l6ZWJvbGRib2xkRAQBBEIAQQIDBUQEAQEAAAMCAH0OfQwFAH5+eH0MDgB4fQx+fn54AgICAAABAAEDEAABAAEB",
+   "content": {
+    "text": {
+     "text": "abcdefwghijklmnop",
+     "delta": [
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "abcd"
+      },
+      {
+       "attributes": {
+        "size": 14
+       },
+       "insert": "e"
+      },
+      {
+       "insert": "fwg"
+      },
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "hijk"
+      },
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "lmnop"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 2,
+   "stateV1": "AwIDAMYBAwEEBHNpemUCMTTGAQYBBwRzaXplAjEyBQIAxgEEAQUEYm9sZARudWxsxgIAAQUEc2l6ZQRudWxsxgEKAQsEYm9sZAR0cnVlxgICAQsEc2l6ZQIxMsQBBQEGAXcOAQAEAQR0ZXh0AmFihAEBAmNkhAEDAWWEAQQBZoQBBQFnhAEGAWiEAQcDaWprhAEKBWxtbm9wRgEABGJvbGQEdHJ1ZcYBEAEABHNpemUCMTKGAQ8EYm9sZARudWxshgESBHNpemUEbnVsbMYBAQECBGJvbGQEbnVsbMYBBwEIBGJvbGQEdHJ1ZQICAgABAgEBAxABEgEUAg==",
+   "stateV2": "AAMAAwkMA0ECAkEAAkEBAkESEQcAREgUUAZIBAMCBgxCBmIMCwgGRAAMAEpMAAQMD8YFxAAEAIQGRgDGAIYBxlJFc2l6ZXNpemVib2xkc2l6ZWJvbGRzaXpld3RleHRhYmNkZWZnaGlqa2xtbm9wYm9sZHNpemVib2xkc2l6ZWJvbGRib2xkRAQBBEIAQQIDBUQEAQEAAAMCAH0OfQwFAH5+eH0MDgB4fQx+fn54AgICAAABAAEDEAABAAEB",
+   "content": {
+    "text": {
+     "text": "abcdefwghijklmnop",
+     "delta": [
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "abcd"
+      },
+      {
+       "attributes": {
+        "size": 14
+       },
+       "insert": "e"
+      },
+      {
+       "insert": "fwg"
+      },
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "hijk"
+      },
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "lmnop"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 3,
+   "stateV1": "AwIDAMYBAwEEBHNpemUCMTTGAQYBBwRzaXplAjEyBQIAxgEEAQUEYm9sZARudWxsxgIAAQUEc2l6ZQRudWxsxgEKAQsEYm9sZAR0cnVlxgICAQsEc2l6ZQIxMsQBBQEGAXcOAQAEAQR0ZXh0AmFihAEBAmNkhAEDAWWEAQQBZoQBBQFnhAEGAWiEAQcDaWprhAEKBWxtbm9wRgEABGJvbGQEdHJ1ZcYBEAEABHNpemUCMTKGAQ8EYm9sZARudWxshgESBHNpemUEbnVsbMYBAQECBGJvbGQEbnVsbMYBBwEIBGJvbGQEdHJ1ZQICAgABAgEBAxABEgEUAg==",
+   "stateV2": "AAMAAwkMA0ECAkEAAkEBAkESEQcAREgUUAZIBAMCBgxCBmIMCwgGRAAMAEpMAAQMD8YFxAAEAIQGRgDGAIYBxlJFc2l6ZXNpemVib2xkc2l6ZWJvbGRzaXpld3RleHRhYmNkZWZnaGlqa2xtbm9wYm9sZHNpemVib2xkc2l6ZWJvbGRib2xkRAQBBEIAQQIDBUQEAQEAAAMCAH0OfQwFAH5+eH0MDgB4fQx+fn54AgICAAABAAEDEAABAAEB",
+   "content": {
+    "text": {
+     "text": "abcdefwghijklmnop",
+     "delta": [
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "abcd"
+      },
+      {
+       "attributes": {
+        "size": 14
+       },
+       "insert": "e"
+      },
+      {
+       "insert": "fwg"
+      },
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "hijk"
+      },
+      {
+       "attributes": {
+        "size": 12
+       },
+       "insert": "lmnop"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

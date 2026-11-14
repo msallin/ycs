@@ -1,0 +1,433 @@
+{
+ "name": "text-format-then-delete",
+ "description": "Formats racing deletes of the formatted text, then everything deleted while a formatted insert races it.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": true
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQMYWJjZGVmZ2hpamtsAA==",
+   "v2": "AAABAQAAAQQTEHRleHRhYmNkZWZnaGlqa2wEDAEBAAABAQAA"
+  },
+  {
+   "v1": "AQIBDMYBAQECBGJvbGQEdHJ1ZcYBBwEIBGJvbGQEbnVsbAA=",
+   "v2": "AAIAAgJBAwICDAIEDAHGCwhib2xkYm9sZEQAAAAAAQIMeH4A"
+  },
+  {
+   "v1": "AAEBAQME",
+   "v2": "AAAAAAAAAQAAAAAAAQEBAwM="
+  },
+  {
+   "v1": "AQIDAMYBAwEEBWNvbG9yBSJyZWQixgEJAQoFY29sb3IEbnVsbAA=",
+   "v2": "AAIAAgMDQQICBgwCCAwBxg0KY29sb3Jjb2xvckUAAAAAAQIAdwNyZWR+AA=="
+  },
+  {
+   "v1": "AAEBAwADBwEMAg==",
+   "v2": "AAAAAAAAAQAAAAAAAQEDAAIEAAQB"
+  },
+  {
+   "v1": "AQMCAEYBAAVjb2xvcgYiYmx1ZSLGAQMDAAVjb2xvcgRudWxsxgIBAwAEYm9sZAR0cnVlAQEBDAE=",
+   "v2": "AAMAAwAGAkEAAwIDAgZEAgEBA0YAxhIOY29sb3Jjb2xvcmJvbGRFAAQAAAABAwB3BGJsdWV+eAEBAQwA"
+  },
+  {
+   "v1": "AAECAQAC",
+   "v2": "AAAAAAAAAQAAAAAAAQIBAAE="
+  },
+  {
+   "v1": "AAIDAQACAQEIBA==",
+   "v2": "AAAAAAAAAQAAAAAAAgMBAAEBAQgD"
+  },
+  {
+   "v1": "AQEBDsQCAgMAAXoA",
+   "v2": "AAADAQIDAQQBAAHEAwF6AQAAAAEBDgA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "z",
+    "delta": [
+     {
+      "attributes": {
+       "bold": true
+      },
+      "insert": "z"
+     }
+    ]
+   }
+  },
+  "stateVector": {
+   "1": 15,
+   "2": 3,
+   "3": 2
+  },
+  "deleteSet": {
+   "1": [
+    [
+     0,
+     14
+    ]
+   ],
+   "2": [
+    [
+     0,
+     2
+    ]
+   ],
+   "3": [
+    [
+     0,
+     2
+    ]
+   ]
+  },
+  "stateV1": "AwIDAMEBAwEEAcEBCQEKAQMCAEEBAAHBAQMDAAHGAgEDAARib2xkBHRydWUIAQABAQR0ZXh0AoEBAQKBAQMEgQEHAoEBCQLBAQEBAgHBAQcBCAHEAgIDAAF6AwMBAAICAQACAQEADg==",
+  "stateV2": "AAEADQNBAgJBAAMCA0EHAgMLBgxMRAAECARQDEoICAxUAQAEDFAPwQFBAMEAxgABAIEDwQHEDQlib2xkdGV4dHpEAAEBAQAJQQJCAARCAEEAAwIAAwB4CAADAwEAAQIBAAEBAQAN",
+  "stateVectorV1": "AwMCAgMBDw==",
+  "itemOrder": {
+   "text": [
+    [
+     2,
+     0,
+     1,
+     1
+    ],
+    [
+     1,
+     0,
+     2,
+     1
+    ],
+    [
+     1,
+     12,
+     1,
+     1
+    ],
+    [
+     1,
+     2,
+     2,
+     1
+    ],
+    [
+     2,
+     1,
+     1,
+     1
+    ],
+    [
+     2,
+     2,
+     1,
+     0
+    ],
+    [
+     1,
+     14,
+     1,
+     0
+    ],
+    [
+     3,
+     0,
+     1,
+     1
+    ],
+    [
+     1,
+     4,
+     4,
+     1
+    ],
+    [
+     1,
+     13,
+     1,
+     1
+    ],
+    [
+     1,
+     8,
+     2,
+     1
+    ],
+    [
+     3,
+     1,
+     1,
+     1
+    ],
+    [
+     1,
+     10,
+     2,
+     1
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 4,
+  "stateVector": "AgMCAQ4=",
+  "stateVectorMap": {
+   "1": 14,
+   "3": 2
+  },
+  "updateV1": "AgMCAEEBAAHBAQMDAAHGAgEDAARib2xkBHRydWUBAQ7EAgIDAAF6AwMBAAICAQACAQEADg==",
+  "updateV2": "AAEACQJBAAMCAwECAwMGRAICAQIHQQDBAMYAxAgFYm9sZHoEAQAAAkEAAgMAeAEOAwMBAAECAQABAQEADQ==",
+  "from": {
+   "1": 14,
+   "2": 0
+  },
+  "to": {
+   "1": 15,
+   "2": 3
+  }
+ },
+ "merged": {
+  "v1": "AwIDAMYBAwEEBWNvbG9yBSJyZWQixgEJAQoFY29sb3IEbnVsbAMCAEYBAAVjb2xvcgYiYmx1ZSLGAQMDAAVjb2xvcgRudWxsxgIBAwAEYm9sZAR0cnVlBAEABAEEdGV4dAxhYmNkZWZnaGlqa2zGAQEBAgRib2xkBHRydWXGAQcBCARib2xkBG51bGzEAgIDAAF6AwMBAAICAQACAQEADg==",
+  "v2": "AAMAAwQNA0ECAkEAAwIDQQMCAwcGDExEAAxKCAgMVAEABAxQC8YBRgDGAQQAxgHEOjFjb2xvcmNvbG9yY29sb3Jjb2xvcmJvbGR0ZXh0YWJjZGVmZ2hpamtsYm9sZGJvbGR6RQJEAAxEAAEBAQAAAwIAdwNyZWR+AwB3BGJsdWV+eAQAeH4DAwEAAQIBAAEBAQAN"
+ },
+ "script": [
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 0,
+     "text": "abcdefghijkl"
+    }
+   ]
+  },
+  {
+   "deliver": 0,
+   "to": 1
+  },
+  {
+   "deliver": 0,
+   "to": 2
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 2,
+     "length": 6,
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "delete",
+     "root": "text",
+     "at": 3,
+     "length": 4
+    }
+   ]
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 4,
+     "length": 6,
+     "attributes": {
+      "color": "red"
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 2,
+   "to": 0
+  },
+  {
+   "deliver": 3,
+   "to": 0
+  },
+  {
+   "deliver": 1,
+   "to": 1
+  },
+  {
+   "deliver": 3,
+   "to": 1
+  },
+  {
+   "deliver": 2,
+   "to": 2
+  },
+  {
+   "deliver": 1,
+   "to": 2
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "delete",
+     "root": "text",
+     "at": 0,
+     "length": 4
+    }
+   ]
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 0,
+     "length": 3,
+     "attributes": {
+      "bold": null,
+      "color": "blue"
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 5,
+   "to": 0
+  },
+  {
+   "deliver": 6,
+   "to": 1
+  },
+  {
+   "deliver": 4,
+   "to": 1
+  },
+  {
+   "deliver": 6,
+   "to": 2
+  },
+  {
+   "deliver": 4,
+   "to": 2
+  },
+  {
+   "deliver": 5,
+   "to": 2
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "delete",
+     "root": "text",
+     "at": 0,
+     "length": 4
+    }
+   ]
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 0,
+     "text": "z",
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 7,
+   "to": 0
+  },
+  {
+   "deliver": 6,
+   "to": 0
+  },
+  {
+   "deliver": 7,
+   "to": 1
+  },
+  {
+   "deliver": 8,
+   "to": 1
+  },
+  {
+   "deliver": 8,
+   "to": 2
+  }
+ ],
+ "clients": [
+  {
+   "id": 1,
+   "stateV1": "AwIDAMEBAwEEAcEBCQEKAQMCAEEBAAHBAQMDAAHGAgEDAARib2xkBHRydWUIAQABAQR0ZXh0AoEBAQKBAQMEgQEHAoEBCQLBAQEBAgHBAQcBCAHEAgIDAAF6AwMBAAICAQACAQEADg==",
+   "stateV2": "AAEADQNBAgJBAAMCA0EHAgMLBgxMRAAECARQDEoICAxUAQAEDFAPwQFBAMEAxgABAIEDwQHEDQlib2xkdGV4dHpEAAEBAQAJQQJCAARCAEEAAwIAAwB4CAADAwEAAQIBAAEBAQAN",
+   "content": {
+    "text": {
+     "text": "z",
+     "delta": [
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "z"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 2,
+   "stateV1": "AwIDAMEBAwEEAcEBCQEKAQMCAEEBAAHBAQMDAAHGAgEDAARib2xkBHRydWUIAQABAQR0ZXh0AoEBAQKBAQMEgQEHAoEBCQLBAQEBAgHBAQcBCAHEAgIDAAF6AwMBAAICAQACAQEADg==",
+   "stateV2": "AAEADQNBAgJBAAMCA0EHAgMLBgxMRAAECARQDEoICAxUAQAEDFAPwQFBAMEAxgABAIEDwQHEDQlib2xkdGV4dHpEAAEBAQAJQQJCAARCAEEAAwIAAwB4CAADAwEAAQIBAAEBAQAN",
+   "content": {
+    "text": {
+     "text": "z",
+     "delta": [
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "z"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 3,
+   "stateV1": "AwIDAMEBAwEEAcEBCQEKAQMCAEEBAAHBAQMDAAHGAgEDAARib2xkBHRydWUIAQABAQR0ZXh0AoEBAQKBAQMEgQEHAoEBCQLBAQEBAgHBAQcBCAHEAgIDAAF6AwMBAAICAQACAQEADg==",
+   "stateV2": "AAEADQNBAgJBAAMCA0EHAgMLBgxMRAAECARQDEoICAxUAQAEDFAPwQFBAMEAxgABAIEDwQHEDQlib2xkdGV4dHpEAAEBAQAJQQJCAARCAEEAAwIAAwB4CAADAwEAAQIBAAEBAQAN",
+   "content": {
+    "text": {
+     "text": "z",
+     "delta": [
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "z"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

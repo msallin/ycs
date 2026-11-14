@@ -74,6 +74,32 @@ internal sealed class CorpusDoc
 
     public void DeleteText(string root, int index, int length) => _doc.GetText(root).Delete(index, length);
 
+    /// <summary>Makes the changes of one scripted step (gen.mjs' runOp) in one transaction.</summary>
+    public void EditText(IReadOnlyList<TextOp> ops) => _doc.Transact(_ =>
+    {
+        foreach (var op in ops)
+        {
+            var text = _doc.GetText(op.Root);
+            switch (op.Op)
+            {
+                case "insert":
+                    text.Insert(op.At, op.Text, op.Attributes);
+                    break;
+                case "delete":
+                    text.Delete(op.At, op.Length);
+                    break;
+                case "format":
+                    text.Format(op.At, op.Length, op.Attributes);
+                    break;
+                case "embed":
+                    text.InsertEmbed(op.At, op.Embed, op.Attributes);
+                    break;
+                default:
+                    throw new ArgumentException($"Unknown text op '{op.Op}'.", nameof(ops));
+            }
+        }
+    });
+
     /// <summary>Y.Text.toDelta() as plain values: a list of {insert, attributes?}.</summary>
     public object Delta(string root)
     {

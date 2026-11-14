@@ -5,21 +5,18 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// The cleanup of formatting after a remote change runs only for a text that has held formatting
-/// (Yjs 13.6's <c>_hasFormatting</c>). The transaction counts are those of Yjs 13.6.32 running the
-/// same steps with the same client ids.
+/// The cleanup of formatting after a remote change runs once per transaction, after its
+/// AfterTransaction handlers, and only for a text that has held formatting (Yjs 13.6's
+/// <c>_hasFormatting</c>). The transaction counts and the encodings are those of Yjs 13.6.32 running
+/// the same steps with the same client ids.
 /// </summary>
 [TestClass]
 public class FormattingCleanupTests
 {
-    // What the cleanup leaves: the two documents agree, and the cleanup deleted three formats (the
-    // delete set at the end), so all of "abcdef" is bold. Yjs 13.6.32 deletes none and ends with
-    // [ab bold][cd bold][ef], encoded as
-    // "AgICAMYBAQECBGJvbGQEdHJ1ZYYBBQRib2xkBG51bGwFAQAEAQR0ZXh0AmFihAEBAmNkhAEDAmVmRgEABGJvbGQEdHJ1ZcYBAwEEBGJvbGQEbnVsbAA=":
-    // the formatting algorithms here (cleanupFormattingGap, formatText) are those of an earlier Yjs.
-    // This pins today's result, so that a change to it is deliberate.
+    // What Yjs 13.6.32 leaves after the same steps with the same client ids: no format deleted,
+    // [ab bold][cd bold][ef].
     private const string ConcurrentBoldAfterSync =
-        "AgICAMEBAQECAYYBBQRib2xkBG51bGwFAQAEAQR0ZXh0AmFihAEBAmNkhAEDAmVmRgEABGJvbGQEdHJ1ZcEBAwEEAQICAQABAQEHAQ==";
+        "AgICAMYBAQECBGJvbGQEdHJ1ZYYBBQRib2xkBG51bGwFAQAEAQR0ZXh0AmFihAEBAmNkhAEDAmVmRgEABGJvbGQEdHJ1ZcYBAwEEBGJvbGQEbnVsbAA=";
 
     [TestMethod]
     public void ApplyUpdate_WithFormatting_RunsCleanupTransaction()
@@ -35,7 +32,7 @@ public class FormattingCleanupTests
 
         Assert.AreEqual(2, transactions, "the update and the formatting cleanup, as in Yjs");
         Assert.AreEqual(ConcurrentBoldAfterSync, Convert.ToBase64String(b.EncodeStateAsUpdateV1()));
-        Assert.AreEqual("[abcdef bold]", Describe(b.GetText("text")));
+        Assert.AreEqual("[ab bold][cd bold][ef]", Describe(b.GetText("text")));
     }
 
     [TestMethod]

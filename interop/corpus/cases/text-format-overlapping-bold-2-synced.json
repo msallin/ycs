@@ -1,0 +1,235 @@
+{
+ "name": "text-format-overlapping-bold-2-synced",
+ "description": "Two clients bold overlapping ranges concurrently, then sync (their cleanups are in the log).",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": true
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQGYWJjZGVmAA==",
+   "v2": "AAABAQAAAQQNCnRleHRhYmNkZWYEBgEBAAABAQAA"
+  },
+  {
+   "v1": "AQIBBkYBAARib2xkBHRydWXGAQMBBARib2xkBG51bGwA",
+   "v2": "AAIAAgJBAgEGAgAIA0YAxgsIYm9sZGJvbGREAAAAAAECBnh+AA=="
+  },
+  {
+   "v1": "AQICAMYBAQECBGJvbGQEdHJ1ZYYBBQRib2xkBG51bGwA",
+   "v2": "AAIAAgMCQQECAggBBAPGAIYLCGJvbGRib2xkRAAAAAABAgB4fgA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "abcdef",
+    "delta": [
+     {
+      "attributes": {
+       "bold": true
+      },
+      "insert": "ab"
+     },
+     {
+      "attributes": {
+       "bold": true
+      },
+      "insert": "cd"
+     },
+     {
+      "insert": "ef"
+     }
+    ]
+   }
+  },
+  "stateVector": {
+   "1": 8,
+   "2": 2
+  },
+  "deleteSet": {},
+  "stateV1": "AgICAMYBAQECBGJvbGQEdHJ1ZYYBBQRib2xkBG51bGwFAQAEAQR0ZXh0AmFihAEBAmNkhAEDAmVmRgEABGJvbGQEdHJ1ZcYBAwEEBGJvbGQEbnVsbAA=",
+  "stateV2": "AAMAAwEDAkEHBQIISAQAAwRECAvGAIYABACEAUYAxiEaYm9sZGJvbGR0ZXh0YWJjZGVmYm9sZGJvbGREAUIBRAABAQAAAgIAeH4FAHh+AA==",
+  "stateVectorV1": "AgICAQg=",
+  "itemOrder": {
+   "text": [
+    [
+     1,
+     6,
+     1,
+     0
+    ],
+    [
+     1,
+     0,
+     2,
+     0
+    ],
+    [
+     2,
+     0,
+     1,
+     0
+    ],
+    [
+     1,
+     2,
+     2,
+     0
+    ],
+    [
+     1,
+     7,
+     1,
+     0
+    ],
+    [
+     1,
+     4,
+     2,
+     0
+    ],
+    [
+     2,
+     1,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 1,
+  "stateVector": "AQEG",
+  "stateVectorMap": {
+   "1": 6
+  },
+  "updateV1": "AgICAMYBAQECBGJvbGQEdHJ1ZYYBBQRib2xkBG51bGwCAQZGAQAEYm9sZAR0cnVlxgEDAQQEYm9sZARudWxsAA==",
+  "updateV2": "AAMAAwEDAkEFAwIIRAMERAgHxgCGAEYAxhMQYm9sZGJvbGRib2xkYm9sZEQCAAAAAgIAeH4CBnh+AA==",
+  "from": {
+   "1": 6,
+   "2": 0
+  },
+  "to": {
+   "1": 8,
+   "2": 2
+  }
+ },
+ "merged": {
+  "v1": "AgICAMYBAQECBGJvbGQEdHJ1ZYYBBQRib2xkBG51bGwDAQAEAQR0ZXh0BmFiY2RlZkYBAARib2xkBHRydWXGAQMBBARib2xkBG51bGwA",
+  "v2": "AAMAAwEDAkEFAwIIRAMERAgJxgCGAAQARgDGIBpib2xkYm9sZHRleHRhYmNkZWZib2xkYm9sZEQBBkQAAQEAAAICAHh+AwB4fgA="
+ },
+ "script": [
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 0,
+     "text": "abcdef"
+    }
+   ]
+  },
+  {
+   "deliver": 0,
+   "to": 1
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 0,
+     "length": 4,
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 2,
+     "length": 4,
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 2,
+   "to": 0
+  },
+  {
+   "deliver": 1,
+   "to": 1
+  }
+ ],
+ "clients": [
+  {
+   "id": 1,
+   "stateV1": "AgICAMYBAQECBGJvbGQEdHJ1ZYYBBQRib2xkBG51bGwFAQAEAQR0ZXh0AmFihAEBAmNkhAEDAmVmRgEABGJvbGQEdHJ1ZcYBAwEEBGJvbGQEbnVsbAA=",
+   "stateV2": "AAMAAwEDAkEHBQIISAQAAwRECAvGAIYABACEAUYAxiEaYm9sZGJvbGR0ZXh0YWJjZGVmYm9sZGJvbGREAUIBRAABAQAAAgIAeH4FAHh+AA==",
+   "content": {
+    "text": {
+     "text": "abcdef",
+     "delta": [
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "ab"
+      },
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "cd"
+      },
+      {
+       "insert": "ef"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 2,
+   "stateV1": "AgICAMYBAQECBGJvbGQEdHJ1ZYYBBQRib2xkBG51bGwFAQAEAQR0ZXh0AmFihAEBAmNkhAEDAmVmRgEABGJvbGQEdHJ1ZcYBAwEEBGJvbGQEbnVsbAA=",
+   "stateV2": "AAMAAwEDAkEHBQIISAQAAwRECAvGAIYABACEAUYAxiEaYm9sZGJvbGR0ZXh0YWJjZGVmYm9sZGJvbGREAUIBRAABAQAAAgIAeH4FAHh+AA==",
+   "content": {
+    "text": {
+     "text": "abcdef",
+     "delta": [
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "ab"
+      },
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "cd"
+      },
+      {
+       "insert": "ef"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

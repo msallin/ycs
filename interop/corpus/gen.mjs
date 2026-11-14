@@ -64,10 +64,29 @@ class Sim {
       return doc
     })
     this.seen = this.docs.map(() => new Set())
+    // What happened, as data, for a replay by Ycs clients: {client, ops} or {deliver, to}.
+    // Only complete when every local change went through ops() (scripted).
+    this.steps = []
+    this.scripted = true
+  }
+
+  /** Like local(), with the changes as data (see runOp), so that the case can be replayed by clients. */
+  ops (i, ops) {
+    const before = this.log.length
+    this.docs[i].transact(() => { for (const op of ops) runOp(this.docs[i], op) })
+    for (let k = before; k < this.log.length; k++) this.seen[i].add(k)
+    this.steps.push({ client: i, ops })
+  }
+
+  deliver (i, k) {
+    Y.applyUpdate(this.docs[i], this.log[k].v1, REMOTE)
+    this.seen[i].add(k)
+    this.steps.push({ deliver: k, to: i })
   }
 
   /** Runs fn(doc) as one transaction on client i, i.e. one update. */
   local (i, fn) {
+    this.scripted = false
     const before = this.log.length
     this.docs[i].transact(() => fn(this.docs[i]))
     for (let k = before; k < this.log.length; k++) this.seen[i].add(k)
@@ -77,10 +96,7 @@ class Sim {
   sync (i) {
     const missing = []
     for (let k = 0; k < this.log.length; k++) if (!this.seen[i].has(k)) missing.push(k)
-    for (const k of this.rng.shuffle(missing)) {
-      Y.applyUpdate(this.docs[i], this.log[k].v1, REMOTE)
-      this.seen[i].add(k)
-    }
+    for (const k of this.rng.shuffle(missing)) this.deliver(i, k)
   }
 
   syncAll () { this.docs.forEach((_, i) => this.sync(i)) }
@@ -88,14 +104,23 @@ class Sim {
   /** Delivers to client i, in log (causal) order, every update client j has and i has not. */
   syncFrom (i, j) {
     for (let k = 0; k < this.log.length; k++) {
-      if (this.seen[j].has(k) && !this.seen[i].has(k)) {
-        Y.applyUpdate(this.docs[i], this.log[k].v1, REMOTE)
-        this.seen[i].add(k)
-      }
+      if (this.seen[j].has(k) && !this.seen[i].has(k)) this.deliver(i, k)
     }
   }
 
   updates (order = this.log.map((_, k) => k)) { return order.map(k => this.log[k]) }
+}
+
+/** One change of a text root, as data: what tests/Ycs.Corpus replays (ClientReplayTests). */
+function runOp (doc, { op, root, at, text, length, embed, attributes }) {
+  const t = doc.getText(root)
+  switch (op) {
+    case 'insert': return t.insert(at, text, attributes)
+    case 'delete': return t.delete(at, length)
+    case 'format': return t.format(at, length, attributes)
+    case 'embed': return t.insertEmbed(at, embed, attributes)
+    default: throw new Error(op)
+  }
 }
 
 function randomTextEdit (rng, text, alphabet, { maxDelete = 5 } = {}) {
@@ -130,7 +155,7 @@ const cases = []
  * Records one case. `updates` are {v1, v2} in the order the observer receives them (may hold
  * duplicates and be out of causal order). The expected state is the observer's, not a client's.
  */
-function record (name, description, { updates, roots, gc = true, diffAt }) {
+function record (name, description, { updates, roots, gc = true, diffAt, clients }) {
   const v1s = updates.map(u => u.v1)
   const v2s = updates.map(u => u.v2)
   const observer = docFrom(v1s, gc)
@@ -183,6 +208,13 @@ function record (name, description, { updates, roots, gc = true, diffAt }) {
       to: metaObj(diffMeta.to),
     },
     merged: { v1: b64(mergedV1), v2: b64(mergedV2) },
+    // A scripted session (Sim.ops): what each client did and received, and where it ended up.
+    ...(clients && clients.scripted
+      ? {
+          script: clients.steps,
+          clients: clients.docs.map(d => ({ id: d.clientID, stateV1: b64(Y.encodeStateAsUpdate(d)), stateV2: b64(Y.encodeStateAsUpdateV2(d)), content: stateOf(d, roots) })),
+        }
+      : {}),
   })
 }
 
@@ -341,6 +373,136 @@ const UNICODE = ['😀', '👍🏽', '👨‍👩‍👧‍👦', '🇩🇪', '�
   sim.local(2, d => d.getText('text').insert(20, 'X', { bold: true, italic: true }))
   sim.syncAll()
   record('text-formatting', 'Concurrent, overlapping bold/italic/color/link formatting, attribute removal with null, formatted inserts and an embed.', { updates: sim.updates(), roots: [{ name: 'text', type: 'text', delta: true }] })
+}
+
+// ---- concurrent formatting: what Yjs 13.6's cleanup (cleanupYTextAfterTransaction,
+// cleanupFormattingGap, cleanupContextlessFormattingGap) does and leaves, at the observer and, as
+// these cases are scripted, at every client (their cleanup transactions are updates in the log).
+
+const TD = [{ name: 'text', type: 'text', delta: true }]
+const ins = (at, text, attributes) => ({ op: 'insert', root: 'text', at, text, attributes })
+const del = (at, length) => ({ op: 'delete', root: 'text', at, length })
+const fmt = (at, length, attributes) => ({ op: 'format', root: 'text', at, length, attributes })
+const emb = (at, embed, attributes) => ({ op: 'embed', root: 'text', at, embed, attributes })
+const textLength = (sim, i) => sim.docs[i].getText('text').length
+
+for (const synced of [false, true]) {
+  // Two clients bold overlapping ranges of one text; the observer gets both formats before (or
+  // after) the clients saw each other's.
+  const sim = new Sim([1, 2], { seed: 111 })
+  sim.ops(0, [ins(0, 'abcdef')])
+  sim.syncAll()
+  sim.ops(0, [fmt(0, 4, { bold: true })])
+  sim.ops(1, [fmt(2, 4, { bold: true })])
+  if (synced) sim.syncAll()
+  record(`text-format-overlapping-bold-2${synced ? '-synced' : ''}`, `Two clients bold overlapping ranges concurrently${synced ? ', then sync (their cleanups are in the log)' : ''}.`, { updates: sim.updates(), roots: TD, clients: sim })
+}
+
+{
+  // Three clients: overlapping bold, bold removed with null over a range that crosses both, and
+  // italic across all of it, in rounds with partial syncs.
+  const sim = new Sim([1, 2, 3], { seed: 112 })
+  sim.ops(0, [ins(0, 'the quick brown fox jumps')])
+  sim.syncAll()
+  sim.ops(0, [fmt(0, 12, { bold: true })])
+  sim.ops(1, [fmt(4, 12, { bold: true })])
+  sim.ops(2, [fmt(8, 12, { bold: true })])
+  sim.syncFrom(1, 0)
+  sim.ops(1, [fmt(2, 6, { bold: null })])
+  sim.ops(2, [fmt(0, 25, { italic: true })])
+  sim.syncAll()
+  sim.ops(0, [fmt(10, 5, { bold: true, italic: null })])
+  sim.ops(2, [fmt(6, 10, { bold: null })])
+  sim.syncAll()
+  record('text-format-overlapping-bold-3', 'Three clients bold overlapping ranges, remove bold with null over ranges that cross them and add italic, with partial syncs.', { updates: sim.updates(), roots: TD, clients: sim })
+}
+
+{
+  // A format racing deletes of its range: the deleted text leaves a gap of formats behind.
+  const sim = new Sim([1, 2, 3], { seed: 113 })
+  sim.ops(0, [ins(0, 'abcdefghijkl')])
+  sim.syncAll()
+  sim.ops(0, [fmt(2, 6, { bold: true })])
+  sim.ops(1, [del(3, 4)])
+  sim.ops(2, [fmt(4, 6, { color: 'red' })])
+  sim.syncAll()
+  sim.ops(0, [del(0, 4)])
+  sim.ops(1, [fmt(0, 3, { bold: null, color: 'blue' })])
+  sim.syncAll()
+  sim.ops(2, [del(0, textLength(sim, 2))])
+  sim.ops(0, [ins(0, 'z', { bold: true })])
+  sim.syncAll()
+  record('text-format-then-delete', 'Formats racing deletes of the formatted text, then everything deleted while a formatted insert races it.', { updates: sim.updates(), roots: TD, clients: sim })
+}
+
+{
+  // Formats across text other clients insert concurrently inside and at the edges of the range.
+  const sim = new Sim([1, 2, 3], { seed: 114 })
+  sim.ops(0, [ins(0, 'abcdefgh')])
+  sim.syncAll()
+  sim.ops(0, [fmt(1, 6, { bold: true })])
+  sim.ops(1, [ins(4, 'XY'), ins(1, 'P'), ins(10, 'Q')])
+  sim.ops(2, [ins(7, 'mn', { italic: true })])
+  sim.syncAll()
+  sim.ops(1, [fmt(0, 6, { italic: true, bold: null })])
+  sim.ops(2, [ins(3, 'r')])
+  sim.ops(0, [ins(6, 's', { bold: true })])
+  sim.syncAll()
+  record('text-format-across-concurrent-inserts', 'Formats over ranges into which other clients insert, inside and at the edges, plain and formatted.', { updates: sim.updates(), roots: TD, clients: sim })
+}
+
+{
+  // Removing formats with null, concurrently and overlapping, over text that is bold throughout.
+  const sim = new Sim([1, 2, 3], { seed: 115, gc: false })
+  sim.ops(0, [ins(0, 'abcdefghijklmnop'), fmt(0, 16, { bold: true, size: 12 })])
+  sim.syncAll()
+  sim.ops(0, [fmt(2, 6, { bold: null })])
+  sim.ops(1, [fmt(5, 6, { bold: null, size: null })])
+  sim.ops(2, [fmt(4, 3, { size: 14 })])
+  sim.syncAll()
+  sim.ops(1, [ins(6, 'w')])
+  sim.ops(2, [fmt(0, 16, { bold: null })])
+  sim.ops(0, [fmt(8, 4, { bold: true })])
+  sim.syncAll()
+  record('text-format-remove-null', 'Formats removed with null, concurrently and overlapping, then all removed while one is set again (gc off).', { updates: sim.updates(), roots: TD, gc: false, clients: sim })
+}
+
+for (const seed of [121, 122, 123, 124, 125, 126]) {
+  // Random rich-text editing: inserts with and without attributes, formats setting and removing
+  // keys (null), deletes and embeds, from three clients with partial syncs between rounds.
+  const sim = new Sim([1, 2, 3], { seed })
+  const rng = new Rng(seed + 1000)
+  const values = { bold: [true, null], italic: [true, null], color: ['red', 'blue', null] }
+  const someAttributes = () => {
+    const a = {}
+    for (const key of Object.keys(values)) if (rng.bool(0.4)) a[key] = rng.pick(values[key])
+    return a
+  }
+  sim.ops(0, [ins(0, 'abcdefghij')])
+  sim.syncAll()
+  for (let round = 0; round < 6; round++) {
+    for (let i = 0; i < 3; i++) {
+      for (let n = 1 + rng.int(3); n > 0; n--) {
+        const len = textLength(sim, i)
+        const op = rng.int(10)
+        if (op < 4 && len > 0) {
+          const at = rng.int(len)
+          sim.ops(i, [fmt(at, 1 + rng.int(Math.min(6, len - at)), someAttributes())])
+        } else if (op < 6 && len > 0) {
+          const at = rng.int(len)
+          sim.ops(i, [del(at, 1 + rng.int(Math.min(3, len - at)))])
+        } else if (op < 7) {
+          sim.ops(i, [emb(rng.int(len + 1), { image: 'i' + rng.int(9) }, rng.bool() ? someAttributes() : undefined)])
+        } else {
+          sim.ops(i, [ins(rng.int(len + 1), rng.word('xyz', 3), rng.bool() ? someAttributes() : undefined)])
+        }
+      }
+    }
+    if (rng.bool(0.6)) sim.syncFrom(rng.int(3), rng.int(3))
+    if (round % 2 === 1) sim.syncAll()
+  }
+  sim.syncAll()
+  record(`text-format-random-${seed}`, `Random rich-text editing by three clients (seed ${seed}): formats setting and removing keys, formatted inserts, embeds, deletes, partial syncs.`, { updates: sim.updates(), roots: TD, clients: sim })
 }
 
 {

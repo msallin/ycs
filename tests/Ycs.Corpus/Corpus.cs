@@ -6,6 +6,15 @@ namespace Ycs.Corpus;
 
 internal sealed record Root(string Name, string Type, bool Delta);
 
+/// <summary>One change of a text root in a scripted session (gen.mjs' runOp); null for what the op does not use.</summary>
+internal sealed record TextOp(string Op, string Root, int At, string Text, int Length, object Embed, IDictionary<string, object> Attributes);
+
+/// <summary>A step of a scripted session: client <see cref="Client"/> makes <see cref="Ops"/> in one transaction, or update <see cref="Deliver"/> of the log is applied at client <see cref="To"/>.</summary>
+internal sealed record ScriptStep(int Client, IReadOnlyList<TextOp> Ops, int Deliver, int To);
+
+/// <summary>Where a client of a scripted session ended up in Yjs.</summary>
+internal sealed record ScriptClient(int Id, Update State, JsonElement Content);
+
 internal sealed record Update(byte[] V1, byte[] V2)
 {
     public byte[] Get(bool v2) => v2 ? V2 : V1;
@@ -36,6 +45,12 @@ internal sealed class CorpusCase
     /// ("client:clock+length", "d" for deleted runs).
     /// </summary>
     public required IReadOnlyDictionary<string, string> ExpectedItemOrder { get; init; }
+
+    /// <summary>The scripted session (gen.mjs' Sim.ops), or null: what each client did and received, in order.</summary>
+    public IReadOnlyList<ScriptStep> Script { get; init; }
+
+    /// <summary>For a scripted session, each client's state in Yjs at the end.</summary>
+    public IReadOnlyList<ScriptClient> Clients { get; init; }
 
     public override string ToString() => Name;
 
@@ -84,8 +99,25 @@ internal sealed class CorpusCase
                 p => p.Name,
                 p => string.Join(" ", p.Value.EnumerateArray().Select(run =>
                     $"{run[0].GetInt64()}:{run[1].GetInt64()}+{run[2].GetInt64()}{(run[3].GetInt32() == 1 ? "d" : "")}"))),
+            Script = r.TryGetProperty("script", out var script) ? script.EnumerateArray().Select(ReadStep).ToList() : null,
+            Clients = r.TryGetProperty("clients", out var clients)
+                ? clients.EnumerateArray().Select(e => new ScriptClient(e.GetProperty("id").GetInt32(), new Update(Bytes(e, "stateV1"), Bytes(e, "stateV2")), e.GetProperty("content"))).ToList()
+                : null,
         };
     }
+
+    private static ScriptStep ReadStep(JsonElement e) => e.TryGetProperty("deliver", out var deliver)
+        ? new ScriptStep(-1, null, deliver.GetInt32(), e.GetProperty("to").GetInt32())
+        : new ScriptStep(e.GetProperty("client").GetInt32(), e.GetProperty("ops").EnumerateArray().Select(ReadOp).ToList(), -1, -1);
+
+    private static TextOp ReadOp(JsonElement e) => new(
+        e.GetProperty("op").GetString(),
+        e.GetProperty("root").GetString(),
+        e.GetProperty("at").GetInt32(),
+        e.TryGetProperty("text", out var text) ? text.GetString() : null,
+        e.TryGetProperty("length", out var length) ? length.GetInt32() : 0,
+        e.TryGetProperty("embed", out var embed) ? CanonicalJson.FromJson(embed) : null,
+        e.TryGetProperty("attributes", out var attributes) ? (IDictionary<string, object>)CanonicalJson.FromJson(attributes) : null);
 
     private static Update ReadUpdate(JsonElement e) => new(Bytes(e, "v1"), Bytes(e, "v2"));
 

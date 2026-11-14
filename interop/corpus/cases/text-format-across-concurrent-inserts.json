@@ -1,0 +1,486 @@
+{
+ "name": "text-format-across-concurrent-inserts",
+ "description": "Formats over ranges into which other clients insert, inside and at the edges, plain and formatted.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": true
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQIYWJjZGVmZ2gA",
+   "v2": "AAABAQAAAQQPDHRleHRhYmNkZWZnaAQIAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQIBCMYBAAEBBGJvbGQEdHJ1ZcYBBgEHBGJvbGQEbnVsbAA=",
+   "v2": "AAIAAgJBAwIADAICDAHGCwhib2xkYm9sZEQAAAAAAQIIeH4A"
+  },
+  {
+   "v1": "AQMCAMQBAwEEAlhZxAEAAQEBUMQBBgEHAVEA",
+   "v2": "AAADAkEEAwZGDAMIRgwBxAgEWFlQUQJBAAAAAAEDAAA="
+  },
+  {
+   "v1": "AQMDAMYBBgEHBml0YWxpYwR0cnVlxAMAAQcCbW7GAwIBBwZpdGFsaWMEbnVsbAA=",
+   "v2": "AAIAAgcDQQADAQMBAwxMBAMOAQAFxgDEAMYSDml0YWxpY21uaXRhbGljBgIGAAAAAQMAeH4A"
+  },
+  {
+   "v1": "AQMCBEYBAAZpdGFsaWMEdHJ1ZcYCAAIBBml0YWxpYwRudWxsxgIFAgEEYm9sZAR0cnVlAQEBCAE=",
+   "v2": "AAMAAwAEAgFCAgIACgMAAgADRgDGFBBpdGFsaWNpdGFsaWNib2xkRgAEAAAAAQMEeH54AQEBCAA="
+  },
+  {
+   "v1": "AQEDBMQBAQECAXIA",
+   "v2": "AAADA0EAAQIBBAHEAwFyAQAAAAEBBAA="
+  },
+  {
+   "v1": "AQEBCsQCAAIBAXMA",
+   "v2": "AAADAUIAAQABAgHEAwFzAQAAAAEBCgA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "aPbrcdXsYefgQmnh",
+    "delta": [
+     {
+      "attributes": {
+       "italic": true
+      },
+      "insert": "aPbrcdXs"
+     },
+     {
+      "attributes": {
+       "bold": true
+      },
+      "insert": "Yefg"
+     },
+     {
+      "insert": "Q"
+     },
+     {
+      "attributes": {
+       "italic": true
+      },
+      "insert": "mn"
+     },
+     {
+      "insert": "h"
+     }
+    ]
+   }
+  },
+  "stateVector": {
+   "1": 11,
+   "2": 7,
+   "3": 5
+  },
+  "deleteSet": {
+   "1": [
+    [
+     8,
+     1
+    ]
+   ]
+  },
+  "stateV1": "AwQDAMYBBgEHBml0YWxpYwR0cnVlxAMAAQcCbW7GAwIBBwZpdGFsaWMEbnVsbMQBAQECAXIHAgDEAQMBBAFYxAIAAQQBWcQBAAEBAVDEAQYBBwFRRgEABml0YWxpYwR0cnVlxgIAAgEGaXRhbGljBG51bGzGAgUCAQRib2xkBHRydWUIAQAEAQR0ZXh0AWGEAQABYoQBAQJjZIQBAwNlZmeEAQYBaMEBAAEBAcYBBgEHBGJvbGQEbnVsbMQCAAIBAXMBAQEIAQ==",
+  "stateV2": "AAMAAwMUA0EAAwEDQQECQQACQQRCAkEHQgARDEwEQgRGAAxMCkoCBAZMDEwODgEASgQARgxOAgEADEwVxgDEAMYAxARGAMYBBACEA8EAxgDERTRpdGFsaWNtbml0YWxpY3JYWVBRaXRhbGljaXRhbGljYm9sZHRleHRhYmNkZWZnaGJvbGRzBgIGQQNGAEQAQQACAwEEAQEBAAEBAwQAeH4HAHh+eAgAfgEBAQgA",
+  "stateVectorV1": "AwMFAgcBCw==",
+  "itemOrder": {
+   "text": [
+    [
+     2,
+     4,
+     1,
+     0
+    ],
+    [
+     1,
+     0,
+     1,
+     0
+    ],
+    [
+     1,
+     8,
+     1,
+     1
+    ],
+    [
+     2,
+     2,
+     1,
+     0
+    ],
+    [
+     1,
+     1,
+     1,
+     0
+    ],
+    [
+     3,
+     4,
+     1,
+     0
+    ],
+    [
+     1,
+     2,
+     2,
+     0
+    ],
+    [
+     2,
+     0,
+     1,
+     0
+    ],
+    [
+     1,
+     10,
+     1,
+     0
+    ],
+    [
+     2,
+     5,
+     2,
+     0
+    ],
+    [
+     2,
+     1,
+     1,
+     0
+    ],
+    [
+     1,
+     4,
+     3,
+     0
+    ],
+    [
+     1,
+     9,
+     1,
+     0
+    ],
+    [
+     2,
+     3,
+     1,
+     0
+    ],
+    [
+     3,
+     0,
+     4,
+     0
+    ],
+    [
+     1,
+     7,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 3,
+  "stateVector": "AgIEAQo=",
+  "stateVectorMap": {
+   "1": 10,
+   "2": 4
+  },
+  "updateV1": "AwQDAMYBBgEHBml0YWxpYwR0cnVlxAMAAQcCbW7GAwIBBwZpdGFsaWMEbnVsbMQBAQECAXIDAgRGAQAGaXRhbGljBHRydWXGAgACAQZpdGFsaWMEbnVsbMYCBQIBBGJvbGQEdHJ1ZQEBCsQCAAIBAXMBAQEIAQ==",
+  "updateV2": "AAMAAwIPA0EAAwEDQQECAUICAUIABwxMBEEACkoIDgEASkQCAQANxgDEAMYAxABGAMYBxCkgaXRhbGljbW5pdGFsaWNyaXRhbGljaXRhbGljYm9sZHMGAgYBRgAEAQAAAAMEAHh+AwR4fngBCgEBAQgA",
+  "from": {
+   "1": 10,
+   "2": 4,
+   "3": 0
+  },
+  "to": {
+   "1": 11,
+   "2": 7,
+   "3": 5
+  }
+ },
+ "merged": {
+  "v1": "AwQDAMYBBgEHBml0YWxpYwR0cnVlxAMAAQcCbW7GAwIBBwZpdGFsaWMEbnVsbMQBAQECAXIGAgDEAQMBBAJYWcQBAAEBAVDEAQYBBwFRRgEABml0YWxpYwR0cnVlxgIAAgEGaXRhbGljBG51bGzGAgUCAQRib2xkBHRydWUEAQAEAQR0ZXh0CGFiY2RlZmdoxgEAAQEEYm9sZAR0cnVlxgEGAQcEYm9sZARudWxsxAIAAgEBcwEBAQgB",
+  "v2": "AAMAAwQRA0EAAwEDQQECQQVCAkEDQgAMDEwEQgRGDEwKSgxMDQ4BAEoERgxOAgEADEwRxgDEAMYAxANGAMYBBADGAcRIOGl0YWxpY21uaXRhbGljclhZUFFpdGFsaWNpdGFsaWNib2xkdGV4dGFiY2RlZmdoYm9sZGJvbGRzBgIGAQJBAEYARAAIRAABAQEAAAMEAHh+BgB4fngEAHh+AQEBCAA="
+ },
+ "script": [
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 0,
+     "text": "abcdefgh"
+    }
+   ]
+  },
+  {
+   "deliver": 0,
+   "to": 1
+  },
+  {
+   "deliver": 0,
+   "to": 2
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 1,
+     "length": 6,
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 4,
+     "text": "XY"
+    },
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 1,
+     "text": "P"
+    },
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 10,
+     "text": "Q"
+    }
+   ]
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 7,
+     "text": "mn",
+     "attributes": {
+      "italic": true
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 3,
+   "to": 0
+  },
+  {
+   "deliver": 2,
+   "to": 0
+  },
+  {
+   "deliver": 3,
+   "to": 1
+  },
+  {
+   "deliver": 1,
+   "to": 1
+  },
+  {
+   "deliver": 1,
+   "to": 2
+  },
+  {
+   "deliver": 2,
+   "to": 2
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 0,
+     "length": 6,
+     "attributes": {
+      "italic": true,
+      "bold": null
+     }
+    }
+   ]
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 3,
+     "text": "r"
+    }
+   ]
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 6,
+     "text": "s",
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 4,
+   "to": 0
+  },
+  {
+   "deliver": 5,
+   "to": 0
+  },
+  {
+   "deliver": 6,
+   "to": 1
+  },
+  {
+   "deliver": 5,
+   "to": 1
+  },
+  {
+   "deliver": 4,
+   "to": 2
+  },
+  {
+   "deliver": 6,
+   "to": 2
+  }
+ ],
+ "clients": [
+  {
+   "id": 1,
+   "stateV1": "AwQDAMYBBgEHBml0YWxpYwR0cnVlxAMAAQcCbW7GAwIBBwZpdGFsaWMEbnVsbMQBAQECAXIHAgDEAQMBBAFYxAIAAQQBWcQBAAEBAVDEAQYBBwFRRgEABml0YWxpYwR0cnVlxgIAAgEGaXRhbGljBG51bGzGAgUCAQRib2xkBHRydWUIAQAEAQR0ZXh0AWGEAQABYoQBAQJjZIQBAwNlZmeEAQYBaMEBAAEBAcYBBgEHBGJvbGQEbnVsbMQCAAIBAXMBAQEIAQ==",
+   "stateV2": "AAMAAwMUA0EAAwEDQQECQQACQQRCAkEHQgARDEwEQgRGAAxMCkoCBAZMDEwODgEASgQARgxOAgEADEwVxgDEAMYAxARGAMYBBACEA8EAxgDERTRpdGFsaWNtbml0YWxpY3JYWVBRaXRhbGljaXRhbGljYm9sZHRleHRhYmNkZWZnaGJvbGRzBgIGQQNGAEQAQQACAwEEAQEBAAEBAwQAeH4HAHh+eAgAfgEBAQgA",
+   "content": {
+    "text": {
+     "text": "aPbrcdXsYefgQmnh",
+     "delta": [
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "aPbrcdXs"
+      },
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "Yefg"
+      },
+      {
+       "insert": "Q"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "mn"
+      },
+      {
+       "insert": "h"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 2,
+   "stateV1": "AwQDAMYBBgEHBml0YWxpYwR0cnVlxAMAAQcCbW7GAwIBBwZpdGFsaWMEbnVsbMQBAQECAXIHAgDEAQMBBAFYxAIAAQQBWcQBAAEBAVDEAQYBBwFRRgEABml0YWxpYwR0cnVlxgIAAgEGaXRhbGljBG51bGzGAgUCAQRib2xkBHRydWUIAQAEAQR0ZXh0AWGEAQABYoQBAQJjZIQBAwNlZmeEAQYBaMEBAAEBAcYBBgEHBGJvbGQEbnVsbMQCAAIBAXMBAQEIAQ==",
+   "stateV2": "AAMAAwMUA0EAAwEDQQECQQACQQRCAkEHQgARDEwEQgRGAAxMCkoCBAZMDEwODgEASgQARgxOAgEADEwVxgDEAMYAxARGAMYBBACEA8EAxgDERTRpdGFsaWNtbml0YWxpY3JYWVBRaXRhbGljaXRhbGljYm9sZHRleHRhYmNkZWZnaGJvbGRzBgIGQQNGAEQAQQACAwEEAQEBAAEBAwQAeH4HAHh+eAgAfgEBAQgA",
+   "content": {
+    "text": {
+     "text": "aPbrcdXsYefgQmnh",
+     "delta": [
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "aPbrcdXs"
+      },
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "Yefg"
+      },
+      {
+       "insert": "Q"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "mn"
+      },
+      {
+       "insert": "h"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 3,
+   "stateV1": "AwQDAMYBBgEHBml0YWxpYwR0cnVlxAMAAQcCbW7GAwIBBwZpdGFsaWMEbnVsbMQBAQECAXIHAgDEAQMBBAFYxAIAAQQBWcQBAAEBAVDEAQYBBwFRRgEABml0YWxpYwR0cnVlxgIAAgEGaXRhbGljBG51bGzGAgUCAQRib2xkBHRydWUIAQAEAQR0ZXh0AWGEAQABYoQBAQJjZIQBAwNlZmeEAQYBaMEBAAEBAcYBBgEHBGJvbGQEbnVsbMQCAAIBAXMBAQEIAQ==",
+   "stateV2": "AAMAAwMUA0EAAwEDQQECQQACQQRCAkEHQgARDEwEQgRGAAxMCkoCBAZMDEwODgEASgQARgxOAgEADEwVxgDEAMYAxARGAMYBBACEA8EAxgDERTRpdGFsaWNtbml0YWxpY3JYWVBRaXRhbGljaXRhbGljYm9sZHRleHRhYmNkZWZnaGJvbGRzBgIGQQNGAEQAQQACAwEEAQEBAAEBAwQAeH4HAHh+eAgAfgEBAQgA",
+   "content": {
+    "text": {
+     "text": "aPbrcdXsYefgQmnh",
+     "delta": [
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "aPbrcdXs"
+      },
+      {
+       "attributes": {
+        "bold": true
+       },
+       "insert": "Yefg"
+      },
+      {
+       "insert": "Q"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "mn"
+      },
+      {
+       "insert": "h"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

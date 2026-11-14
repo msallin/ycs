@@ -46,6 +46,10 @@ public partial class Transaction
     private bool _local;
     private bool _ended;
 
+    // A remote change touched a text with formatting: YText.CleanupAfterTransaction runs after the
+    // AfterTransaction handlers.
+    internal bool _needFormattingCleanup;
+
     private DeleteSet _deleteSet;
     private Dictionary<long, long> _beforeState;
     private Dictionary<long, long> _afterState;
@@ -191,6 +195,7 @@ public partial class Transaction
         }
 
         _ended = true;
+        _needFormattingCleanup = false;
         _origin = null;
         _meta = null;
         _subdocsAdded = null;
@@ -420,6 +425,18 @@ public partial class Transaction
             try
             {
                 doc.InvokeOnAfterTransaction(transaction);
+            }
+            catch (Exception e)
+            {
+                error ??= ExceptionDispatchInfo.Capture(e);
+            }
+
+            try
+            {
+                if (transaction._needFormattingCleanup)
+                {
+                    YText.CleanupAfterTransaction(transaction);
+                }
             }
             catch (Exception e)
             {

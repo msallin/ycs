@@ -1,0 +1,593 @@
+{
+ "name": "text-format-overlapping-bold-3",
+ "description": "Three clients bold overlapping ranges, remove bold with null over ranges that cross them and add italic, with partial syncs.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": true
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQZdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wcwA=",
+   "v2": "AAABAQAAAQQgHXRleHR0aGUgcXVpY2sgYnJvd24gZm94IGp1bXBzBBkBAQAAAQEAAA=="
+  },
+  {
+   "v1": "AQIBGUYBAARib2xkBHRydWXGAQsBDARib2xkBG51bGwA",
+   "v2": "AAIAAgJBAgEWAgAYA0YAxgsIYm9sZGJvbGREAAAAAAECGXh+AA=="
+  },
+  {
+   "v1": "AQICAMYBAwEEBGJvbGQEdHJ1ZcYBDwEQBGJvbGQEbnVsbAA=",
+   "v2": "AAIAAgMCQQICBhgCCBgBxgsIYm9sZGJvbGREAAAAAAECAHh+AA=="
+  },
+  {
+   "v1": "AQIDAMYBBwEIBGJvbGQEdHJ1ZcYBEwEUBGJvbGQEbnVsbAA=",
+   "v2": "AAIAAgMDQQICDhgCEBgBxgsIYm9sZGJvbGREAAAAAAECAHh+AA=="
+  },
+  {
+   "v1": "AQICAsYBAQECBGJvbGQEbnVsbMYBBwEIBGJvbGQEdHJ1ZQECAQAB",
+   "v2": "AAIAAgMCQQICAgwCBAwBxgsIYm9sZGJvbGREAAAAAAECAn54AQIBAAA="
+  },
+  {
+   "v1": "AQIDAkYBAAZpdGFsaWMEdHJ1ZYYBGAZpdGFsaWMEbnVsbAA=",
+   "v2": "AAIAAgMDQQABMAEAA0YAhg8MaXRhbGljaXRhbGljRgAAAAABAgJ4fgA="
+  },
+  {
+   "v1": "AQMBG8YBCQEKBml0YWxpYwRudWxsxgEOAQ8GaXRhbGljBHRydWXGARwBDwRib2xkBG51bGwBAQEaAQ==",
+   "v2": "AAMAAwACQQUDEgocAxQKAAHGFBBpdGFsaWNpdGFsaWNib2xkRgAEAAAAAQMbfnh+AQEBGgA="
+  },
+  {
+   "v1": "AAMDAQABAgEDAQEBGgE=",
+   "v2": "AAAAAAAAAQAAAAAAAwMBAAACAQMAAQEaAA=="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "the quick brown fox jumps",
+    "delta": [
+     {
+      "attributes": {
+       "bold": true,
+       "italic": true
+      },
+      "insert": "th"
+     },
+     {
+      "attributes": {
+       "italic": true
+      },
+      "insert": "e quick "
+     },
+     {
+      "insert": "brown"
+     },
+     {
+      "attributes": {
+       "italic": true
+      },
+      "insert": " "
+     },
+     {
+      "attributes": {
+       "italic": true
+      },
+      "insert": "fox "
+     },
+     {
+      "attributes": {
+       "italic": true
+      },
+      "insert": "jumps"
+     }
+    ]
+   }
+  },
+  "stateVector": {
+   "1": 30,
+   "2": 4,
+   "3": 4
+  },
+  "deleteSet": {
+   "1": [
+    [
+     26,
+     1
+    ]
+   ],
+   "2": [
+    [
+     0,
+     1
+    ],
+    [
+     3,
+     1
+    ]
+   ],
+   "3": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "stateV1": "AwQDAMEBBwEIAcYBEwEUBGJvbGQEbnVsbEYBAAZpdGFsaWMEdHJ1ZYYBGAZpdGFsaWMEbnVsbAQCAMEBAwEEAcYBDwEQBGJvbGQEbnVsbMYBAQECBGJvbGQEbnVsbMEBBwEIAQ4BAAQBBHRleHQCdGiEAQECZSCEAQMEcXVpY4QBBwJrIIQBCQJicoQBCwNvd26EAQ4BIIQBDwRmb3gghAETBWp1bXBzRgEABGJvbGQEdHJ1ZcEBCwEMAcYBCQEKBml0YWxpYwRudWxsxgEOAQ8GaXRhbGljBHRydWXGARwBDwRib2xkBG51bGwDAwEAAQICAAEDAQEBGgE=",
+  "stateV2": "AAMAAwYGA0EEAkEYEw4YCmoYXAxMBAgFAAYCCFBEChwMEBhoCBhcDFAYRAoAF8EAxgBGAIYAwQDGAcEABACEB0YAwQDGXElib2xkaXRhbGljaXRhbGljYm9sZGJvbGR0ZXh0dGhlIHF1aWNrIGJyb3duIGZveCBqdW1wc2JvbGRpdGFsaWNpdGFsaWNib2xkBEYARAFCAARCAAMBBAUERgAEAQEAAkECAwQAfnh+BAB+fg4AeH54fgMDAQAAAgIAAAIAAQEaAA==",
+  "stateVectorV1": "AwMEAgQBHg==",
+  "itemOrder": {
+   "text": [
+    [
+     1,
+     25,
+     1,
+     0
+    ],
+    [
+     3,
+     2,
+     1,
+     0
+    ],
+    [
+     1,
+     0,
+     2,
+     0
+    ],
+    [
+     2,
+     2,
+     1,
+     0
+    ],
+    [
+     1,
+     2,
+     2,
+     0
+    ],
+    [
+     2,
+     0,
+     1,
+     1
+    ],
+    [
+     1,
+     4,
+     4,
+     0
+    ],
+    [
+     2,
+     3,
+     1,
+     1
+    ],
+    [
+     3,
+     0,
+     1,
+     1
+    ],
+    [
+     1,
+     8,
+     2,
+     0
+    ],
+    [
+     1,
+     27,
+     1,
+     0
+    ],
+    [
+     1,
+     10,
+     2,
+     0
+    ],
+    [
+     1,
+     26,
+     1,
+     1
+    ],
+    [
+     1,
+     12,
+     3,
+     0
+    ],
+    [
+     1,
+     28,
+     2,
+     0
+    ],
+    [
+     1,
+     15,
+     1,
+     0
+    ],
+    [
+     2,
+     1,
+     1,
+     0
+    ],
+    [
+     1,
+     16,
+     4,
+     0
+    ],
+    [
+     3,
+     1,
+     1,
+     0
+    ],
+    [
+     1,
+     20,
+     5,
+     0
+    ],
+    [
+     3,
+     3,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 4,
+  "stateVector": "AwMCAgIBGw==",
+  "stateVectorMap": {
+   "1": 27,
+   "2": 2,
+   "3": 2
+  },
+  "updateV1": "AwIDAkYBAAZpdGFsaWMEdHJ1ZYYBGAZpdGFsaWMEbnVsbAICAsYBAQECBGJvbGQEbnVsbMEBBwEIAQMBG8YBCQEKBml0YWxpYwRudWxsxgEOAQ8GaXRhbGljBHRydWXGARwBDwRib2xkBG51bGwDAwEAAQICAAEDAQEBGgE=",
+  "updateV2": "AAMAAwMGA0EAAkEJBjBuDAQKHAYABAwECgAJRgCGAMYAwQDGJyBpdGFsaWNpdGFsaWNib2xkaXRhbGljaXRhbGljYm9sZEYABEYABAAAAQEDAgJ4fgICfgMbfnh+AwMBAAACAgAAAgABARoA",
+  "from": {
+   "1": 27,
+   "2": 2,
+   "3": 2
+  },
+  "to": {
+   "1": 30,
+   "2": 4,
+   "3": 4
+  }
+ },
+ "merged": {
+  "v1": "AwQDAMYBBwEIBGJvbGQEdHJ1ZcYBEwEUBGJvbGQEbnVsbEYBAAZpdGFsaWMEdHJ1ZYYBGAZpdGFsaWMEbnVsbAQCAMYBAwEEBGJvbGQEdHJ1ZcYBDwEQBGJvbGQEbnVsbMYBAQECBGJvbGQEbnVsbMYBBwEIBGJvbGQEdHJ1ZQYBAAQBBHRleHQZdGhlIHF1aWNrIGJyb3duIGZveCBqdW1wc0YBAARib2xkBHRydWXGAQsBDARib2xkBG51bGzGAQkBCgZpdGFsaWMEbnVsbMYBDgEPBml0YWxpYwR0cnVlxgEcAQ8EYm9sZARudWxsAwMBAAECAgABAwEBARoB",
+  "v2": "AAMAAwoGA0EEAkEQCw4YCmoYXAwIRAocDBAYaAgYXAxQGEQKAA3GAUYAhgDGAwQARgDGZllib2xkYm9sZGl0YWxpY2l0YWxpY2JvbGRib2xkYm9sZGJvbGR0ZXh0dGhlIHF1aWNrIGJyb3duIGZveCBqdW1wc2JvbGRib2xkaXRhbGljaXRhbGljYm9sZEQARgBEAxlEAEYABAEBAAADBAB4fnh+BAB4fn54BgB4fn54fgMDAQAAAgIAAAIAAQEaAA=="
+ },
+ "script": [
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "insert",
+     "root": "text",
+     "at": 0,
+     "text": "the quick brown fox jumps"
+    }
+   ]
+  },
+  {
+   "deliver": 0,
+   "to": 1
+  },
+  {
+   "deliver": 0,
+   "to": 2
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 0,
+     "length": 12,
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 4,
+     "length": 12,
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 8,
+     "length": 12,
+     "attributes": {
+      "bold": true
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 1,
+   "to": 1
+  },
+  {
+   "client": 1,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 2,
+     "length": 6,
+     "attributes": {
+      "bold": null
+     }
+    }
+   ]
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 0,
+     "length": 25,
+     "attributes": {
+      "italic": true
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 2,
+   "to": 0
+  },
+  {
+   "deliver": 3,
+   "to": 0
+  },
+  {
+   "deliver": 5,
+   "to": 0
+  },
+  {
+   "deliver": 4,
+   "to": 0
+  },
+  {
+   "deliver": 5,
+   "to": 1
+  },
+  {
+   "deliver": 3,
+   "to": 1
+  },
+  {
+   "deliver": 4,
+   "to": 2
+  },
+  {
+   "deliver": 2,
+   "to": 2
+  },
+  {
+   "deliver": 1,
+   "to": 2
+  },
+  {
+   "client": 0,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 10,
+     "length": 5,
+     "attributes": {
+      "bold": true,
+      "italic": null
+     }
+    }
+   ]
+  },
+  {
+   "client": 2,
+   "ops": [
+    {
+     "op": "format",
+     "root": "text",
+     "at": 6,
+     "length": 10,
+     "attributes": {
+      "bold": null
+     }
+    }
+   ]
+  },
+  {
+   "deliver": 7,
+   "to": 0
+  },
+  {
+   "deliver": 7,
+   "to": 1
+  },
+  {
+   "deliver": 6,
+   "to": 1
+  },
+  {
+   "deliver": 6,
+   "to": 2
+  }
+ ],
+ "clients": [
+  {
+   "id": 1,
+   "stateV1": "AwQDAMEBBwEIAcYBEwEUBGJvbGQEbnVsbEYBAAZpdGFsaWMEdHJ1ZYYBGAZpdGFsaWMEbnVsbAQCAMEBAwEEAcYBDwEQBGJvbGQEbnVsbMYBAQECBGJvbGQEbnVsbMEBBwEIAQ4BAAQBBHRleHQCdGiEAQECZSCEAQMEcXVpY4QBBwJrIIQBCQJicoQBCwNvd26EAQ4BIIQBDwRmb3gghAETBWp1bXBzRgEABGJvbGQEdHJ1ZcEBCwEMAcYBCQEKBml0YWxpYwRudWxsxgEOAQ8GaXRhbGljBHRydWXGARwBDwRib2xkBG51bGwDAwEAAQICAAEDAQEBGgE=",
+   "stateV2": "AAMAAwYGA0EEAkEYEw4YCmoYXAxMBAgFAAYCCFBEChwMEBhoCBhcDFAYRAoAF8EAxgBGAIYAwQDGAcEABACEB0YAwQDGXElib2xkaXRhbGljaXRhbGljYm9sZGJvbGR0ZXh0dGhlIHF1aWNrIGJyb3duIGZveCBqdW1wc2JvbGRpdGFsaWNpdGFsaWNib2xkBEYARAFCAARCAAMBBAUERgAEAQEAAkECAwQAfnh+BAB+fg4AeH54fgMDAQAAAgIAAAIAAQEaAA==",
+   "content": {
+    "text": {
+     "text": "the quick brown fox jumps",
+     "delta": [
+      {
+       "attributes": {
+        "bold": true,
+        "italic": true
+       },
+       "insert": "th"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "e quick "
+      },
+      {
+       "insert": "brown"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": " "
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "fox "
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "jumps"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 2,
+   "stateV1": "AwQDAMEBBwEIAcYBEwEUBGJvbGQEbnVsbEYBAAZpdGFsaWMEdHJ1ZYYBGAZpdGFsaWMEbnVsbAQCAMEBAwEEAcYBDwEQBGJvbGQEbnVsbMYBAQECBGJvbGQEbnVsbMEBBwEIAQ4BAAQBBHRleHQCdGiEAQECZSCEAQMEcXVpY4QBBwJrIIQBCQJicoQBCwNvd26EAQ4BIIQBDwRmb3gghAETBWp1bXBzRgEABGJvbGQEdHJ1ZcEBCwEMAcYBCQEKBml0YWxpYwRudWxsxgEOAQ8GaXRhbGljBHRydWXGARwBDwRib2xkBG51bGwDAwEAAQICAAEDAQEBGgE=",
+   "stateV2": "AAMAAwYGA0EEAkEYEw4YCmoYXAxMBAgFAAYCCFBEChwMEBhoCBhcDFAYRAoAF8EAxgBGAIYAwQDGAcEABACEB0YAwQDGXElib2xkaXRhbGljaXRhbGljYm9sZGJvbGR0ZXh0dGhlIHF1aWNrIGJyb3duIGZveCBqdW1wc2JvbGRpdGFsaWNpdGFsaWNib2xkBEYARAFCAARCAAMBBAUERgAEAQEAAkECAwQAfnh+BAB+fg4AeH54fgMDAQAAAgIAAAIAAQEaAA==",
+   "content": {
+    "text": {
+     "text": "the quick brown fox jumps",
+     "delta": [
+      {
+       "attributes": {
+        "bold": true,
+        "italic": true
+       },
+       "insert": "th"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "e quick "
+      },
+      {
+       "insert": "brown"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": " "
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "fox "
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "jumps"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": 3,
+   "stateV1": "AwQDAMEBBwEIAcYBEwEUBGJvbGQEbnVsbEYBAAZpdGFsaWMEdHJ1ZYYBGAZpdGFsaWMEbnVsbAQCAMEBAwEEAcYBDwEQBGJvbGQEbnVsbMYBAQECBGJvbGQEbnVsbMEBBwEIAQ4BAAQBBHRleHQCdGiEAQECZSCEAQMEcXVpY4QBBwJrIIQBCQJicoQBCwNvd26EAQ4BIIQBDwRmb3gghAETBWp1bXBzRgEABGJvbGQEdHJ1ZcEBCwEMAcYBCQEKBml0YWxpYwRudWxsxgEOAQ8GaXRhbGljBHRydWXGARwBDwRib2xkBG51bGwDAwEAAQICAAEDAQEBGgE=",
+   "stateV2": "AAMAAwYGA0EEAkEYEw4YCmoYXAxMBAgFAAYCCFBEChwMEBhoCBhcDFAYRAoAF8EAxgBGAIYAwQDGAcEABACEB0YAwQDGXElib2xkaXRhbGljaXRhbGljYm9sZGJvbGR0ZXh0dGhlIHF1aWNrIGJyb3duIGZveCBqdW1wc2JvbGRpdGFsaWNpdGFsaWNib2xkBEYARAFCAARCAAMBBAUERgAEAQEAAkECAwQAfnh+BAB+fg4AeH54fgMDAQAAAgIAAAIAAQEaAA==",
+   "content": {
+    "text": {
+     "text": "the quick brown fox jumps",
+     "delta": [
+      {
+       "attributes": {
+        "bold": true,
+        "italic": true
+       },
+       "insert": "th"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "e quick "
+      },
+      {
+       "insert": "brown"
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": " "
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "fox "
+      },
+      {
+       "attributes": {
+        "italic": true
+       },
+       "insert": "jumps"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}
