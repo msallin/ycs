@@ -16,84 +16,241 @@ namespace Ycs;
 /// to bundle changes on the Yjs model in a single transaction to minimize
 /// the number of messages sent and the number of observer calls.
 /// If possible the user of this library should bundle as many changes as possible.
+/// <para>
+/// A transaction, its collections and the events created in it are valid until the
+/// <see cref="YDoc.AfterAllTransactions"/> handlers of its batch have returned. Then the document
+/// reuses the object for a later transaction, so read what you need inside a callback or handler
+/// and keep that, not the transaction. Reading an ended transaction, or the changes of an event
+/// whose transaction ended, throws <see cref="InvalidOperationException"/> (as Yjs throws when an
+/// event's changes are computed after its handler).
+/// </para>
 /// </summary>
 public partial class Transaction
 {
-    // TODO: [alekseyk] To private?
-    internal readonly IList<AbstractStruct> _mergeStructs;
+    // How many ended transactions a document keeps for reuse: one, plus those that observers start
+    // during a cleanup.
+    internal const int PoolSize = 4;
 
-    internal Transaction(YDoc doc, object origin, bool local)
+    // Collections that grew beyond this are dropped when the transaction ends, so a document does
+    // not hold the peak of one large transaction for good.
+    private const int KeepCapacity = 64;
+
+    // Handed to the events of an ended transaction, so that their lazily computed changes throw
+    // instead of reading the transaction that reuses the object.
+    private static readonly Transaction Ended = new Transaction(null);
+
+    private static readonly Comparison<YEvent> ByPathLength = static (a, b) => a.Path.Count - b.Path.Count;
+
+    private readonly YDoc _doc;
+    private object _origin;
+    private bool _local;
+    private bool _ended;
+
+    private DeleteSet _deleteSet;
+    private Dictionary<long, long> _beforeState;
+    private Dictionary<long, long> _afterState;
+
+    // What the undo manager keeps beyond the transaction; replaced, not cleared, when it ends.
+    private bool _deleteSetTaken;
+    private bool _beforeStateTaken;
+    private bool _afterStateTaken;
+
+    internal readonly Dictionary<AbstractType, ISet<string>> _changed = new();
+    internal readonly Dictionary<AbstractType, IList<YEvent>> _changedParentTypes = new();
+    internal readonly List<AbstractStruct> _mergeStructs = new();
+
+    // The deep observers to call in the cleanup, collected first, as Yjs does.
+    private readonly List<(AbstractType Type, IList<YEvent> Events)> _deepCalls = new();
+
+    // Rarely used, so created on first use.
+    private Dictionary<string, object> _meta;
+    private HashSet<YDoc> _subdocsAdded;
+    private HashSet<YDoc> _subdocsRemoved;
+    private HashSet<YDoc> _subdocsLoaded;
+
+    // The document's free list of ended transactions.
+    internal Transaction _nextFree;
+
+    internal Transaction(YDoc doc)
     {
-        Doc = doc;
-        DeleteSet = new DeleteSet();
-        BeforeState = Doc.Store.GetStateVector();
-        AfterState = new Dictionary<long, long>();
-        Changed = new Dictionary<AbstractType, ISet<string>>();
-        ChangedParentTypes = new Dictionary<AbstractType, IList<YEvent>>();
-        _mergeStructs = new List<AbstractStruct>();
-        Origin = origin;
-        Meta = new Dictionary<string, object>();
-        Local = local;
-        SubdocsAdded = new HashSet<YDoc>();
-        SubdocsRemoved = new HashSet<YDoc>();
-        SubdocsLoaded = new HashSet<YDoc>();
+        _doc = doc;
+        _ended = true;
     }
 
     /// <summary>
     /// The Yjs instance.
     /// </summary>
-    public YDoc Doc { get; }
+    public YDoc Doc => _ended ? throw EndedException() : _doc;
 
-    public object Origin { get; }
+    public object Origin => _ended ? throw EndedException() : _origin;
 
     /// <summary>
     /// Holds the state before the transaction started.
     /// </summary>
-    public IDictionary<long, long> BeforeState { get; }
+    public IDictionary<long, long> BeforeState => _ended ? throw EndedException() : _beforeState;
 
     /// <summary>
-    /// Holds the state after the transaction.
+    /// Holds the state after the transaction (empty until its cleanup starts).
     /// </summary>
-    public IDictionary<long, long> AfterState { get; private set; }
+    public IDictionary<long, long> AfterState => _ended ? throw EndedException() : _afterState;
 
     /// <summary>
     /// All types that were directly modified (property added or child
     /// inserted/deleted). New types are not included in this Set.
     /// Maps from type to parentSubs ('item.parentSub = null' for YArray).
     /// </summary>
-    public IDictionary<AbstractType, ISet<string>> Changed { get; }
+    public IDictionary<AbstractType, ISet<string>> Changed => _ended ? throw EndedException() : _changed;
 
     /// <summary>
     /// Stores the events for the types that observe also child elements.
     /// It is mainly used by 'observeDeep'.
     /// </summary>
-    public IDictionary<AbstractType, IList<YEvent>> ChangedParentTypes { get; }
+    public IDictionary<AbstractType, IList<YEvent>> ChangedParentTypes => _ended ? throw EndedException() : _changedParentTypes;
 
     /// <summary>
     /// Stores meta information on the transaction.
     /// </summary>
-    public IDictionary<string, object> Meta { get; }
+    public IDictionary<string, object> Meta => _ended ? throw EndedException() : _meta ??= new Dictionary<string, object>();
 
     /// <summary>
     /// Whether this change originates from this doc. Applying an update makes the transaction it
     /// runs in non-local, as in Yjs.
     /// </summary>
-    public bool Local { get; internal set; }
+    public bool Local
+    {
+        get => _ended ? throw EndedException() : _local;
+        internal set => _local = value;
+    }
 
-    public ISet<YDoc> SubdocsAdded { get; }
+    public ISet<YDoc> SubdocsAdded => _ended ? throw EndedException() : _subdocsAdded ??= new HashSet<YDoc>();
 
-    public ISet<YDoc> SubdocsRemoved { get; }
+    public ISet<YDoc> SubdocsRemoved => _ended ? throw EndedException() : _subdocsRemoved ??= new HashSet<YDoc>();
 
-    public ISet<YDoc> SubdocsLoaded { get; }
+    public ISet<YDoc> SubdocsLoaded => _ended ? throw EndedException() : _subdocsLoaded ??= new HashSet<YDoc>();
 
     /// <summary>
     /// Describes the set of deleted items by Ids.
     /// </summary>
-    internal DeleteSet DeleteSet { get; }
+    internal DeleteSet DeleteSet => _ended ? throw EndedException() : _deleteSet;
+
+    /// <summary>The delete set, which the caller keeps beyond the transaction (the undo manager's stack item).</summary>
+    internal DeleteSet TakeDeleteSet()
+    {
+        _deleteSetTaken = true;
+        return _deleteSet;
+    }
+
+    /// <summary>The state before the transaction, which the caller keeps beyond it.</summary>
+    internal Dictionary<long, long> TakeBeforeState()
+    {
+        _beforeStateTaken = true;
+        return _beforeState;
+    }
+
+    /// <summary>The state after the transaction, which the caller keeps beyond it.</summary>
+    internal Dictionary<long, long> TakeAfterState()
+    {
+        _afterStateTaken = true;
+        return _afterState;
+    }
+
+    private static InvalidOperationException EndedException() => new(
+        "This transaction has ended and its object is reused by the document. Read what you need from a " +
+        "transaction, or the changes of an event (Changes, Keys, Delta, Adds, Deletes), in the callback or " +
+        "handler that receives it, and keep that instead.");
+
+    /// <summary>Starts the transaction: the state before it is the document's state now.</summary>
+    internal void Begin(object origin, bool local)
+    {
+        Debug.Assert(_ended && _doc != null);
+        _ended = false;
+        _origin = origin;
+        _local = local;
+        _deleteSet ??= new DeleteSet();
+        _afterState ??= new Dictionary<long, long>();
+        _beforeState ??= new Dictionary<long, long>();
+        GetStateVector(_doc.Store, _beforeState);
+    }
+
+    /// <summary>
+    /// Ends the transaction after its batch: the events created in it let go of it, and what it
+    /// collected is cleared for reuse (or dropped, where someone keeps it or it grew large).
+    /// </summary>
+    internal void End()
+    {
+        foreach (var kvp in _changedParentTypes)
+        {
+            var events = kvp.Value;
+            for (var i = 0; i < events.Count; i++)
+            {
+                if (events[i].Transaction == this)
+                {
+                    events[i].Transaction = Ended;
+                }
+            }
+        }
+
+        _ended = true;
+        _origin = null;
+        _meta = null;
+        _subdocsAdded = null;
+        _subdocsRemoved = null;
+        _subdocsLoaded = null;
+        Clear(_changed);
+        Clear(_changedParentTypes);
+        _mergeStructs.Clear();
+        if (_mergeStructs.Capacity > KeepCapacity)
+        {
+            _mergeStructs.Capacity = 0;
+        }
+
+        _deepCalls.Clear();
+
+        if (_deleteSetTaken || _deleteSet.Clients.Count > KeepCapacity)
+        {
+            _deleteSet = null;
+        }
+        else
+        {
+            _deleteSet.Clients.Clear();
+        }
+
+        _beforeState = _beforeStateTaken || _beforeState.Count > KeepCapacity ? null : Cleared(_beforeState);
+        _afterState = _afterStateTaken || _afterState.Count > KeepCapacity ? null : Cleared(_afterState);
+        _deleteSetTaken = _beforeStateTaken = _afterStateTaken = false;
+
+        static void Clear<TKey, TValue>(Dictionary<TKey, TValue> dictionary)
+        {
+            var large = dictionary.Count > KeepCapacity;
+            dictionary.Clear();
+            if (large)
+            {
+                dictionary.TrimExcess();
+            }
+        }
+
+        static Dictionary<long, long> Cleared(Dictionary<long, long> dictionary)
+        {
+            dictionary.Clear();
+            return dictionary;
+        }
+    }
+
+    // Like StructStore.GetStateVector, into a dictionary that is reused.
+    private static void GetStateVector(StructStore store, Dictionary<long, long> into)
+    {
+        into.Clear();
+        foreach (var kvp in store.Clients)
+        {
+            var structs = kvp.Value;
+            var last = structs[structs.Count - 1];
+            into[kvp.Key] = last.Id.Clock + last.Length;
+        }
+    }
 
     internal ID GetNextId()
     {
-        return new ID(Doc.ClientId, Doc.Store.GetState(Doc.ClientId));
+        return new ID(_doc.ClientId, _doc.Store.GetState(_doc.ClientId));
     }
 
     /// <summary>
@@ -103,12 +260,12 @@ public partial class Transaction
     internal void AddChangedTypeToTransaction(AbstractType type, string parentSub)
     {
         var item = type._item;
-        if (item == null || (BeforeState.TryGetValue(item.Id.Client, out var clock) && item.Id.Clock < clock && !item.Deleted))
+        if (item == null || (_beforeState.TryGetValue(item.Id.Client, out var clock) && item.Id.Clock < clock && !item.Deleted))
         {
-            if (!Changed.TryGetValue(type, out var set))
+            if (!_changed.TryGetValue(type, out var set))
             {
                 set = new HashSet<string>();
-                Changed[type] = set;
+                _changed[type] = set;
             }
 
             set.Add(parentSub);
@@ -116,18 +273,18 @@ public partial class Transaction
     }
 
     /// <summary>
-    /// Cleans up the transactions from <paramref name="i"/> on, including those that observers start
-    /// meanwhile. Whatever throws (an observer, or a bug), every transaction is cleaned up and the
-    /// document is left ready for the next one; the first exception is rethrown at the end.
+    /// Cleans up the document's transactions, including those that observers start meanwhile, then
+    /// ends them for reuse. Whatever throws (an observer, or a bug), every transaction is cleaned up
+    /// and the document is left ready for the next one; the first exception is rethrown at the end.
     /// </summary>
-    internal static void CleanupTransactions(IList<Transaction> transactionCleanups, int i)
+    internal static void CleanupTransactions(YDoc doc)
     {
-        var doc = transactionCleanups[i].Doc;
+        var transactionCleanups = doc._transactionCleanups;
         ExceptionDispatchInfo error = null;
 
         try
         {
-            for (; i < transactionCleanups.Count; i++)
+            for (var i = 0; i < transactionCleanups.Count; i++)
             {
                 try
                 {
@@ -141,61 +298,91 @@ public partial class Transaction
         }
         finally
         {
+            // A transaction that an 'AfterAllTransactions' handler starts is a new batch, in the
+            // other list (as Yjs replaces 'doc._transactionCleanups').
             doc._transaction = null;
-            var all = transactionCleanups.ToList();
-            doc._transactionCleanups.Clear();
+            doc._transactionCleanups = doc._spareTransactionCleanups ?? new List<Transaction>();
+            doc._spareTransactionCleanups = null;
 
             try
             {
-                doc.InvokeAfterAllTransactions(all);
+                doc.InvokeAfterAllTransactions(transactionCleanups);
             }
             catch (Exception e)
             {
                 error ??= ExceptionDispatchInfo.Capture(e);
             }
+
+            for (var i = 0; i < transactionCleanups.Count; i++)
+            {
+                doc.ReturnTransaction(transactionCleanups[i]);
+            }
+
+            transactionCleanups.Clear();
+            doc._spareTransactionCleanups = transactionCleanups;
         }
 
         error?.Throw();
     }
 
+    /// <summary>
+    /// Yjs' 'cleanupTransactions' for one transaction: the observers, deep observers and
+    /// 'AfterTransaction' are each called even if one before throws; the first exception is
+    /// rethrown after the structs are merged and the update events are fired.
+    /// </summary>
     private static void CleanupTransaction(Transaction transaction)
     {
-        var doc = transaction.Doc;
+        var doc = transaction._doc;
         var store = doc.Store;
-        var ds = transaction.DeleteSet;
+        var ds = transaction._deleteSet;
         var mergeStructs = transaction._mergeStructs;
-        var actions = new List<Action>();
+        ExceptionDispatchInfo error = null;
 
         doc._transaction = null;
 
         try
         {
             ds.SortAndMergeDeleteSet();
-            transaction.AfterState = store.GetStateVector();
+            GetStateVector(store, transaction._afterState);
 
-            actions.Add(() =>
+            try
             {
                 doc.InvokeOnBeforeObserverCalls(transaction);
-            });
-
-            actions.Add(() =>
+            }
+            catch (Exception e)
             {
-                foreach (var kvp in transaction.Changed)
+                error ??= ExceptionDispatchInfo.Capture(e);
+            }
+
+            try
+            {
+                foreach (var kvp in transaction._changed)
                 {
                     var itemType = kvp.Key;
-                    var subs = kvp.Value;
-
                     if (itemType._item == null || !itemType._item.Deleted)
                     {
-                        itemType.CallObserver(transaction, subs);
+                        try
+                        {
+                            itemType.CallObserver(transaction, kvp.Value);
+                        }
+                        catch (Exception e)
+                        {
+                            error ??= ExceptionDispatchInfo.Capture(e);
+                        }
                     }
                 }
-            });
-
-            actions.Add(() =>
+            }
+            catch (Exception e)
             {
-                // Deep observe events.
-                foreach (var kvp in transaction.ChangedParentTypes)
+                error ??= ExceptionDispatchInfo.Capture(e);
+            }
+
+            // Deep observe events: every event gets its current target first, then the observers
+            // are called (an event shared by several types keeps the last one, as in Yjs).
+            var deepCalls = transaction._deepCalls;
+            try
+            {
+                foreach (var kvp in transaction._changedParentTypes)
                 {
                     var type = kvp.Key;
                     var events = kvp.Value;
@@ -203,33 +390,53 @@ public partial class Transaction
                     // We need to think about the possibility that the user transforms the YDoc in the event.
                     if (type._item == null || !type._item.Deleted)
                     {
-                        foreach (var evt in events)
+                        for (var i = 0; i < events.Count; i++)
                         {
+                            var evt = events[i];
                             if (evt.Target._item == null || !evt.Target._item.Deleted)
                             {
                                 evt.CurrentTarget = type;
                             }
                         }
 
-                        // Sort events by path length so that top-level events are fired first.
-                        var sortedEvents = events.ToList();
-                        sortedEvents.Sort((a, b) => a.Path.Count - b.Path.Count);
-                        Debug.Assert(sortedEvents.Count > 0);
-
-                        actions.Add(() =>
+                        Debug.Assert(events.Count > 0);
+                        if (events.Count > 1)
                         {
-                            type.CallDeepEventHandlerListeners(sortedEvents, transaction);
-                        });
+                            // Sort events by path length so that top-level events are fired first.
+                            var sortedEvents = new List<YEvent>(events);
+                            sortedEvents.Sort(ByPathLength);
+                            events = sortedEvents;
+                        }
+
+                        deepCalls.Add((type, events));
                     }
                 }
-            });
+            }
+            catch (Exception e)
+            {
+                error ??= ExceptionDispatchInfo.Capture(e);
+            }
 
-            actions.Add(() =>
+            for (var i = 0; i < deepCalls.Count; i++)
+            {
+                try
+                {
+                    deepCalls[i].Type.CallDeepEventHandlerListeners(deepCalls[i].Events, transaction);
+                }
+                catch (Exception e)
+                {
+                    error ??= ExceptionDispatchInfo.Capture(e);
+                }
+            }
+
+            try
             {
                 doc.InvokeOnAfterTransaction(transaction);
-            });
-
-            CallAll(actions);
+            }
+            catch (Exception e)
+            {
+                error ??= ExceptionDispatchInfo.Capture(e);
+            }
         }
         finally
         {
@@ -243,12 +450,13 @@ public partial class Transaction
             ds.TryMergeDeleteSet(store);
 
             // On all affected store.clients props, try to merge.
-            foreach (var kvp in transaction.AfterState)
+            var beforeState = transaction._beforeState;
+            foreach (var kvp in transaction._afterState)
             {
                 var client = kvp.Key;
                 var clock = kvp.Value;
 
-                if (!transaction.BeforeState.TryGetValue(client, out var beforeClock))
+                if (!beforeState.TryGetValue(client, out var beforeClock))
                 {
                     beforeClock = 0;
                 }
@@ -285,14 +493,14 @@ public partial class Transaction
                 }
             }
 
-            if (!transaction.Local)
+            if (!transaction._local)
             {
-                if (!transaction.AfterState.TryGetValue(doc.ClientId, out var afterClock))
+                if (!transaction._afterState.TryGetValue(doc.ClientId, out var afterClock))
                 {
                     afterClock = -1;
                 }
 
-                if (!transaction.BeforeState.TryGetValue(doc.ClientId, out var beforeClock))
+                if (!beforeState.TryGetValue(doc.ClientId, out var beforeClock))
                 {
                     beforeClock = -1;
                 }
@@ -310,24 +518,31 @@ public partial class Transaction
             doc.InvokeUpdateV1(transaction);
             doc.InvokeUpdateV2(transaction);
 
-            foreach (var subDoc in transaction.SubdocsAdded)
+            if (transaction._subdocsAdded?.Count > 0 || transaction._subdocsRemoved?.Count > 0 || transaction._subdocsLoaded?.Count > 0)
             {
-                doc.Subdocs.Add(subDoc);
+                var added = transaction.SubdocsAdded;
+                var removed = transaction.SubdocsRemoved;
+
+                foreach (var subDoc in added)
+                {
+                    doc.Subdocs.Add(subDoc);
+                }
+
+                foreach (var subDoc in removed)
+                {
+                    doc.Subdocs.Remove(subDoc);
+                }
+
+                doc.InvokeSubdocsChanged(transaction.SubdocsLoaded, added, removed);
+
+                foreach (var subDoc in removed)
+                {
+                    subDoc.Destroy();
+                }
             }
-
-            foreach (var subDoc in transaction.SubdocsRemoved)
-            {
-                doc.Subdocs.Remove(subDoc);
-            }
-
-            doc.InvokeSubdocsChanged(transaction.SubdocsLoaded, transaction.SubdocsAdded, transaction.SubdocsRemoved);
-
-            foreach (var subDoc in transaction.SubdocsRemoved)
-            {
-                subDoc.Destroy();
-            }
-
         }
+
+        error?.Throw();
     }
 
     /// <summary>
@@ -484,34 +699,28 @@ public partial class Transaction
     /// <returns>Whether the data was written.</returns>
     internal bool WriteUpdateMessageFromTransaction(IUpdateEncoder encoder)
     {
-        if (DeleteSet.Clients.Count == 0 && !AfterState.Any(kvp => !BeforeState.TryGetValue(kvp.Key, out var clockB) || kvp.Value != clockB))
+        if (_deleteSet.Clients.Count == 0 && !StateChanged())
         {
             return false;
         }
 
-        DeleteSet.SortAndMergeDeleteSet();
-        EncodingUtils.WriteClientsStructs(encoder, Doc.Store, BeforeState);
-        DeleteSet.Write(encoder);
+        _deleteSet.SortAndMergeDeleteSet();
+        EncodingUtils.WriteClientsStructs(encoder, _doc.Store, _beforeState);
+        _deleteSet.Write(encoder);
 
         return true;
     }
 
-    /// <summary>Calls every function, also after one throws (the list may grow meanwhile); rethrows the first exception.</summary>
-    private static void CallAll(List<Action> funcs)
+    private bool StateChanged()
     {
-        ExceptionDispatchInfo error = null;
-        for (var index = 0; index < funcs.Count; index++)
+        foreach (var kvp in _afterState)
         {
-            try
+            if (!_beforeState.TryGetValue(kvp.Key, out var clockB) || kvp.Value != clockB)
             {
-                funcs[index]();
-            }
-            catch (Exception e)
-            {
-                error ??= ExceptionDispatchInfo.Capture(e);
+                return true;
             }
         }
 
-        error?.Throw();
+        return false;
     }
 }

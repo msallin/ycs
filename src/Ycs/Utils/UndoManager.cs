@@ -96,6 +96,11 @@ public class UndoManager
     private int _captureTimeout;
     private bool _destroyed;
 
+    // The transaction of the running Undo or Redo, and its changed parent types as they were at its
+    // 'AfterTransaction' (the transaction object is reused once it has ended).
+    private Transaction _popTransaction;
+    private IDictionary<AbstractType, IList<YEvent>> _poppedChangedParentTypes;
+
     public UndoManager(AbstractType typeScope)
         : this(new[] { typeScope }, 500, it => true, new HashSet<object> { null })
     {
@@ -270,7 +275,7 @@ public class UndoManager
             {
                 stackItem.DeleteSet.IterateDeletedStructs(tr, i =>
                 {
-                    if (i is Item item && _scope.Any(entry => IsParentOf(entry, item)))
+                    if (i is Item item && InScope(item))
                     {
                         item.KeepItemAndParents(false);
                     }
@@ -380,8 +385,13 @@ public class UndoManager
 
     private void OnAfterTransaction(object sender, Transaction transaction)
     {
+        if (transaction == _popTransaction)
+        {
+            _poppedChangedParentTypes = CopyChangedParentTypes(transaction, StackItemPopped);
+        }
+
         // Only track certain transactions.
-        if (!_scope.Any(entry => entry is YDoc || (entry is AbstractType at && transaction.ChangedParentTypes.ContainsKey(at))) ||
+        if (!ScopeChanged(transaction) ||
             (!_trackedOrigins.Contains(transaction.Origin) &&
                 (transaction.Origin == null || !_trackedOrigins.Contains(transaction.Origin.GetType()))))
         {
@@ -403,21 +413,20 @@ public class UndoManager
             Clear(false, true);
         }
 
-        var beforeState = transaction.BeforeState;
-        var afterState = transaction.AfterState;
-
+        // The stack item keeps the transaction's states and delete set, which the transaction then
+        // does not reuse.
         var now = DateTime.UtcNow;
         if ((now - _lastChange).TotalMilliseconds < _captureTimeout && stack.Count > 0 && !undoing && !redoing)
         {
             // Append change to last stack op.
             var lastOp = stack.Peek();
             lastOp.DeleteSet = new DeleteSet(new List<DeleteSet>() { lastOp.DeleteSet, transaction.DeleteSet });
-            lastOp.AfterState = afterState;
+            lastOp.AfterState = transaction.TakeAfterState();
         }
         else
         {
             // Create a new stack op.
-            var item = new StackItem(transaction.DeleteSet, beforeState, afterState);
+            var item = new StackItem(transaction.TakeDeleteSet(), transaction.TakeBeforeState(), transaction.TakeAfterState());
             stack.Push(item);
         }
 
@@ -429,7 +438,7 @@ public class UndoManager
         // Make sure that deleted structs are not GC'd.
         transaction.DeleteSet.IterateDeletedStructs(transaction, i =>
         {
-            if (i is Item item && _scope.Any(entry => IsParentOf(entry, item)))
+            if (i is Item item && InScope(item))
             {
                 item.KeepItemAndParents(true);
             }
@@ -437,8 +446,39 @@ public class UndoManager
             return true;
         });
 
-        StackItemAdded?.Invoke(this, new StackEventArgs(stack.Peek(), undoing ? OperationType.Redo : OperationType.Undo, transaction.ChangedParentTypes, transaction.Origin));
+        var added = StackItemAdded;
+        added?.Invoke(this, new StackEventArgs(stack.Peek(), undoing ? OperationType.Redo : OperationType.Undo, CopyChangedParentTypes(transaction, added), transaction.Origin));
     }
+
+    private bool ScopeChanged(Transaction transaction)
+    {
+        foreach (var entry in _scope)
+        {
+            if (entry is YDoc || (entry is AbstractType at && transaction._changedParentTypes.ContainsKey(at)))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private bool InScope(Item item)
+    {
+        foreach (var entry in _scope)
+        {
+            if (IsParentOf(entry, item))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A stack event outlives the transaction; a copy is made only for a subscribed event.
+    private static Dictionary<AbstractType, IList<YEvent>> CopyChangedParentTypes(Transaction transaction, Delegate handler) =>
+        handler == null ? null : new Dictionary<AbstractType, IList<YEvent>>(transaction._changedParentTypes);
 
     private StackItem PopStackItem(Stack<StackItem> stack, OperationType eventType)
     {
@@ -447,9 +487,14 @@ public class UndoManager
         // Keep a reference to the transaction so we can fire the event with the 'changedParentTypes'.
         Transaction tr = null;
 
+        // Reset here too: a Transact that threw left them set.
+        _popTransaction = null;
+        _poppedChangedParentTypes = null;
+
         _doc.Transact(transaction =>
         {
             tr = transaction;
+            _popTransaction = transaction;
 
             while (stack.Count > 0 && result == null)
             {
@@ -505,7 +550,7 @@ public class UndoManager
                                     str = it = item as Item;
                                 }
 
-                                if (!it.Deleted && _scope.Any(entry => IsParentOf(entry, it)))
+                                if (!it.Deleted && InScope(it))
                                 {
                                     itemsToDelete.Add(it);
                                 }
@@ -533,7 +578,7 @@ public class UndoManager
                     }
 
                     if (str is Item item &&
-                        _scope.Any(entry => IsParentOf(entry, item)) &&
+                        InScope(item) &&
                         // Never redo structs in [stackItem.start, stackItem.start + stackItem.end), because they were created and deleted in the same capture interval.
                         !(clock >= startClock && clock < endClock))
                     {
@@ -576,9 +621,14 @@ public class UndoManager
             }
         }, origin: this);
 
+        // Within an outer transaction, this one is not cleaned up yet: its types are still being collected.
+        var changedParentTypes = _poppedChangedParentTypes ?? tr._changedParentTypes;
+        _popTransaction = null;
+        _poppedChangedParentTypes = null;
+
         if (result != null)
         {
-            StackItemPopped?.Invoke(this, new StackEventArgs(result, eventType, tr.ChangedParentTypes, tr.Origin));
+            StackItemPopped?.Invoke(this, new StackEventArgs(result, eventType, changedParentTypes, this));
         }
 
         return result;

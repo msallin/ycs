@@ -348,6 +348,7 @@ class Ycs.YDoc
     void EncodeStateAsUpdateV2(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     void Load()
     void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
+    void Transact<TState>(TState state, System.Action<TState, Transaction> action, object origin = null, bool local = true)
 class Ycs.YDocOptions
     System.Collections.Generic.IDictionary<string, object> Meta { get; set; }
     System.Predicate<Item> GcFilter { get; set; }

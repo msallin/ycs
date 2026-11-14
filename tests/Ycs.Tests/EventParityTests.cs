@@ -75,8 +75,13 @@ public class EventParityTests
         var doc = new YDoc();
         var map = doc.GetMap("map");
 
+        // An event's changes are computed in its handler (afterwards the transaction has ended).
         YMapEvent evt = null;
-        map.EventHandler += (s, e) => evt = e.Event as YMapEvent;
+        map.EventHandler += (s, e) =>
+        {
+            evt = e.Event as YMapEvent;
+            _ = evt.Changes;
+        };
 
         doc.Transact(_ =>
         {
@@ -105,8 +110,13 @@ public class EventParityTests
         var doc = new YDoc();
         var map = doc.GetMap("map");
 
+        // An event's changes are computed in its handler (afterwards the transaction has ended).
         YMapEvent evt = null;
-        map.EventHandler += (s, e) => evt = e.Event as YMapEvent;
+        map.EventHandler += (s, e) =>
+        {
+            evt = e.Event as YMapEvent;
+            _ = evt.Changes;
+        };
 
         map.Set("a", 1);
 
@@ -122,7 +132,11 @@ public class EventParityTests
         var arr = doc.GetArray("array");
 
         YArrayEvent evt = null;
-        arr.EventHandler += (s, e) => evt = e.Event as YArrayEvent;
+        arr.EventHandler += (s, e) =>
+        {
+            evt = e.Event as YArrayEvent;
+            _ = evt.Changes;
+        };
 
         arr.Insert(0, new object[] { 1, 2, 3 });
 
@@ -149,7 +163,12 @@ public class EventParityTests
         var text = doc.GetText("text");
 
         YTextEvent evt = null;
-        text.EventHandler += (s, e) => evt = e.Event as YTextEvent;
+        text.EventHandler += (s, e) =>
+        {
+            evt = e.Event as YTextEvent;
+            _ = evt.Changes;
+            _ = evt.Delta;
+        };
 
         text.Insert(0, "abc");
 
@@ -170,16 +189,18 @@ public class EventParityTests
         var doc = new YDoc();
         var arr = doc.GetArray("array");
 
-        YEvent evt = null;
-        arr.EventHandler += (s, e) => evt = e.Event;
+        // We can't get the raw Item back out of a public API, so just prove the methods compile
+        // and run as *public* members by invoking them through the event's own added set, in the
+        // handler (afterwards the transaction has ended).
+        (bool Adds, bool Deletes)? result = null;
+        arr.EventHandler += (s, e) =>
+        {
+            var addedItem = e.Event.Changes.Added.Single();
+            result = (e.Event.Adds(addedItem), e.Event.Deletes(addedItem));
+        };
 
         arr.Insert(0, new object[] { "x" });
 
-        Assert.IsNotNull(evt);
-        // We can't get the raw Item back out of a public API, so just prove the methods compile
-        // and run as *public* members by invoking them through the event's own added set.
-        var addedItem = evt.Changes.Added.Single();
-        Assert.IsTrue(evt.Adds(addedItem));
-        Assert.IsFalse(evt.Deletes(addedItem));
+        Assert.AreEqual((true, false), result);
     }
 }

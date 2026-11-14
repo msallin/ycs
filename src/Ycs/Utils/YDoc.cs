@@ -114,14 +114,20 @@ public partial class YDoc
     public IDictionary<string, object> Meta => _opts.Meta;
 
     internal bool ShouldLoad;
-    internal readonly IList<Transaction> _transactionCleanups;
+    internal List<Transaction> _transactionCleanups;
+    // The list of the batch before, kept for the next one (see Transaction.CleanupTransactions).
+    internal List<Transaction> _spareTransactionCleanups;
     internal Transaction _transaction;
-    internal readonly ISet<YDoc> Subdocs;
+    internal readonly HashSet<YDoc> Subdocs;
+
+    // Ended transactions for reuse, linked by Transaction._nextFree.
+    private Transaction _freeTransactions;
+    private int _freeTransactionCount;
 
     // If this document is a subdocument - a document integrated into another document - them _item is defined.
     internal Item _item;
 
-    private readonly IDictionary<string, AbstractType> _share;
+    private readonly Dictionary<string, AbstractType> _share;
 
     /// <summary>
     /// Yjs uses a random 32-bit client id (see 'generateNewClientId' in Doc.js). It has to be
@@ -160,10 +166,7 @@ public partial class YDoc
         if (item != null && !ShouldLoad)
         {
             Debug.Assert(item.Parent is AbstractType);
-            (item.Parent as AbstractType).Doc.Transact(tr =>
-            {
-                tr.SubdocsLoaded.Add(this);
-            }, origin: null, local: true);
+            (item.Parent as AbstractType).Doc.Transact(this, static (doc, tr) => tr.SubdocsLoaded.Add(doc));
         }
         ShouldLoad = true;
     }
@@ -205,16 +208,16 @@ public partial class YDoc
                 content.Doc._item = item;
             }
 
-            (item.Parent as AbstractType).Doc.Transact(tr =>
+            (item.Parent as AbstractType).Doc.Transact((doc: this, item, content), static (s, tr) =>
             {
-                if (!item.Deleted)
+                if (!s.item.Deleted)
                 {
-                    Debug.Assert(content != null);
-                    tr.SubdocsAdded.Add(content.Doc);
+                    Debug.Assert(s.content != null);
+                    tr.SubdocsAdded.Add(s.content.Doc);
                 }
 
-                tr.SubdocsRemoved.Add(this);
-            }, origin: null, local: true);
+                tr.SubdocsRemoved.Add(s.doc);
+            });
         }
 
         InvokeDestroyed();
@@ -261,50 +264,104 @@ public partial class YDoc
     /// <param name="local"></param>
     public void Transact(Action<Transaction> fun, object origin = null, bool local = true)
     {
-        bool initialCall = false;
-        if (_transaction == null)
+        ArgumentNullException.ThrowIfNull(fun);
+        Transact(fun, static (f, tr) => f(tr), origin, local);
+    }
+
+    /// <summary>
+    /// Like <see cref="Transact(Action{Transaction}, object, bool)"/>, with the state that
+    /// <paramref name="action"/> needs passed in, so that a <c>static</c> lambda captures nothing
+    /// and no closure is allocated: <c>doc.Transact((text, index), static (s, tr) => ...)</c>.
+    /// </summary>
+    /// <param name="state">Passed to <paramref name="action"/>.</param>
+    /// <param name="action">The function that should be executed as a transaction.</param>
+    /// <param name="origin">Transaction owner. Will be stored in 'transaction.origin'.</param>
+    /// <param name="local">Whether the change originates from this document.</param>
+    public void Transact<TState>(TState state, Action<TState, Transaction> action, object origin = null, bool local = true)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        var transaction = _transaction;
+        var initialCall = false;
+        if (transaction == null)
         {
             initialCall = true;
-            _transaction = new Transaction(this, origin, local);
-            _transactionCleanups.Add(_transaction);
+            transaction = _transaction = RentTransaction(origin, local);
+            _transactionCleanups.Add(transaction);
             if (_transactionCleanups.Count == 1)
             {
                 InvokeBeforeAllTransactions();
             }
 
-            InvokeOnBeforeTransaction(_transaction);
+            InvokeOnBeforeTransaction(transaction);
         }
 
         var completed = false;
         try
         {
-            fun(_transaction);
+            action(state, transaction);
             completed = true;
         }
         finally
         {
-            if (initialCall && _transactionCleanups.Count > 0 && _transactionCleanups[0] == _transaction)
+            if (initialCall)
             {
-                // The first transaction ended, now process observer calls.
-                // Observer call may create new transacations for which we need to call the observers and do cleanup.
-                // We don't want to nest these calls, so we execute these calls one after another.
-                // Also we need to ensure that all cleanups are called, even if the observers throw errors.
-                if (completed)
+                // A transaction that an observer starts during a cleanup is cleaned up after the one
+                // being cleaned up, in the same loop; it is not nested (as in Yjs).
+                var finishCleanup = _transactionCleanups.Count > 0 && _transactionCleanups[0] == transaction;
+                _transaction = null;
+
+                if (finishCleanup)
                 {
-                    Transaction.CleanupTransactions(_transactionCleanups, 0);
-                }
-                else
-                {
-                    try
+                    // Observer calls may create new transactions for which we need to call the observers and do cleanup.
+                    // Also we need to ensure that all cleanups are called, even if the observers throw errors.
+                    if (completed)
                     {
-                        Transaction.CleanupTransactions(_transactionCleanups, 0);
+                        Transaction.CleanupTransactions(this);
                     }
-                    catch (Exception)
+                    else
                     {
-                        // The exception of 'fun' propagates; one from an observer would hide it.
+                        try
+                        {
+                            Transaction.CleanupTransactions(this);
+                        }
+                        catch (Exception)
+                        {
+                            // The exception of 'action' propagates; one from an observer would hide it.
+                        }
                     }
                 }
             }
+        }
+    }
+
+    private Transaction RentTransaction(object origin, bool local)
+    {
+        var transaction = _freeTransactions;
+        if (transaction != null)
+        {
+            _freeTransactions = transaction._nextFree;
+            transaction._nextFree = null;
+            _freeTransactionCount--;
+        }
+        else
+        {
+            transaction = new Transaction(this);
+        }
+
+        transaction.Begin(origin, local);
+        return transaction;
+    }
+
+    /// <summary>Ends a cleaned-up transaction and keeps it for reuse (up to <see cref="Transaction.PoolSize"/>).</summary>
+    internal void ReturnTransaction(Transaction transaction)
+    {
+        transaction.End();
+        if (_freeTransactionCount < Transaction.PoolSize)
+        {
+            transaction._nextFree = _freeTransactions;
+            _freeTransactions = transaction;
+            _freeTransactionCount++;
         }
     }
 
@@ -397,7 +454,7 @@ public partial class YDoc
     /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
     public void ApplyUpdateV1(ReadOnlySpan<byte> update, object transactionOrigin = null)
     {
-        WithPooledCopy(update, buffer => ApplyUpdate(buffer, v2: false, transactionOrigin));
+        ApplyPooledCopy(update, v2: false, transactionOrigin);
     }
 
     /// <summary>
@@ -413,7 +470,7 @@ public partial class YDoc
     /// <inheritdoc cref="ApplyUpdateV2(byte[], object)"/>
     public void ApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null)
     {
-        WithPooledCopy(update, buffer => ApplyUpdate(buffer, v2: true, transactionOrigin));
+        ApplyPooledCopy(update, v2: true, transactionOrigin);
     }
 
     /// <summary>
@@ -432,7 +489,7 @@ public partial class YDoc
     {
         try
         {
-            WithPooledCopy(update, buffer => ApplyUpdate(buffer, v2, transactionOrigin));
+            ApplyPooledCopy(update, v2, transactionOrigin);
             return true;
         }
         catch (YUpdateException)
@@ -517,15 +574,30 @@ public partial class YDoc
         return encoder.ToArray();
     }
 
+    // Only read: an empty target state vector asks for everything.
+    private static readonly Dictionary<long, long> EmptyStateVector = new();
+
     private static IDictionary<long, long> DecodeTargetStateVector(ReadOnlySpan<byte> encodedTargetStateVector)
     {
         if (encodedTargetStateVector.IsEmpty)
         {
-            return new Dictionary<long, long>();
+            return EmptyStateVector;
         }
 
-        var bytes = encodedTargetStateVector.ToArray();
-        return YUpdateException.Decode(() => EncodingUtils.DecodeStateVector(new Lib0Reader(bytes)));
+        var buffer = ArrayPool<byte>.Shared.Rent(encodedTargetStateVector.Length);
+        try
+        {
+            encodedTargetStateVector.CopyTo(buffer);
+            return EncodingUtils.DecodeStateVector(new Lib0Reader(buffer, 0, encodedTargetStateVector.Length));
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
     }
 
     /// <summary>
@@ -548,11 +620,11 @@ public partial class YDoc
             throw YUpdateException.Wrap(e);
         }
 
-        Transact(tr =>
+        Transact((store: Store, structs, ds, _opts.MaxPendingBytes), static (s, tr) =>
         {
             // As Yjs' readUpdateV2: also when this runs in the caller's transaction.
             tr.Local = false;
-            Store.ApplyUpdate(tr, structs, ds, _opts.MaxPendingBytes);
+            s.store.ApplyUpdate(tr, s.structs, s.ds, s.MaxPendingBytes);
         }, transactionOrigin, local: false);
     }
 
@@ -560,13 +632,13 @@ public partial class YDoc
     /// The decoders read from an array; a span is copied into a pooled one first. Nothing
     /// decoded keeps a reference to the input, so the array can be returned afterwards.
     /// </summary>
-    private static void WithPooledCopy(ReadOnlySpan<byte> update, Action<Lib0Reader> read)
+    private void ApplyPooledCopy(ReadOnlySpan<byte> update, bool v2, object transactionOrigin)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(update.Length);
         try
         {
             update.CopyTo(buffer);
-            read(new Lib0Reader(buffer, 0, update.Length));
+            ApplyUpdate(new Lib0Reader(buffer, 0, update.Length), v2, transactionOrigin);
         }
         finally
         {
