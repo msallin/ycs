@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -386,11 +386,9 @@ internal sealed partial class StructStore
         if (unappliedDs.Clients.Count > 0)
         {
             // @TODO: No need for encoding+decoding ds anymore.
-            using (var unappliedDsEncoder = new DSEncoderV2())
-            {
-                unappliedDs.Write(unappliedDsEncoder);
-                _pendingDeleteReaders.Add(new DSDecoderV2(new MemoryStream(unappliedDsEncoder.ToArray())));
-            }
+            var unappliedDsEncoder = new DSEncoderV2();
+            unappliedDs.Write(unappliedDsEncoder);
+            _pendingDeleteReaders.Add(new DSDecoderV2(new Lib0Reader(unappliedDsEncoder.ToArray())));
         }
     }
 

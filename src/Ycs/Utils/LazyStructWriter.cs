@@ -21,11 +21,9 @@ namespace Ycs;
 /// swapping out the encoder's 'rest' stream for a fresh one every time the writer moves to a
 /// new client, stashing the bytes written so far as a fragment, then re-assembling
 /// '# clients, then (count, fragment) per client' once everything is known
-/// (<see cref="Finish"/>). <see cref="IUpdateEncoder.RestWriter"/> only exposes a getter here
-/// (its setter is private in the concrete encoders, which we don't own), so instead of
-/// swapping the stream reference we truncate the SAME <see cref="MemoryStream"/> back to
-/// empty after capturing its bytes - the concrete encoders always back <c>RestWriter</c> with a
-/// <see cref="MemoryStream"/>, so this is safe.
+/// (<see cref="Finish"/>). <see cref="IUpdateEncoder.RestWriter"/> only exposes a getter, so
+/// instead of swapping the writer we clear the same <see cref="Lib0Writer"/> after capturing
+/// its bytes.
 /// </summary>
 internal sealed class LazyStructWriter
 {
@@ -83,7 +81,7 @@ internal sealed class LazyStructWriter
     {
         Flush(lazyWriter);
 
-        // This is a fresh (empty) MemoryStream, because 'Flush' just truncated it.
+        // This is empty, because 'Flush' just cleared it.
         var restWriter = lazyWriter.Encoder.RestWriter;
 
         // Write # states that were updated - i.e. the clients.
@@ -95,7 +93,7 @@ internal sealed class LazyStructWriter
             restWriter.WriteVarUint((uint)part.Written);
 
             // Write the rest of the fragment.
-            restWriter.Write(part.Fragment, 0, part.Fragment.Length);
+            restWriter.WriteBytes(part.Fragment);
         }
     }
 
@@ -106,16 +104,14 @@ internal sealed class LazyStructWriter
             return;
         }
 
-        // The concrete encoders (DSEncoderV1/V2) always back 'RestWriter' with a MemoryStream.
-        var restWriter = (MemoryStream)lazyWriter.Encoder.RestWriter;
+        var restWriter = lazyWriter.Encoder.RestWriter;
         var fragment = restWriter.ToArray();
 
         lazyWriter.ClientStructs.Add((lazyWriter.Written, fragment));
 
         // Truncate back to empty so unrelated later writes (the next client's fragment, or -
         // once we're done - the delete set) don't see these bytes again.
-        restWriter.SetLength(0);
-        restWriter.Position = 0;
+        restWriter.Clear();
 
         lazyWriter.Written = 0;
     }

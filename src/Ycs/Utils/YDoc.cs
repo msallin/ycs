@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -313,24 +313,16 @@ public partial class YDoc
     /// Read and apply a document update in the original ('v1') format,
     /// i.e. the output of Yjs' 'Y.encodeStateAsUpdate'.
     /// </summary>
-    public void ApplyUpdateV1(Stream input, object transactionOrigin = null, bool local = false)
-    {
-        Transact(tr =>
-        {
-            using (var structDecoder = new UpdateDecoderV1(input, leaveOpen: true))
-            {
-                EncodingUtils.ReadStructs(structDecoder, tr, Store);
-                Store.ReadAndApplyDeleteSet(structDecoder, tr);
-            }
-        }, transactionOrigin, local);
-    }
-
     public void ApplyUpdateV1(byte[] update, object transactionOrigin = null, bool local = false)
     {
-        using (var input = new MemoryStream(update, writable: false))
-        {
-            ApplyUpdateV1(input, transactionOrigin, local);
-        }
+        ArgumentNullException.ThrowIfNull(update);
+        ApplyUpdate(new UpdateDecoderV1(new Lib0Reader(update)), transactionOrigin, local);
+    }
+
+    /// <inheritdoc cref="ApplyUpdateV1(byte[], object, bool)"/>
+    public void ApplyUpdateV1(ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
+    {
+        WithPooledCopy(update, buffer => ApplyUpdate(new UpdateDecoderV1(buffer), transactionOrigin, local));
     }
 
     /// <summary>
@@ -339,47 +331,60 @@ public partial class YDoc
     /// </summary>
     public byte[] EncodeStateAsUpdateV1(byte[] encodedTargetStateVector = null)
     {
-        using (var encoder = new UpdateEncoderV1())
-        {
-            var targetStateVector = encodedTargetStateVector == null
-                ? new Dictionary<long, long>()
-                : EncodingUtils.DecodeStateVector(new MemoryStream(encodedTargetStateVector, writable: false));
-            WriteStateAsUpdate(encoder, targetStateVector);
-            return encoder.ToArray();
-        }
+        var encoder = new UpdateEncoderV1();
+        var targetStateVector = encodedTargetStateVector == null
+            ? new Dictionary<long, long>()
+            : EncodingUtils.DecodeStateVector(new Lib0Reader(encodedTargetStateVector));
+        WriteStateAsUpdate(encoder, targetStateVector);
+        return encoder.ToArray();
     }
 
     public byte[] EncodeStateVectorV1()
     {
-        using (var encoder = new DSEncoderV1())
-        {
-            WriteStateVector(encoder);
-            return encoder.ToArray();
-        }
+        var encoder = new DSEncoderV1();
+        WriteStateVector(encoder);
+        return encoder.ToArray();
     }
 
     /// <summary>
-    /// Read and apply a document update.
-    /// <br/>
-    /// This function has the same effect as 'applyUpdate' but accepts a decoder.
+    /// Read and apply a document update in the v2 format (Yjs' 'Y.applyUpdateV2').
     /// </summary>
-    public void ApplyUpdateV2(Stream input, object transactionOrigin = null, bool local = false)
+    public void ApplyUpdateV2(byte[] update, object transactionOrigin = null, bool local = false)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        ApplyUpdate(new UpdateDecoderV2(new Lib0Reader(update)), transactionOrigin, local);
+    }
+
+    /// <inheritdoc cref="ApplyUpdateV2(byte[], object, bool)"/>
+    public void ApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
+    {
+        WithPooledCopy(update, buffer => ApplyUpdate(new UpdateDecoderV2(buffer), transactionOrigin, local));
+    }
+
+    private void ApplyUpdate(IUpdateDecoder structDecoder, object transactionOrigin, bool local)
     {
         Transact(tr =>
         {
-            using (var structDecoder = new UpdateDecoderV2(input))
-            {
-                EncodingUtils.ReadStructs(structDecoder, tr, Store);
-                Store.ReadAndApplyDeleteSet(structDecoder, tr);
-            }
+            EncodingUtils.ReadStructs(structDecoder, tr, Store);
+            Store.ReadAndApplyDeleteSet(structDecoder, tr);
         }, transactionOrigin, local);
     }
 
-    public void ApplyUpdateV2(byte[] update, object transactionOrigin = null, bool local = false)
+    /// <summary>
+    /// The decoders read from an array; a span is copied into a pooled one first. Nothing
+    /// decoded keeps a reference to the input, so the array can be returned afterwards.
+    /// </summary>
+    private static void WithPooledCopy(ReadOnlySpan<byte> update, Action<Lib0Reader> read)
     {
-        using (var input = new MemoryStream(update, writable: false))
+        var buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(update.Length);
+        try
         {
-            ApplyUpdateV2(input, transactionOrigin, local);
+            update.CopyTo(buffer);
+            read(new Lib0Reader(buffer, 0, update.Length));
+        }
+        finally
+        {
+            System.Buffers.ArrayPool<byte>.Shared.Return(buffer);
         }
     }
 
@@ -391,23 +396,19 @@ public partial class YDoc
     /// </summary>
     public byte[] EncodeStateAsUpdateV2(byte[] encodedTargetStateVector = null)
     {
-        using (var encoder = new UpdateEncoderV2())
-        {
-            var targetStateVector = encodedTargetStateVector == null
-                ? new Dictionary<long, long>()
-                : EncodingUtils.DecodeStateVector(new MemoryStream(encodedTargetStateVector, writable: false));
-            WriteStateAsUpdate(encoder, targetStateVector);
-            return encoder.ToArray();
-        }
+        var encoder = new UpdateEncoderV2();
+        var targetStateVector = encodedTargetStateVector == null
+            ? new Dictionary<long, long>()
+            : EncodingUtils.DecodeStateVector(new Lib0Reader(encodedTargetStateVector));
+        WriteStateAsUpdate(encoder, targetStateVector);
+        return encoder.ToArray();
     }
 
     public byte[] EncodeStateVectorV2()
     {
-        using (var encoder = new DSEncoderV2())
-        {
-            WriteStateVector(encoder);
-            return encoder.ToArray();
-        }
+        var encoder = new DSEncoderV2();
+        WriteStateVector(encoder);
+        return encoder.ToArray();
     }
 
     /// <summary>
@@ -470,13 +471,11 @@ public partial class YDoc
         var handler = UpdateV1;
         if (handler != null)
         {
-            using (var encoder = new UpdateEncoderV1())
+            var encoder = new UpdateEncoderV1();
+            var hasContent = transaction.WriteUpdateMessageFromTransaction(encoder);
+            if (hasContent)
             {
-                var hasContent = transaction.WriteUpdateMessageFromTransaction(encoder);
-                if (hasContent)
-                {
-                    handler.Invoke(this, (encoder.ToArray(), transaction.Origin, transaction));
-                }
+                handler.Invoke(this, (encoder.ToArray(), transaction.Origin, transaction));
             }
         }
     }
@@ -486,13 +485,11 @@ public partial class YDoc
         var handler = UpdateV2;
         if (handler != null)
         {
-            using (var encoder = new UpdateEncoderV2())
+            var encoder = new UpdateEncoderV2();
+            var hasContent = transaction.WriteUpdateMessageFromTransaction(encoder);
+            if (hasContent)
             {
-                var hasContent = transaction.WriteUpdateMessageFromTransaction(encoder);
-                if (hasContent)
-                {
-                    handler.Invoke(this, (encoder.ToArray(), transaction.Origin, transaction));
-                }
+                handler.Invoke(this, (encoder.ToArray(), transaction.Origin, transaction));
             }
         }
     }

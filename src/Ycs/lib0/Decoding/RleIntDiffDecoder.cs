@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -14,8 +14,8 @@ internal class RleIntDiffDecoder : AbstractStreamDecoder<long>
     private long _state;
     private long _count;
 
-    public RleIntDiffDecoder(Stream input, long start, bool leaveOpen = false)
-        : base(input, leaveOpen)
+    public RleIntDiffDecoder(Lib0Reader input, long start)
+        : base(input)
     {
         _state = start;
     }
@@ -23,16 +23,15 @@ internal class RleIntDiffDecoder : AbstractStreamDecoder<long>
     /// <inheritdoc/>
     public override long Read()
     {
-        CheckDisposed();
 
         if (_count == 0)
         {
-            _state += Stream.ReadVarInt().Value;
+            _state += Reader.ReadVarInt().Value;
 
             if (HasContent)
             {
                 // See encoder implementation for the reason why this is incremented.
-                _count = Stream.ReadVarUint() + 1;
+                _count = Reader.ReadVarUint() + 1;
                 Debug.Assert(_count > 0);
             }
             else

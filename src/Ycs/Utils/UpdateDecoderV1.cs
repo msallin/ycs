@@ -13,147 +13,68 @@ namespace Ycs;
 /// </summary>
 internal class DSDecoderV1 : IDSDecoder
 {
-    private readonly bool _leaveOpen;
-
-    public DSDecoderV1(Stream input, bool leaveOpen = false)
+    public DSDecoderV1(Lib0Reader input)
     {
-        _leaveOpen = leaveOpen;
+        ArgumentNullException.ThrowIfNull(input);
         Reader = input;
     }
 
-    public Stream Reader { get; private set; }
-    protected bool Disposed { get; private set; }
-
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        System.GC.SuppressFinalize(this);
-    }
+    public Lib0Reader Reader { get; }
 
     public void ResetDsCurVal()
     {
         // Nothing to do.
     }
 
-    public long ReadDsClock()
-    {
-        CheckDisposed();
-        return Reader.ReadVarUint();
-    }
+    public long ReadDsClock() => Reader.ReadVarUint();
 
     public long ReadDsLength()
     {
-        CheckDisposed();
         var length = Reader.ReadVarUint();
         Debug.Assert(length > 0);
         return length;
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!Disposed)
-        {
-            if (disposing && !_leaveOpen)
-            {
-                Reader?.Dispose();
-            }
-
-            Reader = null;
-            Disposed = true;
-        }
-    }
-
-    protected void CheckDisposed()
-    {
-        if (Disposed)
-        {
-            throw new ObjectDisposedException(nameof(DSDecoderV1));
-        }
     }
 }
 
 internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
 {
-    public UpdateDecoderV1(Stream input, bool leaveOpen = false)
-        : base(input, leaveOpen)
+    public UpdateDecoderV1(Lib0Reader input)
+        : base(input)
     {
     }
 
-    public ID ReadLeftId()
-    {
-        CheckDisposed();
-        return new ID(Reader.ReadVarUint(), Reader.ReadVarUint());
-    }
+    public ID ReadLeftId() => new ID(Reader.ReadVarUint(), Reader.ReadVarUint());
 
-    public ID ReadRightId()
-    {
-        CheckDisposed();
-        return new ID(Reader.ReadVarUint(), Reader.ReadVarUint());
-    }
+    public ID ReadRightId() => new ID(Reader.ReadVarUint(), Reader.ReadVarUint());
 
-    public long ReadClient()
-    {
-        CheckDisposed();
-        return Reader.ReadVarUint();
-    }
+    public long ReadClient() => Reader.ReadVarUint();
 
-    public byte ReadInfo()
-    {
-        CheckDisposed();
-        return (byte)Reader.ReadByte();
-    }
+    public byte ReadInfo() => Reader.ReadByte();
 
-    public string ReadString()
-    {
-        CheckDisposed();
-        return Reader.ReadVarString();
-    }
+    public string ReadString() => Reader.ReadVarString();
 
-    public bool ReadParentInfo()
-    {
-        CheckDisposed();
-        return Reader.ReadVarUint() == 1;
-    }
+    public bool ReadParentInfo() => Reader.ReadVarUint() == 1;
 
-    public uint ReadTypeRef()
-    {
-        CheckDisposed();
-        return Reader.ReadVarUint();
-    }
+    public uint ReadTypeRef() => Reader.ReadVarUint();
 
     public int ReadLength()
     {
-        CheckDisposed();
-        var value = (int)Reader.ReadVarUint();
-        Debug.Assert(value >= 0);
-        return value;
+        var value = Reader.ReadVarUint();
+        if (value > int.MaxValue)
+        {
+            throw new InvalidDataException("Length out of range.");
+        }
+
+        return (int)value;
     }
 
-    public object ReadAny()
-    {
-        CheckDisposed();
-        return Reader.ReadAny();
-    }
+    public object ReadAny() => Reader.ReadAny();
 
-    public byte[] ReadBuffer()
-    {
-        CheckDisposed();
-        return Reader.ReadVarUint8Array();
-    }
+    public byte[] ReadBuffer() => Reader.ReadVarUint8Array();
 
-    public string ReadKey()
-    {
-        CheckDisposed();
-        return Reader.ReadVarString();
-    }
+    public string ReadKey() => Reader.ReadVarString();
 
-    public object ReadJson()
-    {
-        CheckDisposed();
-        var jsonString = Reader.ReadVarString();
-        // Plain CLR values: the same content may be re-encoded with the v2 encoder,
-        // which writes it through WriteAny.
-        return YJson.Parse(jsonString);
-    }
-
+    // Plain CLR values: the same content may be re-encoded with the v2 encoder,
+    // which writes it through WriteAny.
+    public object ReadJson() => YJson.Parse(Reader.ReadVarUint8ArraySpan());
 }

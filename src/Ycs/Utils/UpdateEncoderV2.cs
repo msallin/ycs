@@ -1,9 +1,10 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
 // ------------------------------------------------------------------------------
 
+using System.Buffers;
 using System.Diagnostics;
 
 namespace Ycs;
@@ -12,20 +13,7 @@ internal class DSEncoderV2 : IDSEncoder
 {
     private long _dsCurVal;
 
-    public DSEncoderV2()
-    {
-        _dsCurVal = 0;
-        RestWriter = new MemoryStream();
-    }
-
-    public Stream RestWriter { get; private set; }
-    protected bool Disposed { get; private set; }
-
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        System.GC.SuppressFinalize(this);
-    }
+    public Lib0Writer RestWriter { get; } = new Lib0Writer(256);
 
     public void ResetDsCurVal()
     {
@@ -37,96 +25,67 @@ internal class DSEncoderV2 : IDSEncoder
         var diff = clock - _dsCurVal;
         Debug.Assert(diff >= 0);
         _dsCurVal = clock;
-        RestWriter.WriteVarUint((uint)diff);
+        RestWriter.WriteVarUint((ulong)diff);
     }
 
     public void WriteDsLength(long length)
     {
-        if (length <= 0)
-        {
-            throw new ArgumentOutOfRangeException();
-        }
-
-        RestWriter.WriteVarUint((uint)(length - 1));
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
+        RestWriter.WriteVarUint((ulong)(length - 1));
         _dsCurVal += length;
     }
 
-    public virtual byte[] ToArray()
-    {
-        return ((MemoryStream)RestWriter).ToArray();
-    }
+    public virtual byte[] ToArray() => RestWriter.ToArray();
 
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!Disposed)
-        {
-            if (disposing)
-            {
-                RestWriter.Dispose();
-            }
-
-            RestWriter = null;
-            Disposed = true;
-        }
-    }
+    public virtual void WriteTo(IBufferWriter<byte> destination) => RestWriter.CopyTo(destination);
 }
 
 internal sealed class UpdateEncoderV2 : DSEncoderV2, IUpdateEncoder
 {
     // Refers to the next unique key-identifier to be used.
     private int _keyClock;
-    private IDictionary<string, int> _keyMap;
 
-    private IntDiffOptRleEncoder _keyClockEncoder;
-    private UintOptRleEncoder _clientEncoder;
-    private IntDiffOptRleEncoder _leftClockEncoder;
-    private IntDiffOptRleEncoder _rightClockEncoder;
-    private RleEncoder _infoEncoder;
-    private StringEncoder _stringEncoder;
-    private RleEncoder _parentInfoEncoder;
-    private UintOptRleEncoder _typeRefEncoder;
-    private UintOptRleEncoder _lengthEncoder;
-
-    public UpdateEncoderV2()
-    {
-        _keyClock = 0;
-
-        _keyMap = new Dictionary<string, int>();
-        _keyClockEncoder = new IntDiffOptRleEncoder();
-        _clientEncoder = new UintOptRleEncoder();
-        _leftClockEncoder = new IntDiffOptRleEncoder();
-        _rightClockEncoder = new IntDiffOptRleEncoder();
-        _infoEncoder = new RleEncoder();
-        _stringEncoder = new StringEncoder();
-        _parentInfoEncoder = new RleEncoder();
-        _typeRefEncoder = new UintOptRleEncoder();
-        _lengthEncoder = new UintOptRleEncoder();
-    }
+    private readonly IntDiffOptRleEncoder _keyClockEncoder = new();
+    private readonly UintOptRleEncoder _clientEncoder = new();
+    private readonly IntDiffOptRleEncoder _leftClockEncoder = new();
+    private readonly IntDiffOptRleEncoder _rightClockEncoder = new();
+    private readonly RleEncoder _infoEncoder = new();
+    private readonly StringEncoder _stringEncoder = new();
+    private readonly RleEncoder _parentInfoEncoder = new();
+    private readonly UintOptRleEncoder _typeRefEncoder = new();
+    private readonly UintOptRleEncoder _lengthEncoder = new();
 
     public override byte[] ToArray()
     {
-        using (var stream = new MemoryStream())
+        var output = new ArrayBufferWriter<byte>(RestWriter.Length + 256);
+        WriteTo(output);
+        return output.WrittenSpan.ToArray();
+    }
+
+    public override void WriteTo(IBufferWriter<byte> destination)
+    {
+        // Feature flag that might be used in the future.
+        destination.GetSpan(1)[0] = 0;
+        destination.Advance(1);
+
+        WriteColumn(destination, _keyClockEncoder.GetWrittenSpan());
+        WriteColumn(destination, _clientEncoder.GetWrittenSpan());
+        WriteColumn(destination, _leftClockEncoder.GetWrittenSpan());
+        WriteColumn(destination, _rightClockEncoder.GetWrittenSpan());
+        WriteColumn(destination, _infoEncoder.GetWrittenSpan());
+        WriteColumn(destination, _stringEncoder.GetWrittenSpan());
+        WriteColumn(destination, _parentInfoEncoder.GetWrittenSpan());
+        WriteColumn(destination, _typeRefEncoder.GetWrittenSpan());
+        WriteColumn(destination, _lengthEncoder.GetWrittenSpan());
+
+        // Append the rest of the data from the RestWriter.
+        // Note it's not the 'WriteVarUint8Array'.
+        RestWriter.CopyTo(destination);
+
+        static void WriteColumn(IBufferWriter<byte> destination, ReadOnlySpan<byte> column)
         {
-            // Read the feature flag that might be used in the future.
-            stream.WriteByte(0);
-
-            // TODO: [alekseyk] Maybe pass the writer directly instead of using ToArray()?
-            stream.WriteVarUint8Array(_keyClockEncoder.ToArray());
-            stream.WriteVarUint8Array(_clientEncoder.ToArray());
-            stream.WriteVarUint8Array(_leftClockEncoder.ToArray());
-            stream.WriteVarUint8Array(_rightClockEncoder.ToArray());
-            stream.WriteVarUint8Array(_infoEncoder.ToArray());
-            stream.WriteVarUint8Array(_stringEncoder.ToArray());
-            stream.WriteVarUint8Array(_parentInfoEncoder.ToArray());
-            stream.WriteVarUint8Array(_typeRefEncoder.ToArray());
-            stream.WriteVarUint8Array(_lengthEncoder.ToArray());
-
-            // Append the rest of the data from the RestWriter.
-            // Note it's not the 'WriteVarUint8Array'.
-            var content = base.ToArray();
-            stream.Write(content, 0, content.Length);
-
-            return stream.ToArray();
+            Lib0Writer.WriteVarUint(destination, (uint)column.Length);
+            destination.Write(column);
         }
     }
 
@@ -142,30 +101,17 @@ internal sealed class UpdateEncoderV2 : DSEncoderV2, IUpdateEncoder
         _rightClockEncoder.Write(id.Clock);
     }
 
-    public void WriteClient(long client)
-    {
-        _clientEncoder.Write((uint)client);
-    }
+    public void WriteClient(long client) => _clientEncoder.Write((uint)client);
 
-    public void WriteInfo(byte info)
-    {
-        _infoEncoder.Write(info);
-    }
+    public void WriteInfo(byte info) => _infoEncoder.Write(info);
 
-    public void WriteString(string s)
-    {
-        _stringEncoder.Write(s);
-    }
+    public void WriteString(string s) => _stringEncoder.Write(s);
 
-    public void WriteParentInfo(bool isYKey)
-    {
-        _parentInfoEncoder.Write((byte)(isYKey ? 1 : 0));
-    }
+    public void WriteString(ReadOnlySpan<char> s) => _stringEncoder.Write(s);
 
-    public void WriteTypeRef(uint info)
-    {
-        _typeRefEncoder.Write(info);
-    }
+    public void WriteParentInfo(bool isYKey) => _parentInfoEncoder.Write((byte)(isYKey ? 1 : 0));
+
+    public void WriteTypeRef(uint info) => _typeRefEncoder.Write(info);
 
     public void WriteLength(int len)
     {
@@ -173,30 +119,22 @@ internal sealed class UpdateEncoderV2 : DSEncoderV2, IUpdateEncoder
         _lengthEncoder.Write((uint)len);
     }
 
-    public void WriteAny(object any)
-    {
-        RestWriter.WriteAny(any);
-    }
+    public void WriteAny(object any) => RestWriter.WriteAny(any);
 
-    public void WriteBuffer(byte[] data)
-    {
-        RestWriter.WriteVarUint8Array(data);
-    }
+    public void WriteBuffer(ReadOnlySpan<byte> data) => RestWriter.WriteVarUint8Array(data);
 
     /// <summary>
     /// Property keys are often reused. For example, in y-prosemirror the key 'bold'
     /// might occur very often. For a 3D application, the key 'position' might occur often.
     /// <br/>
-    /// We can these keys in a map and refer to them via a unique number.
+    /// Yjs could cache these keys in a map and refer to them via a unique number, but it
+    /// never enabled that (see <c>UpdateEncoderV2#writeKey</c>): every key gets a fresh
+    /// clock and is written out. We do the same so the bytes match.
     /// </summary>
     public void WriteKey(string key)
     {
         _keyClockEncoder.Write(_keyClock++);
-
-        if (!_keyMap.ContainsKey(key))
-        {
-            _stringEncoder.Write(key);
-        }
+        _stringEncoder.Write(key);
     }
 
     /// <summary>
@@ -204,41 +142,5 @@ internal sealed class UpdateEncoderV2 : DSEncoderV2, IUpdateEncoder
     /// generic 'any' encoding rather than as a JSON string (see Yjs'
     /// UpdateEncoderV2#writeJSON).
     /// </summary>
-    public void WriteJson<T>(T any)
-    {
-        RestWriter.WriteAny(any);
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (!Disposed)
-        {
-            if (disposing)
-            {
-                _keyMap.Clear();
-                _keyClockEncoder.Dispose();
-                _clientEncoder.Dispose();
-                _leftClockEncoder.Dispose();
-                _rightClockEncoder.Dispose();
-                _infoEncoder.Dispose();
-                _stringEncoder.Dispose();
-                _parentInfoEncoder.Dispose();
-                _typeRefEncoder.Dispose();
-                _lengthEncoder.Dispose();
-            }
-
-            _keyMap = null;
-            _keyClockEncoder = null;
-            _clientEncoder = null;
-            _leftClockEncoder = null;
-            _rightClockEncoder = null;
-            _infoEncoder = null;
-            _stringEncoder = null;
-            _parentInfoEncoder = null;
-            _typeRefEncoder = null;
-            _lengthEncoder = null;
-        }
-
-        base.Dispose(disposing);
-    }
+    public void WriteJson(object any) => RestWriter.WriteAny(any);
 }

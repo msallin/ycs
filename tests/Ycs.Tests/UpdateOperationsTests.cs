@@ -6,7 +6,6 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -457,17 +456,15 @@ public class UpdateOperationsTests
 
     private static byte[] EncodeEmptyStateVector()
     {
-        using (var ms = new MemoryStream())
-        {
-            ms.WriteVarUint(0);
-            return ms.ToArray();
-        }
+        var ms = new Lib0Writer();
+        ms.WriteVarUint(0);
+        return ms.ToArray();
     }
 
     private static void AssertStateVectorsEqual(byte[] a, byte[] b)
     {
-        var svA = EncodingUtils.DecodeStateVector(new MemoryStream(a, writable: false));
-        var svB = EncodingUtils.DecodeStateVector(new MemoryStream(b, writable: false));
+        var svA = EncodingUtils.DecodeStateVector(new Lib0Reader(a));
+        var svB = EncodingUtils.DecodeStateVector(new Lib0Reader(b));
 
         Assert.AreEqual(svA.Count, svB.Count, "State vectors have a different number of clients.");
         foreach (var kvp in svA)

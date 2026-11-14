@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -215,7 +215,7 @@ internal static class EncodingUtils
         return ss;
     }
 
-    public static IDictionary<long, long> DecodeStateVector(Stream input)
+    public static IDictionary<long, long> DecodeStateVector(Lib0Reader input)
     {
         return ReadStateVector(new DSDecoderV2(input));
     }

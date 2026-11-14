@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -28,7 +28,6 @@ internal class RleEncoder : AbstractStreamEncoder<byte>
     /// <inheritdoc/>
     public override void Write(byte value)
     {
-        CheckDisposed();
 
         if (_state == value)
         {
@@ -40,10 +39,10 @@ internal class RleEncoder : AbstractStreamEncoder<byte>
             {
                 // Flush counter, unless this is the first value (count = 0).
                 // Since 'count' is always >0, we can decrement by one. Non-standard encoding.
-                Stream.WriteVarUint(_count - 1);
+                Writer.WriteVarUint(_count - 1);
             }
 
-            Stream.WriteByte(value);
+            Writer.WriteByte(value);
 
             _count = 1;
             _state = value;

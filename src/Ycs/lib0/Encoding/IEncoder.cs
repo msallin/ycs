@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -6,20 +6,12 @@
 
 namespace Ycs;
 
-/// <seealso cref="IDecoder{T}"/>
-internal interface IEncoder<T> : IDisposable
+internal interface IEncoder<T>
 {
     void Write(T value);
 
     /// <summary>
-    /// Returns a copy of the encode contents.
+    /// Flushes the pending run and returns the encoded bytes. Call once, after the last write.
     /// </summary>
-    byte[] ToArray();
-
-    /// <summary>
-    /// Returns the current raw buffer of the encoder.
-    /// This buffer is valid only until the encoder is not disposed.
-    /// </summary>
-    /// <returns></returns>
-    (byte[] buffer, int length) GetBuffer();
+    ReadOnlySpan<byte> GetWrittenSpan();
 }

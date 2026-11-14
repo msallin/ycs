@@ -1,44 +1,38 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.Diagnostics;
-
 namespace Ycs;
 
-/// <seealso cref="StringEncoder"/>
-internal class StringDecoder : IDecoder<string>
+/// <summary>
+/// Decoder for <see cref="StringEncoder"/> (lib0 <c>StringDecoder</c>).
+/// </summary>
+internal sealed class StringDecoder : IDecoder<string>
 {
-    private UintOptRleDecoder _lengthDecoder;
+    private readonly UintOptRleDecoder _lengthDecoder;
     private string _value;
     private int _pos;
-    private bool _disposed;
 
-    public StringDecoder(Stream input, bool leaveOpen = false)
+    public StringDecoder(Lib0Reader input)
     {
-        Debug.Assert(input != null);
-
+        ArgumentNullException.ThrowIfNull(input);
         _value = input.ReadVarString();
-        _lengthDecoder = new UintOptRleDecoder(input, leaveOpen);
+        _lengthDecoder = new UintOptRleDecoder(input);
     }
 
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        System.GC.SuppressFinalize(this);
-    }
-
-    /// <inheritdoc/>
     public string Read()
     {
-        CheckDisposed();
-
         var length = (int)_lengthDecoder.Read();
         if (length == 0)
         {
             return string.Empty;
+        }
+
+        if (_value == null || (uint)length > (uint)(_value.Length - _pos))
+        {
+            throw new InvalidDataException("String length out of range.");
         }
 
         var result = _value.Substring(_pos, length);
@@ -52,28 +46,5 @@ internal class StringDecoder : IDecoder<string>
         }
 
         return result;
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!_disposed)
-        {
-            if (disposing)
-            {
-                _lengthDecoder?.Dispose();
-            }
-
-            _lengthDecoder = null;
-            _disposed = true;
-        }
-    }
-
-    [Conditional("DEBUG")]
-    protected void CheckDisposed()
-    {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(GetType().ToString());
-        }
     }
 }

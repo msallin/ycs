@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -42,7 +42,6 @@ internal class IntDiffOptRleEncoder : AbstractStreamEncoder<long>
     public override void Write(long value)
     {
         Debug.Assert(value <= Bits.Bits30);
-        CheckDisposed();
 
         if (_diff == value - _state)
         {
@@ -62,7 +61,6 @@ internal class IntDiffOptRleEncoder : AbstractStreamEncoder<long>
     protected override void Flush()
     {
         WriteEncodedValue();
-        base.Flush();
     }
 
     private void WriteEncodedValue()
@@ -76,12 +74,12 @@ internal class IntDiffOptRleEncoder : AbstractStreamEncoder<long>
             // and so decodes one short, shifting every later value in the stream.
             var encodedDiff = _diff * 2 + (_count == 1 ? 0 : 1);
 
-            Stream.WriteVarInt(encodedDiff);
+            Writer.WriteVarInt(encodedDiff);
 
             if (_count > 1)
             {
                 // Since count is always >1, we can decrement by one. Non-standard encoding.
-                Stream.WriteVarUint(_count - 2);
+                Writer.WriteVarUint(_count - 2);
             }
         }
     }

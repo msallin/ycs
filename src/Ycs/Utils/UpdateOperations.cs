@@ -111,7 +111,7 @@ public static class UpdateOperations
         return MergeUpdatesCore(updates, s => new UpdateDecoderV2(s), () => new UpdateEncoderV2());
     }
 
-    private static byte[] MergeUpdatesCore(IList<byte[]> updates, Func<Stream, IUpdateDecoder> newDecoder, Func<IUpdateEncoder> newEncoder)
+    private static byte[] MergeUpdatesCore(IList<byte[]> updates, Func<Lib0Reader, IUpdateDecoder> newDecoder, Func<IUpdateEncoder> newEncoder)
     {
         if (updates.Count == 1)
         {
@@ -119,167 +119,155 @@ public static class UpdateOperations
         }
 
         var updateDecoders = updates
-            .Select(u => newDecoder(new MemoryStream(u, writable: false)))
+            .Select(u => newDecoder(new Lib0Reader(u)))
             .ToList();
 
-        try
+        var lazyStructDecoders = updateDecoders
+            .Select(d => new LazyStructReader(d, filterSkips: true))
+            .ToList();
+
+        WriteState currWrite = null;
+
+        var updateEncoder = newEncoder();
+        var lazyStructEncoder = new LazyStructWriter(updateEncoder);
+
+        // Note: we need to ensure that all lazyStructDecoders are fully consumed.
+        // Note: should merge document updates whenever possible - even from different updates.
+        // Note: should handle that some operations cannot be applied yet.
+        while (true)
         {
-            var lazyStructDecoders = updateDecoders
-                .Select(d => new LazyStructReader(d, filterSkips: true))
-                .ToList();
-
-            WriteState currWrite = null;
-
-            using (var updateEncoder = newEncoder())
+            // Write higher clients first - sort by clientID & clock and remove decoders without content.
+            lazyStructDecoders = lazyStructDecoders.Where(dec => dec.Curr != null).ToList();
+            lazyStructDecoders.Sort((dec1, dec2) =>
             {
-                var lazyStructEncoder = new LazyStructWriter(updateEncoder);
-
-                // Note: we need to ensure that all lazyStructDecoders are fully consumed.
-                // Note: should merge document updates whenever possible - even from different updates.
-                // Note: should handle that some operations cannot be applied yet.
-                while (true)
+                if (dec1.Curr.Id.Client == dec2.Curr.Id.Client)
                 {
-                    // Write higher clients first - sort by clientID & clock and remove decoders without content.
-                    lazyStructDecoders = lazyStructDecoders.Where(dec => dec.Curr != null).ToList();
-                    lazyStructDecoders.Sort((dec1, dec2) =>
+                    var clockCompare = dec1.Curr.Id.Clock.CompareTo(dec2.Curr.Id.Clock);
+                    if (clockCompare == 0)
                     {
-                        if (dec1.Curr.Id.Client == dec2.Curr.Id.Client)
-                        {
-                            var clockCompare = dec1.Curr.Id.Clock.CompareTo(dec2.Curr.Id.Clock);
-                            if (clockCompare == 0)
-                            {
-                                // Remove references to Skip since the struct decoders must filter Skips anyway.
-                                return dec1.Curr.GetType() == dec2.Curr.GetType() ? 0 : (dec1.Curr is Skip ? 1 : -1);
-                            }
-
-                            return clockCompare;
-                        }
-
-                        return dec2.Curr.Id.Client.CompareTo(dec1.Curr.Id.Client);
-                    });
-
-                    if (lazyStructDecoders.Count == 0)
-                    {
-                        break;
+                        // Remove references to Skip since the struct decoders must filter Skips anyway.
+                        return dec1.Curr.GetType() == dec2.Curr.GetType() ? 0 : (dec1.Curr is Skip ? 1 : -1);
                     }
 
-                    var currDecoder = lazyStructDecoders[0];
+                    return clockCompare;
+                }
 
-                    // Write from currDecoder until the next operation is from another client or if
-                    // filler-struct, then we need to reorder the decoders and find the next operation to write.
-                    var firstClient = currDecoder.Curr.Id.Client;
+                return dec2.Curr.Id.Client.CompareTo(dec1.Curr.Id.Client);
+            });
 
-                    if (currWrite != null)
+            if (lazyStructDecoders.Count == 0)
+            {
+                break;
+            }
+
+            var currDecoder = lazyStructDecoders[0];
+
+            // Write from currDecoder until the next operation is from another client or if
+            // filler-struct, then we need to reorder the decoders and find the next operation to write.
+            var firstClient = currDecoder.Curr.Id.Client;
+
+            if (currWrite != null)
+            {
+                var curr = currDecoder.Curr;
+                var iterated = false;
+
+                // Iterate until we find something that we haven't written already.
+                // Remember: first the high client-ids are written.
+                while (curr != null &&
+                       curr.Id.Clock + curr.Length <= currWrite.Struct.Id.Clock + currWrite.Struct.Length &&
+                       curr.Id.Client >= currWrite.Struct.Id.Client)
+                {
+                    curr = currDecoder.Next();
+                    iterated = true;
+                }
+
+                if (curr == null || // Current decoder is empty.
+                    curr.Id.Client != firstClient || // Check whether there is another decoder that has updates from 'firstClient'.
+                    (iterated && curr.Id.Clock > currWrite.Struct.Id.Clock + currWrite.Struct.Length)) // The above while loop was used and we are potentially missing updates.
+                {
+                    continue;
+                }
+
+                if (firstClient != currWrite.Struct.Id.Client)
+                {
+                    LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
+                    currWrite = new WriteState { Struct = curr, Offset = 0 };
+                    currDecoder.Next();
+                }
+                else
+                {
+                    if (currWrite.Struct.Id.Clock + currWrite.Struct.Length < curr.Id.Clock)
                     {
-                        var curr = currDecoder.Curr;
-                        var iterated = false;
-
-                        // Iterate until we find something that we haven't written already.
-                        // Remember: first the high client-ids are written.
-                        while (curr != null &&
-                               curr.Id.Clock + curr.Length <= currWrite.Struct.Id.Clock + currWrite.Struct.Length &&
-                               curr.Id.Client >= currWrite.Struct.Id.Client)
+                        if (currWrite.Struct is Skip currSkip)
                         {
-                            curr = currDecoder.Next();
-                            iterated = true;
+                            // Extend existing skip.
+                            currSkip.SetLength((int)(curr.Id.Clock + curr.Length - currWrite.Struct.Id.Clock));
+                        }
+                        else
+                        {
+                            LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
+                            var gapLength = curr.Id.Clock - currWrite.Struct.Id.Clock - currWrite.Struct.Length;
+                            var skip = new Skip(new ID(firstClient, currWrite.Struct.Id.Clock + currWrite.Struct.Length), (int)gapLength);
+                            currWrite = new WriteState { Struct = skip, Offset = 0 };
+                        }
+                    }
+                    else
+                    {
+                        var diff = currWrite.Struct.Id.Clock + currWrite.Struct.Length - curr.Id.Clock;
+                        if (diff > 0)
+                        {
+                            if (currWrite.Struct is Skip skipToTrim)
+                            {
+                                // Prefer to slice Skip because the other struct might contain more information.
+                                skipToTrim.SetLength((int)(skipToTrim.Length - diff));
+                            }
+                            else
+                            {
+                                curr = SliceStruct(curr, (int)diff);
+                            }
                         }
 
-                        if (curr == null || // Current decoder is empty.
-                            curr.Id.Client != firstClient || // Check whether there is another decoder that has updates from 'firstClient'.
-                            (iterated && curr.Id.Clock > currWrite.Struct.Id.Clock + currWrite.Struct.Length)) // The above while loop was used and we are potentially missing updates.
-                        {
-                            continue;
-                        }
-
-                        if (firstClient != currWrite.Struct.Id.Client)
+                        if (!currWrite.Struct.MergeWith(curr))
                         {
                             LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
                             currWrite = new WriteState { Struct = curr, Offset = 0 };
                             currDecoder.Next();
                         }
-                        else
-                        {
-                            if (currWrite.Struct.Id.Clock + currWrite.Struct.Length < curr.Id.Clock)
-                            {
-                                if (currWrite.Struct is Skip currSkip)
-                                {
-                                    // Extend existing skip.
-                                    currSkip.SetLength((int)(curr.Id.Clock + curr.Length - currWrite.Struct.Id.Clock));
-                                }
-                                else
-                                {
-                                    LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
-                                    var gapLength = curr.Id.Clock - currWrite.Struct.Id.Clock - currWrite.Struct.Length;
-                                    var skip = new Skip(new ID(firstClient, currWrite.Struct.Id.Clock + currWrite.Struct.Length), (int)gapLength);
-                                    currWrite = new WriteState { Struct = skip, Offset = 0 };
-                                }
-                            }
-                            else
-                            {
-                                var diff = currWrite.Struct.Id.Clock + currWrite.Struct.Length - curr.Id.Clock;
-                                if (diff > 0)
-                                {
-                                    if (currWrite.Struct is Skip skipToTrim)
-                                    {
-                                        // Prefer to slice Skip because the other struct might contain more information.
-                                        skipToTrim.SetLength((int)(skipToTrim.Length - diff));
-                                    }
-                                    else
-                                    {
-                                        curr = SliceStruct(curr, (int)diff);
-                                    }
-                                }
-
-                                if (!currWrite.Struct.MergeWith(curr))
-                                {
-                                    LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
-                                    currWrite = new WriteState { Struct = curr, Offset = 0 };
-                                    currDecoder.Next();
-                                }
-                            }
-                        }
-                    }
-                    else
-                    {
-                        currWrite = new WriteState { Struct = currDecoder.Curr, Offset = 0 };
-                        currDecoder.Next();
-                    }
-
-                    for (var next = currDecoder.Curr;
-                         next != null &&
-                         next.Id.Client == firstClient &&
-                         next.Id.Clock == currWrite.Struct.Id.Clock + currWrite.Struct.Length &&
-                         !(next is Skip);
-                         next = currDecoder.Next())
-                    {
-                        LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
-                        currWrite = new WriteState { Struct = next, Offset = 0 };
                     }
                 }
-
-                if (currWrite != null)
-                {
-                    LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
-                }
-
-                LazyStructWriter.Finish(lazyStructEncoder);
-
-                // Every decoder above was drained (Curr == null) before the loop could exit, so
-                // each one's stream is now positioned right at the start of its delete set.
-                var deleteSets = updateDecoders.Select(DeleteSet.Read).ToList();
-                var mergedDeleteSet = MergeDeleteSets(deleteSets);
-                mergedDeleteSet.Write(updateEncoder);
-
-                return updateEncoder.ToArray();
             }
-        }
-        finally
-        {
-            foreach (var decoder in updateDecoders)
+            else
             {
-                decoder.Dispose();
+                currWrite = new WriteState { Struct = currDecoder.Curr, Offset = 0 };
+                currDecoder.Next();
+            }
+
+            for (var next = currDecoder.Curr;
+                 next != null &&
+                 next.Id.Client == firstClient &&
+                 next.Id.Clock == currWrite.Struct.Id.Clock + currWrite.Struct.Length &&
+                 !(next is Skip);
+                 next = currDecoder.Next())
+            {
+                LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
+                currWrite = new WriteState { Struct = next, Offset = 0 };
             }
         }
+
+        if (currWrite != null)
+        {
+            LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
+        }
+
+        LazyStructWriter.Finish(lazyStructEncoder);
+
+        // Every decoder above was drained (Curr == null) before the loop could exit, so
+        // each one's stream is now positioned right at the start of its delete set.
+        var deleteSets = updateDecoders.Select(DeleteSet.Read).ToList();
+        var mergedDeleteSet = MergeDeleteSets(deleteSets);
+        mergedDeleteSet.Write(updateEncoder);
+
+        return updateEncoder.ToArray();
     }
 
     /// <summary>
@@ -406,12 +394,10 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] DiffUpdate(byte[] update, byte[] stateVector)
     {
-        using (var decoder = new UpdateDecoderV1(new MemoryStream(update, writable: false)))
-        using (var encoder = new UpdateEncoderV1())
-        {
-            DiffUpdateCore(decoder, stateVector, encoder);
-            return encoder.ToArray();
-        }
+        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
+        var encoder = new UpdateEncoderV1();
+        DiffUpdateCore(decoder, stateVector, encoder);
+        return encoder.ToArray();
     }
 
     /// <summary>
@@ -419,17 +405,15 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] DiffUpdateV2(byte[] update, byte[] stateVector)
     {
-        using (var decoder = new UpdateDecoderV2(new MemoryStream(update, writable: false)))
-        using (var encoder = new UpdateEncoderV2())
-        {
-            DiffUpdateCore(decoder, stateVector, encoder);
-            return encoder.ToArray();
-        }
+        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
+        var encoder = new UpdateEncoderV2();
+        DiffUpdateCore(decoder, stateVector, encoder);
+        return encoder.ToArray();
     }
 
     private static void DiffUpdateCore(IUpdateDecoder decoder, byte[] stateVector, IUpdateEncoder encoder)
     {
-        var state = EncodingUtils.DecodeStateVector(new MemoryStream(stateVector, writable: false));
+        var state = EncodingUtils.DecodeStateVector(new Lib0Reader(stateVector));
         var lazyStructWriter = new LazyStructWriter(encoder);
         var reader = new LazyStructReader(decoder, filterSkips: false);
 
@@ -485,10 +469,8 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] EncodeStateVectorFromUpdate(byte[] update)
     {
-        using (var decoder = new UpdateDecoderV1(new MemoryStream(update, writable: false)))
-        {
-            return EncodeStateVectorFromUpdateCore(decoder);
-        }
+        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
+        return EncodeStateVectorFromUpdateCore(decoder);
     }
 
     /// <summary>
@@ -496,10 +478,8 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] EncodeStateVectorFromUpdateV2(byte[] update)
     {
-        using (var decoder = new UpdateDecoderV2(new MemoryStream(update, writable: false)))
-        {
-            return EncodeStateVectorFromUpdateCore(decoder);
-        }
+        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
+        return EncodeStateVectorFromUpdateCore(decoder);
     }
 
     private static byte[] EncodeStateVectorFromUpdateCore(IUpdateDecoder decoder)
@@ -548,17 +528,15 @@ public static class UpdateOperations
             }
         }
 
-        using (var ms = new MemoryStream())
+        var writer = new Lib0Writer();
+        writer.WriteVarUint((uint)pairs.Count);
+        foreach (var (client, clock) in pairs)
         {
-            ms.WriteVarUint((uint)pairs.Count);
-            foreach (var (client, clock) in pairs)
-            {
-                ms.WriteVarUint((uint)client);
-                ms.WriteVarUint((uint)clock);
-            }
-
-            return ms.ToArray();
+            writer.WriteVarUint((ulong)client);
+            writer.WriteVarUint((ulong)clock);
         }
+
+        return writer.ToArray();
     }
 
     #endregion
@@ -571,10 +549,8 @@ public static class UpdateOperations
     /// </summary>
     public static UpdateMeta ParseUpdateMeta(byte[] update)
     {
-        using (var decoder = new UpdateDecoderV1(new MemoryStream(update, writable: false)))
-        {
-            return ParseUpdateMetaCore(decoder);
-        }
+        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
+        return ParseUpdateMetaCore(decoder);
     }
 
     /// <summary>
@@ -582,10 +558,8 @@ public static class UpdateOperations
     /// </summary>
     public static UpdateMeta ParseUpdateMetaV2(byte[] update)
     {
-        using (var decoder = new UpdateDecoderV2(new MemoryStream(update, writable: false)))
-        {
-            return ParseUpdateMetaCore(decoder);
-        }
+        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
+        return ParseUpdateMetaCore(decoder);
     }
 
     private static UpdateMeta ParseUpdateMetaCore(IUpdateDecoder decoder)
@@ -633,12 +607,10 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] ConvertUpdateFormatV1ToV2(byte[] update)
     {
-        using (var decoder = new UpdateDecoderV1(new MemoryStream(update, writable: false)))
-        using (var encoder = new UpdateEncoderV2())
-        {
-            ConvertUpdateFormatCore(decoder, encoder);
-            return encoder.ToArray();
-        }
+        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
+        var encoder = new UpdateEncoderV2();
+        ConvertUpdateFormatCore(decoder, encoder);
+        return encoder.ToArray();
     }
 
     /// <summary>
@@ -646,12 +618,10 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] ConvertUpdateFormatV2ToV1(byte[] update)
     {
-        using (var decoder = new UpdateDecoderV2(new MemoryStream(update, writable: false)))
-        using (var encoder = new UpdateEncoderV1())
-        {
-            ConvertUpdateFormatCore(decoder, encoder);
-            return encoder.ToArray();
-        }
+        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
+        var encoder = new UpdateEncoderV1();
+        ConvertUpdateFormatCore(decoder, encoder);
+        return encoder.ToArray();
     }
 
     private static void ConvertUpdateFormatCore(IUpdateDecoder decoder, IUpdateEncoder encoder)
@@ -680,10 +650,8 @@ public static class UpdateOperations
     /// </summary>
     public static DecodedUpdate DecodeUpdate(byte[] update)
     {
-        using (var decoder = new UpdateDecoderV1(new MemoryStream(update, writable: false)))
-        {
-            return DecodeUpdateCore(decoder);
-        }
+        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
+        return DecodeUpdateCore(decoder);
     }
 
     /// <summary>
@@ -691,10 +659,8 @@ public static class UpdateOperations
     /// </summary>
     public static DecodedUpdate DecodeUpdateV2(byte[] update)
     {
-        using (var decoder = new UpdateDecoderV2(new MemoryStream(update, writable: false)))
-        {
-            return DecodeUpdateCore(decoder);
-        }
+        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
+        return DecodeUpdateCore(decoder);
     }
 
     private static DecodedUpdate DecodeUpdateCore(IUpdateDecoder decoder)

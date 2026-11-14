@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -6,9 +6,9 @@
 
 namespace Ycs;
 
-internal interface IDSDecoder : IDisposable
+internal interface IDSDecoder
 {
-    Stream Reader { get; }
+    Lib0Reader Reader { get; }
 
     void ResetDsCurVal();
     long ReadDsClock();

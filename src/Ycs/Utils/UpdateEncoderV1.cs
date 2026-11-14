@@ -4,6 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
+using System.Buffers;
 using System.Diagnostics;
 
 namespace Ycs;
@@ -16,21 +17,9 @@ namespace Ycs;
 /// </summary>
 internal class DSEncoderV1 : IDSEncoder
 {
-    public DSEncoderV1()
-    {
-        RestWriter = new MemoryStream();
-    }
+    public Lib0Writer RestWriter { get; } = new Lib0Writer(256);
 
-    public Stream RestWriter { get; private set; }
-    protected bool Disposed { get; private set; }
-
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        System.GC.SuppressFinalize(this);
-    }
-
-    // ponytail: v1 writes absolute clocks, so there is no running diff to reset.
+    // v1 writes absolute clocks, so there is no running diff to reset.
     public void ResetDsCurVal()
     {
         // Nothing to do.
@@ -39,78 +28,49 @@ internal class DSEncoderV1 : IDSEncoder
     public void WriteDsClock(long clock)
     {
         Debug.Assert(clock >= 0);
-        RestWriter.WriteVarUint((uint)clock);
+        RestWriter.WriteVarUint((ulong)clock);
     }
 
     public void WriteDsLength(long length)
     {
-        if (length <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(length));
-        }
-
-        RestWriter.WriteVarUint((uint)length);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(length);
+        RestWriter.WriteVarUint((ulong)length);
     }
 
-    public virtual byte[] ToArray()
-    {
-        return ((MemoryStream)RestWriter).ToArray();
-    }
+    public byte[] ToArray() => RestWriter.ToArray();
 
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!Disposed)
-        {
-            if (disposing)
-            {
-                RestWriter.Dispose();
-            }
-
-            RestWriter = null;
-            Disposed = true;
-        }
-    }
+    public void WriteTo(IBufferWriter<byte> destination) => RestWriter.CopyTo(destination);
 }
 
 internal sealed class UpdateEncoderV1 : DSEncoderV1, IUpdateEncoder
 {
     public void WriteLeftId(ID id)
     {
-        RestWriter.WriteVarUint((uint)id.Client);
-        RestWriter.WriteVarUint((uint)id.Clock);
+        RestWriter.WriteVarUint((ulong)id.Client);
+        RestWriter.WriteVarUint((ulong)id.Clock);
     }
 
     public void WriteRightId(ID id)
     {
-        RestWriter.WriteVarUint((uint)id.Client);
-        RestWriter.WriteVarUint((uint)id.Clock);
+        RestWriter.WriteVarUint((ulong)id.Client);
+        RestWriter.WriteVarUint((ulong)id.Clock);
     }
 
     public void WriteClient(long client)
     {
         Debug.Assert(client >= 0);
-        RestWriter.WriteVarUint((uint)client);
+        RestWriter.WriteVarUint((ulong)client);
     }
 
-    public void WriteInfo(byte info)
-    {
-        RestWriter.WriteByte(info);
-    }
+    public void WriteInfo(byte info) => RestWriter.WriteByte(info);
 
-    public void WriteString(string s)
-    {
-        RestWriter.WriteVarString(s);
-    }
+    public void WriteString(string s) => RestWriter.WriteVarString(s);
 
-    public void WriteParentInfo(bool isYKey)
-    {
-        RestWriter.WriteVarUint(isYKey ? 1u : 0u);
-    }
+    public void WriteString(ReadOnlySpan<char> s) => RestWriter.WriteVarString(s);
 
-    public void WriteTypeRef(uint info)
-    {
-        RestWriter.WriteVarUint(info);
-    }
+    public void WriteParentInfo(bool isYKey) => RestWriter.WriteVarUint(isYKey ? 1u : 0u);
+
+    public void WriteTypeRef(uint info) => RestWriter.WriteVarUint(info);
 
     public void WriteLength(int len)
     {
@@ -118,24 +78,11 @@ internal sealed class UpdateEncoderV1 : DSEncoderV1, IUpdateEncoder
         RestWriter.WriteVarUint((uint)len);
     }
 
-    public void WriteAny(object any)
-    {
-        RestWriter.WriteAny(any);
-    }
+    public void WriteAny(object any) => RestWriter.WriteAny(any);
 
-    public void WriteBuffer(byte[] data)
-    {
-        RestWriter.WriteVarUint8Array(data);
-    }
+    public void WriteBuffer(ReadOnlySpan<byte> data) => RestWriter.WriteVarUint8Array(data);
 
-    public void WriteKey(string key)
-    {
-        RestWriter.WriteVarString(key);
-    }
+    public void WriteKey(string key) => RestWriter.WriteVarString(key);
 
-    public void WriteJson<T>(T any)
-    {
-        var jsonString = YJson.Stringify(any);
-        RestWriter.WriteVarString(jsonString);
-    }
+    public void WriteJson(object any) => RestWriter.WriteVarString(YJson.Stringify(any));
 }

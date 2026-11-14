@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -11,8 +11,8 @@ internal class IntDiffDecoder : AbstractStreamDecoder<long>
 {
     private long _state;
 
-    public IntDiffDecoder(Stream input, long start, bool leaveOpen = false)
-        : base(input, leaveOpen)
+    public IntDiffDecoder(Lib0Reader input, long start)
+        : base(input)
     {
         _state = start;
     }
@@ -20,9 +20,8 @@ internal class IntDiffDecoder : AbstractStreamDecoder<long>
     /// <inheritdoc/>
     public override long Read()
     {
-        CheckDisposed();
 
-        _state += Stream.ReadVarInt().Value;
+        _state += Reader.ReadVarInt().Value;
         return _state;
     }
 }

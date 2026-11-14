@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -55,15 +55,6 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             TypeId = new ID(type._item.Id.Client, type._item.Id.Clock);
         }
     }
-
-    /*
-    public RelativePosition(dynamic json)
-    {
-        TypeId = json.type == null ? (ID?)null : new ID((long)json.type.client, (long)json.type.clock);
-        TName = json.tname ?? null;
-        Item = json.item == null ? (ID?)null : new ID((long)json.item.client, (long)json.item.clock);
-    }
-    */
 
     private RelativePosition(ID? typeId, string tname, ID? item, int assoc)
     {
@@ -197,7 +188,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         return new ID(Convert.ToInt64(dict["client"]), Convert.ToInt64(dict["clock"]));
     }
 
-    public void Write(Stream writer)
+    internal void Write(Lib0Writer writer)
     {
         if (Item != null)
         {
@@ -222,18 +213,15 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             throw new Exception();
         }
 
-        writer.WriteVarInt(Assoc, treatZeroAsNegative: false);
+        writer.WriteVarInt(Assoc);
     }
 
     public static RelativePosition Read(byte[] encodedPosition)
     {
-        using (var stream = new MemoryStream(encodedPosition))
-        {
-            return Read(stream);
-        }
+        return Read(new Lib0Reader(encodedPosition));
     }
 
-    public static RelativePosition Read(Stream reader)
+    internal static RelativePosition Read(Lib0Reader reader)
     {
         ID? itemId = null;
         ID? typeId = null;
@@ -257,17 +245,15 @@ public partial class RelativePosition : IEquatable<RelativePosition>
                 throw new Exception();
         }
 
-        var assoc = reader.Position < reader.Length ? (int)reader.ReadVarInt().Value : 0;
+        var assoc = reader.HasContent ? (int)reader.ReadVarInt().Value : 0;
         return new RelativePosition(typeId, tName, itemId, assoc);
     }
 
     public byte[] ToArray()
     {
-        using (var stream = new MemoryStream())
-        {
-            Write(stream);
-            return stream.ToArray();
-        }
+        var writer = new Lib0Writer();
+        Write(writer);
+        return writer.ToArray();
     }
 
     /// <summary>

@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -74,50 +74,48 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// </summary>
     internal static byte[] EncodeRestoreUpdateV2(YDoc originDoc, DeleteSet ds, IDictionary<long, long> stateVector)
     {
-        using (var encoder = new UpdateEncoderV2())
+        var encoder = new UpdateEncoderV2();
+        originDoc.Transact(tr =>
         {
-            originDoc.Transact(tr =>
+            int size = stateVector.Count(kvp => kvp.Value /* clock */ > 0);
+            encoder.RestWriter.WriteVarUint((uint)size);
+
+            // Splitting the structs before writing them to the encoder.
+            foreach (var kvp in stateVector)
             {
-                int size = stateVector.Count(kvp => kvp.Value /* clock */ > 0);
-                encoder.RestWriter.WriteVarUint((uint)size);
+                var client = kvp.Key;
+                var clock = kvp.Value;
 
-                // Splitting the structs before writing them to the encoder.
-                foreach (var kvp in stateVector)
+                if (clock == 0)
                 {
-                    var client = kvp.Key;
-                    var clock = kvp.Value;
-
-                    if (clock == 0)
-                    {
-                        continue;
-                    }
-
-                    if (clock < originDoc.Store.GetState(client))
-                    {
-                        tr.Doc.Store.GetItemCleanStart(tr, new ID(client, clock));
-                    }
-
-                    var structs = originDoc.Store.Clients[client];
-                    var lastStructIndex = StructStore.FindIndexSS(structs, clock - 1);
-
-                    // Write # encoded structs.
-                    encoder.RestWriter.WriteVarUint((uint)(lastStructIndex + 1));
-                    encoder.WriteClient(client);
-
-                    // First clock written is 0.
-                    encoder.RestWriter.WriteVarUint(0);
-
-                    for (int i = 0; i <= lastStructIndex; i++)
-                    {
-                        structs[i].Write(encoder, 0);
-                    }
+                    continue;
                 }
 
-                ds.Write(encoder);
-            });
+                if (clock < originDoc.Store.GetState(client))
+                {
+                    tr.Doc.Store.GetItemCleanStart(tr, new ID(client, clock));
+                }
 
-            return encoder.ToArray();
-        }
+                var structs = originDoc.Store.Clients[client];
+                var lastStructIndex = StructStore.FindIndexSS(structs, clock - 1);
+
+                // Write # encoded structs.
+                encoder.RestWriter.WriteVarUint((uint)(lastStructIndex + 1));
+                encoder.WriteClient(client);
+
+                // First clock written is 0.
+                encoder.RestWriter.WriteVarUint(0);
+
+                for (int i = 0; i <= lastStructIndex; i++)
+                {
+                    structs[i].Write(encoder, 0);
+                }
+            }
+
+            ds.Write(encoder);
+        });
+
+        return encoder.ToArray();
     }
 
     public bool Equals(Snapshot other)
@@ -176,12 +174,10 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
 
     public byte[] EncodeSnapshotV2()
     {
-        using (var encoder = new DSEncoderV2())
-        {
-            DeleteSet.Write(encoder);
-            EncodingUtils.WriteStateVector(encoder, StateVector);
-            return encoder.ToArray();
-        }
+        var encoder = new DSEncoderV2();
+        DeleteSet.Write(encoder);
+        EncodingUtils.WriteStateVector(encoder, StateVector);
+        return encoder.ToArray();
     }
 
     /// <summary>
@@ -189,54 +185,42 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// </summary>
     public byte[] EncodeSnapshot()
     {
-        using (var encoder = new DSEncoderV1())
-        {
-            DeleteSet.Write(encoder);
-            EncodingUtils.WriteStateVector(encoder, StateVector);
-            return encoder.ToArray();
-        }
+        var encoder = new DSEncoderV1();
+        DeleteSet.Write(encoder);
+        EncodingUtils.WriteStateVector(encoder, StateVector);
+        return encoder.ToArray();
     }
 
     /// <summary>
     /// Yjs parity: <c>decodeSnapshotV2(buf)</c>.
     /// </summary>
-    public static Snapshot DecodeSnapshotV2(Stream input)
+    internal static Snapshot DecodeSnapshotV2(Lib0Reader input)
     {
-        using (var decoder = new DSDecoderV2(input))
-        {
-            var ds = DeleteSet.Read(decoder);
-            var sv = EncodingUtils.ReadStateVector(decoder);
-            return new Snapshot(ds, sv);
-        }
+        var decoder = new DSDecoderV2(input);
+        var ds = DeleteSet.Read(decoder);
+        var sv = EncodingUtils.ReadStateVector(decoder);
+        return new Snapshot(ds, sv);
     }
 
     public static Snapshot DecodeSnapshotV2(byte[] buf)
     {
-        using (var stream = new MemoryStream(buf, writable: false))
-        {
-            return DecodeSnapshotV2(stream);
-        }
+        return DecodeSnapshotV2(new Lib0Reader(buf));
     }
 
     /// <summary>
     /// Yjs parity: <c>decodeSnapshot(buf)</c> - the original ('v1') snapshot wire format.
     /// </summary>
-    public static Snapshot DecodeSnapshot(Stream input)
+    internal static Snapshot DecodeSnapshot(Lib0Reader input)
     {
-        using (var decoder = new DSDecoderV1(input))
-        {
-            var ds = DeleteSet.Read(decoder);
-            var sv = EncodingUtils.ReadStateVector(decoder);
-            return new Snapshot(ds, sv);
-        }
+        var decoder = new DSDecoderV1(input);
+        var ds = DeleteSet.Read(decoder);
+        var sv = EncodingUtils.ReadStateVector(decoder);
+        return new Snapshot(ds, sv);
     }
 
     public static Snapshot DecodeSnapshot(byte[] buf)
     {
-        using (var stream = new MemoryStream(buf, writable: false))
-        {
-            return DecodeSnapshot(stream);
-        }
+        return DecodeSnapshot(new Lib0Reader(buf));
     }
 
     /// <summary>
@@ -266,43 +250,34 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// </summary>
     private bool SnapshotContainsUpdateCore(byte[] update, bool isV1)
     {
-        using (var stream = new MemoryStream(update, writable: false))
+        var stream = new Lib0Reader(update);
+        IUpdateDecoder decoder = isV1
+            ? (IUpdateDecoder)new UpdateDecoderV1(stream)
+            : new UpdateDecoderV2(stream);
+
+        var scratchDoc = new YDoc();
+        var clientStructRefs = EncodingUtils.ReadClientStructRefs(decoder, scratchDoc);
+
+        foreach (var kvp in clientStructRefs)
         {
-            IUpdateDecoder decoder = isV1
-                ? (IUpdateDecoder)new UpdateDecoderV1(stream, leaveOpen: true)
-                : new UpdateDecoderV2(stream, leaveOpen: true);
-
-            try
+            var structs = kvp.Value;
+            if (structs.Count == 0)
             {
-                var scratchDoc = new YDoc();
-                var clientStructRefs = EncodingUtils.ReadClientStructRefs(decoder, scratchDoc);
-
-                foreach (var kvp in clientStructRefs)
-                {
-                    var structs = kvp.Value;
-                    if (structs.Count == 0)
-                    {
-                        continue;
-                    }
-
-                    var last = structs[structs.Count - 1];
-                    var endClock = last.Id.Clock + last.Length;
-
-                    if (!StateVector.TryGetValue(kvp.Key, out var svClock) || svClock < endClock)
-                    {
-                        return false;
-                    }
-                }
-
-                var updateDs = DeleteSet.Read(decoder);
-                var merged = new DeleteSet(new List<DeleteSet> { DeleteSet, updateDs });
-                return DeleteSetsEqual(DeleteSet, merged);
+                continue;
             }
-            finally
+
+            var last = structs[structs.Count - 1];
+            var endClock = last.Id.Clock + last.Length;
+
+            if (!StateVector.TryGetValue(kvp.Key, out var svClock) || svClock < endClock)
             {
-                decoder.Dispose();
+                return false;
             }
         }
+
+        var updateDs = DeleteSet.Read(decoder);
+        var merged = new DeleteSet(new List<DeleteSet> { DeleteSet, updateDs });
+        return DeleteSetsEqual(DeleteSet, merged);
     }
 
     /// <summary>

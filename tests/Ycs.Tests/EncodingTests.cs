@@ -1,11 +1,10 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
 // ------------------------------------------------------------------------------
 
 using System;
-using System.IO;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -40,13 +39,11 @@ public class EncodingTests
     [DataRow(4_294_967_295u, new byte[] { 255, 255, 255, 255, 15 })]
     public void TestGolangBinaryEncodingCompatibility(uint value, byte[] expected)
     {
-        using (var stream = new MemoryStream())
-        {
-            stream.WriteVarUint(value);
+        var stream = new Lib0Writer();
+        stream.WriteVarUint(value);
 
-            var actual = stream.ToArray();
-            CollectionAssert.AreEqual(expected, actual);
-        }
+        var actual = stream.ToArray();
+        CollectionAssert.AreEqual(expected, actual);
     }
 
     [TestMethod]
@@ -73,7 +70,7 @@ public class EncodingTests
         DoTestEncoding<long>("VarInt 3 bytes", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, -(1 << 17 | 1 << 9 | 3));
         DoTestEncoding<long>("VarInt 4 bytes", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, -(1 << 25 | 1 << 17 | 1 << 9 | 3));
         DoTestEncoding<long>("VarInt of -691529286", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, -691_529_286);
-        DoTestEncoding<long>("VarInt of 64 (-0)", (w, v) => w.WriteVarInt(v, treatZeroAsNegative: true), (r) => r.ReadVarInt().Value, 0);
+        DoTestEncoding<long>("VarInt of 64 (-0)", (w, v) => w.WriteVarInt(v, negativeZero: true), (r) => r.ReadVarInt().Value, 0);
     }
 
     [TestMethod]
@@ -86,22 +83,18 @@ public class EncodingTests
     [TestMethod]
     public void TestVarIntEncodingNegativeZero()
     {
-        using (var stream = new MemoryStream())
-        {
-            stream.WriteVarInt(0, treatZeroAsNegative: true);
+        var stream = new Lib0Writer();
+        stream.WriteVarInt(0, negativeZero: true);
 
-            var actual = stream.ToArray();
+        var actual = stream.ToArray();
 
-            // '-0' should have the 7th bit set, i.e. == 64.
-            CollectionAssert.AreEqual(new byte[] { 64 }, actual);
+        // '-0' should have the 7th bit set, i.e. == 64.
+        CollectionAssert.AreEqual(new byte[] { 64 }, actual);
 
-            using (var inputStream = new MemoryStream(actual))
-            {
-                var v = inputStream.ReadVarInt();
-                Assert.AreEqual(0, v.Value);
-                Assert.AreEqual(-1, v.Sign);
-            }
-        }
+        var inputStream = new Lib0Reader(actual);
+        var v = inputStream.ReadVarInt();
+        Assert.AreEqual(0, v.Value);
+        Assert.AreEqual(-1, v.Sign);
     }
 
     [TestMethod]
@@ -136,20 +129,16 @@ public class EncodingTests
         DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (r) => r.ReadVarString(), "😝"); // Surrogate length 4.
     }
 
-    private void DoTestEncoding<T>(string description, Action<Stream, T> write, Func<Stream, T> read, T val)
+    private void DoTestEncoding<T>(string description, Action<Lib0Writer, T> write, Func<Lib0Reader, T> read, T val)
     {
         byte[] encoded;
 
-        using (var outputStream = new MemoryStream())
-        {
-            write(outputStream, val);
-            encoded = outputStream.ToArray();
-        }
+        var outputStream = new Lib0Writer();
+        write(outputStream, val);
+        encoded = outputStream.ToArray();
 
-        using (var inputStream = new MemoryStream(encoded))
-        {
-            var decodedValue = read(inputStream);
-            Assert.AreEqual(val, decodedValue, description);
-        }
+        var inputStream = new Lib0Reader(encoded);
+        var decodedValue = read(inputStream);
+        Assert.AreEqual(val, decodedValue, description);
     }
 }

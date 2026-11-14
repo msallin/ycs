@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -23,9 +23,8 @@ internal class IntDiffEncoder : AbstractStreamEncoder<long>
     /// <inheritdoc/>
     public override void Write(long value)
     {
-        CheckDisposed();
 
-        Stream.WriteVarInt(value - _state);
+        Writer.WriteVarInt(value - _state);
         _state = value;
     }
 }

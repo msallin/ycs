@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -12,8 +12,8 @@ internal class IncUintOptRleDecoder : AbstractStreamDecoder<uint>
     private uint _state;
     private uint _count;
 
-    public IncUintOptRleDecoder(Stream input, bool leaveOpen = false)
-        : base(input, leaveOpen)
+    public IncUintOptRleDecoder(Lib0Reader input)
+        : base(input)
     {
         // Do nothing.
     }
@@ -21,18 +21,17 @@ internal class IncUintOptRleDecoder : AbstractStreamDecoder<uint>
     /// <inheritdoc/>
     public override uint Read()
     {
-        CheckDisposed();
 
         if (_count == 0)
         {
-            var (value, sign) = Stream.ReadVarInt();
+            var (value, sign) = Reader.ReadVarInt();
 
             // If the sign is negative, we read the count too; otherwise. count is 1.
             bool isNegative = sign < 0;
             if (isNegative)
             {
                 _state = (uint)(-value);
-                _count = Stream.ReadVarUint() + 2;
+                _count = Reader.ReadVarUint() + 2;
             }
             else
             {

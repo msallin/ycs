@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -28,7 +28,6 @@ internal sealed class RleIntDiffEncoder : AbstractStreamEncoder<long>
     /// <inheritdoc/>
     public override void Write(long value)
     {
-        CheckDisposed();
 
         if (_state == value && _count > 0)
         {
@@ -38,10 +37,10 @@ internal sealed class RleIntDiffEncoder : AbstractStreamEncoder<long>
         {
             if (_count > 0)
             {
-                Stream.WriteVarUint(_count - 1);
+                Writer.WriteVarUint(_count - 1);
             }
 
-            Stream.WriteVarInt(value - _state);
+            Writer.WriteVarInt(value - _state);
 
             _count = 1;
             _state = value;

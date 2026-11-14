@@ -1,73 +1,40 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.Diagnostics;
-
 namespace Ycs;
 
-/// <seealso cref="AbstractStreamDecoder{T}"/>
+/// <summary>
+/// Base class of the lib0 column encoders used by the v2 update format. Each one writes
+/// into its own <see cref="Lib0Writer"/>; <see cref="GetWrittenSpan"/> flushes any pending
+/// run and returns the bytes.
+/// </summary>
 internal abstract class AbstractStreamEncoder<T> : IEncoder<T>
 {
     protected AbstractStreamEncoder()
     {
-        Stream = new MemoryStream();
+        Writer = new Lib0Writer();
     }
 
-    protected MemoryStream Stream { get; private set; }
-    protected bool Disposed { get; private set; }
+    protected Lib0Writer Writer { get; }
 
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        System.GC.SuppressFinalize(this);
-    }
-
-    /// <inheritdoc/>
     public abstract void Write(T value);
 
-    /// <inheritdoc/>
-    public virtual byte[] ToArray()
+    /// <summary>
+    /// Flushes the pending run and returns the encoded bytes. Call once, after the last write.
+    /// </summary>
+    public ReadOnlySpan<byte> GetWrittenSpan()
     {
         Flush();
-        return Stream.ToArray();
+        return Writer.WrittenSpan;
     }
 
-    /// <inheritdoc/>
-    public virtual (byte[] buffer, int length) GetBuffer()
-    {
-        Flush();
-        return (Stream.GetBuffer(), (int)Stream.Length);
-    }
+    public byte[] ToArray() => GetWrittenSpan().ToArray();
 
     protected virtual void Flush()
     {
-        CheckDisposed();
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!Disposed)
-        {
-            if (disposing)
-            {
-                Stream?.Dispose();
-            }
-
-            Stream = null;
-            Disposed = true;
-        }
-    }
-
-    [Conditional("DEBUG")]
-    protected void CheckDisposed()
-    {
-        if (Disposed)
-        {
-            throw new ObjectDisposedException(GetType().ToString());
-        }
+        // Do nothing.
     }
 }

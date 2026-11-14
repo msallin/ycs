@@ -1,16 +1,23 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
 // ------------------------------------------------------------------------------
 
+using System.Buffers;
+
 namespace Ycs;
 
-internal interface IDSEncoder : IDisposable
+internal interface IDSEncoder
 {
-    Stream RestWriter { get; }
+    Lib0Writer RestWriter { get; }
 
     byte[] ToArray();
+
+    /// <summary>
+    /// Writes the encoded bytes to <paramref name="destination"/>.
+    /// </summary>
+    void WriteTo(IBufferWriter<byte> destination);
 
     /// <summary>
     /// Resets the ds value to 0.
@@ -34,6 +41,7 @@ internal interface IUpdateEncoder : IDSEncoder
 
     void WriteInfo(byte info);
     void WriteString(string s);
+    void WriteString(ReadOnlySpan<char> s);
     void WriteParentInfo(bool isYKey);
     void WriteTypeRef(uint info);
 
@@ -43,7 +51,7 @@ internal interface IUpdateEncoder : IDSEncoder
     void WriteLength(int len);
 
     void WriteAny(object any);
-    void WriteBuffer(byte[] buf);
+    void WriteBuffer(ReadOnlySpan<byte> buf);
     void WriteKey(string key);
-    void WriteJson<T>(T any);
+    void WriteJson(object any);
 }

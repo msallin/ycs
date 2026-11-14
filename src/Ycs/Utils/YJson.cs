@@ -39,6 +39,8 @@ internal static class YJson
         return sb.ToString();
     }
 
+    public static object Parse(ReadOnlySpan<byte> utf8Json) => Parse(Encoding.UTF8.GetString(utf8Json));
+
     public static object Parse(string json)
     {
         using (var doc = JsonDocument.Parse(json, ParseOptions))

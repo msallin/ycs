@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -10,23 +10,15 @@ namespace Ycs;
 
 internal class DSDecoderV2 : IDSDecoder
 {
-    private readonly bool _leaveOpen;
     private long _dsCurVal;
 
-    public DSDecoderV2(Stream input, bool leaveOpen = false)
+    public DSDecoderV2(Lib0Reader input)
     {
-        _leaveOpen = leaveOpen;
+        ArgumentNullException.ThrowIfNull(input);
         Reader = input;
     }
 
-    public Stream Reader { get; private set; }
-    protected bool Disposed { get; private set; }
-
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        System.GC.SuppressFinalize(this);
-    }
+    public Lib0Reader Reader { get; }
 
     public void ResetDsCurVal()
     {
@@ -42,33 +34,9 @@ internal class DSDecoderV2 : IDSDecoder
 
     public long ReadDsLength()
     {
-        var diff = Reader.ReadVarUint() + 1;
-        Debug.Assert(diff >= 0);
+        var diff = Reader.ReadVarUint() + 1L;
         _dsCurVal += diff;
         return diff;
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!Disposed)
-        {
-            if (disposing && !_leaveOpen)
-            {
-                Reader?.Dispose();
-            }
-
-            Reader = null;
-            Disposed = true;
-        }
-    }
-
-    [Conditional("DEBUG")]
-    protected void CheckDisposed()
-    {
-        if (Disposed)
-        {
-            throw new ObjectDisposedException(GetType().ToString());
-        }
     }
 }
 
@@ -78,155 +46,79 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     /// List of cached keys. If the keys[id] does not exist, we read a new key from
     /// the string encoder and push it to keys.
     /// </summary>
-    private List<string> _keys;
-    private IntDiffOptRleDecoder _keyClockDecoder;
-    private UintOptRleDecoder _clientDecoder;
-    private IntDiffOptRleDecoder _leftClockDecoder;
-    private IntDiffOptRleDecoder _rightClockDecoder;
-    private RleDecoder _infoDecoder;
-    private StringDecoder _stringDecoder;
-    private RleDecoder _parentInfoDecoder;
-    private UintOptRleDecoder _typeRefDecoder;
-    private UintOptRleDecoder _lengthDecoder;
+    private readonly List<string> _keys = new();
+    private readonly IntDiffOptRleDecoder _keyClockDecoder;
+    private readonly UintOptRleDecoder _clientDecoder;
+    private readonly IntDiffOptRleDecoder _leftClockDecoder;
+    private readonly IntDiffOptRleDecoder _rightClockDecoder;
+    private readonly RleDecoder _infoDecoder;
+    private readonly StringDecoder _stringDecoder;
+    private readonly RleDecoder _parentInfoDecoder;
+    private readonly UintOptRleDecoder _typeRefDecoder;
+    private readonly UintOptRleDecoder _lengthDecoder;
 
-    public UpdateDecoderV2(Stream input, bool leaveOpen = false)
-        : base(input, leaveOpen)
+    public UpdateDecoderV2(Lib0Reader input)
+        : base(input)
     {
-        _keys = new List<string>();
-
         // Read feature flag - currently unused.
         Reader.ReadByte();
 
-        _keyClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsStream());
-        _clientDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsStream());
-        _leftClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsStream());
-        _rightClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsStream());
-        _infoDecoder = new RleDecoder(Reader.ReadVarUint8ArrayAsStream());
-        _stringDecoder = new StringDecoder(Reader.ReadVarUint8ArrayAsStream());
-        _parentInfoDecoder = new RleDecoder(Reader.ReadVarUint8ArrayAsStream());
-        _typeRefDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsStream());
-        _lengthDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsStream());
+        // Each column is a reader over a slice of the same buffer; nothing is copied.
+        _keyClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
+        _clientDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
+        _leftClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
+        _rightClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
+        _infoDecoder = new RleDecoder(Reader.ReadVarUint8ArrayAsReader());
+        _stringDecoder = new StringDecoder(Reader.ReadVarUint8ArrayAsReader());
+        _parentInfoDecoder = new RleDecoder(Reader.ReadVarUint8ArrayAsReader());
+        _typeRefDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
+        _lengthDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
     }
 
-    public ID ReadLeftId()
-    {
-        CheckDisposed();
-        return new ID(_clientDecoder.Read(), _leftClockDecoder.Read());
-    }
+    public ID ReadLeftId() => new ID(_clientDecoder.Read(), _leftClockDecoder.Read());
 
-    public ID ReadRightId()
-    {
-        CheckDisposed();
-        return new ID(_clientDecoder.Read(), _rightClockDecoder.Read());
-    }
+    public ID ReadRightId() => new ID(_clientDecoder.Read(), _rightClockDecoder.Read());
 
     /// <summary>
     /// Read the next client Id.
     /// </summary>
-    public long ReadClient()
-    {
-        CheckDisposed();
-        return _clientDecoder.Read();
-    }
+    public long ReadClient() => _clientDecoder.Read();
 
-    public byte ReadInfo()
-    {
-        CheckDisposed();
-        return _infoDecoder.Read();
-    }
+    public byte ReadInfo() => _infoDecoder.Read();
 
-    public string ReadString()
-    {
-        CheckDisposed();
-        return _stringDecoder.Read();
-    }
+    public string ReadString() => _stringDecoder.Read();
 
-    public bool ReadParentInfo()
-    {
-        CheckDisposed();
-        return _parentInfoDecoder.Read() == 1;
-    }
+    public bool ReadParentInfo() => _parentInfoDecoder.Read() == 1;
 
-    public uint ReadTypeRef()
-    {
-        CheckDisposed();
-        return _typeRefDecoder.Read();
-    }
+    public uint ReadTypeRef() => _typeRefDecoder.Read();
 
     public int ReadLength()
     {
-        CheckDisposed();
+        var value = _lengthDecoder.Read();
+        if (value > int.MaxValue)
+        {
+            throw new InvalidDataException("Length out of range.");
+        }
 
-        var value = (int)_lengthDecoder.Read();
-        Debug.Assert(value >= 0);
-        return value;
+        return (int)value;
     }
 
-    public object ReadAny()
-    {
-        CheckDisposed();
-        var obj = Reader.ReadAny();
-        return obj;
-    }
+    public object ReadAny() => Reader.ReadAny();
 
-    public byte[] ReadBuffer()
-    {
-        CheckDisposed();
-        return Reader.ReadVarUint8Array();
-    }
+    public byte[] ReadBuffer() => Reader.ReadVarUint8Array();
 
     public string ReadKey()
     {
-        CheckDisposed();
-
         var keyClock = (int)_keyClockDecoder.Read();
         if (keyClock < _keys.Count)
         {
             return _keys[keyClock];
         }
-        else
-        {
-            var key = _stringDecoder.Read();
-            _keys.Add(key);
-            return key;
-        }
+
+        var key = _stringDecoder.Read();
+        _keys.Add(key);
+        return key;
     }
 
-    public object ReadJson()
-    {
-        CheckDisposed();
-
-        return Reader.ReadAny();
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (!Disposed)
-        {
-            if (disposing)
-            {
-                _keyClockDecoder?.Dispose();
-                _clientDecoder?.Dispose();
-                _leftClockDecoder?.Dispose();
-                _rightClockDecoder?.Dispose();
-                _infoDecoder?.Dispose();
-                _stringDecoder?.Dispose();
-                _parentInfoDecoder?.Dispose();
-                _typeRefDecoder?.Dispose();
-                _lengthDecoder?.Dispose();
-            }
-
-            _keyClockDecoder = null;
-            _clientDecoder = null;
-            _leftClockDecoder = null;
-            _rightClockDecoder = null;
-            _infoDecoder = null;
-            _stringDecoder = null;
-            _parentInfoDecoder = null;
-            _typeRefDecoder = null;
-            _lengthDecoder = null;
-        }
-
-        base.Dispose(disposing);
-    }
+    public object ReadJson() => Reader.ReadAny();
 }

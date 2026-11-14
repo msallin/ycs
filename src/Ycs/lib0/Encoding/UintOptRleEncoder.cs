@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -26,7 +26,6 @@ internal class UintOptRleEncoder : AbstractStreamEncoder<uint>
     /// <inheritdoc/>
     public override void Write(uint value)
     {
-        CheckDisposed();
 
         if (_state == value)
         {
@@ -44,7 +43,6 @@ internal class UintOptRleEncoder : AbstractStreamEncoder<uint>
     protected override void Flush()
     {
         WriteEncodedValue();
-        base.Flush();
     }
 
     private void WriteEncodedValue()
@@ -56,15 +54,15 @@ internal class UintOptRleEncoder : AbstractStreamEncoder<uint>
             // Case 2: Write several values. Set sign to negative to indicate that there is a length coming.
             if (_count == 1)
             {
-                Stream.WriteVarInt(_state);
+                Writer.WriteVarInt(_state);
             }
             else
             {
                 // Specify 'treatZeroAsNegative' in case we pass the '-0'.
-                Stream.WriteVarInt(-_state, treatZeroAsNegative: _state == 0);
+                Writer.WriteVarInt(-_state, negativeZero: _state == 0);
 
                 // Since count is always >1, we can decrement by one. Non-standard encoding.
-                Stream.WriteVarUint(_count - 2);
+                Writer.WriteVarUint(_count - 2);
             }
         }
     }

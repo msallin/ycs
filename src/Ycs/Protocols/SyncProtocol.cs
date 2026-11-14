@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -17,29 +17,77 @@ public static class SyncProtocol
     public const uint MessageYjsSyncStep2 = 1;
     public const uint MessageYjsUpdate = 2;
 
+    private static void WriteVarUint(Stream stream, uint num)
+    {
+        Span<byte> buffer = stackalloc byte[5];
+        var i = 0;
+        while (num > 0x7F)
+        {
+            buffer[i++] = (byte)(0x80 | (num & 0x7F));
+            num >>= 7;
+        }
+
+        buffer[i++] = (byte)num;
+        stream.Write(buffer[..i]);
+    }
+
+    private static void WriteVarUint8Array(Stream stream, ReadOnlySpan<byte> data)
+    {
+        WriteVarUint(stream, (uint)data.Length);
+        stream.Write(data);
+    }
+
+    private static uint ReadVarUint(Stream stream)
+    {
+        ulong num = 0;
+        for (var shift = 0; shift <= 35; shift += 7)
+        {
+            var r = stream.ReadByte();
+            if (r < 0)
+            {
+                throw new EndOfStreamException();
+            }
+
+            num |= (ulong)(r & 0x7F) << shift;
+            if (r < 0x80)
+            {
+                return num <= uint.MaxValue ? (uint)num : throw new InvalidDataException("Integer out of range.");
+            }
+        }
+
+        throw new InvalidDataException("Integer out of range.");
+    }
+
+    private static byte[] ReadVarUint8Array(Stream stream)
+    {
+        var data = new byte[ReadVarUint(stream)];
+        stream.ReadExactly(data);
+        return data;
+    }
+
     public static void WriteSyncStep1(Stream stream, YDoc doc, bool v2 = false)
     {
-        stream.WriteVarUint(MessageYjsSyncStep1);
+        WriteVarUint(stream, MessageYjsSyncStep1);
         var sv = v2 ? doc.EncodeStateVectorV2() : doc.EncodeStateVectorV1();
-        stream.WriteVarUint8Array(sv);
+        WriteVarUint8Array(stream, sv);
     }
 
     public static void WriteSyncStep2(Stream stream, YDoc doc, byte[] encodedStateVector, bool v2 = false)
     {
-        stream.WriteVarUint(MessageYjsSyncStep2);
+        WriteVarUint(stream, MessageYjsSyncStep2);
         var update = v2 ? doc.EncodeStateAsUpdateV2(encodedStateVector) : doc.EncodeStateAsUpdateV1(encodedStateVector);
-        stream.WriteVarUint8Array(update);
+        WriteVarUint8Array(stream, update);
     }
 
     public static void ReadSyncStep1(Stream reader, Stream writer, YDoc doc, bool v2 = false)
     {
-        var encodedStateVector = reader.ReadVarUint8Array();
+        var encodedStateVector = ReadVarUint8Array(reader);
         WriteSyncStep2(writer, doc, encodedStateVector, v2);
     }
 
     public static void ReadSyncStep2(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false)
     {
-        var update = stream.ReadVarUint8Array();
+        var update = ReadVarUint8Array(stream);
         if (v2)
         {
             doc.ApplyUpdateV2(update, transactionOrigin);
@@ -52,8 +100,8 @@ public static class SyncProtocol
 
     public static void WriteUpdate(Stream stream, byte[] update)
     {
-        stream.WriteVarUint(MessageYjsUpdate);
-        stream.WriteVarUint8Array(update);
+        WriteVarUint(stream, MessageYjsUpdate);
+        WriteVarUint8Array(stream, update);
     }
 
     public static void ReadUpdate(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false)
@@ -63,7 +111,7 @@ public static class SyncProtocol
 
     public static uint ReadSyncMessage(Stream reader, Stream writer, YDoc doc, object transactionOrigin, bool v2 = false)
     {
-        var messageType = reader.ReadVarUint();
+        var messageType = ReadVarUint(reader);
 
         switch (messageType)
         {
@@ -77,7 +125,7 @@ public static class SyncProtocol
                 ReadUpdate(reader, doc, transactionOrigin, v2);
                 break;
             default:
-                throw new Exception($"Unknown message type: {messageType}");
+                throw new InvalidDataException($"Unknown message type: {messageType}");
         }
 
         return messageType;

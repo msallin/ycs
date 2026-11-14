@@ -216,19 +216,15 @@ public sealed class PermanentUserData
 
     private static DeleteSet DecodeDeleteSet(byte[] encoded)
     {
-        using (var stream = new MemoryStream(encoded, writable: false))
-        using (var decoder = new DSDecoderV1(stream))
-        {
-            return DeleteSet.Read(decoder);
-        }
+        var stream = new Lib0Reader(encoded);
+        var decoder = new DSDecoderV1(stream);
+        return DeleteSet.Read(decoder);
     }
 
     private static byte[] EncodeDeleteSet(DeleteSet ds)
     {
-        using (var encoder = new DSEncoderV1())
-        {
-            ds.Write(encoder);
-            return encoder.ToArray();
-        }
+        var encoder = new DSEncoderV1();
+        ds.Write(encoder);
+        return encoder.ToArray();
     }
 }

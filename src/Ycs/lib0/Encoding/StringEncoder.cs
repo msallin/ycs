@@ -1,92 +1,50 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.Diagnostics;
 using System.Text;
 
 namespace Ycs;
 
 /// <summary>
-/// Optimized String Encoder.
+/// Optimized string encoder (lib0 <c>StringEncoder</c>).
 /// <br/>
-/// The lengths are encoded using the <see cref="UintOptRleEncoder"/>.
+/// Encoding many small strings in a simple Encoder is not very efficient. The function call to decode a string takes some time and creates references that must be eventually deleted.
+/// In practice, when decoding several million small strings, the GC will kick in more and more often to collect orphaned string objects (or maybe there is another reason?).
+/// <br/>
+/// This string encoder solves the above problem. All strings are concatenated and written as a single string using a single encoding call.
+/// <br/>
+/// The lengths are encoded using a <see cref="UintOptRleEncoder"/>, in UTF-16 code units as in JavaScript.
 /// </summary>
-/// <seealso cref="StringDecoder"/>
-internal class StringEncoder : IEncoder<string>
+internal sealed class StringEncoder : IEncoder<string>
 {
-    private StringBuilder _sb;
-    private UintOptRleEncoder _lengthEncoder;
-    private bool _disposed;
+    private readonly StringBuilder _sb = new();
+    private readonly UintOptRleEncoder _lengthEncoder = new();
+    private Lib0Writer _output;
 
-    public StringEncoder()
-    {
-        _sb = new StringBuilder();
-        _lengthEncoder = new UintOptRleEncoder();
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        Dispose(disposing: true);
-        System.GC.SuppressFinalize(this);
-    }
-
-    /// <inheritdoc/>
     public void Write(string value)
     {
         _sb.Append(value);
         _lengthEncoder.Write((uint)value.Length);
     }
 
-    public void Write(char[] value, int offset, int count)
+    public void Write(ReadOnlySpan<char> value)
     {
-        _sb.Append(value, offset, count);
-        _lengthEncoder.Write((uint)count);
+        _sb.Append(value);
+        _lengthEncoder.Write((uint)value.Length);
     }
 
-    public byte[] ToArray()
+    public ReadOnlySpan<byte> GetWrittenSpan()
     {
-        using (var stream = new MemoryStream())
+        if (_output == null)
         {
-            stream.WriteVarString(_sb.ToString());
-
-            var (buffer, length) = _lengthEncoder.GetBuffer();
-            stream.Write(buffer, 0, length);
-
-            return stream.ToArray();
+            _output = new Lib0Writer(_sb.Length + 16);
+            _output.WriteVarString(_sb.ToString());
+            _output.WriteBytes(_lengthEncoder.GetWrittenSpan());
         }
-    }
 
-    public (byte[] buffer, int length) GetBuffer()
-    {
-        throw new NotSupportedException($"{nameof(StringEncoder)} doesn't use temporary byte buffers");
-    }
-
-    protected virtual void Dispose(bool disposing)
-    {
-        if (!_disposed)
-        {
-            if (disposing)
-            {
-                _sb.Clear();
-                _lengthEncoder.Dispose();
-            }
-
-            _sb = null;
-            _lengthEncoder = null;
-            _disposed = true;
-        }
-    }
-
-    [Conditional("DEBUG")]
-    protected void CheckDisposed()
-    {
-        if (_disposed)
-        {
-            throw new ObjectDisposedException(GetType().ToString());
-        }
+        return _output.WrittenSpan;
     }
 }

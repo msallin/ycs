@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -39,13 +39,13 @@ public struct ID : IEquatable<ID>
         return (a == null && b == null) || (a != null && b != null && a.Value.Equals(b.Value));
     }
 
-    public void Write(Stream writer)
+    internal void Write(Lib0Writer writer)
     {
-        writer.WriteVarUint((uint)Client);
-        writer.WriteVarUint((uint)Clock);
+        writer.WriteVarUint((ulong)Client);
+        writer.WriteVarUint((ulong)Clock);
     }
 
-    public static ID Read(Stream reader)
+    internal static ID Read(Lib0Reader reader)
     {
         var client = reader.ReadVarUint();
         var clock = reader.ReadVarUint();
