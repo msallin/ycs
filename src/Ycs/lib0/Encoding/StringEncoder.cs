@@ -22,7 +22,7 @@ internal sealed class StringEncoder : IEncoder<string>
 {
     private readonly StringBuilder _sb = new();
     private readonly UintOptRleEncoder _lengthEncoder = new();
-    private Lib0Writer _output;
+    private Lib0Writer? _output;
 
     public void Write(string value)
     {

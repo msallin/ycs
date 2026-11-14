@@ -12,7 +12,7 @@ namespace Ycs;
 internal sealed class StringDecoder : IDecoder<string>
 {
     private readonly UintOptRleDecoder _lengthDecoder;
-    private string _value;
+    private string? _value;
     private int _pos;
 
     public StringDecoder(Lib0Reader input)

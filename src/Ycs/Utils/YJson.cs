@@ -34,16 +34,16 @@ internal static class YJson
 
     private static readonly JsonReaderOptions ReaderOptions = new() { MaxDepth = 256 };
 
-    public static string Stringify(object value)
+    public static string Stringify(object? value)
     {
         var sb = new StringBuilder();
         Write(sb, value);
         return sb.ToString();
     }
 
-    public static object Parse(string json) => Parse(Encoding.UTF8.GetBytes(json));
+    public static object? Parse(string json) => Parse(Encoding.UTF8.GetBytes(json));
 
-    public static object Parse(ReadOnlySpan<byte> utf8Json)
+    public static object? Parse(ReadOnlySpan<byte> utf8Json)
     {
         var reader = new Utf8JsonReader(utf8Json, ReaderOptions);
         if (!reader.Read())
@@ -60,16 +60,16 @@ internal static class YJson
         return value;
     }
 
-    private static object ReadValue(ref Utf8JsonReader reader)
+    private static object? ReadValue(ref Utf8JsonReader reader)
     {
         switch (reader.TokenType)
         {
             case JsonTokenType.StartObject:
                 {
-                    var dict = new Dictionary<string, object>();
+                    var dict = new Dictionary<string, object?>();
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                     {
-                        var key = reader.GetString();
+                        var key = reader.GetString()!;
                         reader.Read();
                         dict[key] = ReadValue(ref reader); // a repeated key: the last one wins, as in JSON.parse
                     }
@@ -78,7 +78,7 @@ internal static class YJson
                 }
             case JsonTokenType.StartArray:
                 {
-                    var list = new List<object>();
+                    var list = new List<object?>();
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
                         list.Add(ReadValue(ref reader));
@@ -110,7 +110,7 @@ internal static class YJson
         }
     }
 
-    private static void Write(StringBuilder sb, object value)
+    private static void Write(StringBuilder sb, object? value)
     {
         switch (value)
         {
@@ -149,10 +149,10 @@ internal static class YJson
                 }
                 sb.Append('}');
                 return;
-            case IDictionary<string, object> map:
+            case IDictionary<string, object?> map:
                 WriteObject(sb, map);
                 return;
-            case IReadOnlyDictionary<string, object> map:
+            case IReadOnlyDictionary<string, object?> map:
                 WriteObject(sb, map);
                 return;
             case IDictionary map:
@@ -186,7 +186,7 @@ internal static class YJson
         }
     }
 
-    private static void WriteObject(StringBuilder sb, IEnumerable<KeyValuePair<string, object>> map)
+    private static void WriteObject(StringBuilder sb, IEnumerable<KeyValuePair<string, object?>> map)
     {
         sb.Append('{');
         var first = true;

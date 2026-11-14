@@ -4,6 +4,8 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
+#nullable disable // Not annotated for nullable reference types yet.
+
 namespace Ycs;
 
 /// <summary>

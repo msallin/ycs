@@ -41,7 +41,7 @@ internal static class AnyEncoding
 {
     private const long MaxSafeInteger = (1L << 53) - 1;
 
-    public static void WriteAny(this Lib0Writer writer, object o)
+    public static void WriteAny(this Lib0Writer writer, object? o)
     {
         switch (o)
         {
@@ -93,7 +93,7 @@ internal static class AnyEncoding
                 writer.WriteByte(116);
                 writer.WriteVarUint8Array(ba);
                 break;
-            case IDictionary<string, object> map: // TYPE 118: object
+            case IDictionary<string, object?> map: // TYPE 118: object
                 writer.WriteByte(118);
                 writer.WriteVarUint((uint)map.Count);
                 foreach (var kvp in map)
@@ -102,7 +102,7 @@ internal static class AnyEncoding
                     writer.WriteAny(kvp.Value);
                 }
                 break;
-            case IReadOnlyDictionary<string, object> map: // TYPE 118: object
+            case IReadOnlyDictionary<string, object?> map: // TYPE 118: object
                 writer.WriteByte(118);
                 writer.WriteVarUint((uint)map.Count);
                 foreach (var kvp in map)
@@ -133,7 +133,7 @@ internal static class AnyEncoding
         }
     }
 
-    public static object ReadAny(this Lib0Reader reader)
+    public static object? ReadAny(this Lib0Reader reader)
     {
         var type = reader.ReadByte();
         switch (type)
@@ -168,7 +168,7 @@ internal static class AnyEncoding
             case 117: // Array<object>
                 {
                     var len = (int)reader.ReadVarUint();
-                    var arr = new List<object>(Math.Min(len, reader.Remaining));
+                    var arr = new List<object?>(Math.Min(len, reader.Remaining));
                     for (int i = 0; i < len; i++)
                     {
                         arr.Add(reader.ReadAny());
@@ -179,7 +179,7 @@ internal static class AnyEncoding
             case 118: // object (Dictionary<string, object>)
                 {
                     var len = (int)reader.ReadVarUint();
-                    var obj = new Dictionary<string, object>(Math.Min(len, reader.Remaining));
+                    var obj = new Dictionary<string, object?>(Math.Min(len, reader.Remaining));
                     for (int i = 0; i < len; i++)
                     {
                         var key = reader.ReadVarString();
@@ -198,7 +198,7 @@ internal static class AnyEncoding
     /// <see cref="WriteAny"/> accepts. Called when a value enters a document, so a bad value
     /// fails at the call that inserted it rather than at the next encode.
     /// </summary>
-    public static void Validate(object value)
+    public static void Validate(object? value)
     {
         switch (value)
         {
@@ -213,13 +213,13 @@ internal static class AnyEncoding
             case BigInteger bi:
                 ToInt64(bi);
                 return;
-            case IDictionary<string, object> map:
+            case IDictionary<string, object?> map:
                 foreach (var kvp in map)
                 {
                     Validate(kvp.Value);
                 }
                 return;
-            case IReadOnlyDictionary<string, object> map:
+            case IReadOnlyDictionary<string, object?> map:
                 foreach (var kvp in map)
                 {
                     Validate(kvp.Value);
@@ -296,7 +296,7 @@ internal static class AnyEncoding
     internal static ArgumentOutOfRangeException OutOfRange(object value) =>
         new("value", value, "Integers beyond ±(2^53 - 1) have no exact JavaScript number. Use System.Numerics.BigInteger for a BigInt.");
 
-    private static ArgumentException NotAStringKey(object key) =>
+    private static ArgumentException NotAStringKey(object? key) =>
         new($"Object keys must be strings, not '{key?.GetType().Name ?? "null"}'.", "value");
 
     internal static NotSupportedException Unsupported(object value) =>
