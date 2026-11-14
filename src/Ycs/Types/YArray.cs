@@ -190,7 +190,7 @@ public partial class YArray : YArrayBase
             {
                 if (index < n.Length)
                 {
-                    return n.Content.GetContent()[index];
+                    return ValueAt(n.Content, index);
                 }
 
                 index -= n.Length;

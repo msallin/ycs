@@ -50,6 +50,8 @@ public class ContentAny : IContentEx
 
     public IReadOnlyList<object> GetContent() => _content.AsReadOnly();
 
+    internal object ValueAt(int index) => _content[index];
+
     public IContent Copy() => new ContentAny(_content.ToList());
 
     public IContent Splice(int offset)

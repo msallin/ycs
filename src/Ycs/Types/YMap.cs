@@ -105,7 +105,7 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
 
     public IEnumerable<string> Keys() => TypeMapEnumerate().Select(kvp => kvp.Key);
 
-    public IEnumerable<object> Values() => TypeMapEnumerate().Select(kvp => kvp.Value.Content.GetContent()[kvp.Value.Length - 1]);
+    public IEnumerable<object> Values() => TypeMapEnumerate().Select(kvp => ValueAt(kvp.Value.Content, kvp.Value.Length - 1));
 
     /// <summary>
     /// Returns an enumerable of (key, value) pairs. Mirrors Yjs' <c>entries()</c>; C# idiom: since

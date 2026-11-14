@@ -261,7 +261,7 @@ public partial class AbstractType
     {
         if (_map.TryGetValue(key, out var val) && !val.Deleted)
         {
-            value = val.Content.GetContent()[val.Length - 1];
+            value = ValueAt(val.Content, val.Length - 1);
             return true;
         }
 
@@ -281,10 +281,14 @@ public partial class AbstractType
             v = v.Left as Item;
         }
 
-        return v != null && v.IsVisible(snapshot) ? v.Content.GetContent()[v.Length - 1] : null;
+        return v != null && v.IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
     }
 
     protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
+
+    /// <summary>The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.</summary>
+    internal static object ValueAt(IContent content, int index) =>
+        content is ContentAny any ? any.ValueAt(index) : content.GetContent()[index];
 
     /// <summary>How many keys have a value that is not deleted; walks the map without allocating.</summary>
     internal int TypeMapCount()
@@ -306,7 +310,7 @@ public partial class AbstractType
         foreach (var kvp in TypeMapEnumerate())
         {
             var key = kvp.Key;
-            var value = kvp.Value.Content.GetContent()[kvp.Value.Length - 1];
+            var value = ValueAt(kvp.Value.Content, kvp.Value.Length - 1);
             yield return new KeyValuePair<string, object>(key, value);
         }
     }
