@@ -1,0 +1,75 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Ycs;
+
+/// <summary>
+/// The struct store keeps its integration plan for the next update; a plan that was rejected while
+/// planning must not leave anything behind.
+/// </summary>
+[TestClass]
+public class IntegrationPlanReuseTests
+{
+    [TestMethod]
+    public void ApplyUpdate_AfterARejectedPlan_IntegratesTheNextUpdate()
+    {
+        var doc = new YDoc();
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(NestedArrays(300)));
+
+        doc.ApplyUpdateV1(NestedArrays(3));
+
+        Assert.AreEqual(1, doc.GetArray("a").Length);
+        Assert.AreEqual(3L, doc.Store.GetState(5));
+        Assert.IsFalse(doc.HasPending);
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_MissingThenArriving_IntegratesBothWithOnePlan()
+    {
+        var source = new YDoc(new YDocOptions { ClientId = 1 });
+        var text = source.GetText("text");
+        text.Insert(0, "ab");
+        var first = source.EncodeStateAsUpdateV1();
+        var vector = source.EncodeStateVector();
+        text.Insert(2, "cd");
+        var second = source.EncodeStateAsUpdateV1(vector);
+        var doc = new YDoc();
+
+        doc.ApplyUpdateV1(second);
+        var pendingAfterSecond = doc.HasPending;
+        doc.ApplyUpdateV1(first);
+
+        Assert.IsTrue(pendingAfterSecond);
+        Assert.IsFalse(doc.HasPending);
+        Assert.AreEqual("abcd", doc.GetText("text").ToString());
+    }
+
+    /// <summary>A v1 update of client 5: <paramref name="depth"/> arrays, each nested in the one before, the first in root 'a'.</summary>
+    private static byte[] NestedArrays(int depth)
+    {
+        var writer = new Lib0Writer();
+        writer.WriteVarUint(1);
+        writer.WriteVarUint((ulong)depth);
+        writer.WriteVarUint(5);
+        writer.WriteVarUint(0);
+        for (var i = 0; i < depth; i++)
+        {
+            writer.WriteByte(7); // ContentType, no origins
+            if (i == 0)
+            {
+                writer.WriteVarUint(1);
+                writer.WriteVarString("a");
+            }
+            else
+            {
+                writer.WriteVarUint(0);
+                writer.WriteVarUint(5);
+                writer.WriteVarUint((ulong)(i - 1));
+            }
+
+            writer.WriteVarUint(YArray.YArrayRefId);
+        }
+
+        writer.WriteVarUint(0);
+        return writer.ToArray();
+    }
+}
