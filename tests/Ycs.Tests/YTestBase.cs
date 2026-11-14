@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -26,8 +26,14 @@ public class YTestBase
     protected IDictionary<TestYInstance, YText> Texts;
 
     [TestCleanup]
-    protected void Cleanup()
+    public void Cleanup()
     {
+        // Not every test calls Init.
+        if (Connector == null)
+        {
+            return;
+        }
+
         Connector.DisconnectAll();
 
         foreach (var u in Users)
@@ -102,7 +108,7 @@ public class YTestBase
         foreach (var kvp in Users[0].GetMap("map"))
         {
             var otherKvp = userMapValues[0].FirstOrDefault(v => string.Equals(v.Key, kvp.Key));
-            Assert.IsNotNull(otherKvp);
+            Assert.IsTrue(userMapValues[0].Any(v => string.Equals(v.Key, kvp.Key)), $"key '{kvp.Key}' missing");
             Assert.AreEqual(otherKvp.Value, kvp.Value);
         }
 
@@ -213,7 +219,7 @@ public class YTestBase
         }
 
         Assert.IsTrue((arr1 == null) == (arr2 == null));
-        Assert.AreEqual(arr1.Length, arr1.Length);
+        Assert.AreEqual(arr1.Length, arr2.Length);
 
         for (int i = 0; i < arr1.Length; i++)
         {

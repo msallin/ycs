@@ -17,35 +17,35 @@ public class CorpusTests
     [TestMethod]
     public void Corpus_IsPresent_HasCases() => Assert.IsTrue(CorpusCase.All.Count >= 20, $"Corpus not found in {CorpusCase.Directory}.");
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyV1_RecordedOrder_StateMatchesYjs(string name) => Run(name, c =>
         AssertState(c, Build(c, c.Updates, v2: false), "applying the v1 updates in the recorded order"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyV2_RecordedOrder_StateMatchesYjs(string name) => Run(name, c =>
         AssertState(c, Build(c, c.Updates, v2: true), "applying the v2 updates in the recorded order"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyV1_ShuffledWithDuplicates_StateMatchesYjs(string name) => Run(name, c => Shuffled(c, v2: false));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyV2_ShuffledWithDuplicates_StateMatchesYjs(string name) => Run(name, c => Shuffled(c, v2: true));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyYjsStateV1_FreshDoc_StateMatchesYjs(string name) => Run(name, c =>
         AssertState(c, Build(c, [c.ExpectedState], v2: false), "applying Yjs' encodeStateAsUpdate"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyYjsStateV2_FreshDoc_StateMatchesYjs(string name) => Run(name, c =>
         AssertState(c, Build(c, [c.ExpectedState], v2: true), "applying Yjs' encodeStateAsUpdateV2"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ReEncodeStateV1_FreshDoc_StateMatchesYjs(string name) => Run(name, c =>
     {
@@ -54,7 +54,7 @@ public class CorpusTests
         AssertState(c, copy, "re-encoding with Ycs (v1) into a fresh doc");
     });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ReEncodeStateV2_FreshDoc_StateMatchesYjs(string name) => Run(name, c =>
     {
@@ -63,28 +63,28 @@ public class CorpusTests
         AssertState(c, copy, "re-encoding with Ycs (v2) into a fresh doc");
     });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void EncodeStateV1_AfterUpdates_BytesEqualYjs(string name) => Run(name, c =>
         AssertBytes(c.ExpectedState.V1, Build(c, c.Updates, v2: false).EncodeStateV1(), "encodeStateAsUpdate"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void EncodeStateV2_AfterUpdates_BytesEqualYjs(string name) => Run(name, c =>
         AssertBytes(c.ExpectedState.V2, Build(c, c.Updates, v2: true).EncodeStateV2(), "encodeStateAsUpdateV2"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void EncodeStateVector_AfterUpdates_BytesEqualYjs(string name) => Run(name, c =>
         AssertBytes(c.ExpectedStateVectorBytes, Build(c, c.Updates, v2: false).EncodeStateVector(), "encodeStateVector"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void EncodeStateVector_OfPrefix_EqualsYjs(string name) => Run(name, c =>
         Assert.AreEqual(Observed.Clocks(c.DiffStateVectorMap), Observed.StateVector(Prefix(c, v2: false).EncodeStateVector()),
             $"state vector after the first {c.DiffPrefix} updates"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void EncodeStateV1_ForStateVector_CompletesPrefixDoc(string name) => Run(name, c =>
     {
@@ -93,7 +93,7 @@ public class CorpusTests
         AssertState(c, prefix, $"the first {c.DiffPrefix} updates plus Ycs' diff for their state vector");
     });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void EncodeStateV2_ForStateVector_CompletesPrefixDoc(string name) => Run(name, c =>
     {
@@ -102,7 +102,7 @@ public class CorpusTests
         AssertState(c, prefix, $"the first {c.DiffPrefix} updates plus Ycs' v2 diff for their state vector");
     });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyYjsDiff_ToPrefixDoc_StateMatchesYjs(string name) => Run(name, c =>
     {
@@ -111,35 +111,35 @@ public class CorpusTests
         AssertState(c, prefix, $"the first {c.DiffPrefix} updates plus Yjs' diff for their state vector");
     });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void EncodeStateV1_ForStateVector_CoversWhatYjsDiffCovers(string name) => Run(name, c =>
         Assert.AreEqual(DiffSummary(c.Diff.V1, false), DiffSummary(Build(c, c.Updates, v2: false).EncodeStateV1(c.DiffStateVector), false),
             "client ranges and delete set of the diff for the prefix state vector"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void DiffUpdate_OfYjsState_CoversWhatYjsDiffCovers(string name) => Run(name, c =>
         Assert.AreEqual(DiffSummary(c.Diff.V1, false), DiffSummary(CorpusUpdates.Diff(c.ExpectedState.V1, c.DiffStateVector, v2: false), false),
             "UpdateOperations.DiffUpdate(Yjs state, prefix state vector) against Yjs' diff"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void DiffUpdateV2_OfYjsState_CoversWhatYjsDiffCovers(string name) => Run(name, c =>
         Assert.AreEqual(DiffSummary(c.Diff.V2, true), DiffSummary(CorpusUpdates.Diff(c.ExpectedState.V2, c.DiffStateVector, v2: true), true),
             "UpdateOperations.DiffUpdateV2(Yjs state, prefix state vector) against Yjs' diff"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void MergeUpdatesV1_RecordedUpdates_BytesEqualYjs(string name) => Run(name, c =>
         AssertBytes(c.Merged.V1, CorpusUpdates.Merge(c.Updates.Select(u => u.V1).ToList(), v2: false), "mergeUpdates"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void MergeUpdatesV2_RecordedUpdates_BytesEqualYjs(string name) => Run(name, c =>
         AssertBytes(c.Merged.V2, CorpusUpdates.Merge(c.Updates.Select(u => u.V2).ToList(), v2: true), "mergeUpdatesV2"));
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void MergeUpdatesV1_Applied_StateMatchesYjs(string name) => Run(name, c =>
     {
@@ -148,7 +148,7 @@ public class CorpusTests
         AssertState(c, doc, "applying Ycs' mergeUpdates of the recorded updates");
     });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyYjsMergedV1_FreshDoc_StateMatchesYjs(string name) => Run(name, c =>
         AssertState(c, Build(c, [c.Merged], v2: false), "applying Yjs' mergeUpdates of the recorded updates"));

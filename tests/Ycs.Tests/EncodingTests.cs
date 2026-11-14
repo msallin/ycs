@@ -18,7 +18,7 @@ public class EncodingTests
     /// Check if binary encoding is compatible with golang binary encoding.
     /// Result: is compatible up to 32 bit: [0, 4294967295] / [0, 0xFFFFFFFF].
     /// </summary>
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(0u, new byte[] { 0 })]
     [DataRow(1u, new byte[] { 1 })]
     [DataRow(128u, new byte[] { 128, 1 })]
@@ -130,13 +130,13 @@ public class EncodingTests
     [TestMethod]
     public void TestWriteAnyRejectsValuesOutsideTheClosedSet()
     {
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => new Lib0Writer().WriteAny(9007199254740992L));
-        Assert.ThrowsException<NotSupportedException>(() => new Lib0Writer().WriteAny(DateTime.UnixEpoch));
-        Assert.ThrowsException<NotSupportedException>(() => AnyEncoding.Validate(new List<object> { new object() }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new Lib0Writer().WriteAny(9007199254740992L));
+        Assert.ThrowsExactly<NotSupportedException>(() => new Lib0Writer().WriteAny(DateTime.UnixEpoch));
+        Assert.ThrowsExactly<NotSupportedException>(() => AnyEncoding.Validate(new List<object> { new object() }));
 
         // ...and a document rejects them when they are inserted, not when it is encoded.
         var doc = new YDoc();
-        Assert.ThrowsException<NotSupportedException>(() => doc.GetMap("map").Set("k", Guid.Empty));
+        Assert.ThrowsExactly<NotSupportedException>(() => doc.GetMap("map").Set("k", Guid.Empty));
         Assert.AreEqual(0, doc.GetMap("map").Count);
     }
 

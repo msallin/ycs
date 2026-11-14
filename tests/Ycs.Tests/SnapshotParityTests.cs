@@ -193,7 +193,7 @@ public class SnapshotParityTests
         doc.GetText().Insert(0, "x");
         var snap = doc.CreateSnapshot();
 
-        Assert.ThrowsException<InvalidOperationException>(() => doc.CreateDocFromSnapshot(snap));
+        Assert.ThrowsExactly<InvalidOperationException>(() => doc.CreateDocFromSnapshot(snap));
     }
 
     [TestMethod]

@@ -36,7 +36,7 @@ public class YArrayTests : YTestBase
         var array0 = Arrays[Users[0]];
         array0.Delete(0, 0);
 
-        Assert.ThrowsException<Exception>(() => array0.Delete(1, 1));
+        Assert.ThrowsExactly<Exception>(() => array0.Delete(1, 1));
 
         array0.Insert(0, new List<object> { "A" });
         array0.Delete(1, 0);
@@ -410,7 +410,7 @@ public class YArrayTests : YTestBase
         };
 
         array0.Insert(0, new object[] { "stuff" });
-        Assert.AreEqual(array0, evt.Target, "Target property is set correctly");
+        Assert.AreSame(array0, evt.Target, "Target property is set correctly");
     }
 
     [TestMethod]
@@ -430,7 +430,7 @@ public class YArrayTests : YTestBase
         array1.Insert(0, new object[] { "stuff" });
         Connector.FlushAllMessages();
 
-        Assert.AreEqual(array0, evt.Target, "Target property is set correctly");
+        Assert.AreSame(array0, evt.Target, "Target property is set correctly");
 
         CompareUsers();
     }
@@ -472,7 +472,7 @@ public class YArrayTests : YTestBase
         CollectionAssert.AreEqual(new object[] { 0, 1 }, arr.Slice(0, 2).ToArray());
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(5, 6)]
     [DataRow(5, 40)]
     [DataRow(5, 42)]

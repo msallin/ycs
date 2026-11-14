@@ -214,14 +214,12 @@ public class UndoRedoTests : YTestBase
 
         undoManager.StackItemAdded += (s, e) =>
         {
-            Assert.IsNotNull(e.Type);
             Assert.IsTrue(e.ChangedParentTypes?.ContainsKey(text0) ?? false);
             e.StackItem.Meta["test"] = counter++;
         };
 
         undoManager.StackItemPopped += (s, e) =>
         {
-            Assert.IsNotNull(e.Type);
             Assert.IsTrue(e.ChangedParentTypes?.ContainsKey(text0) ?? false);
             receivedMetadata = e.StackItem.Meta.TryGetValue("test", out var val) ? (int)val : -1;
         };

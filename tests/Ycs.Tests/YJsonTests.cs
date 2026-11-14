@@ -15,7 +15,7 @@ namespace Ycs;
 [TestClass]
 public class YJsonTests
 {
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(1.0, "1")]
     [DataRow(1.5, "1.5")]
     [DataRow(-2.25, "-2.25")]

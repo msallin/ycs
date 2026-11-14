@@ -58,7 +58,7 @@ public class RelativePositionParityTests
         return doc;
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(TextRight0, "text", 0, 0, DisplayName = "text, index 0, right-assoc")]
     [DataRow(TextLeft0, "text", 0, -1, DisplayName = "text, index 0, left-assoc")]
     [DataRow(TextRight5, "text", 5, 0, DisplayName = "text, index 5, right-assoc")]
@@ -83,7 +83,7 @@ public class RelativePositionParityTests
         Assert.AreEqual(expectedAssoc, abs.Assoc);
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(TextRight0, DisplayName = "text, index 0, right-assoc")]
     [DataRow(TextLeft0, DisplayName = "text, index 0, left-assoc")]
     [DataRow(TextRight5, DisplayName = "text, index 5, right-assoc")]

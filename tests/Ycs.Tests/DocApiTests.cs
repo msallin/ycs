@@ -55,7 +55,7 @@ public class DocApiTests
     public void ClientIdCanBeChosenButNotNegative()
     {
         Assert.AreEqual(42, new YDoc(new YDocOptions { ClientId = 42 }).ClientId);
-        Assert.ThrowsException<ArgumentOutOfRangeException>(() => new YDocOptions { ClientId = -1 });
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new YDocOptions { ClientId = -1 });
     }
 
     [TestMethod]

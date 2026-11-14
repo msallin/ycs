@@ -25,7 +25,7 @@ public class YXmlTests
     private const string Yjs13XmlUpdateV1 = "AQ3TmNW2BAAHAQN4bWwDCXBhcmFncmFwaAcA05jVtgQABgYA05jVtgQBBGJvbGQEdHJ1ZYTTmNW2BAIGSGVsbG8ghtOY1bYECARib2xkBG51bGyE05jVtgQJBXdvcmxkh9OY1bYEAQMCZW0HANOY1bYEDwYEANOY1bYEEAMhISEoANOY1bYEDwV0aXRsZQF3BXNob3V0KADTmNW2BAAFYWxpZ24BdwZjZW50ZXIoANOY1bYEAAVjbGFzcwF3BWludHJvgdOY1bYEAAEB05jVtgQBFwE=";
     private const string Yjs13XmlUpdateV2 = "AAMAAwEG07Gq7QgLDAADAAwCUBwCQl4BAAATBwEGAIQAhgCEAIcABwAEACgCgT4zeG1scGFyYWdyYXBoYm9sZEhlbGxvIGJvbGR3b3JsZGVtISEhdGl0bGVhbGlnbmNsYXNzAwkEBgQFAgNFAQMBAAAEAwYDBgJBAgENAHh+dwVzaG91dHcGY2VudGVydwVpbnRybwHTmNW2BAEXAA==";
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(Yjs13XmlUpdateV1, false, DisplayName = "v1 update")]
     [DataRow(Yjs13XmlUpdateV2, true, DisplayName = "v2 update")]
     public void ReadsXmlTreeProducedByYjs(string base64Update, bool v2)
@@ -78,7 +78,7 @@ public class YXmlTests
         Assert.AreEqual(frag.ToString(), frag.ToJson());
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(Yjs13XmlUpdateV1, false, DisplayName = "v1 re-encode")]
     [DataRow(Yjs13XmlUpdateV2, true, DisplayName = "v2 re-encode")]
     public void ReEncodesXmlToAnUpdateYjsCanRead(string base64Update, bool v2)

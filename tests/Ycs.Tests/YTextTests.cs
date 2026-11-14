@@ -536,7 +536,7 @@ public class YTextTests : YTestBase
         CollectionAssert.AreEqual(new[] { new KeyValuePair<string, object>("test", 42) }, text0.GetAttributes().ToArray());
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(5, 20)]
     [DataRow(5, 40)]
     [DataRow(5, 42)]
@@ -586,7 +586,7 @@ public class YTextTests : YTestBase
         }, users, iterations);
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(5, 20)]
     [DataRow(5, 40)]
     [DataRow(5, 42)]

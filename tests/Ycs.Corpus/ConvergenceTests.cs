@@ -16,7 +16,7 @@ public class ConvergenceTests
         Enumerable.Range(1, int.TryParse(Environment.GetEnvironmentVariable("YCS_CONVERGENCE_SEEDS"), out var n) ? n : 40)
             .Select(s => new object[] { s });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Seeds))]
     public void RandomEdits_RandomDeliveryWithDuplicates_AllDocsConverge(int seed)
     {

@@ -29,7 +29,7 @@ public class YMapTests : YTestBase
         var obj = new object[] { 1 };
         var m2 = new YMap(new Dictionary<string, object> { { "object", obj }, { "boolean", true } });
         map0.Set("m2", m2);
-        Assert.AreEqual(obj, m2.Get("object"));
+        Assert.AreSame(obj, m2.Get("object"));
         Assert.AreEqual(true, m2.Get("boolean"));
 
         CompareUsers();
@@ -124,7 +124,7 @@ public class YMapTests : YTestBase
         var map = new YMap();
         map0.Set("map", map);
 
-        Assert.AreEqual(map, map0.Get("map"));
+        Assert.AreSame(map, map0.Get("map"));
         map.Set("one", 1);
         Assert.AreEqual(1, map.Get("one"));
 
@@ -139,7 +139,7 @@ public class YMapTests : YTestBase
 
         var array = new YArray();
         map0.Set("array", array);
-        Assert.AreEqual(array, map0.Get("array"));
+        Assert.AreSame(array, map0.Get("array"));
 
         array.Insert(0, new object[] { 1, 2, 3 });
         CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, (ICollection)(map0.Get("array") as YArray).ToArray());
@@ -383,20 +383,20 @@ public class YMapTests : YTestBase
         };
 
         map0.Set("stuff", 4);
-        Assert.AreEqual(map0, evt.Target);
+        Assert.AreSame(map0, evt.Target);
         CollectionAssert.AreEqual(new[] { "stuff" }, evt.KeysChanged.ToList());
         evt = null;
 
         // Update, oldValue is in contents.
         map0.Set("stuff", new YArray());
-        Assert.AreEqual(map0, evt.Target);
+        Assert.AreSame(map0, evt.Target);
         CollectionAssert.AreEqual(new[] { "stuff" }, evt.KeysChanged.ToList());
         evt = null;
 
         // Update, oldValue is in opContents.
         map0.Set("stuff", 5);
         map0.Delete("stuff");
-        Assert.AreEqual(map0, evt.Target);
+        Assert.AreSame(map0, evt.Target);
         CollectionAssert.AreEqual(new[] { "stuff" }, evt.KeysChanged.ToList());
         evt = null;
 
@@ -505,7 +505,7 @@ public class YMapTests : YTestBase
         map.EventHandler += throwingObserver;
         map.DeepEventHandler += throwingDeepObserver;
 
-        Assert.ThrowsException<Exception>(() =>
+        Assert.ThrowsExactly<Exception>(() =>
         {
             map.Set("y", "2");
         });
@@ -519,7 +519,7 @@ public class YMapTests : YTestBase
         throwingObserverCalled = false;
         throwingDeepObserverCalled = false;
 
-        Assert.ThrowsException<Exception>(() =>
+        Assert.ThrowsExactly<Exception>(() =>
         {
             map.Set("z", "3");
         });
@@ -531,7 +531,7 @@ public class YMapTests : YTestBase
         Assert.AreEqual("3", map.Get("z"));
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(5, 20)]
     [DataRow(5, 40)]
     [DataRow(5, 42)]

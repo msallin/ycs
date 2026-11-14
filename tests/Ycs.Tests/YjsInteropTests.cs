@@ -27,7 +27,7 @@ public class YjsInteropTests
     private const string Yjs14UpdateV1 = "ARTI/4exDwAoAQNtYXADc3RyAXcQaGVsbG8g4pyTINC80LjRgCgBA21hcANpbnQBfSooAQNtYXAFZmxvYXQBfEBgAAAoAQNtYXAEYm9vbAF4KAEDbWFwBG51bGwBfigBA21hcARqc29uAXYCAWF9AQFidQJ3AXh3AXkjAQNtYXADYmluBAECA/onAQNtYXAGbmVzdGVkASgAyP+HsQ8HBGRlZXABdwV2YWx1ZQgBBWFycmF5AXcBYYHI/4exDwkBiMj/h7EPCgJ5dgEBa3cBdofI/4exDwwACADI/4exDw0CdwJpMHcCaTEEAQR0ZXh0BnBsYWluIIbI/4exDxUEYm9sZAR0cnVlhMj/h7EPFgRib2xkhsj/h7EPGgRib2xkBG51bGzEyP+HsQ8ayP+HsQ8bBSB0YWlshcj/h7EPGxF7ImltYWdlIjoieC5wbmcifQHI/4exDwEKAQ==";
     private const string Yjs14UpdateV2 = "AAIAAgbI/4/iHgoKDgQCBAIQAggAAgE2HSgFIwAnACgACACBAIgAhwAIAAQAhgCEAIYAxACFcFxtYXBzdHJtYXBpbnRtYXBmbG9hdG1hcGJvb2xtYXBudWxsbWFwanNvbm1hcGJpbm1hcG5lc3RlZGRlZXBhcnJheXRleHRwbGFpbiBib2xkYm9sZGJvbGQgdGFpbEMDBQMEAwQDBEMBBgQFBAZEAQUJAQcAAAEAAAABAgEABEEHQgABFAB3EGhlbGxvIOKckyDQvNC40YB9KnxAYAAAeH52AgFhfQEBYnUCdwF4dwF5BAECA/p3BXZhbHVldwFheXYBAWt3AXZ3AmkwdwJpMXh+dgEFaW1hZ2V3BXgucG5nAcj/h7EPAQoA";
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(Yjs13UpdateV1, false, DisplayName = "yjs 13.6.32, v1 update")]
     [DataRow(Yjs13UpdateV2, true, DisplayName = "yjs 13.6.32, v2 update")]
     [DataRow(Yjs14UpdateV1, false, DisplayName = "yjs 14.0.0-16, v1 update")]
@@ -64,7 +64,7 @@ public class YjsInteropTests
             "embedded object lost");
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DataRow(Yjs13UpdateV1, false, DisplayName = "v1 re-encode")]
     [DataRow(Yjs13UpdateV2, true, DisplayName = "v2 re-encode")]
     public void ReEncodesToAnUpdateYjsCanRead(string base64Update, bool v2)
