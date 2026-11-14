@@ -6,6 +6,25 @@ using System.Collections;
 
 namespace Ycs.Corpus;
 
+/// <summary>
+/// One struct of a sequence's item list as the library holds it: a run of <see cref="Length"/>
+/// elements with ids (Client, Clock) .. (Client, Clock + Length - 1). Origins are ids, null for
+/// the start / end of the sequence. <see cref="Kind"/> is "Item" for an Item, else the struct type.
+/// </summary>
+internal readonly record struct ItemRun(
+    long Client,
+    long Clock,
+    int Length,
+    (long Client, long Clock)? Origin,
+    (long Client, long Clock)? RightOrigin,
+    bool Deleted,
+    string Kind,
+    bool LinkedBack,
+    bool InParent)
+{
+    public const string ItemKind = "Item";
+}
+
 /// <summary>A document under test.</summary>
 internal sealed class CorpusDoc
 {
@@ -81,6 +100,102 @@ internal sealed class CorpusDoc
         "text" => _doc.GetText(root).ToString(),
         _ => throw new ArgumentException($"Unknown root type '{type}'.", nameof(type)),
     };
+
+    // AbstractType._start (the first struct of a sequence) is internal and this assembly is not
+    // in the library's InternalsVisibleTo list; it is the only internal this file reads. Everything
+    // else ItemListInvariants needs (Id, Length, LeftOrigin, RightOrigin, Left, Right, Parent,
+    // ParentSub, Deleted) is public on Item.
+    private static readonly FieldInfo StartField =
+        typeof(AbstractType).GetField("_start", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new MissingFieldException(nameof(AbstractType), "_start");
+
+    /// <summary>
+    /// The item list of every sequence (Y.Text, Y.Array, Y.Xml*) reachable from the given roots:
+    /// the roots of type "text" and "array" themselves, plus sequences nested (visibly) in map and
+    /// array roots, keyed by a path such as "root.list[0].inner". Read-only.
+    /// </summary>
+    public IReadOnlyDictionary<string, IReadOnlyList<ItemRun>> Sequences(IEnumerable<(string Name, string Type)> roots)
+    {
+        var result = new Dictionary<string, IReadOnlyList<ItemRun>>();
+        foreach (var (name, type) in roots)
+        {
+            AbstractType root = type switch
+            {
+                "text" => _doc.GetText(name),
+                "array" => _doc.GetArray(name),
+                "map" => _doc.GetMap(name),
+                _ => throw new ArgumentException($"Unknown root type '{type}'.", nameof(roots)),
+            };
+            Collect(root, name, result);
+        }
+
+        return result;
+    }
+
+    /// <summary>The item list of one root sequence ("text" or "array").</summary>
+    public IReadOnlyList<ItemRun> Items(string root, string type) =>
+        ItemsOf(type == "text" ? _doc.GetText(root) : _doc.GetArray(root));
+
+    private static void Collect(AbstractType type, string path, Dictionary<string, IReadOnlyList<ItemRun>> into)
+    {
+        switch (type)
+        {
+            case YArrayBase seq:
+                into[path] = ItemsOf(seq);
+                var i = 0;
+                foreach (var value in seq)
+                {
+                    if (value is AbstractType nested)
+                    {
+                        Collect(nested, $"{path}[{i}]", into);
+                    }
+
+                    i++;
+                }
+
+                break;
+            case YMap map:
+                foreach (var (key, value) in map)
+                {
+                    if (value is AbstractType nested)
+                    {
+                        Collect(nested, $"{path}.{key}", into);
+                    }
+                }
+
+                break;
+        }
+    }
+
+    private static List<ItemRun> ItemsOf(AbstractType type)
+    {
+        var runs = new List<ItemRun>();
+        AbstractStruct previous = null;
+        var s = (AbstractStruct)StartField.GetValue(type);
+        while (s != null)
+        {
+            if (s is not Item item)
+            {
+                runs.Add(new ItemRun(s.Id.Client, s.Id.Clock, s.Length, null, null, s.Deleted, s.GetType().Name, LinkedBack: true, InParent: false));
+                break;
+            }
+
+            runs.Add(new ItemRun(
+                item.Id.Client,
+                item.Id.Clock,
+                item.Length,
+                item.LeftOrigin is ID o ? (o.Client, o.Clock) : null,
+                item.RightOrigin is ID r ? (r.Client, r.Clock) : null,
+                item.Deleted,
+                ItemRun.ItemKind,
+                LinkedBack: ReferenceEquals(item.Left, previous),
+                InParent: ReferenceEquals(item.Parent, type) && item.ParentSub == null));
+            previous = item;
+            s = item.Right;
+        }
+
+        return runs;
+    }
 
     private static object Plain(object value) => value switch
     {

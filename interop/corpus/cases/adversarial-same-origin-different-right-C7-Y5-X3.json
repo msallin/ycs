@@ -1,0 +1,104 @@
+{
+ "name": "adversarial-same-origin-different-right-C7-Y5-X3",
+ "description": "C after 'a'; Y between 'a' and C by a client that has C; X after 'a', concurrently. Client ids C=7, Y=5, X=3; base text 'ab' by client 1.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQCYWIA",
+   "v2": "AAABAQAAAQQJBnRleHRhYgQCAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQEDAMQBAAEBAVgA",
+   "v2": "AAADA0EAAQABAgHEAwFYAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEFAMQBAAcAAVkA",
+   "v2": "AAADBQEHAQABAAHEAwFZAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEHAMQBAAEBAUMA",
+   "v2": "AAADB0EAAQABAgHEAwFDAQAAAAEBAAA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "aXYCb"
+   }
+  },
+  "stateVector": {
+   "1": 2,
+   "3": 1,
+   "5": 1,
+   "7": 1
+  },
+  "deleteSet": {},
+  "stateV1": "BAEHAMQBAAEBAUMBBQDEAQAHAAFZAQMAxAEAAQEBWAIBAAQBBHRleHQBYYQBAAFiAA==",
+  "stateV2": "AAAJB0EABQEHA0ECAgECAwJCAgXEAgQAhA8JQ1lYdGV4dGFiQQEEQQABAQAABAEAAQABAAIAAA==",
+  "stateVectorV1": "BAcBBQEDAQEC",
+  "itemOrder": {
+   "text": [
+    [
+     1,
+     0,
+     1,
+     0
+    ],
+    [
+     3,
+     0,
+     1,
+     0
+    ],
+    [
+     5,
+     0,
+     1,
+     0
+    ],
+    [
+     7,
+     0,
+     1,
+     0
+    ],
+    [
+     1,
+     1,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 2,
+  "stateVector": "AgMBAQI=",
+  "stateVectorMap": {
+   "1": 2,
+   "3": 1
+  },
+  "updateV1": "AgEHAMQBAAEBAUMBBQDEAQAHAAFZAA==",
+  "updateV2": "AAAGB0EABQEHAgEAAgJCAcQFAkNZQQAAAAACAQABAAA=",
+  "from": {
+   "5": 0,
+   "7": 0
+  },
+  "to": {
+   "5": 1,
+   "7": 1
+  }
+ },
+ "merged": {
+  "v1": "BAEHAMQBAAEBAUMBBQDEAQAHAAFZAQMAxAEAAQEBWAEBAAQBBHRleHQCYWIA",
+  "v2": "AAAJB0EABQEHA0EBAgEBAwJCAgPEAgQOCUNZWHRleHRhYkEBBAIBAQAABAEAAQABAAEAAA=="
+ }
+}

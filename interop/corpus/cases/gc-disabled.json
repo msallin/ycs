@@ -54,7 +54,41 @@
   },
   "stateV1": "AgECAIQBHgE8CgEABAEEdGV4dAprZWVwIHRoaXMshAEJCyBkcm9wIHRoaXMshAEUCiBrZWVwIHRoYXQnAQNtYXADc3ViASgAAR8BYQF3CmFhYWFhYWFhYWEnAAEfA2FycgAIAAEhA3cBeHcBeXcBeigBA21hcAtvdmVyd3JpdHRlbgF3CW9sZCB2YWx1ZagBJQF3CW5ldyB2YWx1ZUQBAAE+AQECCgsfBw==",
   "stateV2": "AAADAkEHBzxqFwAABAgBABOEAAQAhAEnACgAJwAIACgAqABESj08dGV4dGtlZXAgdGhpcywgZHJvcCB0aGlzLCBrZWVwIHRoYXRtYXBzdWJhYXJybWFwb3ZlcndyaXR0ZW4+AQQKCwpDAAFDAAsBBQEBAAIBAgEABAEDQQACAQAKAHcKYWFhYWFhYWFhYXcBeHcBeXcBencJb2xkIHZhbHVldwluZXcgdmFsdWUBAQIKCgoG",
-  "stateVectorV1": "AgIBASg="
+  "stateVectorV1": "AgIBASg=",
+  "itemOrder": {
+   "text": [
+    [
+     1,
+     39,
+     1,
+     0
+    ],
+    [
+     1,
+     0,
+     10,
+     0
+    ],
+    [
+     1,
+     10,
+     11,
+     1
+    ],
+    [
+     1,
+     21,
+     10,
+     0
+    ],
+    [
+     2,
+     0,
+     1,
+     0
+    ]
+   ]
+  }
  },
  "diff": {
   "prefix": 1,

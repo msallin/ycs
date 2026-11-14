@@ -1,0 +1,125 @@
+{
+ "name": "adversarial-deleted-competitor-P5-Q7-R3",
+ "description": "P after 'a'; Q after P, then Q deletes P; R after 'a' twice, concurrently. Client ids P=5, Q=7, R=3; base text 'ab' by client 1.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQCYWIA",
+   "v2": "AAABAQAAAQQJBnRleHRhYgQCAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQEDAcQBAAMAAXIA",
+   "v2": "AAADAwEDAQABAAHEAwFyAQAAAAEBAQA="
+  },
+  {
+   "v1": "AQEDAMQBAAEBAVIA",
+   "v2": "AAADA0EAAQABAgHEAwFSAQAAAAEBAAA="
+  },
+  {
+   "v1": "AAEFAQAB",
+   "v2": "AAAAAAAAAQAAAAAAAQUBAAA="
+  },
+  {
+   "v1": "AQEHAMQFAAEBAVEA",
+   "v2": "AAADBwUBAQABAgHEAwFRAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEFAMQBAAEBAVAA",
+   "v2": "AAADBUEAAQABAgHEAwFQAQAAAAEBAAA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "arRQb"
+   }
+  },
+  "stateVector": {
+   "1": 2,
+   "3": 2,
+   "5": 1,
+   "7": 1
+  },
+  "deleteSet": {
+   "5": [
+    [
+     0,
+     1
+    ]
+   ]
+  },
+  "stateV1": "BAEHAMQFAAEBAVEBBQDBAQABAQECAwDEAQABAQFSxAEAAwABcgIBAAQBBHRleHQBYYQBAAFiAQUBAAE=",
+  "stateV2": "AAAMBwUBBUEAA0EBA0EAAgEDBAIBAEIJxADBAMQBBACEDwlRUnJ0ZXh0YWJBAQRBAAEBAAEBBAEAAQACAAIAAQUBAAA=",
+  "stateVectorV1": "BAcBBQEDAgEC",
+  "itemOrder": {
+   "text": [
+    [
+     1,
+     0,
+     1,
+     0
+    ],
+    [
+     3,
+     1,
+     1,
+     0
+    ],
+    [
+     3,
+     0,
+     1,
+     0
+    ],
+    [
+     5,
+     0,
+     1,
+     1
+    ],
+    [
+     7,
+     0,
+     1,
+     0
+    ],
+    [
+     1,
+     1,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 3,
+  "stateVector": "AgMCAQI=",
+  "stateVectorMap": {
+   "1": 2,
+   "3": 2
+  },
+  "updateV1": "AgEHAMQFAAEBAVEBBQDBAQABAQEBBQEAAQ==",
+  "updateV2": "AAAGBwUBBUEAAgEAAgIAA8QAwQMBUQEAAAEBAgEAAQABBQEAAA==",
+  "from": {
+   "5": 0,
+   "7": 0
+  },
+  "to": {
+   "5": 1,
+   "7": 1
+  }
+ },
+ "merged": {
+  "v1": "BAEHAMQFAAEBAVEBBQDEAQABAQFQAgMAxAEAAQEBUsQBAAMAAXIBAQAEAQR0ZXh0AmFiAQUBAAE=",
+  "v2": "AAALBwUBBUEAA0EBAwECAQIEAgEAQgPEAwQPClFQUnJ0ZXh0YWJBAgQCAQEAAAQBAAEAAgABAAEFAQAA"
+ }
+}

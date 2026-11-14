@@ -7,7 +7,7 @@ import { mkdirSync, readdirSync, rmSync, writeFileSync, readFileSync } from 'nod
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
-import { b64, deleteSetOf, docFrom, plain, stateOf, stateVectorOf } from './lib.mjs'
+import { b64, deleteSetOf, docFrom, itemOrderOf, plain, stateOf, stateVectorOf } from './lib.mjs'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const outDir = join(here, 'cases')
@@ -85,6 +85,16 @@ class Sim {
 
   syncAll () { this.docs.forEach((_, i) => this.sync(i)) }
 
+  /** Delivers to client i, in log (causal) order, every update client j has and i has not. */
+  syncFrom (i, j) {
+    for (let k = 0; k < this.log.length; k++) {
+      if (this.seen[j].has(k) && !this.seen[i].has(k)) {
+        Y.applyUpdate(this.docs[i], this.log[k].v1, REMOTE)
+        this.seen[i].add(k)
+      }
+    }
+  }
+
   updates (order = this.log.map((_, k) => k)) { return order.map(k => this.log[k]) }
 }
 
@@ -161,6 +171,7 @@ function record (name, description, { updates, roots, gc = true, diffAt }) {
       stateV1: b64(stateV1),
       stateV2: b64(Y.encodeStateAsUpdateV2(observer)),
       stateVectorV1: b64(Y.encodeStateVector(observer)),
+      itemOrder: itemOrderOf(observer, roots),
     },
     diff: {
       prefix: k,
@@ -485,6 +496,120 @@ record('gc-disabled', 'The same edits with gc: false on every doc, so deleted co
   sim.syncAll()
   record('client-ids-uint32', 'Client ids 0, 2^31-1, 2^31 and 2^32-1 editing text and racing on one map key.', { updates: sim.updates(), roots: [{ name: 'text', type: 'text' }, { name: 'map', type: 'map' }] })
 }
+
+// ---------------------------------------------------------------- adversarial interleavings
+//
+// The interleavings the Lean proof of Yjs' integrate (github.com/iasakura/lean-yjs) treats as
+// hard cases, each with every assignment of client ids to the roles, so the client-id tie-break
+// goes both ways. Each local() is one single-character insert (one update); syncFrom() fixes who
+// knew what when it inserted, i.e. the origin and right origin. The observer receives the base
+// text first and then the rest newest first (dependents before what they depend on), which
+// drives Yjs' pending-struct path; tests/Ycs.Corpus also applies every permutation.
+
+function permutations (xs) {
+  if (xs.length <= 1) return [xs]
+  return xs.flatMap((x, i) => permutations([...xs.slice(0, i), ...xs.slice(i + 1)]).map(p => [x, ...p]))
+}
+
+function adversarial (name, description, roles, script, { base = 'ab', order } = {}) {
+  for (const ids of permutations([3, 5, 7, 9].slice(0, roles.length))) {
+    const sim = new Sim([1, ...ids], { seed: 1 })
+    if (base) {
+      sim.local(0, d => d.getText('text').insert(0, base))
+      sim.syncAll()
+    }
+    const r = Object.fromEntries(roles.map((role, k) => [role, k + 1]))
+    const ins = (role, at, ch) => sim.local(r[role], d => d.getText('text').insert(at, ch))
+    script({ sim, r, ins })
+    const ks = sim.log.map((_, k) => k)
+    const delivery = order ? order(ks) : base ? [0, ...ks.slice(1).reverse()] : ks.slice().reverse()
+    const tag = roles.map((role, k) => `${role}${ids[k]}`).join('-')
+    const who = roles.map((role, k) => `${role}=${ids[k]}`).join(', ')
+    record(`adversarial-${name}-${tag}`, `${description} Client ids ${who}${base ? `; base text '${base}' by client 1` : ''}.`, { updates: sim.updates(delivery), roots: T })
+  }
+}
+
+// The scenario behind the YATA-pseudocode discrepancy (discuss.yjs.dev/t/3875): a and b are
+// inserted concurrently into the empty text (both origin ⊥); c is inserted after b by a client
+// that has only b. Delivered b, c, a, the published pseudocode keeps scanning past b and puts a
+// after c ("bca" vs "abc"); Yjs' integrate (and Lean's findIntegratedIndex) does not.
+adversarial('yata-pseudocode', 'a and b concurrently into the empty text, c after b by a client that has only b; delivered b, c, a.',
+  ['a', 'b', 'c'], ({ sim, r, ins }) => {
+    ins('a', 0, 'a')
+    ins('b', 0, 'b')
+    sim.syncFrom(r.c, r.b)
+    ins('c', 1, 'c')
+  }, { base: '', order: ([a, b, c]) => [b, c, a] })
+
+// Same origin, different right origins: X and Y both have origin 'a'; Y's right origin is C
+// (Y was inserted before C), X's is 'b'. Lean: ConflictLt.ltOriginSame needs each before the
+// other's right origin; findIntegratedIndex's "pending same origin" branch (step_pending_same).
+adversarial('same-origin-different-right', "C after 'a'; Y between 'a' and C by a client that has C; X after 'a', concurrently.",
+  ['C', 'Y', 'X'], ({ sim, r, ins }) => {
+    ins('C', 1, 'C')
+    sim.syncFrom(r.Y, r.C)
+    ins('Y', 1, 'Y')
+    ins('X', 1, 'X')
+  })
+
+// An item inserted between an item and its origin's successors: Q's origin is P, R competes with
+// P for the slot after 'a'. Lean: ConflictLt.ltOriginDiff, the "advance other" / "pending
+// other" branches (o.origin ∈ before, ∉ / ∈ conflicts).
+adversarial('between-origin-and-successor', "P after 'a'; Q right after P by a client that has P; R after 'a', concurrently.",
+  ['P', 'Q', 'R'], ({ sim, r, ins }) => {
+    ins('P', 1, 'P')
+    sim.syncFrom(r.Q, r.P)
+    ins('Q', 2, 'Q')
+    ins('R', 1, 'R')
+  })
+
+// A right origin pointing left of a competitor: Q sits between 'a' and P (right origin P), R
+// competes with both for the slot after 'a' and has right origin 'b'.
+adversarial('right-origin-left-of-competitor', "P after 'a'; Q between 'a' and P by a client that has P; R after 'a', concurrently.",
+  ['P', 'Q', 'R'], ({ sim, r, ins }) => {
+    ins('P', 1, 'P')
+    sim.syncFrom(r.Q, r.P)
+    ins('Q', 1, 'Q')
+    ins('R', 1, 'R')
+  })
+
+// The scan in scanning mode (Lean's ghost flag `scanning`, IntegrationInvariant.scannedRegion):
+// S and T form a pending region the new item N has to look past; T's origin S is in
+// `conflictingItems`, so T neither advances nor breaks.
+adversarial('scan-pending-region', "P after 'a'; S between 'a' and P (has P); T right after S (has S); N after 'a', concurrently.",
+  ['P', 'S', 'T', 'N'], ({ sim, r, ins }) => {
+    ins('P', 1, 'P')
+    sim.syncFrom(r.S, r.P)
+    ins('S', 1, 'S')
+    sim.syncFrom(r.T, r.S)
+    ins('T', 2, 'T')
+    ins('N', 1, 'N')
+  })
+
+// Chains of concurrent inserts from four clients: A, then B after A (has A), then C between 'a'
+// and A (has B); concurrently D after 'a' and d right after D.
+adversarial('chains', "A after 'a'; B after A (has A); C between 'a' and A (has B); concurrently D after 'a' and d after D.",
+  ['A', 'B', 'C', 'D'], ({ sim, r, ins }) => {
+    ins('A', 1, 'A')
+    sim.syncFrom(r.B, r.A)
+    ins('B', 2, 'B')
+    sim.syncFrom(r.C, r.B)
+    ins('C', 1, 'C')
+    ins('D', 1, 'D')
+    ins('D', 2, 'd')
+  })
+
+// Tombstones in the scan: as between-origin-and-successor, but Q deletes P (its origin) after
+// inserting, and R inserts two characters; the integration must look at deleted items too.
+adversarial('deleted-competitor', "P after 'a'; Q after P, then Q deletes P; R after 'a' twice, concurrently.",
+  ['P', 'Q', 'R'], ({ sim, r, ins }) => {
+    ins('P', 1, 'P')
+    sim.syncFrom(r.Q, r.P)
+    ins('Q', 2, 'Q')
+    sim.local(r.Q, d => d.getText('text').delete(1, 1))
+    ins('R', 1, 'R')
+    ins('R', 1, 'r')
+  })
 
 // ---------------------------------------------------------------- write
 

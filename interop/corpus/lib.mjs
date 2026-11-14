@@ -58,3 +58,25 @@ export function docFrom (updates, gc, v2 = false) {
   for (const u of updates) (v2 ? Y.applyUpdateV2 : Y.applyUpdate)(doc, u)
   return doc
 }
+
+/**
+ * The item list of each sequence root ("text" / "array"), in list order, as maximal runs
+ * [client, clock, length, deleted (0/1)] of consecutive ids: what Yjs' integrate decided, with
+ * tombstones and independent of how Yjs happened to split or merge its structs.
+ */
+export function itemOrderOf (doc, roots) {
+  const out = {}
+  for (const r of roots) {
+    if (r.type !== 'text' && r.type !== 'array') continue
+    const type = r.type === 'text' ? doc.getText(r.name) : doc.getArray(r.name)
+    const runs = []
+    for (let s = type._start; s !== null; s = s.right) {
+      const last = runs[runs.length - 1]
+      const deleted = s.deleted ? 1 : 0
+      if (last && last[0] === s.id.client && last[1] + last[2] === s.id.clock && last[3] === deleted) last[2] += s.length
+      else runs.push([s.id.client, s.id.clock, s.length, deleted])
+    }
+    out[r.name] = runs
+  }
+  return out
+}

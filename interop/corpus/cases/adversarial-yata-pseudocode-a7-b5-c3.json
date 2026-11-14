@@ -1,0 +1,86 @@
+{
+ "name": "adversarial-yata-pseudocode-a7-b5-c3",
+ "description": "a and b concurrently into the empty text, c after b by a client that has only b; delivered b, c, a. Client ids a=7, b=5, c=3.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEFAAQBBHRleHQBYgA=",
+   "v2": "AAABBQAAAQQIBXRleHRiBAEBAQAAAQEAAA=="
+  },
+  {
+   "v1": "AQEDAIQFAAFjAA==",
+   "v2": "AAACAwUBAAABhAMBYwEAAAABAQAA"
+  },
+  {
+   "v1": "AQEHAAQBBHRleHQBYQA=",
+   "v2": "AAABBwAAAQQIBXRleHRhBAEBAQAAAQEAAA=="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "bca"
+   }
+  },
+  "stateVector": {
+   "3": 1,
+   "5": 1,
+   "7": 1
+  },
+  "deleteSet": {},
+  "stateV1": "AwEHAAQBBHRleHQBYQEFAAQBBHRleHQBYgEDAIQFAAFjAA==",
+  "stateV2": "AAAEBwUDBQEAAAMEAYQRC3RleHRhdGV4dGJjBAEEQQABAQAAAwEAAQABAAA=",
+  "stateVectorV1": "AwcBBQEDAQ==",
+  "itemOrder": {
+   "text": [
+    [
+     5,
+     0,
+     1,
+     0
+    ],
+    [
+     3,
+     0,
+     1,
+     0
+    ],
+    [
+     7,
+     0,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 1,
+  "stateVector": "AQUB",
+  "stateVectorMap": {
+   "5": 1
+  },
+  "updateV1": "AgEHAAQBBHRleHQBYQEDAIQFAAFjAA==",
+  "updateV2": "AAADBwMFAQAAAwQAhAoGdGV4dGFjBEEAAQEAAAIBAAEAAA==",
+  "from": {
+   "3": 0,
+   "7": 0
+  },
+  "to": {
+   "3": 1,
+   "7": 1
+  }
+ },
+ "merged": {
+  "v1": "AwEHAAQBBHRleHQBYQEFAAQBBHRleHQBYgEDAIQFAAFjAA==",
+  "v2": "AAAEBwUDBQEAAAMEAYQRC3RleHRhdGV4dGJjBAEEQQABAQAAAwEAAQABAAA="
+ }
+}
