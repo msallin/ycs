@@ -41,6 +41,10 @@ public class ContentFormat : IContentEx
     {
         // Search markers are currently unsupported for rich text documents.
         (item.Parent as YArrayBase)?.DisableSearchMarkers();
+        if (item.Parent is YText text)
+        {
+            text.HasFormatting = true;
+        }
     }
 
     void IContentEx.Delete(Transaction transaction)

@@ -483,6 +483,12 @@ public partial class YText : YArrayBase
 
     private IList<Action> _pending;
 
+    /// <summary>
+    /// Whether a formatting attribute was ever integrated into this text (Yjs' <c>_hasFormatting</c>).
+    /// Set by <see cref="ContentFormat"/>; it is never reset.
+    /// </summary>
+    internal bool HasFormatting { get; set; }
+
     public YText()
         : this(null)
     {
@@ -887,8 +893,10 @@ public partial class YText : YArrayBase
         var evt = new YTextEvent(this, transaction, parentSubs);
         var doc = transaction.Doc;
 
-        // If a remote change happened, we try to cleanup potential formatting duplicates.
-        if (!transaction.Local)
+        // If a remote change happened, we try to cleanup potential formatting duplicates. As in
+        // Yjs 13.6, only a text that has held formatting can have any; the others skip the second
+        // transaction this needs.
+        if (!transaction.Local && HasFormatting)
         {
             // Check if another formatting item was inserted.
             var foundFormattingItem = false;
