@@ -17,7 +17,8 @@ internal static class Budgets
         ["doc.apply-remote-char-update-100k"] = new(7784, 50),         // 6 764 B, 3 µs
         ["doc.encode-small-document-v1"] = new(1896, 50),              // 1 648 B, 2 µs
         ["doc.encode-diff-of-one-edit-100k"] = new(103904, 2000),      // 90 348 B, 120 µs (writes the whole delete set)
-        ["text.to-string-100k"] = new(460576, 15000),                  // 400 500 B, 1 050 µs
+        ["text.to-string-100k"] = new(0, 15000),                       // 0 B, 0 µs (the string is kept until the text changes)
+        ["text.to-string-after-edit-100k"] = new(233176, 15000),       // 202 761 B, 730 µs (an insert, then the string built again)
         ["position.relative-from-index-deep-100k"] = new(160, 5000),   // 136 B, 400 µs (walks the list from the start, as Yjs does)
         ["position.absolute-from-relative-deep-100k"] = new(40, 5000), // 32 B, 390 µs (walks the list to the start, as Yjs does)
         ["map.set-existing-key"] = new(4112, 50),                      // 3 572 B, 2 µs

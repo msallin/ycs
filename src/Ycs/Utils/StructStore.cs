@@ -62,6 +62,14 @@ internal sealed partial class StructStore
     internal long PendingBytes => (Pending?.Bytes ?? 0) + PendingDs.Bytes;
 
     /// <summary>
+    /// Counts the structs added and split. Every change to the content of a type adds a struct, splits
+    /// one (which can rewrite characters: a split surrogate pair) or deletes, and a delete of countable
+    /// content lowers the type's <see cref="AbstractType.Length"/>: so while this and the length are
+    /// unchanged, so is the content (<see cref="YText.ToString"/> caches on it).
+    /// </summary>
+    internal long Version { get; private set; }
+
+    /// <summary>
     /// Return the states as a Map<int,int>.
     /// Note that clock refers to the next expected clock id.
     /// </summary>
@@ -133,6 +141,13 @@ internal sealed partial class StructStore
         }
 
         structs.Add(str);
+        Version++;
+    }
+
+    private Item SplitItem(Transaction transaction, Item item, int diff)
+    {
+        Version++;
+        return item.SplitItem(transaction, diff);
     }
 
     /// <summary>
@@ -216,7 +231,7 @@ internal sealed partial class StructStore
         var str = structs[index];
         if (str.Id.Clock < clock && str is Item item)
         {
-            structs.Insert(index + 1, item.SplitItem(transaction, (int)(clock - item.Id.Clock)));
+            structs.Insert(index + 1, SplitItem(transaction, item, (int)(clock - item.Id.Clock)));
             return index + 1;
         }
 
@@ -247,7 +262,7 @@ internal sealed partial class StructStore
 
         if ((id.Clock != str.Id.Clock + str.Length - 1) && !(str is GC))
         {
-            structs.Insert(index + 1, (str as Item).SplitItem(transaction, (int)(id.Clock - str.Id.Clock + 1)));
+            structs.Insert(index + 1, SplitItem(transaction, (Item)str, (int)(id.Clock - str.Id.Clock + 1)));
         }
 
         return str;
@@ -421,7 +436,7 @@ internal sealed partial class StructStore
                 // Split the first item if necessary.
                 if (!str.Deleted && str.Id.Clock < clock)
                 {
-                    structs.Insert(index + 1, ((Item)str).SplitItem(transaction, (int)(clock - str.Id.Clock)));
+                    structs.Insert(index + 1, SplitItem(transaction, (Item)str, (int)(clock - str.Id.Clock)));
 
                     // Increase, we now want to use the next struct.
                     index++;
@@ -439,7 +454,7 @@ internal sealed partial class StructStore
                     {
                         if (clockEnd < str.Id.Clock + str.Length)
                         {
-                            structs.Insert(index, ((Item)str).SplitItem(transaction, (int)(clockEnd - str.Id.Clock)));
+                            structs.Insert(index, SplitItem(transaction, (Item)str, (int)(clockEnd - str.Id.Clock)));
                         }
 
                         str.Delete(transaction);

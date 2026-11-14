@@ -6,7 +6,7 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
-using System.Text;
+using System.Buffers;
 
 namespace Ycs;
 
@@ -492,6 +492,11 @@ public partial class YText : YArrayBase
 
     private List<PendingOperation> _pending;
 
+    // The last result of ToString, valid while the store's version and Length are as they were then.
+    private string _string;
+    private long _stringVersion;
+    private int _stringLength;
+
     /// <summary>
     /// Whether a formatting attribute was ever integrated into this text (Yjs' <c>_hasFormatting</c>).
     /// Set by <see cref="ContentFormat"/>; it is never reset.
@@ -822,23 +827,84 @@ public partial class YText : YArrayBase
         return true;
     }
 
+    /// <summary>
+    /// The text, without formatting and embeds (Yjs' <c>toString()</c>). The string is kept until the
+    /// text changes, so asking again for an unchanged text allocates nothing; to fill a buffer of your
+    /// own instead, use <see cref="CopyTo"/> or <see cref="WriteTo"/>.
+    /// </summary>
     public override string ToString()
     {
-        // TODO: [aleskeyk] Can use cached builder.
-        var sb = new StringBuilder(Length);
+        var store = Doc?.Store;
+        if (_string != null && store != null && _stringVersion == store.Version && _stringLength == Length)
+        {
+            return _string;
+        }
 
-        var n = _start;
-        while (n != null)
+        // One walk over the items into a pooled buffer (Length is enough room), then one copy.
+        string result;
+        var buffer = ArrayPool<char>.Shared.Rent(Length);
+        try
+        {
+            var written = CopyTo(buffer);
+            result = written == 0 ? string.Empty : new string(buffer, 0, written);
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
+
+        if (store != null)
+        {
+            _string = result;
+            _stringVersion = store.Version;
+            _stringLength = Length;
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Copies the text, as <see cref="ToString"/> returns it, into <paramref name="destination"/>
+    /// without allocating. <see cref="AbstractType.Length"/> is always enough room (it also counts
+    /// embeds, which the text leaves out).
+    /// </summary>
+    /// <returns>How many characters were written.</returns>
+    /// <exception cref="ArgumentException"><paramref name="destination"/> is too short; it may have been written to.</exception>
+    public int CopyTo(Span<char> destination)
+    {
+        var written = 0;
+        for (var n = _start; n != null; n = n.Right as Item)
         {
             if (!n.Deleted && n.Countable && n.Content is ContentString cs)
             {
-                cs.AppendToBuilder(sb);
-            }
+                if (cs.Length > destination.Length - written)
+                {
+                    throw new ArgumentException($"The destination holds {destination.Length} characters; the text has more. Pass at least Length ({Length}).", nameof(destination));
+                }
 
-            n = n.Right as Item;
+                cs.CopyTo(destination.Slice(written));
+                written += cs.Length;
+            }
         }
 
-        return sb.ToString();
+        return written;
+    }
+
+    /// <summary>
+    /// Writes the text, as <see cref="ToString"/> returns it, to <paramref name="writer"/>, one run of
+    /// characters at a time, without allocating.
+    /// </summary>
+    public void WriteTo(IBufferWriter<char> writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        for (var n = _start; n != null; n = n.Right as Item)
+        {
+            if (!n.Deleted && n.Countable && n.Content is ContentString cs)
+            {
+                cs.CopyTo(writer.GetSpan(cs.Length));
+                writer.Advance(cs.Length);
+            }
+        }
     }
 
     public YText Clone() => InternalClone() as YText;

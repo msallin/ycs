@@ -396,6 +396,7 @@ class Ycs.YText : YArrayBase
     YText(string str)
     bool RemoveNonText()
     int CleanupFormatting()
+    int CopyTo(System.Span<char> destination)
     object GetAttribute(string name)
     override object ToJson()
     override string ToString()
@@ -407,6 +408,7 @@ class Ycs.YText : YArrayBase
     void InsertEmbed(int index, object embed, System.Collections.Generic.IDictionary<string, object> attributes = null)
     void RemoveAttribute(string name)
     void SetAttribute(string name, object value)
+    void WriteTo(System.Buffers.IBufferWriter<char> writer)
 class Ycs.YText.YTextChangeAttributes
     YText.YTextChangeType State { get; set; }
     YText.YTextChangeType Type { get; set; }

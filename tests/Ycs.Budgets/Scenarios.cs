@@ -61,6 +61,18 @@ internal static class Scenarios
             return _ => text.ToString();
         }),
 
+        new("text.to-string-after-edit-100k", 100, () =>
+        {
+            // ToString keeps its result until the text changes; this builds it again each time.
+            var (_, text) = LargeText();
+            var caret = TextLength / 2;
+            return _ =>
+            {
+                text.Insert(caret++, "x");
+                text.ToString();
+            };
+        }),
+
         new("position.relative-from-index-deep-100k", 500, () =>
         {
             var (_, text) = LargeText();
