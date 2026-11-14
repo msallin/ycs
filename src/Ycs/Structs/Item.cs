@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -190,6 +190,8 @@ public partial class Item : AbstractStruct
             Content.GetType().IsAssignableFrom(rightItem?.Content?.GetType()) &&
             Content.MergeWith(rightItem.Content))
         {
+            (Parent as YArrayBase)?.MoveMarkersOnMerge(this, rightItem);
+
             if (rightItem.Keep)
             {
                 Keep = true;

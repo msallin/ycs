@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -125,11 +125,16 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     private const int MaxSearchMarkers = 80;
 
-    protected readonly ArraySearchMarkerCollection _searchMarkers;
+    /// <summary>
+    /// Search markers speed up index lookups, as in Yjs. <c>null</c> means they are disabled:
+    /// Yjs only enables them for Y.Array and Y.Text, and disables them for a text as soon as it
+    /// holds formatting (see <see cref="ContentFormat"/>).
+    /// </summary>
+    protected ArraySearchMarkerCollection _searchMarkers;
 
-    protected YArrayBase()
+    protected YArrayBase(bool useSearchMarkers = true)
     {
-        _searchMarkers = new ArraySearchMarkerCollection();
+        _searchMarkers = useSearchMarkers ? new ArraySearchMarkerCollection() : null;
     }
 
     public IEnumerator<object> GetEnumerator()
@@ -144,7 +149,39 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     internal void ClearSearchMarkers()
     {
-        _searchMarkers.Clear();
+        _searchMarkers?.Clear();
+    }
+
+    internal void DisableSearchMarkers()
+    {
+        _searchMarkers = null;
+    }
+
+    /// <summary>
+    /// Called when <paramref name="right"/> is merged into <paramref name="left"/>: a marker on
+    /// <paramref name="right"/> moves to <paramref name="left"/> (Yjs <c>Item#mergeWith</c>).
+    /// </summary>
+    internal void MoveMarkersOnMerge(Item left, Item right)
+    {
+        if (_searchMarkers == null)
+        {
+            return;
+        }
+
+        foreach (var marker in _searchMarkers._searchMarkers)
+        {
+            if (marker.P == right)
+            {
+                // Right is going to be "forgotten" so we need to update the marker.
+                marker.P = left;
+
+                // Adjust marker index.
+                if (!left.Deleted && left.Countable)
+                {
+                    marker.Index -= left.Length;
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -154,7 +191,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     {
         if (!transaction.Local)
         {
-            _searchMarkers.Clear();
+            _searchMarkers?.Clear();
         }
     }
 
@@ -162,7 +199,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     {
         if (index == 0)
         {
-            if (_searchMarkers.Count > 0)
+            if (_searchMarkers?.Count > 0)
             {
                 _searchMarkers.UpdateMarkerChanges(index, content.Count);
             }
@@ -208,7 +245,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
-        if (_searchMarkers.Count > 0)
+        if (_searchMarkers?.Count > 0)
         {
             _searchMarkers.UpdateMarkerChanges(startIndex, content.Count);
         }
@@ -318,7 +355,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             throw new Exception("Array length exceeded");
         }
 
-        if (_searchMarkers.Count > 0)
+        if (_searchMarkers?.Count > 0)
         {
             _searchMarkers.UpdateMarkerChanges(startIndex, -startLength + length /* in case we remove the above exception */);
         }
@@ -462,7 +499,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// </summary>
     protected ArraySearchMarker FindMarker(int index)
     {
-        if (_start == null || index == 0 || _searchMarkers == null || _searchMarkers.Count == 0)
+        if (_start == null || index == 0 || _searchMarkers == null)
         {
             return null;
         }

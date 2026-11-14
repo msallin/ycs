@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -660,6 +660,8 @@ public partial class YText : YArrayBase
 
     public void Insert(int index, string text, IDictionary<string, object> attributes = null)
     {
+        // As in Yjs, the search marker is only used for inserts without explicit attributes.
+        var useSearchMarker = attributes == null;
         if (string.IsNullOrEmpty(text))
         {
             return;
@@ -670,7 +672,7 @@ public partial class YText : YArrayBase
         {
             doc.Transact(tr =>
             {
-                var pos = FindPosition(tr, index);
+                var pos = FindPosition(tr, index, useSearchMarker: useSearchMarker);
                 if (attributes == null)
                 {
                     attributes = new Dictionary<string, object>();
@@ -697,7 +699,7 @@ public partial class YText : YArrayBase
         {
             Doc.Transact(tr =>
             {
-                var pos = FindPosition(tr, index);
+                var pos = FindPosition(tr, index, useSearchMarker: false);
                 InsertText(tr, pos, embed, attributes);
             });
         }
@@ -718,7 +720,7 @@ public partial class YText : YArrayBase
         {
             Doc.Transact(tr =>
             {
-                var pos = FindPosition(tr, index);
+                var pos = FindPosition(tr, index, useSearchMarker: true);
                 DeleteText(tr, pos, length);
             });
         }
@@ -739,7 +741,7 @@ public partial class YText : YArrayBase
         {
             Doc.Transact(tr =>
             {
-                var pos = FindPosition(tr, index);
+                var pos = FindPosition(tr, index, useSearchMarker: false);
                 if (pos.Right == null)
                 {
                     return;
@@ -926,10 +928,10 @@ public partial class YText : YArrayBase
         CallTypeObservers(transaction, evt);
     }
 
-    private ItemTextListPosition FindPosition(Transaction transaction, int index)
+    private ItemTextListPosition FindPosition(Transaction transaction, int index, bool useSearchMarker)
     {
         var currentAttributes = new Dictionary<string, object>();
-        var marker = FindMarker(index);
+        var marker = useSearchMarker ? FindMarker(index) : null;
 
         if (marker != null)
         {
@@ -997,7 +999,7 @@ public partial class YText : YArrayBase
         // Insert content.
         var content = text is string s ? (IContent)new ContentString(s) : new ContentEmbed(text);
 
-        if (_searchMarkers.Count > 0)
+        if (_searchMarkers?.Count > 0)
         {
             _searchMarkers.UpdateMarkerChanges(currPos.Index, content.Length);
         }

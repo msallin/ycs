@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -39,7 +39,7 @@ public class ContentFormat : IContentEx
     void IContentEx.Integrate(Transaction transaction, Item item)
     {
         // Search markers are currently unsupported for rich text documents.
-        (item.Parent as YArrayBase)?.ClearSearchMarkers();
+        (item.Parent as YArrayBase)?.DisableSearchMarkers();
     }
 
     void IContentEx.Delete(Transaction transaction)

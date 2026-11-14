@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -153,7 +153,9 @@ public class YXmlFragment : YArrayBase
 
     private List<object> _prelimContent;
 
+    // Yjs only enables search markers for Y.Array and Y.Text (and so Y.XmlText).
     public YXmlFragment()
+        : base(useSearchMarkers: false)
     {
         _prelimContent = new List<object>();
     }
