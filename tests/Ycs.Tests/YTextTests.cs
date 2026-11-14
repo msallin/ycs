@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -16,6 +16,30 @@ namespace Ycs;
 [TestClass]
 public class YTextTests : YTestBase
 {
+    /// <summary>
+    /// A Y.Text with a Y.Map embedded between 'a' and 'b', written by yjs 13.6.33:
+    /// <c>t.insert(0, 'ab'); t.insertEmbed(1, new Y.Map())</c>. The embedded type counts as one
+    /// position, as every countable content does in Yjs' findNextPosition and forward.
+    /// </summary>
+    private const string TextWithEmbeddedType = "AQQBAAQBBHRleHQBYYQBAAFixwEAAQEBKAABAgFrAXcBdgA=";
+
+    [TestMethod]
+    public void EmbeddedTypeCountsAsOnePosition()
+    {
+        var doc = new YDoc();
+        doc.ApplyUpdateV1(Convert.FromBase64String(TextWithEmbeddedType));
+        var text = doc.GetText("text");
+        Assert.AreEqual(3, text.Length);
+
+        text.Insert(2, "X");
+        Assert.AreEqual("aXb", text.ToString());
+
+        text.Delete(1, 1);
+        Assert.AreEqual("aXb", text.ToString());
+        Assert.AreEqual(3, text.Length);
+        Assert.IsFalse(text.ToDelta().Any(d => d.Insert is AbstractType), "the embedded type should be deleted");
+    }
+
     [TestMethod]
     public void TestBasicInsertAndDelete()
     {

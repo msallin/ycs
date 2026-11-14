@@ -355,8 +355,7 @@ public partial class YText : YArrayBase
 
             switch (Right.Content)
             {
-                case ContentEmbed _:
-                case ContentString _:
+                default:
                     if (!Right.Deleted)
                     {
                         Index += Right.Length;
@@ -380,8 +379,7 @@ public partial class YText : YArrayBase
             {
                 switch (Right.Content)
                 {
-                    case ContentEmbed _:
-                    case ContentString _:
+                    default:
                         if (!Right.Deleted)
                         {
                             if (count < Right.Length)
@@ -1042,8 +1040,7 @@ public partial class YText : YArrayBase
                             curPos.Right.Delete(transaction);
                         }
                         break;
-                    case ContentEmbed _:
-                    case ContentString _:
+                    default:
                         if (length < curPos.Right.Length)
                         {
                             transaction.Doc.Store.GetItemCleanStart(transaction, new ID(curPos.Right.Id.Client, curPos.Right.Id.Clock + length));
@@ -1186,8 +1183,7 @@ public partial class YText : YArrayBase
                         case ContentFormat cf:
                             UpdateCurrentAttributes(currentAttributes, cf);
                             break;
-                        case ContentEmbed _:
-                        case ContentString _:
+                        default:
                             res += CleanupFormattingGap(transaction, start, end, startAttributes, currentAttributes);
                             startAttributes = new Dictionary<string, object>(currentAttributes);
                             start = end;
@@ -1214,6 +1210,7 @@ public partial class YText : YArrayBase
             {
                 switch (curPos.Right.Content)
                 {
+                    case ContentType _:
                     case ContentEmbed _:
                     case ContentString _:
                         if (length < curPos.Right.Length)
