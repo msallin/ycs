@@ -95,7 +95,7 @@ const jsResult = {
 
 // --- Run the same script against Ycs and compare. ---
 
-const dotnet = process.env.DOTNET || (process.env.HOME + '/.dotnet/dotnet')
+const dotnet = process.env.DOTNET || 'dotnet'
 const csProj = join(__dirname, '..', 'Ycs.Types.Interop', 'Ycs.Types.Interop.csproj')
 const result = spawnSync(dotnet, ['run', '--project', csProj, '-v', 'q'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
 

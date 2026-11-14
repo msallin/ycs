@@ -21,7 +21,7 @@ const b64 = u8 => Buffer.from(u8).toString('base64')
 const bytes = b64str => new Uint8Array(Buffer.from(b64str, 'base64'))
 
 const here = dirname(fileURLToPath(import.meta.url))
-const dotnet = process.env.DOTNET || (process.env.HOME + '/.dotnet/dotnet')
+const dotnet = process.env.DOTNET || 'dotnet'
 const interopProject = join(here, '..', 'Ycs.Positions.Interop', 'Ycs.Positions.Interop.csproj')
 
 // 1. Build the doc and take a snapshot + a batch of relative positions with real Yjs.

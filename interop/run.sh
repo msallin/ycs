@@ -4,7 +4,7 @@
 # Also refreshes the base64 fixtures pasted into tests/Ycs.Tests/YjsInteropTests.cs.
 set -euo pipefail
 cd "$(dirname "$0")"
-DOTNET="${DOTNET:-$HOME/.dotnet/dotnet}"
+DOTNET="${DOTNET:-dotnet}"
 OUT="${TMPDIR:-/tmp}"
 
 [ -d js/node_modules ] || (cd js && npm install --silent)

@@ -40,7 +40,7 @@ frag.delete(1, 1) // delete 'scratch', leaving only 'paragraph'
 const expectedBeforeEdit = frag.toString()
 const updateV1 = b64(Y.encodeStateAsUpdate(doc))
 
-const dotnet = process.env.DOTNET || (process.env.HOME + '/.dotnet/dotnet')
+const dotnet = process.env.DOTNET || 'dotnet'
 const csproj = fileURLToPath(new URL('../Ycs.Xml.Interop/Ycs.Xml.Interop.csproj', import.meta.url))
 
 let csOut

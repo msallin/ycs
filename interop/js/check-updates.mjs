@@ -14,7 +14,7 @@ const Y = await import('yjs13')
 
 const here = dirname(fileURLToPath(import.meta.url))
 const repoRoot = join(here, '..', '..')
-const dotnet = process.env.DOTNET || (process.env.HOME + '/.dotnet/dotnet')
+const dotnet = process.env.DOTNET || 'dotnet'
 const csprojPath = join(repoRoot, 'interop', 'Ycs.Updates.Interop', 'Ycs.Updates.Interop.csproj')
 
 const b64 = u8 => Buffer.from(u8).toString('base64')
