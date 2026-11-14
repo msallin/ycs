@@ -257,7 +257,7 @@ public partial class AbstractType
     }
 
     protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
-    
+
     protected IEnumerable<KeyValuePair<string, object>> TypeMapEnumerateValues()
     {
         foreach (var kvp in TypeMapEnumerate())

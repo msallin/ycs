@@ -412,7 +412,7 @@ public class YTextTests : YTestBase
     public void TestInsertAndDeleteAtRandomPositions()
     {
         const int N = 10_000;
-        
+
         var rand = new Random();
 
         Init(users: 1);
