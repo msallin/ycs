@@ -109,7 +109,7 @@ let cs
 try {
   const stdout = execFileSync(
     dotnet,
-    ['run', '--project', csprojPath, '-v', 'q', '--', inputPath],
+    ['run', '--no-build', '--project', csprojPath, '-v', 'q', '--', inputPath],
     { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }
   )
   cs = JSON.parse(stdout)

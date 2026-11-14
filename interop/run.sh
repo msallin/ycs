@@ -9,9 +9,14 @@ OUT="${TMPDIR:-/tmp}"
 
 [ -d js/node_modules ] || (cd js && npm install --silent)
 
+# Build the interop apps once, so that 'dotnet run' writes nothing but the app's output.
+for P in Ycs.*Interop/*.csproj; do
+  "$DOTNET" build "$P" -v q --nologo >&2
+done
+
 for V in yjs13 yjs14; do
   node js/gen.mjs "$V" > "$OUT/$V-js.json"
-  "$DOTNET" run --project Ycs.Interop/Ycs.Interop.csproj -v q -- "$OUT/$V-js.json" > "$OUT/$V-cs.json"
+  "$DOTNET" run --no-build --project Ycs.Interop/Ycs.Interop.csproj -- "$OUT/$V-js.json" > "$OUT/$V-cs.json"
   node js/verify.mjs "$V" "$OUT/$V-js.json" "$OUT/$V-cs.json"
 done
 

@@ -64,7 +64,7 @@ const dir = mkdtempSync(join(tmpdir(), 'ycs-positions-'))
 const requestPath = join(dir, 'request.json')
 writeFileSync(requestPath, JSON.stringify(request))
 
-const stdout = execFileSync(dotnet, ['run', '--project', interopProject, '-v', 'q', '--', requestPath], {
+const stdout = execFileSync(dotnet, ['run', '--no-build', '--project', interopProject, '-v', 'q', '--', requestPath], {
   encoding: 'utf8'
 })
 const response = JSON.parse(stdout)

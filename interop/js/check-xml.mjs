@@ -45,7 +45,7 @@ const csproj = fileURLToPath(new URL('../Ycs.Xml.Interop/Ycs.Xml.Interop.csproj'
 
 let csOut
 try {
-  csOut = execFileSync(dotnet, ['run', '--project', csproj, '-v', 'q', '--', updateV1],
+  csOut = execFileSync(dotnet, ['run', '--no-build', '--project', csproj, '-v', 'q', '--', updateV1],
     { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
 } catch (e) {
   console.error(`Ycs.Xml.Interop failed:\n${e.stderr || e.message}`)

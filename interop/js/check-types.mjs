@@ -97,7 +97,7 @@ const jsResult = {
 
 const dotnet = process.env.DOTNET || 'dotnet'
 const csProj = join(__dirname, '..', 'Ycs.Types.Interop', 'Ycs.Types.Interop.csproj')
-const result = spawnSync(dotnet, ['run', '--project', csProj, '-v', 'q'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
+const result = spawnSync(dotnet, ['run', '--no-build', '--project', csProj, '-v', 'q'], { encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 })
 
 if (result.status !== 0) {
   console.error(result.stdout)
