@@ -55,6 +55,10 @@ for a discussion with the maintainers:
   `IAsyncEnumerable` over a `PipeReader`, would fit modern servers better.
 - Several public types expose mutable public fields (`ID.Client`, `Delta.Insert`,
   `RelativePosition.Assoc`, `StackItem.Meta`, …). Properties would be safer; it is a breaking change.
+- `RelativePosition` is a class of 80 bytes (two `ID?` fields of 24 bytes each). A `readonly struct`
+  would cost nothing per position, but `Assoc` is a settable field, `CompareRelativePositions` and
+  `AbsolutePosition.TryCreateFromRelativePosition` accept `null`, and callers keep positions in
+  collections by reference, so it is a breaking change.
 - `YDoc.ClientId` is an `int`, so a document cannot use the upper half of Yjs' 32-bit client id
   range itself (it reads such ids from other clients fine). `uint` would match Yjs.
 - `Item`, `AbstractStruct`, `GC`, `Skip` and the content classes are public but are
