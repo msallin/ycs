@@ -9,11 +9,13 @@ namespace Ycs;
 /// <seealso cref="IntDiffEncoder"/>
 internal class IntDiffDecoder : AbstractStreamDecoder<long>
 {
+    private readonly long _start;
     private long _state;
 
     public IntDiffDecoder(Lib0Reader input, long start)
         : base(input)
     {
+        _start = start;
         _state = start;
     }
 
@@ -23,5 +25,10 @@ internal class IntDiffDecoder : AbstractStreamDecoder<long>
 
         _state += Reader.ReadVarInt().Value;
         return _state;
+    }
+
+    public override void Reset()
+    {
+        _state = _start;
     }
 }

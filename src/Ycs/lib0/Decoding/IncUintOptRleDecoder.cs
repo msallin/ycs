@@ -41,4 +41,10 @@ internal class IncUintOptRleDecoder : AbstractStreamDecoder<uint>
         _count--;
         return unchecked(_state++);
     }
+
+    public override void Reset()
+    {
+        _state = 0;
+        _count = 0;
+    }
 }

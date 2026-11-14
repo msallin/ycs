@@ -6,6 +6,7 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Buffers;
 using System.Diagnostics;
 
 namespace Ycs;
@@ -75,67 +76,221 @@ internal static class EncodingUtils
         }
     }
 
-    public static void WriteClientsStructs(IUpdateEncoder encoder, StructStore store, IDictionary<long, long> _sm)
+    /// <summary>Up to this many clients, the client lists of the encoders are sorted on the stack.</summary>
+    internal const int StackClients = 64;
+
+    /// <summary>
+    /// The store's structs by client. <see cref="StructStore.Clients"/> is always a <see cref="Dictionary{TKey, TValue}"/>;
+    /// enumerating it as one does not box the enumerator.
+    /// </summary>
+    internal static Dictionary<long, List<AbstractStruct>> ClientsOf(StructStore store) => (Dictionary<long, List<AbstractStruct>>)store.Clients;
+
+    /// <summary>
+    /// Writes the structs of every client the store has more of than <paramref name="sm"/> says,
+    /// highest client id first (Yjs' <c>writeClientsStructs</c>).
+    /// </summary>
+    public static void WriteClientsStructs(IUpdateEncoder encoder, StructStore store, IDictionary<long, long> sm)
     {
-        // We filter all valid _sm entries into sm.
-        var sm = new Dictionary<long, long>();
-        foreach (var kvp in _sm)
+        var clientStructs = ClientsOf(store);
+        var capacity = clientStructs.Count;
+        long[] rentedClients = null;
+        long[] rentedClocks = null;
+        Span<long> clients = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
+        Span<long> clocks = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClocks = BufferPool<long>.Rent(capacity));
+        try
         {
-            var client = kvp.Key;
-            var clock = kvp.Value;
-
-            // Only write if new structs are available.
-            if (store.GetState(client) > clock)
+            var count = 0;
+            foreach (var (client, structs) in clientStructs)
             {
-                sm[client] = clock;
+                var clock = sm.TryGetValue(client, out var known) ? known : 0;
+                var last = structs[^1];
+
+                // Only write if new structs are available.
+                if (last.Id.Clock + last.Length > clock)
+                {
+                    clients[count] = client;
+                    clocks[count] = clock;
+                    count++;
+                }
+            }
+
+            // Write # states that were updated.
+            encoder.RestWriter.WriteVarUint((uint)count);
+
+            // Write items with higher client ids first.
+            // This heavily improves the conflict resolution algorithm.
+            clients[..count].Sort(clocks[..count]);
+            for (var i = count - 1; i >= 0; i--)
+            {
+                WriteStructs(encoder, clientStructs[clients[i]], clients[i], clocks[i]);
             }
         }
-
-        foreach (var kvp in store.GetStateVector())
+        finally
         {
-            var client = kvp.Key;
-            if (!_sm.ContainsKey(client))
+            if (rentedClients != null)
             {
-                sm[client] = 0;
+                BufferPool<long>.Return(rentedClients);
+                BufferPool<long>.Return(rentedClocks);
             }
         }
+    }
 
-        // Write # states that were updated.
-        encoder.RestWriter.WriteVarUint((uint)sm.Count);
+    /// <summary>
+    /// Writes the whole store, or what a peer with <paramref name="targetStateVector"/> is missing, as one
+    /// update: the structs, then the delete set, written straight from the store.
+    /// </summary>
+    public static void WriteStateAsUpdate(IUpdateEncoder encoder, StructStore store, IDictionary<long, long> targetStateVector)
+    {
+        WriteClientsStructs(encoder, store, targetStateVector);
+        DeleteSet.WriteFromStore(encoder, store);
+    }
 
-        // Write items with higher client ids first.
-        // This heavily improves the conflict resolution algorithm.
-        var sortedClients = sm.Keys.ToList();
-        sortedClients.Sort((a, b) => b.CompareTo(a));
-
-        foreach (var client in sortedClients)
+    /// <summary>
+    /// Yjs' <c>encodeStateAsUpdate</c> / <c>encodeStateAsUpdateV2</c> as one array. A malformed
+    /// <paramref name="encodedTargetStateVector"/> throws <see cref="YUpdateException"/>.
+    /// </summary>
+    public static byte[] EncodeStateAsUpdate(StructStore store, ReadOnlySpan<byte> encodedTargetStateVector, bool v2)
+    {
+        var targetStateVector = TargetStateVector.Rent();
+        IUpdateEncoder encoder = null;
+        try
         {
-            WriteStructs(encoder, store.Clients[client], client, sm[client]);
+            var target = targetStateVector.Decode(encodedTargetStateVector);
+            encoder = v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
+            WriteStateAsUpdate(encoder, store, target);
+            return encoder.ToArray();
+        }
+        finally
+        {
+            ReturnEncoder(encoder);
+            targetStateVector.Return();
+        }
+    }
+
+    /// <summary>
+    /// Like <see cref="EncodeStateAsUpdate(StructStore, ReadOnlySpan{byte}, bool)"/>, into <paramref name="destination"/>.
+    /// The v1 format is written straight into it; v2 (whose columns come first) is assembled from
+    /// pooled column buffers with one copy. A malformed state vector throws before anything is
+    /// written; should encoding fail later (a bug), the destination may hold part of the update.
+    /// </summary>
+    public static void EncodeStateAsUpdate(StructStore store, IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector, bool v2)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        var targetStateVector = TargetStateVector.Rent();
+        IUpdateEncoder encoder = null;
+        try
+        {
+            var target = targetStateVector.Decode(encodedTargetStateVector);
+            if (v2)
+            {
+                var encoderV2 = UpdateEncoderV2.Rent();
+                encoder = encoderV2;
+                WriteStateAsUpdate(encoderV2, store, target);
+                encoderV2.WriteTo(destination);
+            }
+            else
+            {
+                var encoderV1 = UpdateEncoderV1.Rent();
+                encoder = encoderV1;
+                encoderV1.Reset(destination);
+                WriteStateAsUpdate(encoderV1, store, target);
+                encoderV1.Flush();
+            }
+        }
+        finally
+        {
+            ReturnEncoder(encoder);
+            targetStateVector.Return();
+        }
+    }
+
+    /// <summary>Yjs' <c>encodeStateVector</c>: the same bytes for both update formats.</summary>
+    public static byte[] EncodeStateVector(StructStore store)
+    {
+        var encoder = UpdateEncoderV1.Rent();
+        try
+        {
+            WriteStateVector(encoder, store);
+            return encoder.ToArray();
+        }
+        finally
+        {
+            encoder.Return();
+        }
+    }
+
+    /// <summary><see cref="EncodeStateVector(StructStore)"/> straight into <paramref name="destination"/>.</summary>
+    public static void EncodeStateVector(StructStore store, IBufferWriter<byte> destination)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        var encoder = UpdateEncoderV1.Rent();
+        try
+        {
+            encoder.Reset(destination);
+            WriteStateVector(encoder, store);
+            encoder.Flush();
+        }
+        finally
+        {
+            encoder.Return();
+        }
+    }
+
+    private static void ReturnEncoder(IUpdateEncoder encoder)
+    {
+        switch (encoder)
+        {
+            case UpdateEncoderV1 v1:
+                v1.Return();
+                break;
+            case UpdateEncoderV2 v2:
+                v2.Return();
+                break;
         }
     }
 
     /// <summary>
     /// The structs of an update grouped by client, each list in clock order (Yjs' <c>readClientsStructRefs</c>).
     /// Parents stay unresolved (a root type's name or the id of the parent's item) until the struct is
-    /// integrated, so reading changes no document.
+    /// integrated, so reading changes no document. See <see cref="StructCursor"/> for what is checked.
     /// </summary>
     public static Dictionary<long, List<AbstractStruct>> ReadClientStructRefs(IUpdateDecoder decoder)
     {
         var clientRefs = new Dictionary<long, List<AbstractStruct>>();
+        ReadClientStructRefs(decoder, clientRefs, seenClients: null, spareLists: null);
+        return clientRefs;
+    }
+
+    /// <summary>
+    /// <see cref="ReadClientStructRefs(IUpdateDecoder)"/> into the empty <paramref name="clientRefs"/>,
+    /// with an empty <paramref name="seenClients"/> to find a client listed twice, and the lists taken
+    /// from <paramref name="spareLists"/> while it has any. On an exception, the lists taken are in
+    /// <paramref name="clientRefs"/>.
+    /// </summary>
+    public static void ReadClientStructRefs(
+        IUpdateDecoder decoder,
+        Dictionary<long, List<AbstractStruct>> clientRefs,
+        HashSet<long> seenClients,
+        Stack<List<AbstractStruct>> spareLists)
+    {
+        Debug.Assert(clientRefs.Count == 0);
+        var cursor = new StructCursor(decoder, seenClients);
         List<AbstractStruct> refs = null;
 
-        foreach (var str in ReadStructSection(decoder))
+        while (cursor.Next() is { } str)
         {
             if (refs == null || refs[0].Id.Client != str.Id.Client)
             {
-                refs = new List<AbstractStruct>();
+                if (spareLists == null || !spareLists.TryPop(out refs))
+                {
+                    refs = new List<AbstractStruct>();
+                }
+
                 clientRefs[str.Id.Client] = refs;
             }
 
             refs.Add(str);
         }
-
-        return clientRefs;
     }
 
     /// <summary>
@@ -144,37 +299,67 @@ internal static class EncodingUtils
     /// beyond <see cref="Limits.MaxClock"/>, no client listed twice, an origin or parent of the same
     /// client only at an earlier clock (it must have existed when the struct was created), and no more
     /// structs than <see cref="IUpdateDecoder.MaxStructs"/>. Throws <see cref="YUpdateException"/>.
+    /// A mutable struct: keep it in a local or a non-readonly field.
     /// </summary>
-    public static IEnumerable<AbstractStruct> ReadStructSection(IUpdateDecoder decoder)
+    internal struct StructCursor
     {
-        var numOfStateUpdates = decoder.Reader.ReadVarUint();
-        var clients = numOfStateUpdates > 1 ? new HashSet<long>() : null;
-        long structCount = 0;
+        private readonly IUpdateDecoder _decoder;
+        private readonly long _sections;
+        private readonly HashSet<long> _clients;
+        private long _section;
+        private long _structsLeft;
+        private long _structCount;
+        private long _client;
+        private long _clock;
 
-        for (long i = 0; i < numOfStateUpdates; i++)
+        /// <param name="seenClients">An empty set to find a client listed twice; one is created when needed if null.</param>
+        public StructCursor(IUpdateDecoder decoder, HashSet<long> seenClients = null)
         {
-            long numberOfStructs = decoder.Reader.ReadVarUint();
-            var client = Limits.CheckClient(decoder.ReadClient());
-            var clock = Limits.CheckClock(decoder.Reader.ReadVarUint());
+            _decoder = decoder;
+            _sections = decoder.Reader.ReadVarUint();
+            _clients = _sections > 1 ? seenClients ?? new HashSet<long>() : null;
+        }
 
-            if (clients != null && !clients.Add(client))
+        /// <summary>The next struct, or null after the last.</summary>
+        public AbstractStruct Next()
+        {
+            while (_structsLeft == 0)
+            {
+                if (_section == _sections)
+                {
+                    return null;
+                }
+
+                _section++;
+                ReadSectionHeader();
+            }
+
+            _structsLeft--;
+            var str = ReadStruct(_decoder, _client, _clock);
+            _clock += str.Length;
+            return str;
+        }
+
+        private void ReadSectionHeader()
+        {
+            long numberOfStructs = _decoder.Reader.ReadVarUint();
+            var client = Limits.CheckClient(_decoder.ReadClient());
+            var clock = Limits.CheckClock(_decoder.Reader.ReadVarUint());
+
+            if (_clients != null && !_clients.Add(client))
             {
                 throw new YUpdateException($"The update lists client {client} more than once.");
             }
 
-            if (numberOfStructs > decoder.MaxStructs - structCount)
+            if (numberOfStructs > _decoder.MaxStructs - _structCount)
             {
-                throw new YUpdateException($"The update holds more structs than its size allows ({decoder.MaxStructs}).");
+                throw new YUpdateException($"The update holds more structs than its size allows ({_decoder.MaxStructs}).");
             }
 
-            structCount += numberOfStructs;
-
-            for (long j = 0; j < numberOfStructs; j++)
-            {
-                var str = ReadStruct(decoder, client, clock);
-                clock += str.Length;
-                yield return str;
-            }
+            _structCount += numberOfStructs;
+            _structsLeft = numberOfStructs;
+            _client = client;
+            _clock = clock;
         }
     }
 
@@ -230,16 +415,84 @@ internal static class EncodingUtils
 
     public static void WriteStateVector(IDSEncoder encoder, IDictionary<long, long> sv)
     {
-        encoder.RestWriter.WriteVarUint((uint)sv.Count);
+        var capacity = sv.Count;
+        long[] rentedClients = null;
+        long[] rentedClocks = null;
+        Span<long> clients = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
+        Span<long> clocks = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClocks = BufferPool<long>.Rent(capacity));
+        try
+        {
+            var count = 0;
+            if (sv is Dictionary<long, long> dictionary)
+            {
+                foreach (var (client, clock) in dictionary)
+                {
+                    clients[count] = client;
+                    clocks[count++] = clock;
+                }
+            }
+            else
+            {
+                foreach (var (client, clock) in sv)
+                {
+                    clients[count] = client;
+                    clocks[count++] = clock;
+                }
+            }
+
+            WriteStateVector(encoder, clients[..count], clocks[..count]);
+        }
+        finally
+        {
+            if (rentedClients != null)
+            {
+                BufferPool<long>.Return(rentedClients);
+                BufferPool<long>.Return(rentedClocks);
+            }
+        }
+    }
+
+    /// <summary>Writes the state vector of <paramref name="store"/> without building it.</summary>
+    public static void WriteStateVector(IDSEncoder encoder, StructStore store)
+    {
+        var clientStructs = ClientsOf(store);
+        var capacity = clientStructs.Count;
+        long[] rentedClients = null;
+        long[] rentedClocks = null;
+        Span<long> clients = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
+        Span<long> clocks = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClocks = BufferPool<long>.Rent(capacity));
+        try
+        {
+            var count = 0;
+            foreach (var (client, structs) in clientStructs)
+            {
+                var last = structs[^1];
+                clients[count] = client;
+                clocks[count++] = last.Id.Clock + last.Length;
+            }
+
+            WriteStateVector(encoder, clients[..count], clocks[..count]);
+        }
+        finally
+        {
+            if (rentedClients != null)
+            {
+                BufferPool<long>.Return(rentedClients);
+                BufferPool<long>.Return(rentedClocks);
+            }
+        }
+    }
+
+    private static void WriteStateVector(IDSEncoder encoder, Span<long> clients, Span<long> clocks)
+    {
+        encoder.RestWriter.WriteVarUint((uint)clients.Length);
 
         // Highest client id first, as Yjs' writeStateVector sorts, so the same state has the same bytes.
-        foreach (var kvp in sv.OrderByDescending(kvp => kvp.Key))
+        clients.Sort(clocks);
+        for (var i = clients.Length - 1; i >= 0; i--)
         {
-            var client = kvp.Key;
-            var clock = kvp.Value;
-
-            encoder.RestWriter.WriteVarUint((uint)client);
-            encoder.RestWriter.WriteVarUint((uint)clock);
+            encoder.RestWriter.WriteVarUint((uint)clients[i]);
+            encoder.RestWriter.WriteVarUint((uint)clocks[i]);
         }
     }
 
@@ -249,19 +502,81 @@ internal static class EncodingUtils
 
         // Each entry takes at least two bytes.
         var ss = new Dictionary<long, long>(Limits.Capacity(ssLength, decoder.Reader.Remaining / 2));
+        ReadStateVectorEntries(decoder.Reader, ssLength, ss);
+        return ss;
+    }
 
-        for (long i = 0; i < ssLength; i++)
+    private static void ReadStateVectorEntries(Lib0Reader reader, uint count, Dictionary<long, long> ss)
+    {
+        for (long i = 0; i < count; i++)
         {
-            var client = decoder.Reader.ReadVarUint();
-            var clock = Limits.CheckClock(decoder.Reader.ReadVarUint());
+            var client = reader.ReadVarUint();
+            var clock = Limits.CheckClock(reader.ReadVarUint());
             ss[client] = clock;
         }
-
-        return ss;
     }
 
     public static IDictionary<long, long> DecodeStateVector(Lib0Reader input)
     {
         return ReadStateVector(new DSDecoderV2(input));
+    }
+
+    /// <summary>
+    /// A state vector to encode against, decoded from a span into a dictionary reused on this thread
+    /// (with the reader and a pooled copy of the input), so encoding allocates nothing for it.
+    /// </summary>
+    private sealed class TargetStateVector
+    {
+        [ThreadStatic]
+        private static TargetStateVector t_free;
+
+        private readonly Dictionary<long, long> _stateVector = new();
+        private readonly Lib0Reader _reader = new();
+
+        public static TargetStateVector Rent()
+        {
+            var result = t_free ?? new TargetStateVector();
+            t_free = null;
+            return result;
+        }
+
+        /// <summary>The decoded state vector, valid until <see cref="Return"/>. Malformed input throws <see cref="YUpdateException"/>.</summary>
+        public Dictionary<long, long> Decode(ReadOnlySpan<byte> encoded)
+        {
+            if (encoded.IsEmpty)
+            {
+                return _stateVector;
+            }
+
+            var buffer = BufferPool<byte>.Rent(encoded.Length);
+            try
+            {
+                encoded.CopyTo(buffer);
+                _reader.Reset(buffer, 0, encoded.Length);
+                var count = _reader.ReadVarUint();
+                _stateVector.EnsureCapacity(Limits.Capacity(count, _reader.Remaining / 2));
+                ReadStateVectorEntries(_reader, count, _stateVector);
+                return _stateVector;
+            }
+            catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+            {
+                throw YUpdateException.Wrap(e);
+            }
+            finally
+            {
+                _reader.Clear();
+                BufferPool<byte>.Return(buffer);
+            }
+        }
+
+        public void Return()
+        {
+            // A huge state vector is not kept.
+            if (_stateVector.Count <= 1024)
+            {
+                _stateVector.Clear();
+                t_free = this;
+            }
+        }
     }
 }
