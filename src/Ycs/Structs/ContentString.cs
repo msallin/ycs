@@ -21,8 +21,8 @@ public class ContentString : IContentEx
     // copy. A run that keeps growing by merges (typing at its end) moves into a StringBuilder once it
     // is longer than BuilderThreshold, where '+=' would copy the whole run on every keystroke.
     // Exactly one of the two is set.
-    private string _string;
-    private StringBuilder _builder;
+    private string? _string;
+    private StringBuilder? _builder;
 
     internal ContentString(string value)
     {
@@ -34,9 +34,9 @@ public class ContentString : IContentEx
     public bool Countable => true;
 
     /// <summary>Length in UTF-16 code units, as in JavaScript.</summary>
-    public int Length => _string?.Length ?? _builder.Length;
+    public int Length => _string?.Length ?? _builder!.Length;
 
-    public string GetString() => _string ?? _builder.ToString();
+    public string GetString() => _string ?? _builder!.ToString();
 
     /// <summary>Copies the text into <paramref name="destination"/>, which is at least <see cref="Length"/> long.</summary>
     internal void CopyTo(Span<char> destination)
@@ -47,7 +47,7 @@ public class ContentString : IContentEx
         }
         else
         {
-            _builder.CopyTo(0, destination, _builder.Length);
+            _builder!.CopyTo(0, destination, _builder.Length);
         }
     }
 
@@ -76,12 +76,12 @@ public class ContentString : IContentEx
         }
         else
         {
-            right = _builder.ToString(offset, _builder.Length - offset);
+            right = _builder!.ToString(offset, _builder.Length - offset);
             _builder.Length = offset;
         }
 
         // Prevent encoding invalid documents because of splitting of surrogate pairs.
-        var firstCharCode = _string != null ? _string[offset - 1] : _builder[offset - 1];
+        var firstCharCode = _string != null ? _string[offset - 1] : _builder![offset - 1];
         if (firstCharCode >= 0xD800 && firstCharCode <= 0xDBFF)
         {
             // Last character of the left split is the start of a surrogate utf16/ucs2 pair.
@@ -93,7 +93,7 @@ public class ContentString : IContentEx
             }
             else
             {
-                _builder[offset - 1] = '\uFFFD';
+                _builder![offset - 1] = '\uFFFD';
             }
 
             // Replace right as well.
@@ -109,7 +109,7 @@ public class ContentString : IContentEx
         var other = (ContentString)right;
         if (_builder == null)
         {
-            var length = _string.Length + other.Length;
+            var length = _string!.Length + other.Length;
             if (length <= BuilderThreshold)
             {
                 _string = string.Concat(_string, other.GetString());
@@ -156,7 +156,7 @@ public class ContentString : IContentEx
         }
 
         // Copy out only the part that is written, without an intermediate string.
-        var length = _builder.Length - offset;
+        var length = _builder!.Length - offset;
         var buffer = System.Buffers.ArrayPool<char>.Shared.Rent(length);
         try
         {
