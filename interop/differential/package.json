@@ -1,0 +1,9 @@
+{
+  "name": "ycs-differential",
+  "private": true,
+  "type": "module",
+  "description": "Generates tests/Ycs.Tests/Fixtures/text-differential.json from real Yjs.",
+  "dependencies": {
+    "yjs": "13.6.33"
+  }
+}
