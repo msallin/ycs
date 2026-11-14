@@ -3,7 +3,6 @@
 // byte[]), so when the library's API changes, this is the file to edit.
 
 using System.Collections;
-using System.Reflection;
 
 namespace Ycs.Corpus;
 
@@ -18,20 +17,13 @@ internal sealed class CorpusDoc
     /// <summary>A fresh document; <paramref name="clientId"/> pins the id for reproducible conflict resolution.</summary>
     public static CorpusDoc Create(bool gc = true, int? clientId = null)
     {
-        var doc = new YDoc(new YDocOptions { Gc = gc });
-        if (clientId is int id)
-        {
-            // ClientId has an internal setter; tests need a fixed id so a seed reproduces a run.
-            typeof(YDoc).GetProperty(nameof(YDoc.ClientId), BindingFlags.Instance | BindingFlags.Public)!.SetValue(doc, id);
-        }
-
-        return new CorpusDoc(doc);
+        return new CorpusDoc(new YDoc(new YDocOptions { Gc = gc, ClientId = clientId }));
     }
 
     /// <summary>Raised with the v1 update of every transaction made on this doc (not of applied remote updates).</summary>
     public event Action<byte[]> LocalUpdateV1
     {
-        add => _doc.UpdateV1 += Forward(value);
+        add => _doc.Update += Forward(value);
         remove => throw new NotSupportedException();
     }
 
