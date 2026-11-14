@@ -30,7 +30,7 @@ upstream ycs.
 
 #### Verified against Yjs 13.6.32 and 13.6.33 (and 14.0.0-16 beta)
 
-* `tests/Ycs.Tests` (363 tests) pins updates written by real Yjs as base64 and checks byte-identical
+* `tests/Ycs.Tests` (364 tests) pins updates written by real Yjs as base64 and checks byte-identical
   re-encoding, and `TextDifferentialTests` replays 40 seeded random concurrent editing sessions on
   2–4 replicas that were run in Yjs 13.6.33 (`interop/differential/gen.mjs`), asserting the same final
   text and byte-identical v1 re-encoding.
@@ -136,11 +136,17 @@ Running the checks
 ```bash
 dotnet test tests/Ycs.Tests      # unit, interop fixtures and differential tests; no Node needed
 dotnet test tests/Ycs.Corpus     # the recorded Yjs corpus; no Node needed
+dotnet test tests/Ycs.Fuzz -c Release     # damaged updates must fail cleanly
+dotnet test tests/Ycs.Budgets -c Release  # allocation and time budgets per operation
 dotnet publish samples/Ycs.AotSample -c Release -o out/aot && ./out/aot/Ycs.AotSample
+dotnet publish samples/Ycs.WasmSample -c Release -o out/wasm && node out/wasm/wwwroot/main.mjs
 ./interop/run.sh                 # live round-trips against yjs 13.6.32 and 14 beta (Node)
 ./interop/corpus/roundtrip.sh    # Ycs encodings of the corpus read back by Yjs (Node)
 (cd interop/differential && npm ci && node gen.mjs > ../../tests/Ycs.Tests/Fixtures/text-differential.json)
 ```
+
+[`docs/testing.md`](docs/testing.md) says what each of these guards, how to run a fuzz soak, how
+to accept a public API change and how to update the budgets.
 
 Demo
 -------
