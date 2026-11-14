@@ -5,6 +5,8 @@
 // ------------------------------------------------------------------------------
 
 using System;
+using System.Collections.Generic;
+using System.Numerics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -73,11 +75,69 @@ public class EncodingTests
         DoTestEncoding<long>("VarInt of 64 (-0)", (w, v) => w.WriteVarInt(v, negativeZero: true), (r) => r.ReadVarInt().Value, 0);
     }
 
-    [TestMethod]
-    public void TestEncodeFloatingPoint()
+    /// <summary>
+    /// The 'any' encoding follows JavaScript's number rules, so a value written by Ycs has the
+    /// bytes lib0 writes for the same value. Expected bytes from lib0 0.2.117's writeAny (Node 24).
+    /// </summary>
+    public static IEnumerable<object[]> AnyValuesAndLib0Bytes => new[]
     {
-        DoTestEncoding<float>("", (w, v) => w.WriteAny(v), (r) => (float)r.ReadAny(), 2.0f);
-        DoTestEncoding<double>("", (w, v) => w.WriteAny(v), (r) => (double)r.ReadAny(), 2.0);
+        new object[] { 2, "7d02" },
+        new object[] { 2.0, "7d02" },
+        new object[] { 2.0f, "7d02" },
+        new object[] { -2L, "7d42" },
+        new object[] { 1.5, "7c3fc00000" },
+        new object[] { 0.1, "7b3fb999999999999a" },
+        new object[] { 2147483647, "7dbfffffff0f" },
+        new object[] { 2147483648L, "7c4f000000" },
+        new object[] { -2147483648, "7ccf000000" },
+        new object[] { 9007199254740991L, "7b433fffffffffffff" },
+        new object[] { -0.0, "7d40" },
+        new object[] { double.NaN, "7b7ff8000000000000" },
+        new object[] { double.PositiveInfinity, "7c7f800000" },
+        new object[] { 1e300, "7b7e37e43c8800759c" },
+        new object[] { new BigInteger(5), "7a0000000000000005" },
+        new object[] { new Dictionary<string, object> { ["a"] = 1, ["b"] = new object[] { true, null, "x" } }, "760201617d0101627503787e770178" },
+        new object[] { new byte[] { 1, 2, 3 }, "7403010203" },
+    };
+
+    [TestMethod]
+    [DynamicData(nameof(AnyValuesAndLib0Bytes))]
+    public void TestWriteAnyMatchesLib0(object value, string expectedHex)
+    {
+        var writer = new Lib0Writer();
+        writer.WriteAny(value);
+        Assert.AreEqual(expectedHex, Convert.ToHexStringLower(writer.WrittenSpan));
+    }
+
+    [TestMethod]
+    public void TestReadAnyProducesTheClosedSetOfValues()
+    {
+        object RoundTrip(object value)
+        {
+            var writer = new Lib0Writer();
+            writer.WriteAny(value);
+            return new Lib0Reader(writer.ToArray()).ReadAny();
+        }
+
+        Assert.AreEqual(2, RoundTrip(2.0));
+        Assert.AreEqual(1.5, RoundTrip(1.5f));
+        Assert.AreEqual(2147483648.0, RoundTrip(2147483648L));
+        Assert.IsTrue(double.IsNegative((double)RoundTrip(-0.0)));
+        Assert.AreEqual(new BigInteger(-7), RoundTrip(new BigInteger(-7)));
+        CollectionAssert.AreEqual(new List<object> { "a", 1, null }, (List<object>)RoundTrip(new object[] { "a", 1, null }));
+    }
+
+    [TestMethod]
+    public void TestWriteAnyRejectsValuesOutsideTheClosedSet()
+    {
+        Assert.ThrowsException<ArgumentOutOfRangeException>(() => new Lib0Writer().WriteAny(9007199254740992L));
+        Assert.ThrowsException<NotSupportedException>(() => new Lib0Writer().WriteAny(DateTime.UnixEpoch));
+        Assert.ThrowsException<NotSupportedException>(() => AnyEncoding.Validate(new List<object> { new object() }));
+
+        // ...and a document rejects them when they are inserted, not when it is encoded.
+        var doc = new YDoc();
+        Assert.ThrowsException<NotSupportedException>(() => doc.GetMap("map").Set("k", Guid.Empty));
+        Assert.AreEqual(0, doc.GetMap("map").Count);
     }
 
     [TestMethod]

@@ -64,7 +64,7 @@ public class YJsonTests
     {
         var parsed = (Dictionary<string, object>)YJson.Parse("{\"i\":42,\"d\":1.5,\"e\":1e3,\"s\":\"2020-01-01T00:00:00Z\",\"a\":[true,null],\"o\":{}}");
 
-        Assert.AreEqual(42L, parsed["i"]);
+        Assert.AreEqual(42, parsed["i"]);
         Assert.AreEqual(1.5, parsed["d"]);
         Assert.AreEqual(1000.0, parsed["e"]);
         // An ISO-8601-looking string stays a string, as JSON.parse keeps it.

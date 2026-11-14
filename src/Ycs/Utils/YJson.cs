@@ -5,6 +5,7 @@
 
 using System.Collections;
 using System.Globalization;
+using System.Numerics;
 using System.Text;
 using System.Text.Json;
 
@@ -15,22 +16,23 @@ namespace Ycs;
 /// stores formatting attributes, embeds and legacy <see cref="ContentJson"/> as JSON strings, so the bytes
 /// Ycs writes there should be the bytes Yjs would write for the same value.
 ///
-/// <para>Replaces Newtonsoft.Json, which differed from Yjs in three ways: it wrote an integral double as
-/// <c>1.0</c> (JavaScript writes <c>1</c>), it turned ISO-8601-looking strings into <see cref="DateTime"/>
-/// on read (JavaScript keeps them strings), and it pulled a third-party dependency into every consumer.</para>
+/// <para>Values are the closed set of <see cref="AnyEncoding"/>; there is no reflection, so this works
+/// under trimming and Native AOT. Parsing uses <see cref="Utf8JsonReader"/> straight on the UTF-8 bytes
+/// and returns <see cref="Dictionary{TKey, TValue}"/> of <see cref="string"/> to <see cref="object"/>,
+/// <see cref="List{T}"/> of <see cref="object"/>, <see cref="string"/>, <see cref="bool"/>,
+/// <see cref="int"/> for an integer literal that fits (<see cref="long"/> up to ±(2^53 - 1)), otherwise
+/// <see cref="double"/>, and
+/// <c>null</c>.</para>
 ///
-/// <para>Values read back are plain CLR values — <see cref="Dictionary{TKey, TValue}"/> of
-/// <see cref="string"/> to <see cref="object"/>, <see cref="List{T}"/> of <see cref="object"/>,
-/// <see cref="string"/>, <see cref="bool"/>, <see cref="long"/> for an integer literal that fits, otherwise
-/// <see cref="double"/>, and <c>null</c> — which is what the rest of Ycs and the v2 'any' encoder expect.</para>
+/// <para>Writing is done by hand rather than with <see cref="Utf8JsonWriter"/>, because the bytes must be
+/// those of <c>JSON.stringify</c>: ECMAScript number formatting (<c>1e+21</c>, <c>1.5e-7</c>, no <c>.0</c>)
+/// and its minimal string escaping, which <see cref="Utf8JsonWriter"/>'s encoders do not reproduce.</para>
 /// </summary>
 internal static class YJson
 {
-    private static readonly JsonDocumentOptions ParseOptions = new JsonDocumentOptions
-    {
-        AllowTrailingCommas = true,
-        CommentHandling = JsonCommentHandling.Skip,
-    };
+    private const long MaxSafeInteger = (1L << 53) - 1;
+
+    private static readonly JsonReaderOptions ReaderOptions = new() { MaxDepth = 256 };
 
     public static string Stringify(object value)
     {
@@ -39,55 +41,72 @@ internal static class YJson
         return sb.ToString();
     }
 
-    public static object Parse(ReadOnlySpan<byte> utf8Json) => Parse(Encoding.UTF8.GetString(utf8Json));
+    public static object Parse(string json) => Parse(Encoding.UTF8.GetBytes(json));
 
-    public static object Parse(string json)
+    public static object Parse(ReadOnlySpan<byte> utf8Json)
     {
-        using (var doc = JsonDocument.Parse(json, ParseOptions))
+        var reader = new Utf8JsonReader(utf8Json, ReaderOptions);
+        if (!reader.Read())
         {
-            return ToClr(doc.RootElement);
+            throw new JsonException("Empty JSON text.");
         }
+
+        var value = ReadValue(ref reader);
+        if (reader.Read())
+        {
+            throw new JsonException("Unexpected data after the JSON value.");
+        }
+
+        return value;
     }
 
-    private static object ToClr(JsonElement e)
+    private static object ReadValue(ref Utf8JsonReader reader)
     {
-        switch (e.ValueKind)
+        switch (reader.TokenType)
         {
-            case JsonValueKind.Object:
+            case JsonTokenType.StartObject:
                 {
                     var dict = new Dictionary<string, object>();
-                    foreach (var prop in e.EnumerateObject())
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                     {
-                        dict[prop.Name] = ToClr(prop.Value); // a repeated key: the last one wins, as in JSON.parse
+                        var key = reader.GetString();
+                        reader.Read();
+                        dict[key] = ReadValue(ref reader); // a repeated key: the last one wins, as in JSON.parse
                     }
+
                     return dict;
                 }
-            case JsonValueKind.Array:
+            case JsonTokenType.StartArray:
                 {
-                    var list = new List<object>(e.GetArrayLength());
-                    foreach (var item in e.EnumerateArray())
+                    var list = new List<object>();
+                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
                     {
-                        list.Add(ToClr(item));
+                        list.Add(ReadValue(ref reader));
                     }
+
                     return list;
                 }
-            case JsonValueKind.String:
-                return e.GetString();
-            case JsonValueKind.Number:
+            case JsonTokenType.String:
+                return reader.GetString();
+            case JsonTokenType.Number:
                 {
-                    var raw = e.GetRawText();
-                    if (raw.IndexOfAny(new[] { '.', 'e', 'E' }) < 0 && e.TryGetInt64(out var l))
+                    if (reader.ValueSpan.IndexOfAny((byte)'.', (byte)'e', (byte)'E') < 0
+                        && reader.TryGetInt64(out var l)
+                        && l >= -MaxSafeInteger && l <= MaxSafeInteger)
                     {
-                        return l;
+                        return l >= int.MinValue && l <= int.MaxValue ? (object)(int)l : l;
                     }
-                    return e.GetDouble();
+
+                    return reader.GetDouble();
                 }
-            case JsonValueKind.True:
+            case JsonTokenType.True:
                 return true;
-            case JsonValueKind.False:
+            case JsonTokenType.False:
                 return false;
-            default:
+            case JsonTokenType.Null:
                 return null;
+            default:
+                throw new JsonException($"Unexpected JSON token: {reader.TokenType}.");
         }
     }
 
@@ -108,48 +127,34 @@ internal static class YJson
                 WriteNumber(sb, d);
                 return;
             case float f:
-                // Via the float's own shortest text, so 0.1f writes 0.1, not 0.10000000149011612.
-                WriteNumber(sb, double.Parse(f.ToString("R", CultureInfo.InvariantCulture), CultureInfo.InvariantCulture));
+                WriteNumber(sb, f);
                 return;
-            case decimal m:
-                WriteNumber(sb, (double)m);
+            case long or int or short or sbyte or byte or ushort or uint:
+                WriteInteger(sb, Convert.ToInt64(value, CultureInfo.InvariantCulture));
                 return;
-            case long _:
-            case int _:
-            case short _:
-            case sbyte _:
-            case byte _:
-            case ulong _:
-            case uint _:
-            case ushort _:
-                sb.Append(Convert.ToString(value, CultureInfo.InvariantCulture));
+            case ulong ul:
+                WriteInteger(sb, ul <= MaxSafeInteger ? (long)ul : throw AnyEncoding.OutOfRange(ul));
                 return;
-            case char c:
-                WriteString(sb, c.ToString());
-                return;
+            case BigInteger:
+                // JSON.stringify throws a TypeError for a BigInt.
+                throw new NotSupportedException("A BigInt cannot be written as JSON.");
             case byte[] bytes:
-                // Not a JSON value in Yjs' sense (binary is ContentBinary); kept as base64 text, which is what
-                // Ycs wrote here before.
-                WriteString(sb, Convert.ToBase64String(bytes));
-                return;
-            case JsonElement element:
-                WriteElement(sb, element);
+                // JSON.stringify writes a Uint8Array as an object of its indices.
+                sb.Append('{');
+                for (int i = 0; i < bytes.Length; i++)
+                {
+                    if (i > 0) sb.Append(',');
+                    sb.Append('"').Append(i.ToString(CultureInfo.InvariantCulture)).Append("\":")
+                        .Append(bytes[i].ToString(CultureInfo.InvariantCulture));
+                }
+                sb.Append('}');
                 return;
             case IDictionary<string, object> map:
-                {
-                    sb.Append('{');
-                    var first = true;
-                    foreach (var kv in map)
-                    {
-                        if (!first) sb.Append(',');
-                        first = false;
-                        WriteString(sb, kv.Key);
-                        sb.Append(':');
-                        Write(sb, kv.Value);
-                    }
-                    sb.Append('}');
-                    return;
-                }
+                WriteObject(sb, map);
+                return;
+            case IReadOnlyDictionary<string, object> map:
+                WriteObject(sb, map);
+                return;
             case IDictionary map:
                 {
                     sb.Append('{');
@@ -158,58 +163,52 @@ internal static class YJson
                     {
                         if (!first) sb.Append(',');
                         first = false;
-                        WriteString(sb, Convert.ToString(kv.Key, CultureInfo.InvariantCulture));
+                        WriteString(sb, kv.Key as string ?? throw new ArgumentException("Object keys must be strings.", nameof(value)));
                         sb.Append(':');
                         Write(sb, kv.Value);
                     }
                     sb.Append('}');
                     return;
                 }
-            case IEnumerable items:
+            case IList items:
                 {
                     sb.Append('[');
-                    var first = true;
-                    foreach (var item in items)
+                    for (int i = 0; i < items.Count; i++)
                     {
-                        if (!first) sb.Append(',');
-                        first = false;
-                        Write(sb, item);
+                        if (i > 0) sb.Append(',');
+                        Write(sb, items[i]);
                     }
                     sb.Append(']');
                     return;
                 }
             default:
-                // Any other object (a POCO, an anonymous type, a DateTime): its public shape as
-                // System.Text.Json sees it, then written by the rules above.
-                using (var doc = JsonDocument.Parse(JsonSerializer.Serialize(value, value.GetType())))
-                {
-                    WriteElement(sb, doc.RootElement);
-                }
-                return;
+                throw AnyEncoding.Unsupported(value);
         }
     }
 
-    private static void WriteElement(StringBuilder sb, JsonElement e)
+    private static void WriteObject(StringBuilder sb, IEnumerable<KeyValuePair<string, object>> map)
     {
-        switch (e.ValueKind)
+        sb.Append('{');
+        var first = true;
+        foreach (var kv in map)
         {
-            case JsonValueKind.Number:
-                {
-                    var raw = e.GetRawText();
-                    if (raw.IndexOfAny(new[] { '.', 'e', 'E' }) < 0 && e.TryGetInt64(out var l))
-                    {
-                        sb.Append(l.ToString(CultureInfo.InvariantCulture));
-                    }
-                    else
-                    {
-                        WriteNumber(sb, e.GetDouble());
-                    }
-                    return;
-                }
-            default:
-                Write(sb, ToClr(e));
-                return;
+            if (!first) sb.Append(',');
+            first = false;
+            WriteString(sb, kv.Key);
+            sb.Append(':');
+            Write(sb, kv.Value);
         }
+        sb.Append('}');
+    }
+
+    private static void WriteInteger(StringBuilder sb, long l)
+    {
+        if (l < -MaxSafeInteger || l > MaxSafeInteger)
+        {
+            throw AnyEncoding.OutOfRange(l);
+        }
+
+        sb.Append(l.ToString(CultureInfo.InvariantCulture));
     }
 
     /// <summary>
@@ -224,30 +223,32 @@ internal static class YJson
             sb.Append("null");
             return;
         }
+
         if (d == 0)
         {
             sb.Append('0');
             return;
         }
 
+        // "R" gives the shortest digits that round-trip, as ECMAScript requires.
         var r = Math.Abs(d).ToString("R", CultureInfo.InvariantCulture);
         var exp = 0;
-        var ePos = r.IndexOfAny(new[] { 'E', 'e' });
+        var ePos = r.IndexOfAny(['E', 'e']);
         if (ePos >= 0)
         {
-            exp = int.Parse(r.Substring(ePos + 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
-            r = r.Substring(0, ePos);
+            exp = int.Parse(r.AsSpan(ePos + 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+            r = r[..ePos];
         }
 
         var dot = r.IndexOf('.');
-        var intPart = dot >= 0 ? r.Substring(0, dot) : r;
-        var fracPart = dot >= 0 ? r.Substring(dot + 1) : string.Empty;
+        var intPart = dot >= 0 ? r[..dot] : r;
+        var fracPart = dot >= 0 ? r[(dot + 1)..] : string.Empty;
         var digits = intPart + fracPart;
         var n = intPart.Length + exp; // value = 0.digits × 10^n
 
         var lead = 0;
         while (lead < digits.Length - 1 && digits[lead] == '0') lead++;
-        digits = digits.Substring(lead);
+        digits = digits[lead..];
         n -= lead;
         digits = digits.TrimEnd('0');
         var k = digits.Length;

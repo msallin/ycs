@@ -272,7 +272,7 @@ public partial class YDoc
         }
 
         // Remote type is realized when this method is called.
-        if (typeof(T) != typeof(AbstractType) && !typeof(T).IsAssignableFrom(type.GetType()))
+        if (typeof(T) != typeof(AbstractType) && type is not T)
         {
             if (type.GetType() == typeof(AbstractType))
             {

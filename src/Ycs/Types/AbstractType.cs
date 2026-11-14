@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -186,6 +186,7 @@ public partial class AbstractType
                     content = new ContentBinary(ba);
                     break;
                 default:
+                    AnyEncoding.Validate(value);
                     content = new ContentAny(new[] { value });
                     break;
             }

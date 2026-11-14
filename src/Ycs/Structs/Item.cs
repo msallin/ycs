@@ -187,7 +187,7 @@ public partial class Item : AbstractStruct
             Deleted == right.Deleted &&
             Redone == null &&
             rightItem?.Redone == null &&
-            Content.GetType().IsAssignableFrom(rightItem?.Content?.GetType()) &&
+            rightItem != null && Content.GetType() == rightItem.Content.GetType() &&
             Content.MergeWith(rightItem.Content))
         {
             (Parent as YArrayBase)?.MoveMarkersOnMerge(this, rightItem);

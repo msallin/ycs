@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -14,6 +14,7 @@ public class ContentEmbed : IContentEx
 
     internal ContentEmbed(object embed)
     {
+        AnyEncoding.Validate(embed);
         Embed = embed;
     }
 

@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -220,7 +220,7 @@ internal class DeleteSet
         var left = structs[pos - 1];
         var right = structs[pos];
 
-        if (left.Deleted == right.Deleted && left.GetType().IsAssignableFrom(right.GetType()))
+        if (left.Deleted == right.Deleted && left.GetType() == right.GetType())
         {
             if (left.MergeWith(right))
             {

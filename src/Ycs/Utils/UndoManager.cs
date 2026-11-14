@@ -381,7 +381,7 @@ public class UndoManager
         // Only track certain transactions.
         if (!_scope.Any(entry => entry is YDoc || (entry is AbstractType at && transaction.ChangedParentTypes.ContainsKey(at))) ||
             (!_trackedOrigins.Contains(transaction.Origin) &&
-                (transaction.Origin == null || !_trackedOrigins.Any(to => (to as Type)?.IsAssignableFrom(transaction.Origin.GetType()) ?? false))))
+                (transaction.Origin == null || !_trackedOrigins.Contains(transaction.Origin.GetType()))))
         {
             return;
         }
