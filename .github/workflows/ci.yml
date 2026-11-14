@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build
+        run: dotnet build Ycs.sln -c Release
+
+      - name: Unit tests
+        run: dotnet test tests/Ycs.Tests -c Release --no-build
+
+      - name: Yjs corpus
+        run: dotnet test tests/Ycs.Corpus -c Release --no-build
+
+      - name: Native AOT sample
+        run: |
+          dotnet publish samples/Ycs.AotSample -c Release -o out/aot
+          ./out/aot/Ycs.AotSample
+
+      - name: Interop against real Yjs
+        run: |
+          (cd interop/js && npm ci)
+          bash interop/run.sh
+
+      - name: Corpus round-trip into Yjs
+        run: |
+          (cd interop/corpus && npm ci)
+          bash interop/corpus/roundtrip.sh
