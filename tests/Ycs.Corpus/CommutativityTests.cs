@@ -20,7 +20,7 @@ public class CommutativityTests
     /// <summary>Every causal order of 3 clients x 4 inserts: up to 12! / 4!^3 = 34650 orders per seed.</summary>
     public static IEnumerable<object[]> CausalOrderSeeds => Enumerable.Range(1, 5).Select(s => new object[] { s });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(AllOrderSeeds))]
     public void ApplyV1_EveryPermutationOfSevenInserts_SameTextAndItemOrder(int seed)
     {
@@ -29,7 +29,7 @@ public class CommutativityTests
         AssertSameOutcome(s, orders, $"seed {seed}, every permutation");
     }
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(CausalOrderSeeds))]
     public void ApplyV1_EveryCausalOrderOfTwelveInserts_SameTextAndItemOrder(int seed)
     {

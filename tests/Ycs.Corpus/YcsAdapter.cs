@@ -101,14 +101,6 @@ internal sealed class CorpusDoc
         _ => throw new ArgumentException($"Unknown root type '{type}'.", nameof(type)),
     };
 
-    // AbstractType._start (the first struct of a sequence) is internal and this assembly is not
-    // in the library's InternalsVisibleTo list; it is the only internal this file reads. Everything
-    // else ItemListInvariants needs (Id, Length, LeftOrigin, RightOrigin, Left, Right, Parent,
-    // ParentSub, Deleted) is public on Item.
-    private static readonly FieldInfo StartField =
-        typeof(AbstractType).GetField("_start", BindingFlags.Instance | BindingFlags.NonPublic)
-        ?? throw new MissingFieldException(nameof(AbstractType), "_start");
-
     /// <summary>
     /// The item list of every sequence (Y.Text, Y.Array, Y.Xml*) reachable from the given roots:
     /// the roots of type "text" and "array" themselves, plus sequences nested (visibly) in map and
@@ -171,7 +163,7 @@ internal sealed class CorpusDoc
     {
         var runs = new List<ItemRun>();
         AbstractStruct previous = null;
-        var s = (AbstractStruct)StartField.GetValue(type);
+        AbstractStruct s = type._start;
         while (s != null)
         {
             if (s is not Item item)

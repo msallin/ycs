@@ -23,7 +23,7 @@ public class ItemListInvariantsTests
     public void Corpus_AdversarialCases_ArePresent() =>
         Assert.IsTrue(AdversarialCases.Count() >= 40, "interop/corpus/gen.mjs records the adversarial-* cases; regenerate the corpus.");
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyV1_EveryRecordedUpdate_LeanListInvariantHolds(string name) => Run(name, c =>
     {
@@ -37,7 +37,7 @@ public class ItemListInvariantsTests
         check.Assert(full: true, $"after all recorded updates of {c.Name}");
     });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyV1_ShuffledWithDuplicates_LeanListInvariantHolds(string name) => Run(name, c =>
     {
@@ -60,7 +60,7 @@ public class ItemListInvariantsTests
         }
     });
 
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(Cases))]
     public void ApplyV1_RecordedOrder_ItemOrderEqualsYjs(string name) => Run(name, c =>
     {
@@ -77,7 +77,7 @@ public class ItemListInvariantsTests
     /// order Yjs gave for the recorded one (Lean: `YjsOperationNetwork_converge'`; for the causal
     /// orders, `insert_commutative` step by step), with the list invariant intact.
     /// </summary>
-    [DataTestMethod]
+    [TestMethod]
     [DynamicData(nameof(AdversarialCases))]
     public void ApplyV1_EveryPermutation_TextAndItemOrderEqualYjs(string name) => Run(name, c =>
     {
