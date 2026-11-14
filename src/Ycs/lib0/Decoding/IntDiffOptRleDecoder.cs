@@ -33,14 +33,10 @@ namespace Ycs
                 // If the first bit is set, we read more data.
                 bool hasCount = (diff & Bit.Bit1) > 0;
 
-                if (diff < 0)
-                {
-                    _diff = -((-diff) >> 1);
-                }
-                else
-                {
-                    _diff = diff >> 1;
-                }
+                // The counter flag rides in the LSB of `diff * 2`, so halve towards negative infinity
+                // to drop it — an arithmetic shift already does that for both signs. Negating around a
+                // shift of the magnitude instead rounds towards zero, reading a negative run one short.
+                _diff = diff >> 1;
 
                 _count = hasCount ? Stream.ReadVarUint() + 2 : 1;
             }

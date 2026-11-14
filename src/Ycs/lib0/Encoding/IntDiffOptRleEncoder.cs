@@ -15,7 +15,7 @@ namespace Ycs
     /// <br/>
     /// WARNING: Therefore this encoder only supports 31 bit integers.
     /// <br/>
-    /// Encodes <c>[1, 2, 3, 2]</c> as <c>[3, 1, -2]</c> (more specifically <c>[(1 << 1) | 1, (3 << 0) | 0, -((1 << 1) | 0)]</c>).
+    /// Encodes <c>[1, 2, 3, 2]</c> as <c>[3, 1, -2]</c> (more specifically <c>[(1 * 2) + 1, 3 - 2, (-1 * 2) + 0]</c>).
     /// <br/>
     /// Internally uses variable length encoding. Contrary to the normal UintVar encoding, the first byte contains:
     /// * 1 bit that denotes whether the next value is a count (LSB).
@@ -69,16 +69,12 @@ namespace Ycs
         {
             if (_count > 0)
             {
-                long encodedDiff;
-                if (_diff < 0)
-                {
-                    encodedDiff = -(((uint)(-_diff) << 1) | (uint)(_count == 1 ? 0 : 1));
-                }
-                else
-                {
-                    // 31bit making up a diff  | whether to write the counter.
-                    encodedDiff = ((uint)_diff << 1) | (uint)(_count == 1 ? 0 : 1);
-                }
+                // 31bit making up a diff | whether to write the counter (LSB). The flag is added to
+                // `diff * 2` rather than OR'd into the magnitude, so a negative diff stays
+                // `2 * diff + flag`, matching lib0's writer. Folding the flag into the magnitude
+                // instead yields `2 * diff - 1`, which lib0's reader halves towards negative infinity
+                // and so decodes one short, shifting every later value in the stream.
+                var encodedDiff = _diff * 2 + (_count == 1 ? 0 : 1);
 
                 Stream.WriteVarInt(encodedDiff);
 
