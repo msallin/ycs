@@ -18,6 +18,7 @@ internal class ContentDoc : IContentEx
         }
 
         Doc = doc;
+        _guid = doc.Guid;
         Opts = new YDocOptions();
 
         if (!doc.Gc)
@@ -36,6 +37,9 @@ internal class ContentDoc : IContentEx
         }
     }
 
+    // Doc is null once a deleted subdocument was destroyed; the item still encodes its guid.
+    private readonly string _guid;
+
     int IContentEx.Ref => _ref;
 
     public bool Countable => true;
@@ -46,7 +50,13 @@ internal class ContentDoc : IContentEx
 
     public IReadOnlyList<object> GetContent() => new[] { Doc };
 
-    public IContent Copy() => new ContentDoc(Doc);
+    // As Yjs: a new document with the same guid and options (the original is integrated already).
+    public IContent Copy()
+    {
+        var opts = Opts.Clone();
+        opts.Guid = _guid;
+        return new ContentDoc(new YDoc(opts));
+    }
 
     public IContent Splice(int offset)
     {
@@ -90,7 +100,7 @@ internal class ContentDoc : IContentEx
     void IContentEx.Write(IUpdateEncoder encoder, int offset)
     {
         // 32 digits separated by hyphens, no braces.
-        encoder.WriteString(Doc.Guid);
+        encoder.WriteString(_guid);
         Opts.Write(encoder, offset);
     }
 
