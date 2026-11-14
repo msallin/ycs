@@ -6,6 +6,8 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Diagnostics;
+
 namespace Ycs;
 
 /// <summary>
@@ -13,7 +15,7 @@ namespace Ycs;
 /// - When created in a transaction, it must only be accessed after sorting and merging.
 ///   - This DeleteSet is sent to other clients.
 /// - We do not create a DeleteSet when we send a sync message. The DeleteSet message is created
-///   directly from StructStore.
+///   directly from StructStore (<see cref="WriteFromStore"/>).
 /// - We read a DeleteSet as a apart of sync/update message. In this case the DeleteSet is already
 ///   sorted and merged.
 /// </summary>
@@ -48,7 +50,7 @@ internal class DeleteSet
         CreateDeleteSetFromStructStore(ss);
     }
 
-    public IDictionary<long, List<DeleteItem>> Clients { get; }
+    public Dictionary<long, List<DeleteItem>> Clients { get; }
 
     public void Add(long client, long clock, long length)
     {
@@ -270,66 +272,164 @@ internal class DeleteSet
 
     private void CreateDeleteSetFromStructStore(StructStore ss)
     {
-        foreach (var kvp in ss.Clients)
+        foreach (var (client, structs) in EncodingUtils.ClientsOf(ss))
         {
-            var client = kvp.Key;
-            var structs = kvp.Value;
-            var dsItems = new List<DeleteItem>();
-
-            for (int i = 0; i < structs.Count; i++)
+            List<DeleteItem> dsItems = null;
+            for (var i = 0; NextDeletedRange(structs, ref i, out var clock, out var length);)
             {
-                var str = structs[i];
-                if (str.Deleted)
-                {
-                    var clock = str.Id.Clock;
-                    var len = str.Length;
-
-                    while (i + 1 < structs.Count)
-                    {
-                        var next = structs[i + 1];
-                        if ((next.Id.Clock == clock + len) && next.Deleted)
-                        {
-                            len += next.Length;
-                            i++;
-                        }
-                        else
-                        {
-                            break;
-                        }
-                    }
-
-                    dsItems.Add(new DeleteItem(clock, len));
-                }
+                dsItems ??= new List<DeleteItem>();
+                dsItems.Add(new DeleteItem(clock, length));
             }
 
-            if (dsItems.Count > 0)
+            if (dsItems != null)
             {
                 Clients[client] = dsItems;
             }
         }
     }
 
+    /// <summary>
+    /// Finds the next range of deleted structs at or after index <paramref name="i"/>, and moves
+    /// <paramref name="i"/> past it. Neighbouring deleted structs form one range.
+    /// </summary>
+    private static bool NextDeletedRange(List<AbstractStruct> structs, ref int i, out long clock, out long length)
+    {
+        for (; i < structs.Count; i++)
+        {
+            var str = structs[i];
+            if (str.Deleted)
+            {
+                clock = str.Id.Clock;
+                length = str.Length;
+
+                while (i + 1 < structs.Count)
+                {
+                    var next = structs[i + 1];
+                    if ((next.Id.Clock == clock + length) && next.Deleted)
+                    {
+                        length += next.Length;
+                        i++;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                i++;
+                return true;
+            }
+        }
+
+        clock = 0;
+        length = 0;
+        return false;
+    }
+
     public void Write(IDSEncoder encoder)
     {
-        encoder.RestWriter.WriteVarUint((uint)Clients.Count);
-
-        // Highest client id first: Yjs' writeDeleteSet sorts "to ensure that the delete set is
-        // written in a deterministic order".
-        foreach (var kvp in Clients.OrderByDescending(kvp => kvp.Key))
+        var count = Clients.Count;
+        long[] rented = null;
+        Span<long> clients = count <= EncodingUtils.StackClients ? stackalloc long[EncodingUtils.StackClients] : (rented = BufferPool<long>.Rent(count));
+        try
         {
-            var client = kvp.Key;
-            var dsItems = kvp.Value;
-            var len = dsItems.Count;
-
-            encoder.ResetDsCurVal();
-            encoder.RestWriter.WriteVarUint((uint)client);
-            encoder.RestWriter.WriteVarUint((uint)len);
-
-            for (int i = 0; i < len; i++)
+            clients = clients[..count];
+            var k = 0;
+            foreach (var client in Clients.Keys)
             {
-                var item = dsItems[i];
-                encoder.WriteDsClock(item.Clock);
-                encoder.WriteDsLength(item.Length);
+                clients[k++] = client;
+            }
+
+            // Highest client id first: Yjs' writeDeleteSet sorts "to ensure that the delete set is
+            // written in a deterministic order".
+            clients.Sort();
+
+            encoder.RestWriter.WriteVarUint((uint)count);
+            for (var c = count - 1; c >= 0; c--)
+            {
+                var client = clients[c];
+                var dsItems = Clients[client];
+                var len = dsItems.Count;
+
+                encoder.ResetDsCurVal();
+                encoder.RestWriter.WriteVarUint((uint)client);
+                encoder.RestWriter.WriteVarUint((uint)len);
+
+                for (int i = 0; i < len; i++)
+                {
+                    var item = dsItems[i];
+                    encoder.WriteDsClock(item.Clock);
+                    encoder.WriteDsLength(item.Length);
+                }
+            }
+        }
+        finally
+        {
+            if (rented != null)
+            {
+                BufferPool<long>.Return(rented);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes the delete set of <paramref name="store"/> - what <c>new DeleteSet(store).Write(encoder)</c>
+    /// writes, byte for byte - without building it: the ranges are found in the store twice, once to
+    /// count them and once to write them.
+    /// </summary>
+    public static void WriteFromStore(IDSEncoder encoder, StructStore store)
+    {
+        var clientStructs = EncodingUtils.ClientsOf(store);
+        var capacity = clientStructs.Count;
+        long[] rentedClients = null;
+        long[] rentedCounts = null;
+        Span<long> clients = capacity <= EncodingUtils.StackClients ? stackalloc long[EncodingUtils.StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
+        Span<long> rangeCounts = capacity <= EncodingUtils.StackClients ? stackalloc long[EncodingUtils.StackClients] : (rentedCounts = BufferPool<long>.Rent(capacity));
+        try
+        {
+            var count = 0;
+            foreach (var (client, structs) in clientStructs)
+            {
+                var ranges = 0;
+                for (var i = 0; NextDeletedRange(structs, ref i, out _, out _);)
+                {
+                    ranges++;
+                }
+
+                if (ranges > 0)
+                {
+                    clients[count] = client;
+                    rangeCounts[count] = ranges;
+                    count++;
+                }
+            }
+
+            clients = clients[..count];
+            clients.Sort(rangeCounts[..count]);
+
+            encoder.RestWriter.WriteVarUint((uint)count);
+            for (var c = count - 1; c >= 0; c--)
+            {
+                var client = clients[c];
+                var structs = clientStructs[client];
+
+                encoder.ResetDsCurVal();
+                encoder.RestWriter.WriteVarUint((uint)client);
+                encoder.RestWriter.WriteVarUint((uint)rangeCounts[c]);
+
+                for (var i = 0; NextDeletedRange(structs, ref i, out var clock, out var length);)
+                {
+                    encoder.WriteDsClock(clock);
+                    encoder.WriteDsLength(length);
+                }
+            }
+        }
+        finally
+        {
+            if (rentedClients != null)
+            {
+                BufferPool<long>.Return(rentedClients);
+                BufferPool<long>.Return(rentedCounts);
             }
         }
     }
@@ -341,6 +441,17 @@ internal class DeleteSet
     public static DeleteSet Read(IDSDecoder decoder)
     {
         var ds = new DeleteSet();
+        ReadInto(decoder, ds, spareLists: null);
+        return ds;
+    }
+
+    /// <summary>
+    /// <see cref="Read"/> into the empty <paramref name="ds"/>, taking the per-client lists from
+    /// <paramref name="spareLists"/> while it has any (on an exception, the lists taken are in <paramref name="ds"/>).
+    /// </summary>
+    public static void ReadInto(IDSDecoder decoder, DeleteSet ds, Stack<List<DeleteItem>> spareLists)
+    {
+        Debug.Assert(ds.Clients.Count == 0);
         var numClients = decoder.Reader.ReadVarUint();
 
         for (long i = 0; i < numClients; i++)
@@ -352,10 +463,19 @@ internal class DeleteSet
 
             if (numberOfDeletes > 0)
             {
+                // Each range takes at least two bytes.
+                var capacity = Limits.Capacity(numberOfDeletes, decoder.Reader.Remaining / 2);
                 if (!ds.Clients.TryGetValue(client, out var dsField))
                 {
-                    // Each range takes at least two bytes.
-                    dsField = new List<DeleteItem>(Limits.Capacity(numberOfDeletes, decoder.Reader.Remaining / 2));
+                    if (spareLists != null && spareLists.TryPop(out dsField))
+                    {
+                        dsField.EnsureCapacity(capacity);
+                    }
+                    else
+                    {
+                        dsField = new List<DeleteItem>(capacity);
+                    }
+
                     ds.Clients[client] = dsField;
                 }
 
@@ -376,10 +496,9 @@ internal class DeleteSet
                 if (dsField.Count == 0)
                 {
                     ds.Clients.Remove(client);
+                    spareLists?.Push(dsField);
                 }
             }
         }
-
-        return ds;
     }
 }

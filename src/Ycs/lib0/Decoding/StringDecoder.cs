@@ -7,7 +7,8 @@
 namespace Ycs;
 
 /// <summary>
-/// Decoder for <see cref="StringEncoder"/> (lib0 <c>StringDecoder</c>).
+/// Decoder for <see cref="StringEncoder"/> (lib0 <c>StringDecoder</c>). The lengths count UTF-16
+/// code units, so the whole string is decoded first and each value is a substring of it.
 /// </summary>
 internal sealed class StringDecoder : IDecoder<string>
 {
@@ -18,8 +19,27 @@ internal sealed class StringDecoder : IDecoder<string>
     public StringDecoder(Lib0Reader input)
     {
         ArgumentNullException.ThrowIfNull(input);
-        _value = input.ReadVarString();
         _lengthDecoder = new UintOptRleDecoder(input);
+        Reset();
+    }
+
+    /// <summary>The column this decoder reads.</summary>
+    public Lib0Reader Input => _lengthDecoder.Input;
+
+    /// <summary>Starts over at the current position of <see cref="Input"/>: reads the string.</summary>
+    public void Reset()
+    {
+        _value = null;
+        _pos = 0;
+        _lengthDecoder.Reset();
+        _value = Input.ReadVarString();
+    }
+
+    /// <summary>Drops the decoded string and the reference to the input.</summary>
+    public void Clear()
+    {
+        _value = null;
+        Input.Clear();
     }
 
     public string Read()

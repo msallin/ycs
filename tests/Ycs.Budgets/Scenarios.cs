@@ -55,6 +55,19 @@ internal static class Scenarios
             return _ => doc.EncodeStateAsUpdateV1(stateVector);
         }),
 
+        new("doc.encode-diff-100k-into-buffer-writer", 500, () =>
+        {
+            var (doc, text) = LargeText();
+            var stateVector = doc.EncodeStateVector();
+            text.Insert(TextLength / 2, "z");
+            var destination = new System.Buffers.ArrayBufferWriter<byte>(1 << 16);
+            return _ =>
+            {
+                destination.ResetWrittenCount();
+                doc.EncodeStateAsUpdateV1(destination, stateVector);
+            };
+        }),
+
         new("text.to-string-100k", 100, () =>
         {
             var (_, text) = LargeText();

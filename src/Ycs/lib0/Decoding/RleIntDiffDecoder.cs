@@ -11,12 +11,14 @@ namespace Ycs;
 /// <seealso cref="RleIntDiffEncoder"/>
 internal class RleIntDiffDecoder : AbstractStreamDecoder<long>
 {
+    private readonly long _start;
     private long _state;
     private long _count;
 
     public RleIntDiffDecoder(Lib0Reader input, long start)
         : base(input)
     {
+        _start = start;
         _state = start;
     }
 
@@ -43,5 +45,11 @@ internal class RleIntDiffDecoder : AbstractStreamDecoder<long>
 
         _count--;
         return _state;
+    }
+
+    public override void Reset()
+    {
+        _state = _start;
+        _count = 0;
     }
 }

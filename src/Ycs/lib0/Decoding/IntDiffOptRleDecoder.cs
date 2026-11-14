@@ -50,4 +50,11 @@ internal class IntDiffOptRleDecoder : AbstractStreamDecoder<long>
         _count--;
         return _state;
     }
+
+    public override void Reset()
+    {
+        _state = 0;
+        _count = 0;
+        _diff = 0;
+    }
 }

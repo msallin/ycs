@@ -44,4 +44,10 @@ internal class RleDecoder : AbstractStreamDecoder<byte>
         _count--;
         return _state;
     }
+
+    public override void Reset()
+    {
+        _state = 0;
+        _count = 0;
+    }
 }

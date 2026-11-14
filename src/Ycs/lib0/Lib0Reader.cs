@@ -12,20 +12,32 @@ namespace Ycs;
 /// <summary>
 /// Reads the primitive encodings of <c>lib0/decoding.js</c> from a byte array (the counterpart
 /// of lib0's <c>Decoder</c>). Sub-ranges are handed out as readers over the same array, so the
-/// column streams of the v2 format are decoded without copying them first.
+/// column streams of the v2 format are decoded without copying them first. A reader can be
+/// pointed at other input with <see cref="Reset"/>, so decoders can be reused.
 /// </summary>
 internal sealed class Lib0Reader
 {
-    private readonly byte[] _buffer;
-    private readonly int _end;
+    private byte[] _buffer = Array.Empty<byte>();
+    private int _end;
     private int _pos;
 
+    /// <summary>A reader over no input; see <see cref="Reset"/>.</summary>
+    public Lib0Reader()
+    {
+    }
+
     public Lib0Reader(byte[] buffer)
-        : this(buffer, 0, buffer.Length)
+        : this(buffer, 0, buffer?.Length ?? 0)
     {
     }
 
     public Lib0Reader(byte[] buffer, int offset, int count)
+    {
+        Reset(buffer, offset, count);
+    }
+
+    /// <summary>Reads <paramref name="count"/> bytes of <paramref name="buffer"/> from <paramref name="offset"/> from now on.</summary>
+    public void Reset(byte[] buffer, int offset, int count)
     {
         ArgumentNullException.ThrowIfNull(buffer);
         ArgumentOutOfRangeException.ThrowIfNegative(offset);
@@ -36,6 +48,9 @@ internal sealed class Lib0Reader
         _pos = offset;
         _end = offset + count;
     }
+
+    /// <summary>Drops the reference to the input.</summary>
+    public void Clear() => Reset(Array.Empty<byte>(), 0, 0);
 
     public bool HasContent => _pos < _end;
 
@@ -151,14 +166,21 @@ internal sealed class Lib0Reader
     /// <summary>A reader over the next length-prefixed byte array, sharing this reader's buffer.</summary>
     public Lib0Reader ReadVarUint8ArrayAsReader()
     {
-        var length = (int)ReadVarUint();
-        if ((uint)length > (uint)(_end - _pos))
+        var reader = new Lib0Reader();
+        ReadVarUint8ArrayInto(reader);
+        return reader;
+    }
+
+    /// <summary>Points <paramref name="target"/> at the next length-prefixed byte array of this reader's buffer.</summary>
+    public void ReadVarUint8ArrayInto(Lib0Reader target)
+    {
+        var length = ReadVarUint();
+        if (length > (uint)(_end - _pos))
         {
             throw EndOfInput();
         }
 
-        var reader = new Lib0Reader(_buffer, _pos, length);
-        _pos += length;
-        return reader;
+        target.Reset(_buffer, _pos, (int)length);
+        _pos += (int)length;
     }
 }

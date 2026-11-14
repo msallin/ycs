@@ -33,13 +33,13 @@ internal class IntDiffOptRleEncoder : AbstractStreamEncoder<long>
     private long _diff = 0;
     private uint _count = 0;
 
-    public IntDiffOptRleEncoder()
+    public IntDiffOptRleEncoder(bool pooled = false)
+        : base(pooled)
     {
-        // Do nothing.
     }
 
     /// <inheritdoc/>
-    public override void Write(long value)
+    protected override void WriteValue(long value)
     {
         Debug.Assert(value <= Bits.Bits30);
 
@@ -56,6 +56,14 @@ internal class IntDiffOptRleEncoder : AbstractStreamEncoder<long>
             _diff = value - _state;
             _state = value;
         }
+    }
+
+    public override void Reset()
+    {
+        base.Reset();
+        _state = 0;
+        _diff = 0;
+        _count = 0;
     }
 
     protected override void Flush()

@@ -17,12 +17,13 @@ namespace Ycs;
 /// </summary>
 internal sealed class LazyStructReader
 {
-    private readonly IEnumerator<AbstractStruct> _generator;
+    // Not readonly: Next() advances it in place.
+    private EncodingUtils.StructCursor _cursor;
     private readonly bool _filterSkips;
 
     public LazyStructReader(IUpdateDecoder decoder, bool filterSkips)
     {
-        _generator = EncodingUtils.ReadStructSection(decoder).GetEnumerator();
+        _cursor = new EncodingUtils.StructCursor(decoder);
         _filterSkips = filterSkips;
         Curr = null;
 
@@ -42,7 +43,7 @@ internal sealed class LazyStructReader
     {
         do
         {
-            Curr = _generator.MoveNext() ? _generator.Current : null;
+            Curr = _cursor.Next();
         }
         while (_filterSkips && Curr != null && Curr is Skip);
 

@@ -22,13 +22,13 @@ internal class IncUintOptRleEncoder : AbstractStreamEncoder<uint>
     private uint _state;
     private uint _count;
 
-    public IncUintOptRleEncoder()
+    public IncUintOptRleEncoder(bool pooled = false)
+        : base(pooled)
     {
-        // Do nothing.
     }
 
     /// <inheritdoc/>
-    public override void Write(uint value)
+    protected override void WriteValue(uint value)
     {
         Debug.Assert(value <= int.MaxValue);
 
@@ -43,6 +43,13 @@ internal class IncUintOptRleEncoder : AbstractStreamEncoder<uint>
             _count = 1;
             _state = value;
         }
+    }
+
+    public override void Reset()
+    {
+        base.Reset();
+        _state = 0;
+        _count = 0;
     }
 
     protected override void Flush()

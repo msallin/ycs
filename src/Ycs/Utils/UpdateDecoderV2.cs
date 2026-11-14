@@ -52,7 +52,7 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     private readonly IntDiffOptRleDecoder _leftClockDecoder;
     private readonly IntDiffOptRleDecoder _rightClockDecoder;
     private readonly RleDecoder _infoDecoder;
-    private readonly StringDecoder _stringDecoder;
+    private StringDecoder _stringDecoder;
     private readonly RleDecoder _parentInfoDecoder;
     private readonly UintOptRleDecoder _typeRefDecoder;
     private readonly UintOptRleDecoder _lengthDecoder;
@@ -62,24 +62,81 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     public UpdateDecoderV2(Lib0Reader input, bool trusted = false)
         : base(input)
     {
-        MaxStructs = trusted ? long.MaxValue : (long)input.Remaining * Limits.MaxStructsPerByteV2 + Limits.MinStructs;
+        _keyClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
+        _clientDecoder = new UintOptRleDecoder(new Lib0Reader());
+        _leftClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
+        _rightClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
+        _infoDecoder = new RleDecoder(new Lib0Reader());
+        _parentInfoDecoder = new RleDecoder(new Lib0Reader());
+        _typeRefDecoder = new UintOptRleDecoder(new Lib0Reader());
+        _lengthDecoder = new UintOptRleDecoder(new Lib0Reader());
+        ReadColumns(trusted, createStringDecoder: true);
+    }
+
+    public long MaxStructs { get; private set; }
+
+    /// <summary>
+    /// Starts over on a new update: <see cref="DSDecoderV2.Reader"/> must have been pointed at it
+    /// (<see cref="Lib0Reader.Reset"/>). The column decoders and their readers are reused.
+    /// </summary>
+    public void Reset(bool trusted = false)
+    {
+        ResetDsCurVal();
+        _keys.Clear();
+        ReadColumns(trusted, createStringDecoder: false);
+    }
+
+    /// <summary>Drops the references to the input and to the decoded strings.</summary>
+    public void Clear()
+    {
+        Reader.Clear();
+        _keys.Clear();
+        _keyClockDecoder.Input.Clear();
+        _clientDecoder.Input.Clear();
+        _leftClockDecoder.Input.Clear();
+        _rightClockDecoder.Input.Clear();
+        _infoDecoder.Input.Clear();
+        _stringDecoder.Clear();
+        _parentInfoDecoder.Input.Clear();
+        _typeRefDecoder.Input.Clear();
+        _lengthDecoder.Input.Clear();
+    }
+
+    private void ReadColumns(bool trusted, bool createStringDecoder)
+    {
+        MaxStructs = trusted ? long.MaxValue : (long)Reader.Remaining * Limits.MaxStructsPerByteV2 + Limits.MinStructs;
 
         // Read feature flag - currently unused.
         Reader.ReadByte();
 
         // Each column is a reader over a slice of the same buffer; nothing is copied.
-        _keyClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
-        _clientDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
-        _leftClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
-        _rightClockDecoder = new IntDiffOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
-        _infoDecoder = new RleDecoder(Reader.ReadVarUint8ArrayAsReader());
-        _stringDecoder = new StringDecoder(Reader.ReadVarUint8ArrayAsReader());
-        _parentInfoDecoder = new RleDecoder(Reader.ReadVarUint8ArrayAsReader());
-        _typeRefDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
-        _lengthDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
+        ReadColumn(_keyClockDecoder);
+        ReadColumn(_clientDecoder);
+        ReadColumn(_leftClockDecoder);
+        ReadColumn(_rightClockDecoder);
+        ReadColumn(_infoDecoder);
+
+        if (createStringDecoder)
+        {
+            _stringDecoder = new StringDecoder(Reader.ReadVarUint8ArrayAsReader());
+        }
+        else
+        {
+            Reader.ReadVarUint8ArrayInto(_stringDecoder.Input);
+            _stringDecoder.Reset();
+        }
+
+        ReadColumn(_parentInfoDecoder);
+        ReadColumn(_typeRefDecoder);
+        ReadColumn(_lengthDecoder);
     }
 
-    public long MaxStructs { get; }
+    private void ReadColumn<T>(AbstractStreamDecoder<T> decoder)
+    {
+        Reader.ReadVarUint8ArrayInto(decoder.Input);
+        decoder.Reset();
+    }
+
 
     public ID ReadLeftId() => new ID(_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
 

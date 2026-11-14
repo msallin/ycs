@@ -20,15 +20,14 @@ internal class RleEncoder : AbstractStreamEncoder<byte>
     private byte? _state = null;
     private uint _count = 0;
 
-    public RleEncoder()
+    public RleEncoder(bool pooled = false)
+        : base(pooled)
     {
-        // Do nothing.
     }
 
     /// <inheritdoc/>
-    public override void Write(byte value)
+    protected override void WriteValue(byte value)
     {
-
         if (_state == value)
         {
             _count++;
@@ -47,5 +46,12 @@ internal class RleEncoder : AbstractStreamEncoder<byte>
             _count = 1;
             _state = value;
         }
+    }
+
+    public override void Reset()
+    {
+        base.Reset();
+        _state = null;
+        _count = 0;
     }
 }
