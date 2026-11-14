@@ -172,4 +172,31 @@ public class YjsInteropTests
 
         return doc;
     }
+
+    [TestMethod]
+    public void PendingStructsAreReReadWhenTheyIntegrate()
+    {
+        // A struct of client 1 at clock 1 arrives before clock 0; meanwhile the root is realized and an
+        // update observer is attached. Yjs keeps pending structs encoded and reads them again, so the
+        // struct lands in the real Y.Text (and encoding the transaction does not hit a stale placeholder).
+        var doc = new YDoc();
+        var updates = 0;
+        doc.Update += (_, _) => updates++;
+        doc.ApplyUpdate(Convert.FromBase64String("AQEBAQQBBHRleHQBYgA="));
+        var text = doc.GetText("text");
+        doc.ApplyUpdate(Convert.FromBase64String("AQEBAAQBBW90aGVyAWEA"));
+
+        Assert.AreEqual("b", text.ToString());
+        Assert.AreEqual("a", doc.GetText("other").ToString());
+        Assert.IsTrue(updates > 0);
+    }
+
+    [TestMethod]
+    public void IndependentUpdateIntegratesWhileAnotherIsPending()
+    {
+        var doc = new YDoc();
+        doc.ApplyUpdate(Convert.FromBase64String("AQEFGMQGDgYPAUEA")); // depends on structs we do not have
+        doc.ApplyUpdate(Convert.FromBase64String("AQEHAAQBBHRleHQBZwA="));
+        Assert.AreEqual("g", doc.GetText("text").ToString());
+    }
 }

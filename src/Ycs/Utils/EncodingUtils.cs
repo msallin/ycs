@@ -59,13 +59,50 @@ internal static class EncodingUtils
     /// <br/>
     /// This is called when data is received from a remote peer.
     /// </summary>
-    public static void ReadStructs(IUpdateDecoder decoder, Transaction transaction, StructStore store)
+    /// <summary>
+    /// Reads the structs of an update and integrates what can be integrated (the struct part of Yjs'
+    /// <c>readUpdateV2</c>). Returns whether structs that were pending before can now be retried.
+    /// </summary>
+    public static bool ReadStructs(IUpdateDecoder decoder, Transaction transaction, StructStore store)
     {
-        var clientStructRefs = ReadClientStructRefs(decoder, transaction.Doc);
-        store.MergeReadStructsIntoPendingReads(clientStructRefs);
-        store.ResumeStructIntegration(transaction);
-        store.CleanupPendingStructs();
+        var ss = ReadClientStructRefs(decoder, transaction.Doc);
+        var restStructs = store.IntegrateStructs(transaction, ss.ToDictionary(kvp => kvp.Key, kvp => new StructStore.ClientStructRefs { Refs = kvp.Value }));
+        var retry = false;
+        var pending = store.Pending;
+
+        if (pending != null)
+        {
+            // Check if we can apply something.
+            foreach (var kvp in pending.Missing)
+            {
+                if (kvp.Value < store.GetState(kvp.Key))
+                {
+                    retry = true;
+                    break;
+                }
+            }
+
+            if (restStructs != null)
+            {
+                // Merge restStructs into store.pending.
+                foreach (var kvp in restStructs.Missing)
+                {
+                    if (!pending.Missing.TryGetValue(kvp.Key, out var mclock) || mclock > kvp.Value)
+                    {
+                        pending.Missing[kvp.Key] = kvp.Value;
+                    }
+                }
+
+                pending.Update = UpdateOperations.MergeUpdatesV2(new List<byte[]> { pending.Update, restStructs.Update });
+            }
+        }
+        else
+        {
+            store.Pending = restStructs;
+        }
+
         store.TryResumePendingDeleteReaders(transaction);
+        return retry;
     }
 
     /// <param name="structs">All structs by 'client'.</param>
@@ -73,6 +110,7 @@ internal static class EncodingUtils
     public static void WriteStructs(IUpdateEncoder encoder, IList<AbstractStruct> structs, long client, long clock)
     {
         // Write first id.
+        clock = Math.Max(clock, structs[0].Id.Clock);
         int startNewStructs = StructStore.FindIndexSS(structs, clock);
 
         // Write # encoded structs.
@@ -148,7 +186,14 @@ internal static class EncodingUtils
             for (var j = 0; j < numberOfStructs; j++)
             {
                 var info = decoder.ReadInfo();
-                if ((Bits.Bits5 & info) != 0)
+                if ((Bits.Bits5 & info) == Skip.StructSkipRefNumber)
+                {
+                    // A range of clocks this update has no data for (written by mergeUpdates).
+                    var skipLength = (int)decoder.Reader.ReadVarUint();
+                    refs.Add(new Skip(new ID(client, clock), skipLength));
+                    clock += skipLength;
+                }
+                else if ((Bits.Bits5 & info) != 0)
                 {
                     // The item that was originally to the left of this item.
                     var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ID?)decoder.ReadLeftId() : null;

@@ -446,8 +446,17 @@ public partial class YDoc
     {
         Transact(tr =>
         {
-            EncodingUtils.ReadStructs(structDecoder, tr, Store);
+            var retry = EncodingUtils.ReadStructs(structDecoder, tr, Store);
             Store.ReadAndApplyDeleteSet(structDecoder, tr);
+
+            if (retry)
+            {
+                // Something the pending structs were waiting for arrived: read them again, from their
+                // encoded form, as Yjs does.
+                var update = Store.Pending.Update;
+                Store.Pending = null;
+                ApplyUpdate(new UpdateDecoderV2(new Lib0Reader(update)), transactionOrigin, local);
+            }
         }, transactionOrigin, local);
     }
 

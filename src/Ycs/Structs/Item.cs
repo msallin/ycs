@@ -545,7 +545,13 @@ public partial class Item : AbstractStruct
         {
             var parent = Parent;
             var parentItem = (parent as AbstractType)?._item;
-            if (parentItem == null)
+            if (parent is ID parentId)
+            {
+                // Not integrated yet (a pending struct being set aside): the parent is still an id.
+                encoder.WriteParentInfo(false);
+                encoder.WriteLeftId(parentId);
+            }
+            else if (parentItem == null)
             {
                 // parent type on y._map.
                 // find the correct key
