@@ -1,0 +1,78 @@
+{
+ "name": "gc-collected-content",
+ "description": "Deleted text, a deleted nested map and an overwritten value, delivered as the full state of a doc that has garbage-collected them (GC structs), then one more edit.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  },
+  {
+   "name": "map",
+   "type": "map",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQgBAAQBBHRleHQKa2VlcCB0aGlzLIEBCQuEARQKIGtlZXAgdGhhdCEBA21hcANzdWIBAAUhAQNtYXALb3ZlcndyaXR0ZW4BqAElAXcJbmV3IHZhbHVlRAEAAT4BAQIKCx8H",
+   "v2": "AAACQQMDEhYiAQAPBACBAIQAIQAAACEAqABENS10ZXh0a2VlcCB0aGlzLCBrZWVwIHRoYXRtYXBzdWJtYXBvdmVyd3JpdHRlbj4ESgBDAQsBAQEABQsBBUEAAQgAdwluZXcgdmFsdWUBAQIKCgoG"
+  },
+  {
+   "v1": "AQECAIQBHgE8AA==",
+   "v2": "AAACAgEBPAABhAMBPAEAAAABAQAA"
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": ">keep this, keep that<"
+   },
+   "map": {
+    "json": {
+     "overwritten": "new value"
+    }
+   }
+  },
+  "stateVector": {
+   "1": 40,
+   "2": 1
+  },
+  "deleteSet": {
+   "1": [
+    [
+     10,
+     11
+    ],
+    [
+     31,
+     7
+    ]
+   ]
+  },
+  "stateV1": "AgECAIQBHgE8CAEABAEEdGV4dAprZWVwIHRoaXMsgQEJC4QBFAoga2VlcCB0aGF0IQEDbWFwA3N1YgEABSEBA21hcAtvdmVyd3JpdHRlbgGoASUBdwluZXcgdmFsdWVEAQABPgEBAgoLHwc=",
+  "stateV2": "AAADAkEEBDxqFiIBABGEAAQAgQCEACEAAAAhAKgARDcuPHRleHRrZWVwIHRoaXMsIGtlZXAgdGhhdG1hcHN1Ym1hcG92ZXJ3cml0dGVuPgEESgBDAQsBAQEABQsBBUEAAgEACAB3CW5ldyB2YWx1ZQEBAgoKCgY=",
+  "stateVectorV1": "AgIBASg="
+ },
+ "diff": {
+  "prefix": 1,
+  "stateVector": "AQEo",
+  "stateVectorMap": {
+   "1": 40
+  },
+  "updateV1": "AQECAIQBHgE8AQECCgsfBw==",
+  "updateV2": "AAACAgEBPAABhAMBPAEAAAABAQABAQIKCgoG",
+  "from": {
+   "2": 0
+  },
+  "to": {
+   "2": 1
+  }
+ },
+ "merged": {
+  "v1": "AgECAIQBHgE8CAEABAEEdGV4dAprZWVwIHRoaXMsgQEJC4QBFAoga2VlcCB0aGF0IQEDbWFwA3N1YgEABSEBA21hcAtvdmVyd3JpdHRlbgGIASUBdwluZXcgdmFsdWVEAQABPgEBAgoLHwc=",
+  "v2": "AAADAkEEBDxqFiIBABGEAAQAgQCEACEAAAAhAIgARDcuPHRleHRrZWVwIHRoaXMsIGtlZXAgdGhhdG1hcHN1Ym1hcG92ZXJ3cml0dGVuPgEESgBDAQsBAQEABQsBBUEAAgEACAB3CW5ldyB2YWx1ZQEBAgoKCgY="
+ }
+}

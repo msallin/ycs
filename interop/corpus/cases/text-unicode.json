@@ -1,0 +1,183 @@
+{
+ "name": "text-unicode",
+ "description": "Inserts and deletes at code-point boundaries of surrogate pairs, ZWJ sequences, flags, combining marks, RTL and CJK text.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQF5Lit16kA",
+   "v2": "AAABAQAAAQQMCXRleHTkuK3XqQQCAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQECAAQBBHRleHQBXAA=",
+   "v2": "AAABAgAAAQQIBXRleHRcBAEBAQAAAQEAAA=="
+  },
+  {
+   "v1": "AQEDAAQBBHRleHQCw6kA",
+   "v2": "AAABAwAAAQQJBnRleHTDqQQBAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQEBAsQCAAMAEvCfh6nwn4eqw7Hwn5GN8J+PvQA=",
+   "v2": "AAADAQIDAQABAAHEFBLwn4ep8J+HqsOx8J+RjfCfj70JAAAAAQECAA=="
+  },
+  {
+   "v1": "AQECAUQBAAjwn4ep8J+HqgA=",
+   "v2": "AAACAgEAAQABRAoI8J+HqfCfh6oEAAAAAQEBAA=="
+  },
+  {
+   "v1": "AQEDAYQDAB7jgqLwn5Go4oCN8J+RqeKAjfCfkafigI3wn5Gmw7EA",
+   "v2": "AAACQwABAAABhCAe44Ki8J+RqOKAjfCfkanigI3wn5Gn4oCN8J+RpsOxDQAAAAEBAQA="
+  },
+  {
+   "v1": "AQEBC8QBAwEECOOCotep7ZWcAA==",
+   "v2": "AAACQQEBBgEIAcQKCOOCotep7ZWcAwAAAAEBCwA="
+  },
+  {
+   "v1": "AQECBcQDAQMCAVwA",
+   "v2": "AAADAkMAAQIBBAHEAwFcAQAAAAEBBQA="
+  },
+  {
+   "v1": "AQEDDsQDBwMIASIA",
+   "v2": "AAACQwEBDgEQAcQDASIBAAAAAQEOAA=="
+  },
+  {
+   "v1": "AQEBDsQDBwMOFuaWh/CfkY3wn4+98J+RjfCfj73mlocA",
+   "v2": "AAADAUMAAQ4BHAHEGBbmlofwn5GN8J+PvfCfkY3wn4+95paHCgAAAAEBDgA="
+  },
+  {
+   "v1": "AQECBsQDBAMFCPSPv7/YqNioAA==",
+   "v2": "AAADAkMAAQgBCgHECgj0j7+/2KjYqAQAAAABAQYA"
+  },
+  {
+   "v1": "AQEDD8QBCwEMBNepIiIA",
+   "v2": "AAADA0EAARYBGAHEBgTXqSIiAwAAAAEBDwA="
+  },
+  {
+   "v1": "AAEBAREC",
+   "v2": "AAAAAAAAAQAAAAAAAQEBEQE="
+  },
+  {
+   "v1": "AQECCsQDEQEMBPSPv78A",
+   "v2": "AAADAgMBASIBGAHEBgT0j7+/AgAAAAEBCgA="
+  },
+  {
+   "v1": "AAEDAQAB",
+   "v2": "AAAAAAAAAQAAAAAAAQMBAAA="
+  },
+  {
+   "v1": "AQEBGEQCARvDsfCfkajigI3wn5Gp4oCN8J+Rp+KAjfCfkaYA",
+   "v2": "AAACAQIAAQIBRB0bw7Hwn5Go4oCN8J+RqeKAjfCfkafigI3wn5GmDAAAAAEBGAA="
+  },
+  {
+   "v1": "AAEBARME",
+   "v2": "AAAAAAAAAQAAAAAAAQEBEwM="
+  },
+  {
+   "v1": "AQEDEsQBBgEHBSLDsdioAA==",
+   "v2": "AAADA0EAAQwBDgHEBwUiw7HYqAMAAAABARIA"
+  },
+  {
+   "v1": "AAEBAQYB",
+   "v2": "AAAAAAAAAQAAAAAAAQEBBgA="
+  },
+  {
+   "v1": "AQECDIQDDQTwnYSeAA==",
+   "v2": "AAACAgMBGgABhAYE8J2EngIAAAABAQwA"
+  },
+  {
+   "v1": "AQEDFcQBIwIBE9ioIPCfkY3wn4+98J+RjfCfj70A",
+   "v2": "AAADAwECAoYBAQIBxBUT2Kgg8J+RjfCfj73wn5GN8J+PvQoAAAABARUA"
+  },
+  {
+   "v1": "AQEBJMQBFwMOCfCfkY3wn4+9XAA=",
+   "v2": "AAADQQADAS4BHAHECwnwn5GN8J+PvVwFAAAAAQEkAA=="
+  },
+  {
+   "v1": "AAICAQoCAQEMAg==",
+   "v2": "AAAAAAAAAQAAAAAAAgIBCgEBAQwB"
+  },
+  {
+   "v1": "AAEDAREB",
+   "v2": "AAAAAAAAAQAAAAAAAQMBEQA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "ñ👨‍👩‍👧‍👦ب 👍🏽👍🏽🇩🇪中ש\\🇩アש\"🇪\"ñب👍🏽ア\\👨‍􏿿بب👩‍文👍文👍🏽\\\"👧‍👦ñ𝄞"
+   }
+  },
+  "stateVector": {
+   "1": 41,
+   "2": 14,
+   "3": 31
+  },
+  "deleteSet": {
+   "1": [
+    [
+     6,
+     1
+    ],
+    [
+     12,
+     2
+    ],
+    [
+     17,
+     6
+    ]
+   ],
+   "2": [
+    [
+     10,
+     2
+    ]
+   ],
+   "3": [
+    [
+     0,
+     1
+    ],
+    [
+     17,
+     1
+    ]
+   ]
+  },
+  "stateV1": "AwoDAAEBBHRleHQBhAMAA+OCooQDAQfwn5Go4oCNhAMEB/CfkanigI2EAwcN8J+Rp+KAjfCfkabDscQDBwMIASLEAQsBDAPXqSLBAxABDAHEAQYBBwUiw7HYqMQBIwIBE9ioIPCfkY3wn4+98J+RjfCfj70GAgAEAQR0ZXh0AVxEAQAI8J+HqfCfh6rEAwEDAgFcxAMEAwUI9I+/v9io2KjBAxEBDAKEAw0E8J2EngwBAAQBBHRleHQF5Lit16nEAgADAATwn4epxAEDAwAE8J+HqsEBBQMAAcQBBgMACPCfkY3wn4+9xAEDAQQD44KiwQELAQQCxAMHAw4H5paH8J+RjcEBEAMOBsQBFgMOA+aWh0QCARvDsfCfkajigI3wn5Gp4oCN8J+Rp+KAjfCfkabEARcDDgnwn5GN8J+PvVwDAwIAAREBAgEKAgEDBgEMAhEG",
+  "stateV2": "AAAiQwVBAANBAkIAAUMDAQMBAgMBAwEDAQNBAkMAAQMBAwIBAxgAAgcAAAgKVDrEAQYaSFoGBAJGEEgSDAITEAgASkxCBAYOWAEBCAAUAQBaGicBAIQDxAHBAMQBBABEAMQBwQCEAAQAxAHBAMQBwQDEAMEAxABEAMS8AaIBdGV4dOOCovCfkajigI3wn5Gp4oCN8J+Rp+KAjfCfkabDsSLXqSIiw7HYqNioIPCfkY3wn4+98J+RjfCfj710ZXh0XPCfh6nwn4eqXPSPv7/YqNio8J2EnnRleHTkuK3XqfCfh6nwn4eq8J+RjfCfj73jgqLmlofwn5GN5paHw7Hwn5Go4oCN8J+RqeKAjfCfkafigI3wn5Gm8J+RjfCfj71cBAFDAAYBAgMKBAEEAQQCBEIBBAEDAQwFAQEABkEAAgECBgMKAAYADAADAwIAABAAAgEKAQEDBgAFAQMF",
+  "stateVectorV1": "AwMfAg4BKQ=="
+ },
+ "diff": {
+  "prefix": 12,
+  "stateVector": "AwMSAgoBGA==",
+  "stateVectorMap": {
+   "1": 24,
+   "2": 10,
+   "3": 18
+  },
+  "updateV1": "AwIDEsQBBgEHBSLDsdioxAEjAgET2Kgg8J+RjfCfj73wn5GN8J+PvQICCsEDEQEMAoQDDQTwnYSeAgEYRAIBG8Ox8J+RqOKAjfCfkanigI3wn5Gn4oCN8J+RpsQBFwMOCfCfkY3wn4+9XAMDAgABEQECAQoCAQMGAQwCEQY=",
+  "updateV2": "AAAMA0EBQgADAQMBAgEDBQw6ZEgUBQ5MFlYaCcQBwQCEAEQAxEZAIsOx2KjYqCDwn5GN8J+PvfCfkY3wn4+98J2EnsOx8J+RqOKAjfCfkanigI3wn5Gn4oCN8J+RpvCfkY3wn4+9XAMKAgwFAAABAgMCEgIKAhgDAwIAABAAAgEKAQEDBgAFAQMF",
+  "from": {
+   "1": 24,
+   "2": 10,
+   "3": 18
+  },
+  "to": {
+   "1": 41,
+   "2": 14,
+   "3": 31
+  }
+ },
+ "merged": {
+  "v1": "AwYDAAQBBHRleHQCw6mEAwAe44Ki8J+RqOKAjfCfkanigI3wn5Gn4oCN8J+RpsOxxAMHAwgBIsQBCwEMBNepIiLEAQYBBwUiw7HYqMQBIwIBE9ioIPCfkY3wn4+98J+RjfCfj70GAgAEAQR0ZXh0AVxEAQAI8J+HqfCfh6rEAwEDAgFcxAMEAwUI9I+/v9io2KjEAxEBDAT0j7+/hAMNBPCdhJ4GAQAEAQR0ZXh0BeS4rdepxAIAAwAS8J+HqfCfh6rDsfCfkY3wn4+9xAEDAQQI44Ki16ntlZzEAwcDDhbmlofwn5GN8J+PvfCfkY3wn4+95paHRAIBG8Ox8J+RqOKAjfCfkanigI3wn5Gn4oCN8J+RpsQBFwMOCfCfkY3wn4+9XAMDAgABEQECAQoCAQMGAQwCEQY=",
+  "v2": "AAAVQwJBA0IAAUMDAQMBAgNBAEMAAgEDDgAOCEo6xAEGGkhaBgggDRAISkxCBAYOWAgUWhoVBACEAMQDBABEAMQChAAEAMQCRADE0wG8AXRleHTDqeOCovCfkajigI3wn5Gp4oCN8J+Rp+KAjfCfkabDsSLXqSIiIsOx2KjYqCDwn5GN8J+PvfCfkY3wn4+9dGV4dFzwn4ep8J+Hqlz0j7+/2KjYqPSPv7/wnYSedGV4dOS4rdep8J+HqfCfh6rDsfCfkY3wn4+944Ki16ntlZzmlofwn5GN8J+PvfCfkY3wn4+95paHw7Hwn5Go4oCN8J+RqeKAjfCfkafigI3wn5Gm8J+RjfCfj71cBAENAUMACgQBBAEEQgAEAgkDCgwFAQEAAAMGAAYABgADAwIAABAAAgEKAQEDBgAFAQMF"
+ }
+}

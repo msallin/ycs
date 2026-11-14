@@ -1,0 +1,113 @@
+{
+ "name": "text-delete-others-ranges",
+ "description": "Clients delete overlapping ranges that span text inserted by the others, concurrently.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQKQUFBQUFBQUFBQQA=",
+   "v2": "AAABAQAAAQQRDnRleHRBQUFBQUFBQUFBBAoBAQAAAQEAAA=="
+  },
+  {
+   "v1": "AQECAMQBBAEFCkJCQkJCQkJCQkIA",
+   "v2": "AAADAkEAAQgBCgHEDApCQkJCQkJCQkJCCgAAAAEBAAA="
+  },
+  {
+   "v1": "AQEDAIQBCQpDQ0NDQ0NDQ0NDAA==",
+   "v2": "AAACAwEBEgABhAwKQ0NDQ0NDQ0NDQwoAAAABAQAA"
+  },
+  {
+   "v1": "AAICAQAHAQEDAg==",
+   "v2": "AAAAAAAAAQAAAAAAAgIBAAYBAQMB"
+  },
+  {
+   "v1": "AAICAQMHAQEFBQ==",
+   "v2": "AAAAAAAAAQAAAAAAAgIBAwYBAQUE"
+  },
+  {
+   "v1": "AAEBAQAE",
+   "v2": "AAAAAAAAAQAAAAAAAQEBAAM="
+  },
+  {
+   "v1": "AQEDCsQCAAIBAmNjAA==",
+   "v2": "AAADA0IAAQABAgHEBAJjYwIAAAABAQoA"
+  },
+  {
+   "v1": "AAEDAgAJCwE=",
+   "v2": "AAAAAAAAAQAAAAAAAQMCAAgCAA=="
+  },
+  {
+   "v1": "AQEBCsQDCgMLAmFhAA==",
+   "v2": "AAADAUMAARQBFgHEBAJhYQIAAAABAQoA"
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "caaC"
+   }
+  },
+  "stateVector": {
+   "1": 12,
+   "2": 10,
+   "3": 12
+  },
+  "deleteSet": {
+   "1": [
+    [
+     0,
+     10
+    ]
+   ],
+   "2": [
+    [
+     0,
+     10
+    ]
+   ],
+   "3": [
+    [
+     0,
+     9
+    ],
+    [
+     11,
+     1
+    ]
+   ]
+  },
+  "stateV1": "AwQDAIEBCQmEAwgBQ8QCAAIBAWPBAwoCAQECAgDBAQQBBQHBAgABBQkDAQABAQR0ZXh0BYEBBAXEAwoDCwJhYQMDAgAJCwECAQAKAQEACg==",
+  "stateV2": "AAAPAwEDQgADQgBBAAJBAUMACBJCUBRMSAgMBQIACAAMDYEAhADEAMECAQCBAMQNCENjdGV4dGFhQQAEAgEBAAYJQQAJRQADBAACAAMAAwMCAAgCAAIBAAkBAQAJ",
+  "stateVectorV1": "AwMMAgoBDA=="
+ },
+ "diff": {
+  "prefix": 4,
+  "stateVector": "AwMKAgoBCg==",
+  "stateVectorMap": {
+   "1": 10,
+   "2": 10,
+   "3": 10
+  },
+  "updateV1": "AgIDCsQCAAIBAWPBAwoCAQEBAQrEAwoDCwJhYQMDAgAJCwECAQAKAQEACg==",
+  "updateV2": "AAAIA0IAAwIBQwADABQAAwIAFAXEAMEAxAYDY2FhAQIAAAEBAgIKAQoDAwIACAIAAgEACQEBAAk=",
+  "from": {
+   "1": 10,
+   "3": 10
+  },
+  "to": {
+   "1": 12,
+   "3": 12
+  }
+ },
+ "merged": {
+  "v1": "AwIDAIQBCQpDQ0NDQ0NDQ0NDxAIAAgECY2MBAgDEAQQBBQpCQkJCQkJCQkJCAgEABAEEdGV4dApBQUFBQUFBQUFBxAMKAwsCYWEDAwIACQsBAgEACgEBAAo=",
+  "v2": "AAAIAwFCAUEBQwAEElIIDAMCCAwHhADEAQQAxC0mQ0NDQ0NDQ0NDQ2NjQkJCQkJCQkJCQnRleHRBQUFBQUFBQUFBYWEKAgoECgIBAQAAAwIAAQACAAMDAgAIAgACAQAJAQEACQ=="
+ }
+}
