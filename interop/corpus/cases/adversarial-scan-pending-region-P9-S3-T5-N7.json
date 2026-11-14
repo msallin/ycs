@@ -1,0 +1,117 @@
+{
+ "name": "adversarial-scan-pending-region-P9-S3-T5-N7",
+ "description": "P after 'a'; S between 'a' and P (has P); T right after S (has S); N after 'a', concurrently. Client ids P=9, S=3, T=5, N=7; base text 'ab' by client 1.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQCYWIA",
+   "v2": "AAABAQAAAQQJBnRleHRhYgQCAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQEHAMQBAAEBAU4A",
+   "v2": "AAADB0EAAQABAgHEAwFOAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEFAMQDAAkAAVQA",
+   "v2": "AAADBQMJAQABAAHEAwFUAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEDAMQBAAkAAVMA",
+   "v2": "AAADAwEJAQABAAHEAwFTAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEJAMQBAAEBAVAA",
+   "v2": "AAADCUEAAQABAgHEAwFQAQAAAAEBAAA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "aSTNPb"
+   }
+  },
+  "stateVector": {
+   "1": 2,
+   "3": 1,
+   "5": 1,
+   "7": 1,
+   "9": 1
+  },
+  "deleteSet": {},
+  "stateV1": "BQEJAMQBAAEBAVABBwDEAQABAQFOAQUAxAMACQABVAEDAMQBAAkAAVMCAQAEAQR0ZXh0AWGEAQABYgA=",
+  "stateV2": "AAAOCUEAB0EABQMJAwEJQQACAQMEAgBCAAXEAwQAhBAKUE5UU3RleHRhYkECBEEAAQEAAAUBAAEAAQABAAIAAA==",
+  "stateVectorV1": "BQkBBwEFAQMBAQI=",
+  "itemOrder": {
+   "text": [
+    [
+     1,
+     0,
+     1,
+     0
+    ],
+    [
+     3,
+     0,
+     1,
+     0
+    ],
+    [
+     5,
+     0,
+     1,
+     0
+    ],
+    [
+     7,
+     0,
+     1,
+     0
+    ],
+    [
+     9,
+     0,
+     1,
+     0
+    ],
+    [
+     1,
+     1,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 2,
+  "stateVector": "AgcBAQI=",
+  "stateVectorMap": {
+   "1": 2,
+   "7": 1
+  },
+  "updateV1": "AwEJAMQBAAEBAVABBQDEAwAJAAFUAQMAxAEACQABUwA=",
+  "updateV2": "AAAJCUEABQMJAwEJAgEBAwJCAAHEBgNQVFNBAQAAAAMBAAEAAQAA",
+  "from": {
+   "3": 0,
+   "5": 0,
+   "9": 0
+  },
+  "to": {
+   "3": 1,
+   "5": 1,
+   "9": 1
+  }
+ },
+ "merged": {
+  "v1": "BQEJAMQBAAEBAVABBwDEAQABAQFOAQUAxAMACQABVAEDAMQBAAkAAVMBAQAEAQR0ZXh0AmFiAA==",
+  "v2": "AAANCUEAB0EABQMJAwEJAQIBAgQCAEIAA8QDBA8KUE5UU3RleHRhYkECBAIBAQAABQEAAQABAAEAAQAA"
+ }
+}

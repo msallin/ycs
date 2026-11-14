@@ -1,0 +1,121 @@
+{
+ "name": "adversarial-chains-A7-B5-C9-D3",
+ "description": "A after 'a'; B after A (has A); C between 'a' and A (has B); concurrently D after 'a' and d after D. Client ids A=7, B=5, C=9, D=3; base text 'ab' by client 1.",
+ "yjs": "13.6.32",
+ "gc": true,
+ "roots": [
+  {
+   "name": "text",
+   "type": "text",
+   "delta": false
+  }
+ ],
+ "updates": [
+  {
+   "v1": "AQEBAAQBBHRleHQCYWIA",
+   "v2": "AAABAQAAAQQJBnRleHRhYgQCAQEAAAEBAAA="
+  },
+  {
+   "v1": "AQEDAcQDAAEBAWQA",
+   "v2": "AAADQwABAQABAgHEAwFkAQAAAAEBAQA="
+  },
+  {
+   "v1": "AQEDAMQBAAEBAUQA",
+   "v2": "AAADA0EAAQABAgHEAwFEAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEJAMQBAAcAAUMA",
+   "v2": "AAADCQEHAQABAAHEAwFDAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEFAMQHAAEBAUIA",
+   "v2": "AAADBQcBAQABAgHEAwFCAQAAAAEBAAA="
+  },
+  {
+   "v1": "AQEHAMQBAAEBAUEA",
+   "v2": "AAADB0EAAQABAgHEAwFBAQAAAAEBAAA="
+  }
+ ],
+ "expected": {
+  "content": {
+   "text": {
+    "text": "aDdCABb"
+   }
+  },
+  "stateVector": {
+   "1": 2,
+   "3": 2,
+   "5": 1,
+   "7": 1,
+   "9": 1
+  },
+  "deleteSet": {},
+  "stateV1": "BQEJAMQBAAcAAUMBBwDEAQABAQFBAQUAxAcAAQEBQgEDAMQBAAEBAkRkAgEABAEEdGV4dAFhhAEAAWIA",
+  "stateV2": "AAAMCQFHAEEABQcBA0ECAgEDBAACAQAFxAMEAIQSC0NBQkRkdGV4dGFiQQECBEEAAQEAAAUBAAEAAQABAAIAAA==",
+  "stateVectorV1": "BQkBBwEFAQMCAQI=",
+  "itemOrder": {
+   "text": [
+    [
+     1,
+     0,
+     1,
+     0
+    ],
+    [
+     3,
+     0,
+     2,
+     0
+    ],
+    [
+     9,
+     0,
+     1,
+     0
+    ],
+    [
+     7,
+     0,
+     1,
+     0
+    ],
+    [
+     5,
+     0,
+     1,
+     0
+    ],
+    [
+     1,
+     1,
+     1,
+     0
+    ]
+   ]
+  }
+ },
+ "diff": {
+  "prefix": 3,
+  "stateVector": "AgMCAQI=",
+  "stateVectorMap": {
+   "1": 2,
+   "3": 2
+  },
+  "updateV1": "AwEJAMQBAAcAAUMBBwDEAQABAQFBAQUAxAcAAQEBQgA=",
+  "updateV2": "AAAJCQFHAEEABQcBAgEBAwACAAHEBgNDQUJBAQAAAAMBAAEAAQAA",
+  "from": {
+   "5": 0,
+   "7": 0,
+   "9": 0
+  },
+  "to": {
+   "5": 1,
+   "7": 1,
+   "9": 1
+  }
+ },
+ "merged": {
+  "v1": "BQEJAMQBAAcAAUMBBwDEAQABAQFBAQUAxAcAAQEBQgIDAMQBAAEBAUTEAwABAQFkAQEABAEEdGV4dAJhYgA=",
+  "v2": "AAAPCQFHAEEABQcBA0EAA0EAAgEDBAACAQEDxAQEEAtDQUJEZHRleHRhYkEDBAIBAQAABQEAAQABAAIAAQAA"
+ }
+}

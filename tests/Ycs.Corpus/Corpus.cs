@@ -31,6 +31,12 @@ internal sealed class CorpusCase
     public required IReadOnlyDictionary<long, long> DiffTo { get; init; }
     public required Update Merged { get; init; }
 
+    /// <summary>
+    /// Yjs' item list of each sequence root, in the format of <see cref="ItemListInvariants.Runs"/>
+    /// ("client:clock+length", "d" for deleted runs).
+    /// </summary>
+    public required IReadOnlyDictionary<string, string> ExpectedItemOrder { get; init; }
+
     public override string ToString() => Name;
 
     public static readonly string Directory = Path.Combine(AppContext.BaseDirectory, "cases");
@@ -74,6 +80,10 @@ internal sealed class CorpusCase
             DiffFrom = ReadClocks(diff.GetProperty("from")),
             DiffTo = ReadClocks(diff.GetProperty("to")),
             Merged = new Update(Bytes(merged, "v1"), Bytes(merged, "v2")),
+            ExpectedItemOrder = expected.GetProperty("itemOrder").EnumerateObject().ToDictionary(
+                p => p.Name,
+                p => string.Join(" ", p.Value.EnumerateArray().Select(run =>
+                    $"{run[0].GetInt64()}:{run[1].GetInt64()}+{run[2].GetInt64()}{(run[3].GetInt32() == 1 ? "d" : "")}"))),
         };
     }
 

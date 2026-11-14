@@ -82,6 +82,16 @@ internal static class KnownFailures
         [("DivergenceTests", "EncodeStateV1_DeleteSetOfTwoClients_HighestClientFirstLikeYjs")] = DeleteSetOrder,
     };
 
+    // Every adversarial-* case of gen.mjs hits StateVectorOrder, except the one whose clients
+    // happen to enter Ycs' store in descending id order.
+    static KnownFailures()
+    {
+        foreach (var c in CorpusCase.All.Where(c => c.Name.StartsWith("adversarial-", StringComparison.Ordinal) && c.Name != "adversarial-yata-pseudocode-a3-b7-c5"))
+        {
+            Known[(c.Name, "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder;
+        }
+    }
+
     public static void Check(string caseName, string testName, Action assertion)
     {
         if (!Known.TryGetValue((caseName, testName), out var reason))

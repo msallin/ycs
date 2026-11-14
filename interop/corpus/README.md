@@ -8,12 +8,25 @@ Node at test time.
   case to `cases/`: the updates an observer received (v1 and v2, in delivery order, possibly
   shuffled and duplicated) and what Yjs ends up with: the content of each root (text, delta,
   JSON), the state vector, the delete set, `encodeStateAsUpdate`/`V2`, `encodeStateVector`, a
-  state-vector diff against a prefix of the updates, and `mergeUpdates`/`V2`. Deterministic:
-  seeded PRNG, fixed client ids, no clocks; re-running it gives identical files.
+  state-vector diff against a prefix of the updates, `mergeUpdates`/`V2`, and the item list of
+  each sequence root (ids in list order, tombstones included). Deterministic: seeded PRNG, fixed
+  client ids, no clocks; re-running it gives identical files.
+- The `adversarial-*` cases are the interleavings the Lean proof of Yjs' integrate
+  ([lean-yjs](https://github.com/iasakura/lean-yjs)) treats as hard: the scenario behind the
+  YATA-pseudocode discrepancy, same origin with different right origins, inserts between an item
+  and its origin's successors, right origins left of a competitor, a pending scan region, chains
+  from four clients and a deleted competitor, each with every assignment of client ids to roles.
 - `tests/Ycs.Corpus` replays every case through Ycs (see `CorpusTests.cs`), plus a seeded
   random convergence test of Ycs against itself (`ConvergenceTests.cs`) and minimal
   reproductions of each divergence found (`DivergenceTests.cs`). The only file there that
   touches the Ycs API is `YcsAdapter.cs`.
+- `ItemListInvariants.cs` checks the list invariant of the Lean development (`YjsArrInvariant`:
+  closed, I1-I3, sorted by the Lean order, unique ids; plus no-cross-origin and "an update only
+  inserts") on every sequence, after every update of every case, of every convergence session,
+  and of every delivery order of the adversarial cases (`ItemListInvariantsTests.cs`), which must
+  also give Yjs' item order. `CommutativityTests.cs` applies small three-client scenarios in
+  every order (all 5040 permutations of 7 inserts, or all causal orders of 12) and requires the
+  same text and item order each time.
 - Divergences that are bugs in Ycs are listed in `tests/Ycs.Corpus/KnownFailures.cs`: those
   checks report Inconclusive (skipped) with the reason, and fail if they start passing.
 
