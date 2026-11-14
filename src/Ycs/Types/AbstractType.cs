@@ -36,7 +36,7 @@ public partial class AbstractType
 {
     internal Item _item = null;
     internal Item _start = null;
-    internal IDictionary<string, Item> _map = new Dictionary<string, Item>();
+    internal Dictionary<string, Item> _map = new Dictionary<string, Item>();
 
     public event EventHandler<YEventArgs> EventHandler;
     public event EventHandler<YDeepEventArgs> DeepEventHandler;
@@ -282,6 +282,21 @@ public partial class AbstractType
     }
 
     protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
+
+    /// <summary>How many keys have a value that is not deleted; walks the map without allocating.</summary>
+    internal int TypeMapCount()
+    {
+        var count = 0;
+        foreach (var value in _map.Values)
+        {
+            if (!value.Deleted)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
 
     protected IEnumerable<KeyValuePair<string, object>> TypeMapEnumerateValues()
     {
