@@ -9,9 +9,6 @@ namespace Ycs.Corpus;
 /// </summary>
 internal static class KnownFailures
 {
-    private const string StateVectorOrder =
-        "EncodingUtils.WriteStateVector writes clients in dictionary (insertion) order; Yjs' writeStateVector " +
-        "sorts them by client id, highest first. Same state, different bytes.";
 
     private const string DeleteSetOrder =
         "DeleteSet.Write writes clients in dictionary (insertion) order; Yjs' writeDeleteSet sorts them by " +
@@ -32,21 +29,6 @@ internal static class KnownFailures
     // (case name or test class, test name) -> why it fails.
     private static readonly Dictionary<(string Case, string Test), string> Known = new()
     {
-        [("array-basics", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("gc-collected-content", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("gc-disabled", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("map-basics", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("merged-updates", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("nested-types", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-concurrent-same-position-3", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-concurrent-same-position-5", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-delete-others-ranges", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-formatting", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-interleaved-deletes", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-large-runs", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-out-of-order-duplicated", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-unicode", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
-        [("text-unicode-split-surrogates", "EncodeStateVector_AfterUpdates_BytesEqualYjs")] = StateVectorOrder,
         [("array-basics", "EncodeStateV1_AfterUpdates_BytesEqualYjs")] = DeleteSetOrder,
         [("map-basics", "EncodeStateV1_AfterUpdates_BytesEqualYjs")] = DeleteSetOrder,
         [("merged-updates", "EncodeStateV1_AfterUpdates_BytesEqualYjs")] = DeleteSetOrder,
@@ -78,7 +60,6 @@ internal static class KnownFailures
         [("text-out-of-order-duplicated", "EncodeStateVector_OfPrefix_EqualsYjs")] = PendingBlocksAll,
         [("DivergenceTests", "ApplyV1_RootRealizedWhilePending_PendingItemLandsInText")] = StaleRootParent,
         [("DivergenceTests", "ApplyV1_PendingStructOfAnotherClient_IndependentUpdateStillIntegrates")] = PendingBlocksAll,
-        [("DivergenceTests", "EncodeStateVector_TwoClients_HighestClientFirstLikeYjs")] = StateVectorOrder,
         [("DivergenceTests", "EncodeStateV1_DeleteSetOfTwoClients_HighestClientFirstLikeYjs")] = DeleteSetOrder,
     };
 

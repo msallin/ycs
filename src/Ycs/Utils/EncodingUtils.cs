@@ -192,7 +192,8 @@ internal static class EncodingUtils
     {
         encoder.RestWriter.WriteVarUint((uint)sv.Count);
 
-        foreach (var kvp in sv)
+        // Highest client id first, as Yjs' writeStateVector sorts, so the same state has the same bytes.
+        foreach (var kvp in sv.OrderByDescending(kvp => kvp.Key))
         {
             var client = kvp.Key;
             var clock = kvp.Value;
