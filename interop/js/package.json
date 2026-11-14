@@ -1,0 +1,9 @@
+{
+  "name": "ycs-interop",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "yjs13": "npm:yjs@13.6.32",
+    "yjs14": "npm:yjs@14.0.0-16"
+  }
+}

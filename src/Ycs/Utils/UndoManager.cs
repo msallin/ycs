@@ -1,4 +1,4 @@
-﻿// ------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------
 //  <copyright company="Microsoft Corporation">
 //      Copyright (c) Microsoft Corporation.  All rights reserved.
 //  </copyright>
@@ -35,6 +35,8 @@ namespace Ycs
     /// on 'event.stackItem.meta' (it is a collection of metadata properties).
     /// Fires 'stack-item-popped' event when a stack item was popped from either the undo- or
     /// the redo-stack. You may restore the saved stack information from 'event.stackItem.Meta'.
+    /// Fires 'stack-cleared' (<see cref="StackCleared"/>) event when <see cref="Clear()"/> empties
+    /// either (or both) stacks.
     /// </summary>
     public class UndoManager
     {
@@ -61,7 +63,28 @@ namespace Ycs
             public object Origin { get; }
         }
 
-        private IList<AbstractType> _scope;
+        /// <summary>
+        /// Payload for the <see cref="StackCleared"/> event. Mirrors Yjs' <c>'stack-cleared'</c>
+        /// event, which reports which of the two stacks were actually emptied.
+        /// </summary>
+        public class StackClearedEventArgs : EventArgs
+        {
+            public StackClearedEventArgs(bool undoStackCleared, bool redoStackCleared)
+            {
+                UndoStackCleared = undoStackCleared;
+                RedoStackCleared = redoStackCleared;
+            }
+
+            public bool UndoStackCleared { get; }
+            public bool RedoStackCleared { get; }
+        }
+
+        // Scope entries are either an AbstractType (only that type's subtree is tracked) or a YDoc
+        // (the whole document is tracked). C# idiom: Yjs represents this as
+        // `Array<AbstractType<any> | Doc>`; since AbstractType and YDoc are unrelated classes in
+        // this port, `object` plays the role of that union, exactly as elsewhere in this codebase
+        // (e.g. `ISet<object> trackedOrigins`).
+        private readonly List<object> _scope = new List<object>();
         private Func<Item, bool> _deleteFilter;
         private ISet<object> _trackedOrigins;
         private Stack<StackItem> _undoStack;
@@ -73,6 +96,7 @@ namespace Ycs
         private YDoc _doc;
         private DateTime _lastChange;
         private int _captureTimeout;
+        private bool _destroyed;
 
         public UndoManager(AbstractType typeScope)
             : this(new[] { typeScope }, 500, it => true, new HashSet<object> { null })
@@ -82,36 +106,173 @@ namespace Ycs
 
         // TODO: [alekseyk] Set default parameters (not for the Func<>), or create options, like YDocOptions.
         public UndoManager(IList<AbstractType> typeScopes, int captureTimeout, Func<Item, bool> deleteFilter, ISet<object> trackedOrigins)
+            : this(typeScopes?.Cast<object>(), typeScopes != null && typeScopes.Count > 0 ? typeScopes[0].Doc : null, captureTimeout, deleteFilter, trackedOrigins)
         {
-            _scope = typeScopes;
+            // Do nothing.
+        }
+
+        /// <summary>
+        /// Limits the scope of the UndoManager to the whole document: every change on <paramref name="doc"/>
+        /// will be tracked, regardless of which type it touched. Mirrors Yjs' <c>new UndoManager(doc, options)</c>.
+        /// </summary>
+        public UndoManager(YDoc doc, int captureTimeout = 500, Func<Item, bool> deleteFilter = null, ISet<object> trackedOrigins = null)
+            : this(new object[] { doc ?? throw new ArgumentNullException(nameof(doc)) }, doc, captureTimeout, deleteFilter, trackedOrigins)
+        {
+            // Do nothing.
+        }
+
+        /// <summary>
+        /// Limits the scope of the UndoManager to a mix of types and/or the owning document.
+        /// Mirrors Yjs' <c>new UndoManager(typeScope, options)</c> where <c>typeScope</c> may be an
+        /// array containing both <c>AbstractType</c>s and a <c>Doc</c>.
+        /// </summary>
+        public UndoManager(IEnumerable<object> scope, int captureTimeout = 500, Func<Item, bool> deleteFilter = null, ISet<object> trackedOrigins = null)
+            : this(scope, InferDoc(scope), captureTimeout, deleteFilter, trackedOrigins)
+        {
+            // Do nothing.
+        }
+
+        private UndoManager(IEnumerable<object> scope, YDoc doc, int captureTimeout, Func<Item, bool> deleteFilter, ISet<object> trackedOrigins)
+        {
+            if (doc == null)
+            {
+                throw new ArgumentException("Could not determine the owning YDoc from the given scope; pass a non-empty scope or use the (YDoc, ...) constructor.");
+            }
+
+            _doc = doc;
             _deleteFilter = deleteFilter ?? (_ => true);
-            _trackedOrigins = trackedOrigins ?? new HashSet<object>();
+            // Match Yjs' actual default (`trackedOrigins = new Set([null])`): untracked transactions
+            // (the common case -- a plain edit with no explicit origin) must be tracked by default.
+            _trackedOrigins = trackedOrigins ?? new HashSet<object> { null };
             _trackedOrigins.Add(this);
             _undoStack = new Stack<StackItem>();
             _redoStack = new Stack<StackItem>();
             _undoing = false;
             _redoing = false;
-            _doc = typeScopes[0].Doc;
             _lastChange = DateTime.MinValue;
             _captureTimeout = captureTimeout;
 
+            AddToScope(scope);
+
             _doc.AfterTransaction += OnAfterTransaction;
+            _doc.Destroyed += OnDocDestroyed;
+        }
+
+        private static YDoc InferDoc(IEnumerable<object> scope)
+        {
+            foreach (var entry in scope ?? Enumerable.Empty<object>())
+            {
+                switch (entry)
+                {
+                    case YDoc d:
+                        return d;
+                    case AbstractType at when at.Doc != null:
+                        return at.Doc;
+                }
+            }
+
+            return null;
         }
 
         public event EventHandler<StackEventArgs> StackItemAdded;
         public event EventHandler<StackEventArgs> StackItemPopped;
 
+        /// <summary>
+        /// Fires when <see cref="Clear()"/> (or <see cref="Clear(bool, bool)"/>) empties either stack.
+        /// Mirrors Yjs' <c>'stack-cleared'</c> event.
+        /// </summary>
+        public event EventHandler<StackClearedEventArgs> StackCleared;
+
         public int Count => _undoStack.Count;
 
-        public void Clear()
+        /// <summary>
+        /// The document this UndoManager operates on. Mirrors Yjs' <c>undoManager.doc</c>.
+        /// </summary>
+        public YDoc Doc => _doc;
+
+        /// <summary>
+        /// The current tracking scope (a read-only view of <see cref="AbstractType"/> and/or
+        /// <see cref="YDoc"/> entries). Mirrors Yjs' <c>undoManager.scope</c>.
+        /// </summary>
+        public IReadOnlyList<object> Scope => _scope;
+
+        /// <summary>
+        /// Extend the scope with one more tracked type (or the whole document). Mirrors Yjs'
+        /// <c>addToScope(ytype)</c>.
+        /// </summary>
+        public void AddToScope(object scopeEntry)
         {
+            AddToScope(new[] { scopeEntry });
+        }
+
+        /// <summary>
+        /// Extend the scope with more tracked types (and/or the whole document). Each entry must be
+        /// an <see cref="AbstractType"/> or a <see cref="YDoc"/>. Mirrors Yjs' <c>addToScope(ytypes)</c>.
+        /// </summary>
+        public void AddToScope(IEnumerable<object> scopeEntries)
+        {
+            if (scopeEntries == null)
+            {
+                return;
+            }
+
+            foreach (var entry in scopeEntries)
+            {
+                if (entry == null || _scope.Contains(entry))
+                {
+                    continue;
+                }
+
+                if (!(entry is AbstractType) && !(entry is YDoc))
+                {
+                    throw new ArgumentException($"UndoManager scope entries must be an {nameof(AbstractType)} or a {nameof(YDoc)}.", nameof(scopeEntries));
+                }
+
+                _scope.Add(entry);
+            }
+        }
+
+        /// <summary>
+        /// Track an additional transaction origin. Mirrors Yjs' <c>addTrackedOrigin(origin)</c>.
+        /// </summary>
+        public void AddTrackedOrigin(object origin) => _trackedOrigins.Add(origin);
+
+        /// <summary>
+        /// Stop tracking a transaction origin. Mirrors Yjs' <c>removeTrackedOrigin(origin)</c>.
+        /// </summary>
+        public void RemoveTrackedOrigin(object origin) => _trackedOrigins.Remove(origin);
+
+        /// <summary>
+        /// Are undo steps available? Mirrors Yjs' <c>canUndo()</c>.
+        /// </summary>
+        public bool CanUndo() => _undoStack.Count > 0;
+
+        /// <summary>
+        /// Are redo steps available? Mirrors Yjs' <c>canRedo()</c>.
+        /// </summary>
+        public bool CanRedo() => _redoStack.Count > 0;
+
+        public void Clear() => Clear(true, true);
+
+        /// <summary>
+        /// Clears the undo and/or redo stack, releasing the items they were keeping alive for
+        /// potential redo. Fires <see cref="StackCleared"/> if either stack was actually emptied.
+        /// Mirrors Yjs' <c>clear(clearUndoStack, clearRedoStack)</c>.
+        /// </summary>
+        public void Clear(bool clearUndoStack, bool clearRedoStack)
+        {
+            if (!((clearUndoStack && CanUndo()) || (clearRedoStack && CanRedo())))
+            {
+                return;
+            }
+
             _doc.Transact(tr =>
             {
                 void clearItem(StackItem stackItem)
                 {
                     stackItem.DeleteSet.IterateDeletedStructs(tr, i =>
                     {
-                        if (i is Item item && _scope.Any(type => IsParentOf(type, item)))
+                        if (i is Item item && _scope.Any(entry => IsParentOf(entry, item)))
                         {
                             item.KeepItemAndParents(false);
                         }
@@ -120,19 +281,28 @@ namespace Ycs
                     });
                 }
 
-                foreach (var item in _undoStack)
+                if (clearUndoStack)
                 {
-                    clearItem(item);
+                    foreach (var item in _undoStack)
+                    {
+                        clearItem(item);
+                    }
+
+                    _undoStack.Clear();
                 }
 
-                foreach (var item in _redoStack)
+                if (clearRedoStack)
                 {
-                    clearItem(item);
+                    foreach (var item in _redoStack)
+                    {
+                        clearItem(item);
+                    }
+
+                    _redoStack.Clear();
                 }
             });
 
-            _undoStack.Clear();
-            _redoStack.Clear();
+            StackCleared?.Invoke(this, new StackClearedEventArgs(clearUndoStack, clearRedoStack));
         }
 
         /// <summary>
@@ -191,10 +361,29 @@ namespace Ycs
             return res;
         }
 
+        /// <summary>
+        /// Unhooks this UndoManager from its document and stops tracking. Mirrors Yjs' <c>destroy()</c>.
+        /// Safe to call more than once.
+        /// </summary>
+        public void Destroy()
+        {
+            if (_destroyed)
+            {
+                return;
+            }
+
+            _destroyed = true;
+            _trackedOrigins.Remove(this);
+            _doc.AfterTransaction -= OnAfterTransaction;
+            _doc.Destroyed -= OnDocDestroyed;
+        }
+
+        private void OnDocDestroyed(object sender, EventArgs e) => Destroy();
+
         private void OnAfterTransaction(object sender, Transaction transaction)
         {
             // Only track certain transactions.
-            if (!_scope.Any(type => transaction.ChangedParentTypes.ContainsKey(type)) ||
+            if (!_scope.Any(entry => entry is YDoc || (entry is AbstractType at && transaction.ChangedParentTypes.ContainsKey(at))) ||
                 (!_trackedOrigins.Contains(transaction.Origin) &&
                     (transaction.Origin == null || !_trackedOrigins.Any(to => (to as Type)?.IsAssignableFrom(transaction.Origin.GetType()) ?? false))))
             {
@@ -213,7 +402,7 @@ namespace Ycs
             else if (!redoing)
             {
                 // Neither undoing nor redoing: delete redoStack.
-                _redoStack.Clear();
+                Clear(false, true);
             }
 
             var beforeState = transaction.BeforeState;
@@ -242,7 +431,7 @@ namespace Ycs
             // Make sure that deleted structs are not GC'd.
             transaction.DeleteSet.IterateDeletedStructs(transaction, i =>
             {
-                if (i is Item item && _scope.Any(type => IsParentOf(type, item)))
+                if (i is Item item && _scope.Any(entry => IsParentOf(entry, item)))
                 {
                     item.KeepItemAndParents(true);
                 }
@@ -318,7 +507,7 @@ namespace Ycs
                                         str = it = item as Item;
                                     }
 
-                                    if (!it.Deleted && _scope.Any(type => IsParentOf(type, it)))
+                                    if (!it.Deleted && _scope.Any(entry => IsParentOf(entry, it)))
                                     {
                                         itemsToDelete.Add(it);
                                     }
@@ -346,7 +535,7 @@ namespace Ycs
                         }
 
                         if (str is Item item &&
-                            _scope.Any(type => IsParentOf(type, item)) &&
+                            _scope.Any(entry => IsParentOf(entry, item)) &&
                             // Never redo structs in [stackItem.start, stackItem.start + stackItem.end), because they were created and deleted in the same capture interval.
                             !(clock >= startClock && clock < endClock))
                         {
@@ -397,8 +586,16 @@ namespace Ycs
             return result;
         }
 
-        private static bool IsParentOf(AbstractType parent, Item child)
+        private static bool IsParentOf(object scopeEntry, Item child)
         {
+            if (scopeEntry is YDoc)
+            {
+                // Whole-document scope: every item in this document is "in scope".
+                return true;
+            }
+
+            var parent = scopeEntry as AbstractType;
+
             while (child != null)
             {
                 if (child.Parent == parent)

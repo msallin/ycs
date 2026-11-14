@@ -29,7 +29,8 @@ namespace Ycs
 
         public IContent Copy() => new ContentFormat(Key, Value);
 
-        public IReadOnlyList<object> GetContent() => throw new NotImplementedException();
+        // Yjs: ContentFormat#getContent returns an empty array - formatting carries no user content.
+        public IReadOnlyList<object> GetContent() => System.Array.Empty<object>();
 
         public IContent Splice(int offset) => throw new NotImplementedException();
 

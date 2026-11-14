@@ -129,9 +129,14 @@ namespace Ycs
                     var left = dels[j - 1];
                     var right = dels[i];
 
-                    if (left.Clock + left.Length == right.Clock)
+                    // '>=', not '==': ranges that overlap (not just touch) must coalesce too,
+                    // otherwise a merged delete set keeps duplicate ranges. Matches Yjs'
+                    // sortAndMergeDeleteSet.
+                    if (left.Clock + left.Length >= right.Clock)
                     {
-                        left = dels[j - 1] = new DeleteItem(left.Clock, left.Length + right.Length);
+                        dels[j - 1] = new DeleteItem(
+                            left.Clock,
+                            Math.Max(left.Length, right.Clock + right.Length - left.Clock));
                     }
                     else
                     {

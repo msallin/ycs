@@ -199,9 +199,7 @@ namespace Ycs
         {
             CheckDisposed();
 
-            var jsonString = Reader.ReadVarString();
-            var result = Newtonsoft.Json.JsonConvert.DeserializeObject(jsonString);
-            return result;
+            return Reader.ReadAny();
         }
 
         protected override void Dispose(bool disposing)

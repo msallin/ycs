@@ -119,8 +119,20 @@ namespace Ycs
                 case YText.YTextRefId:
                     var text = YText.Read(decoder);
                     return new ContentType(text);
+                case YXmlElement.YXmlElementRefId:
+                    var xmlElement = YXmlElement.Read(decoder);
+                    return new ContentType(xmlElement);
+                case YXmlFragment.YXmlFragmentRefId:
+                    var xmlFragment = YXmlFragment.Read(decoder);
+                    return new ContentType(xmlFragment);
+                case YXmlHook.YXmlHookRefId:
+                    var xmlHook = YXmlHook.Read(decoder);
+                    return new ContentType(xmlHook);
+                case YXmlText.YXmlTextRefId:
+                    var xmlText = YXmlText.Read(decoder);
+                    return new ContentType(xmlText);
                 default:
-                    throw new NotImplementedException($"Type {typeRef} not implemented");
+                    throw new NotSupportedException($"Unknown Yjs type ref: {typeRef}");
             }
         }
     }

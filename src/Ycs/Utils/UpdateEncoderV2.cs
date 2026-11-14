@@ -202,10 +202,14 @@ namespace Ycs
             }
         }
 
+        /// <summary>
+        /// Unlike v1, the v2 format writes embeds and formatting attributes with the
+        /// generic 'any' encoding rather than as a JSON string (see Yjs'
+        /// UpdateEncoderV2#writeJSON).
+        /// </summary>
         public void WriteJson<T>(T any)
         {
-            var jsonString = Newtonsoft.Json.JsonConvert.SerializeObject(any, typeof(T), null);
-            RestWriter.WriteVarString(jsonString);
+            RestWriter.WriteAny(any);
         }
 
         protected override void Dispose(bool disposing)

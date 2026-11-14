@@ -17,7 +17,7 @@ namespace Ycs
     /// the number of messages sent and the number of observer calls.
     /// If possible the user of this library should bundle as many changes as possible.
     /// </summary>
-    public class Transaction
+    public partial class Transaction
     {
         // TODO: [alekseyk] To private?
         internal readonly IList<AbstractStruct> _mergeStructs;
@@ -265,6 +265,7 @@ namespace Ycs
                     // @todo: Merge all the transactions into one and provide send the data as a single update message.
                     doc.InvokeOnAfterTransactionCleanup(transaction);
 
+                    doc.InvokeUpdateV1(transaction);
                     doc.InvokeUpdateV2(transaction);
 
                     foreach (var subDoc in transaction.SubdocsAdded)

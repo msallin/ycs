@@ -58,9 +58,11 @@ namespace Ycs
         public bool ChildListChanged { get; }
 
         /// <summary>
-        /// Compute the changes in the delta format.
+        /// Compute the changes in the delta format. Overrides <see cref="YEvent.Delta"/> — for
+        /// YText this is a Quill-style attribute-aware delta, not the plain insert/retain/delete
+        /// shape used by <see cref="YEvent.Changes"/>.Delta, exactly as Yjs does.
         /// </summary>
-        public IList<Delta> Delta
+        public override IList<Delta> Delta
         {
             get
             {
@@ -307,9 +309,10 @@ namespace Ycs
                         while (delta.Count > 0)
                         {
                             var lastOp = delta[delta.Count - 1];
-                            if (lastOp.Retain != null && lastOp.Attributes != null)
+                            if (lastOp.Retain != null && lastOp.Attributes == null)
                             {
-                                // Retain delta's if they don't assign attributes.
+                                // Drop trailing retains that don't assign attributes; a retain that
+                                // *does* carry attributes is a real formatting op and must survive.
                                 delta.RemoveAt(delta.Count - 1);
                             }
                             else
@@ -328,7 +331,7 @@ namespace Ycs
     /// <summary>
     /// Type that represents text with formatting information.
     /// </summary>
-    public class YText : YArrayBase
+    public partial class YText : YArrayBase
     {
         private class ItemTextListPosition
         {
@@ -774,6 +777,12 @@ namespace Ycs
 
         public YText Clone() => InternalClone() as YText;
 
+        /// <summary>
+        /// Returns the unformatted string representation of this YText type. Mirrors Yjs' <c>toJSON()</c>
+        /// (<c>toJSON() { return this.toString() }</c>).
+        /// </summary>
+        public override object ToJson() => ToString();
+
         public void RemoveAttribute(string name)
         {
             if (Doc != null)
@@ -1156,7 +1165,8 @@ namespace Ycs
         /// <br/>
         /// This function won't be exported anymore as soon as there is confidence that the YText type works as intended.
         /// </summary>
-        internal int CleanupFormatting()
+        /// <returns>How many formatting attributes have been cleaned up.</returns>
+        public int CleanupFormatting()
         {
             int res = 0;
 
@@ -1242,6 +1252,14 @@ namespace Ycs
         {
             return new YText();
         }
+
+        /// <summary>
+        /// This function is experimental and subject to change / be removed. Mirrors Yjs' exported
+        /// free function <c>cleanupYTextFormatting(type)</c>; identical to the instance method
+        /// <see cref="CleanupFormatting"/>, provided as a static under the Yjs-familiar name for parity.
+        /// </summary>
+        /// <returns>How many formatting attributes have been cleaned up.</returns>
+        public static int CleanupYTextFormatting(YText type) => type.CleanupFormatting();
 
         internal static bool EqualAttrs(object attr1, object attr2)
         {

@@ -12,7 +12,7 @@ using System.Linq;
 
 namespace Ycs
 {
-    internal sealed class StructStore
+    internal sealed partial class StructStore
     {
         private class PendingClientStructRef
         {

@@ -66,7 +66,7 @@ namespace Ycs
     /// <summary>
     /// Yjs instance handles the state of shared data.
     /// </summary>
-    public class YDoc
+    public partial class YDoc
     {
         private readonly YDocOptions _opts;
 
@@ -86,9 +86,22 @@ namespace Ycs
 
         private readonly IDictionary<string, AbstractType> _share;
 
+        /// <summary>
+        /// Yjs uses a random 32-bit client id (see 'generateNewClientId' in Doc.js). It has to be
+        /// unpredictable across processes: 'new Random()' is seeded from the clock on the
+        /// .NET Framework targets, so two documents created in the same tick - or two server
+        /// processes started together - would share a client id and silently corrupt the merge.
+        /// </summary>
         internal static int GenerateNewClientId()
         {
-            return new Random().Next(0, int.MaxValue);
+            var buffer = new byte[4];
+            using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+            {
+                rng.GetBytes(buffer);
+            }
+
+            // Non-negative, to stay within the int-typed ClientId; the wire format writes it as a uint.
+            return BitConverter.ToInt32(buffer, 0) & int.MaxValue;
         }
 
         /// <param name="gc">Disable garbage collection.</param>
@@ -182,6 +195,12 @@ namespace Ycs
         public event EventHandler<Transaction> AfterTransactionCleanup;
         public event EventHandler BeforeAllTransactions;
         public event EventHandler<IList<Transaction>> AfterAllTransactions;
+        /// <summary>
+        /// Fires with an update in the original ('v1') format - the one used by
+        /// 'Y.applyUpdate' and every y-protocols provider.
+        /// </summary>
+        public event EventHandler<(byte[] data, object origin, Transaction transaction)> UpdateV1;
+
         public event EventHandler<(byte[] data, object origin, Transaction transaction)> UpdateV2;
         public event EventHandler Destroyed;
         public event EventHandler<(ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed)> SubdocsChanged;
@@ -295,6 +314,55 @@ namespace Ycs
         }
 
         /// <summary>
+        /// Read and apply a document update in the original ('v1') format,
+        /// i.e. the output of Yjs' 'Y.encodeStateAsUpdate'.
+        /// </summary>
+        public void ApplyUpdateV1(Stream input, object transactionOrigin = null, bool local = false)
+        {
+            Transact(tr =>
+            {
+                using (var structDecoder = new UpdateDecoderV1(input, leaveOpen: true))
+                {
+                    EncodingUtils.ReadStructs(structDecoder, tr, Store);
+                    Store.ReadAndApplyDeleteSet(structDecoder, tr);
+                }
+            }, transactionOrigin, local);
+        }
+
+        public void ApplyUpdateV1(byte[] update, object transactionOrigin = null, bool local = false)
+        {
+            using (var input = new MemoryStream(update, writable: false))
+            {
+                ApplyUpdateV1(input, transactionOrigin, local);
+            }
+        }
+
+        /// <summary>
+        /// Encode the whole document as a single 'v1' update message, optionally diffed
+        /// against a remote state vector. Feed the result to Yjs' 'Y.applyUpdate'.
+        /// </summary>
+        public byte[] EncodeStateAsUpdateV1(byte[] encodedTargetStateVector = null)
+        {
+            using (var encoder = new UpdateEncoderV1())
+            {
+                var targetStateVector = encodedTargetStateVector == null
+                    ? new Dictionary<long, long>()
+                    : EncodingUtils.DecodeStateVector(new MemoryStream(encodedTargetStateVector, writable: false));
+                WriteStateAsUpdate(encoder, targetStateVector);
+                return encoder.ToArray();
+            }
+        }
+
+        public byte[] EncodeStateVectorV1()
+        {
+            using (var encoder = new DSEncoderV1())
+            {
+                WriteStateVector(encoder);
+                return encoder.ToArray();
+            }
+        }
+
+        /// <summary>
         /// Read and apply a document update.
         /// <br/>
         /// This function has the same effect as 'applyUpdate' but accepts a decoder.
@@ -399,6 +467,22 @@ namespace Ycs
         internal void InvokeDestroyed()
         {
             Destroyed?.Invoke(this, null);
+        }
+
+        internal void InvokeUpdateV1(Transaction transaction)
+        {
+            var handler = UpdateV1;
+            if (handler != null)
+            {
+                using (var encoder = new UpdateEncoderV1())
+                {
+                    var hasContent = transaction.WriteUpdateMessageFromTransaction(encoder);
+                    if (hasContent)
+                    {
+                        handler.Invoke(this, (encoder.ToArray(), transaction.Origin, transaction));
+                    }
+                }
+            }
         }
 
         internal void InvokeUpdateV2(Transaction transaction)

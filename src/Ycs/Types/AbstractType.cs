@@ -34,7 +34,7 @@ namespace Ycs
         public Transaction Transaction { get; }
     }
 
-    public class AbstractType
+    public partial class AbstractType
     {
         internal Item _item = null;
         internal Item _start = null;
@@ -58,6 +58,37 @@ namespace Ycs
         internal virtual AbstractType InternalClone() { throw new NotImplementedException(); }
 
         internal virtual void Write(IUpdateEncoder encoder) { throw new NotImplementedException(); }
+
+        /// <summary>
+        /// Transforms this Shared Type into a JSON-compatible representation (mirrors Yjs' <c>toJSON()</c>).
+        /// Must be implemented by each concrete type.
+        /// </summary>
+        public virtual object ToJson() { throw new NotImplementedException(); }
+
+        /// <summary>
+        /// Observe all events that are created on this type (mirrors Yjs' <c>observe(f)</c>).
+        /// <br/>
+        /// C# idiom note: <see cref="EventHandler"/> is a regular .NET event, so subscribing with
+        /// <c>+=</c>/<c>-=</c> already works. <see cref="Observe"/>/<see cref="Unobserve"/> are thin,
+        /// symmetrical wrappers over the same event provided for callers who prefer the Yjs-style
+        /// method-call API (and for parity with <c>ObserveDeep</c>/<c>UnobserveDeep</c> below).
+        /// </summary>
+        public void Observe(EventHandler<YEventArgs> handler) => EventHandler += handler;
+
+        /// <summary>
+        /// Unregister an observer function previously registered with <see cref="Observe"/> (or <c>+=</c>).
+        /// </summary>
+        public void Unobserve(EventHandler<YEventArgs> handler) => EventHandler -= handler;
+
+        /// <summary>
+        /// Observe all events that are created by this type and its children (mirrors Yjs' <c>observeDeep(f)</c>).
+        /// </summary>
+        public void ObserveDeep(EventHandler<YDeepEventArgs> handler) => DeepEventHandler += handler;
+
+        /// <summary>
+        /// Unregister a deep observer function previously registered with <see cref="ObserveDeep"/> (or <c>+=</c>).
+        /// </summary>
+        public void UnobserveDeep(EventHandler<YDeepEventArgs> handler) => DeepEventHandler -= handler;
 
         /// <summary>
         /// Call event listeners with an event. This will also add an event to all parents

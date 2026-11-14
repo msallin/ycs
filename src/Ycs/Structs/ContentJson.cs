@@ -69,7 +69,7 @@ namespace Ycs
             encoder.WriteLength(len);
             for (int i = offset; i < len; i++)
             {
-                var jsonStr = Newtonsoft.Json.JsonConvert.SerializeObject(_content[i]);
+                var jsonStr = YJson.Stringify(_content[i]);
                 encoder.WriteString(jsonStr);
             }
         }
@@ -84,7 +84,7 @@ namespace Ycs
                 var jsonStr = decoder.ReadString();
                 object jsonObj = string.Equals(jsonStr, "undefined")
                     ? null
-                    : Newtonsoft.Json.JsonConvert.DeserializeObject(jsonStr);
+                    : YJson.Parse(jsonStr);
                 content.Add(jsonObj);
             }
 

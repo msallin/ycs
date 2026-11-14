@@ -1,7 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0;netstandard2.1</TargetFrameworks>
+    <TargetFrameworks>netstandard2.0;net8.0;net10.0</TargetFrameworks>
+    <LangVersion>latest</LangVersion>
     <OutputType>Library</OutputType>
     <Company>Microsoft</Company>
     <Version>0.0.1</Version>
@@ -25,7 +26,9 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Newtonsoft.Json" Version="12.0.3" />
+    <!-- JSON in the v1 update format goes through Utils/YJson.cs (JSON.stringify / JSON.parse rules) on
+         System.Text.Json, which is in the box from net8.0; only netstandard2.0 needs the package. -->
+    <PackageReference Include="System.Text.Json" Version="8.0.5" Condition="'$(TargetFramework)' == 'netstandard2.0'" />
   </ItemGroup>
 
   <ItemGroup>
