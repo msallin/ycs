@@ -13,18 +13,20 @@ public class ContentString : IContentEx
 {
     internal const int _ref = 4;
 
-    // Yjs keeps a string and appends to it on merge; a StringBuilder gives the same amortized
-    // cost in .NET, where '+=' on a string would copy the whole run on every merged keystroke.
-    private readonly StringBuilder _content;
+    // Above this length a run that grows by merging moves into a StringBuilder.
+    private const int BuilderThreshold = 32;
+
+    // Yjs keeps a string and appends to it on merge. Here the text is a string as long as it is short
+    // or never grew: an insert keeps the caller's string, a decoded item the decoder's, without a
+    // copy. A run that keeps growing by merges (typing at its end) moves into a StringBuilder once it
+    // is longer than BuilderThreshold, where '+=' would copy the whole run on every keystroke.
+    // Exactly one of the two is set.
+    private string? _string;
+    private StringBuilder? _builder;
 
     internal ContentString(string value)
     {
-        _content = new StringBuilder(value);
-    }
-
-    private ContentString(StringBuilder content)
-    {
-        _content = content;
+        _string = value;
     }
 
     int IContentEx.Ref => _ref;
@@ -32,16 +34,27 @@ public class ContentString : IContentEx
     public bool Countable => true;
 
     /// <summary>Length in UTF-16 code units, as in JavaScript.</summary>
-    public int Length => _content.Length;
+    public int Length => _string?.Length ?? _builder!.Length;
 
-    internal void AppendToBuilder(StringBuilder sb) => sb.Append(_content);
+    public string GetString() => _string ?? _builder!.ToString();
 
-    public string GetString() => _content.ToString();
+    /// <summary>Copies the text into <paramref name="destination"/>, which is at least <see cref="Length"/> long.</summary>
+    internal void CopyTo(Span<char> destination)
+    {
+        if (_string != null)
+        {
+            _string.CopyTo(destination);
+        }
+        else
+        {
+            _builder!.CopyTo(0, destination, _builder.Length);
+        }
+    }
 
     /// <summary>The characters, boxed one by one. Prefer <see cref="GetString"/>.</summary>
     public IReadOnlyList<object> GetContent()
     {
-        var chars = _content.ToString();
+        var chars = GetString();
         var result = new object[chars.Length];
         for (int i = 0; i < chars.Length; i++)
         {
@@ -51,33 +64,71 @@ public class ContentString : IContentEx
         return result;
     }
 
-    public IContent Copy() => new ContentString(new StringBuilder().Append(_content));
+    public IContent Copy() => new ContentString(GetString());
 
     public IContent Splice(int offset)
     {
-        var right = new ContentString(_content.ToString(offset, _content.Length - offset));
-        _content.Length = offset;
+        string right;
+        if (_string != null)
+        {
+            right = _string.Substring(offset);
+            _string = _string.Substring(0, offset);
+        }
+        else
+        {
+            right = _builder!.ToString(offset, _builder.Length - offset);
+            _builder.Length = offset;
+        }
 
         // Prevent encoding invalid documents because of splitting of surrogate pairs.
-        var firstCharCode = _content[offset - 1];
+        var firstCharCode = _string != null ? _string[offset - 1] : _builder![offset - 1];
         if (firstCharCode >= 0xD800 && firstCharCode <= 0xDBFF)
         {
             // Last character of the left split is the start of a surrogate utf16/ucs2 pair.
             // We don't support splitting of surrogate pairs because this may lead to invalid documents.
             // Replace the invalid character with a unicode replacement character U+FFFD.
-            _content[offset - 1] = '\uFFFD';
+            if (_string != null)
+            {
+                _string = string.Concat(_string.AsSpan(0, offset - 1), "\uFFFD");
+            }
+            else
+            {
+                _builder![offset - 1] = '\uFFFD';
+            }
 
             // Replace right as well.
-            right._content[0] = '\uFFFD';
+            right = string.Concat("\uFFFD", right.AsSpan(1));
         }
 
-        return right;
+        return new ContentString(right);
     }
 
     public bool MergeWith(IContent right)
     {
         Debug.Assert(right is ContentString);
-        _content.Append(((ContentString)right)._content);
+        var other = (ContentString)right;
+        if (_builder == null)
+        {
+            var length = _string!.Length + other.Length;
+            if (length <= BuilderThreshold)
+            {
+                _string = string.Concat(_string, other.GetString());
+                return true;
+            }
+
+            _builder = new StringBuilder(Math.Max(2 * length, 2 * BuilderThreshold)).Append(_string);
+            _string = null;
+        }
+
+        if (other._string != null)
+        {
+            _builder.Append(other._string);
+        }
+        else
+        {
+            _builder.Append(other._builder);
+        }
+
         return true;
     }
 
@@ -98,12 +149,18 @@ public class ContentString : IContentEx
 
     void IContentEx.Write(IUpdateEncoder encoder, int offset)
     {
+        if (_string != null)
+        {
+            encoder.WriteString(_string.AsSpan(offset));
+            return;
+        }
+
         // Copy out only the part that is written, without an intermediate string.
-        var length = _content.Length - offset;
+        var length = _builder!.Length - offset;
         var buffer = System.Buffers.ArrayPool<char>.Shared.Rent(length);
         try
         {
-            _content.CopyTo(offset, buffer, 0, length);
+            _builder.CopyTo(offset, buffer, 0, length);
             encoder.WriteString(buffer.AsSpan(0, length));
         }
         finally

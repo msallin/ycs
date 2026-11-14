@@ -16,8 +16,11 @@ internal sealed partial class StructStore
     internal sealed class ClientStructRefs
     {
         public int NextReadOperation { get; set; }
-        public List<AbstractStruct> Refs { get; set; } = new List<AbstractStruct>(1);
+        public List<AbstractStruct> Refs { get; set; }
     }
+
+    private static readonly Dictionary<long, long> EmptyStateVector = new();
+    private static readonly List<AbstractStruct> NoRefs = new();
 
     /// <summary>
     /// Structs that could not be integrated yet (Yjs' <c>store.pendingStructs</c>), and per client the
@@ -51,7 +54,10 @@ internal sealed partial class StructStore
     }
 
     // TODO: [alekseyk] To private?
-    public readonly IDictionary<long, List<AbstractStruct>> Clients = new Dictionary<long, List<AbstractStruct>>();
+    public readonly Dictionary<long, List<AbstractStruct>> Clients = new Dictionary<long, List<AbstractStruct>>();
+
+    // The plan of the last update, kept for the next one (null while one is in use).
+    private IntegrationPlan _spare;
 
     internal PendingStructs Pending { get; set; }
 
@@ -60,6 +66,14 @@ internal sealed partial class StructStore
 
     /// <summary>The encoded size of what is pending, as <see cref="YDocOptions.MaxPendingBytes"/> counts it.</summary>
     internal long PendingBytes => (Pending?.Bytes ?? 0) + PendingDs.Bytes;
+
+    /// <summary>
+    /// Counts the structs added and split. Every change to the content of a type adds a struct, splits
+    /// one (which can rewrite characters: a split surrogate pair) or deletes, and a delete of countable
+    /// content lowers the type's <see cref="AbstractType.Length"/>: so while this and the length are
+    /// unchanged, so is the content (<see cref="YText.ToString"/> caches on it).
+    /// </summary>
+    internal long Version { get; private set; }
 
     /// <summary>
     /// Return the states as a Map<int,int>.
@@ -133,6 +147,13 @@ internal sealed partial class StructStore
         }
 
         structs.Add(str);
+        Version++;
+    }
+
+    private Item SplitItem(Transaction transaction, Item item, int diff)
+    {
+        Version++;
+        return item.SplitItem(transaction, diff);
     }
 
     /// <summary>
@@ -216,7 +237,7 @@ internal sealed partial class StructStore
         var str = structs[index];
         if (str.Id.Clock < clock && str is Item item)
         {
-            structs.Insert(index + 1, item.SplitItem(transaction, (int)(clock - item.Id.Clock)));
+            structs.Insert(index + 1, SplitItem(transaction, item, (int)(clock - item.Id.Clock)));
             return index + 1;
         }
 
@@ -247,7 +268,7 @@ internal sealed partial class StructStore
 
         if ((id.Clock != str.Id.Clock + str.Length - 1) && !(str is GC))
         {
-            structs.Insert(index + 1, (str as Item).SplitItem(transaction, (int)(id.Clock - str.Id.Clock + 1)));
+            structs.Insert(index + 1, SplitItem(transaction, (Item)str, (int)(id.Clock - str.Id.Clock + 1)));
         }
 
         return str;
@@ -327,15 +348,28 @@ internal sealed partial class StructStore
     /// </summary>
     internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, long maxPendingBytes)
     {
-        var plan = new IntegrationPlan(this, structs);
+        var plan = _spare ?? new IntegrationPlan(this);
+        _spare = null;
+        plan.Plan(structs);
         var restUpdate = plan.EncodeRest();
-        var retry = Pending != null && Pending.Missing.Any(kvp => kvp.Value < plan.GetState(kvp.Key));
+        var retry = false;
+        if (Pending != null)
+        {
+            foreach (var (client, clock) in Pending.Missing)
+            {
+                if (clock < plan.GetState(client))
+                {
+                    retry = true;
+                    break;
+                }
+            }
+        }
 
         // A retry integrates what is pending (and re-checks what is left), so only an update that adds
         // to it without a retry is held to the limit.
         if (!retry && maxPendingBytes < long.MaxValue)
         {
-            var growth = (restUpdate?.Length ?? 0) + PendingDs.Growth(ds, plan.GetState);
+            var growth = (restUpdate?.Length ?? 0) + PendingDs.Growth(ds, plan);
             if (growth > 0 && PendingBytes + growth > maxPendingBytes)
             {
                 // Duplicates (the same update received again) shrink when merged.
@@ -365,6 +399,9 @@ internal sealed partial class StructStore
 
             Pending.Add(restUpdate);
         }
+
+        plan.Clear();
+        _spare = plan;
 
         // As in Yjs: the update's deletions first, then those that were waiting.
         var waiting = PendingDs.TakeApplicable(this);
@@ -421,7 +458,7 @@ internal sealed partial class StructStore
                 // Split the first item if necessary.
                 if (!str.Deleted && str.Id.Clock < clock)
                 {
-                    structs.Insert(index + 1, ((Item)str).SplitItem(transaction, (int)(clock - str.Id.Clock)));
+                    structs.Insert(index + 1, SplitItem(transaction, (Item)str, (int)(clock - str.Id.Clock)));
 
                     // Increase, we now want to use the next struct.
                     index++;
@@ -439,7 +476,7 @@ internal sealed partial class StructStore
                     {
                         if (clockEnd < str.Id.Clock + str.Length)
                         {
-                            structs.Insert(index, ((Item)str).SplitItem(transaction, (int)(clockEnd - str.Id.Clock)));
+                            structs.Insert(index, SplitItem(transaction, (Item)str, (int)(clockEnd - str.Id.Clock)));
                         }
 
                         str.Delete(transaction);
@@ -465,24 +502,30 @@ internal sealed partial class StructStore
     /// When a struct depends on something that is not there, it and the rest of its client's structs
     /// are set aside (<see cref="Rest"/>) and everything else is still integrated.
     /// </summary>
-    private sealed class IntegrationPlan
+    internal sealed class IntegrationPlan
     {
         private readonly StructStore _store;
-        private readonly Dictionary<long, List<AbstractStruct>> _refs;
         private readonly Dictionary<long, long> _state = new();
-        private readonly List<(AbstractStruct Struct, int Offset, bool Integrate)> _steps;
+        private readonly List<(AbstractStruct Struct, int Offset, bool Integrate)> _steps = new();
+        private readonly Func<long, long> _getState;
+
+        // Planning state, kept between updates.
+        private readonly Dictionary<long, ClientStructRefs> _clientsStructRefs = new();
+        private readonly List<long> _clientsStructRefsIds = new();
+        private readonly List<AbstractStruct> _stack = new();
+        private readonly List<ClientStructRefs> _freeRefs = new();
+        private readonly List<Item> _chain = new();
+        private Dictionary<long, List<AbstractStruct>> _refs;
 
         // Nesting depth of the types this update creates (by the id of their item), and of the type
         // each item lands in (when it was needed), for the nesting limit.
         private Dictionary<ID, int> _typeDepths;
         private Dictionary<Item, int> _parentDepths;
 
-        public IntegrationPlan(StructStore store, Dictionary<long, List<AbstractStruct>> refs)
+        public IntegrationPlan(StructStore store)
         {
             _store = store;
-            _refs = refs;
-            _steps = new List<(AbstractStruct, int, bool)>(refs.Count == 1 ? refs.First().Value.Count : refs.Sum(kvp => kvp.Value.Count));
-            Plan();
+            _getState = GetState;
         }
 
         /// <summary>The structs set aside, by client, or null.</summary>
@@ -516,90 +559,75 @@ internal sealed partial class StructStore
             }
 
             var encoder = new UpdateEncoderV2();
-            EncodingUtils.WriteClientsStructs(encoder, Rest, new Dictionary<long, long>());
+            EncodingUtils.WriteClientsStructs(encoder, Rest, EmptyStateVector);
 
             // Write an empty delete set: there is no need for an extra function call, just write 0 deletes.
             encoder.RestWriter.WriteVarUint(0);
             return encoder.ToArray();
         }
 
-        private void Plan()
+        /// <summary>Forgets the update, so that the plan can be used for the next one.</summary>
+        public void Clear()
         {
-            var clientsStructRefs = new Dictionary<long, ClientStructRefs>(_refs.Count);
-            foreach (var (client, list) in _refs)
+            _refs = null;
+            _state.Clear();
+            _steps.Clear();
+            _stack.Clear();
+            _clientsStructRefsIds.Clear();
+            foreach (var refs in _clientsStructRefs.Values)
+            {
+                refs.Refs = null;
+                _freeRefs.Add(refs);
+            }
+
+            _clientsStructRefs.Clear();
+            _typeDepths?.Clear();
+            _parentDepths?.Clear();
+            Rest = null;
+            Missing = null;
+        }
+
+        /// <summary>
+        /// Works out how <paramref name="refs"/> integrate. A plan that threw (or was used before) is
+        /// cleared first, so nothing of an earlier update is left in it.
+        /// </summary>
+        public void Plan(Dictionary<long, List<AbstractStruct>> refs)
+        {
+            Clear();
+            _refs = refs;
+            var clientsStructRefs = _clientsStructRefs;
+            foreach (var (client, list) in refs)
             {
                 if (list.Count > 0)
                 {
-                    clientsStructRefs[client] = new ClientStructRefs { Refs = list };
+                    ClientStructRefs clientRefs;
+                    if (_freeRefs.Count > 0)
+                    {
+                        clientRefs = _freeRefs[^1];
+                        _freeRefs.RemoveAt(_freeRefs.Count - 1);
+                        clientRefs.NextReadOperation = 0;
+                    }
+                    else
+                    {
+                        clientRefs = new ClientStructRefs();
+                    }
+
+                    clientRefs.Refs = list;
+                    clientsStructRefs[client] = clientRefs;
+                    _clientsStructRefsIds.Add(client);
                 }
             }
 
             // Sort them so that we take the higher id first, in case of conflicts the lower id will probably not conflict with the id from the higher user.
-            var clientsStructRefsIds = clientsStructRefs.Keys.ToList();
-            clientsStructRefsIds.Sort();
+            _clientsStructRefsIds.Sort();
 
-            ClientStructRefs getNextStructTarget()
-            {
-                while (clientsStructRefsIds.Count > 0)
-                {
-                    var target = clientsStructRefs[clientsStructRefsIds[^1]];
-                    if (target.NextReadOperation < target.Refs.Count)
-                    {
-                        return target;
-                    }
-
-                    clientsStructRefsIds.RemoveAt(clientsStructRefsIds.Count - 1);
-                }
-
-                return null;
-            }
-
-            var curStructsTarget = getNextStructTarget();
+            var curStructsTarget = GetNextStructTarget();
             if (curStructsTarget == null)
             {
                 return;
             }
 
-            var stack = new List<AbstractStruct>();
-            Func<long, long> getState = GetState;
-
-            void updateMissingSv(long client, long clock)
-            {
-                Missing ??= new Dictionary<long, long>();
-                if (!Missing.TryGetValue(client, out var mclock) || mclock > clock)
-                {
-                    Missing[client] = clock;
-                }
-            }
-
-            void addStackToRestSS()
-            {
-                Rest ??= new StructStore();
-                foreach (var item in stack)
-                {
-                    var client = item.Id.Client;
-                    if (clientsStructRefs.TryGetValue(client, out var inapplicableItems))
-                    {
-                        // Decrement because we weren't able to apply previous operation.
-                        inapplicableItems.NextReadOperation--;
-                        Rest.Clients[client] = inapplicableItems.Refs.GetRange(inapplicableItems.NextReadOperation, inapplicableItems.Refs.Count - inapplicableItems.NextReadOperation);
-                        clientsStructRefs.Remove(client);
-                        inapplicableItems.NextReadOperation = 0;
-                        inapplicableItems.Refs = new List<AbstractStruct>();
-                    }
-                    else
-                    {
-                        // Item was the last item on clientsStructRefs and the field was already cleared. Add item to restStructs and continue.
-                        Rest.Clients[client] = new List<AbstractStruct> { item };
-                    }
-
-                    // Remove client from clientsStructRefsIds to prevent users from applying the same update again.
-                    clientsStructRefsIds.RemoveAll(c => c == client);
-                }
-
-                stack.Clear();
-            }
-
+            var stack = _stack;
             var stackHead = curStructsTarget.Refs[curStructsTarget.NextReadOperation++];
 
             // Iterate over all struct readers until we are done.
@@ -612,14 +640,14 @@ internal sealed partial class StructStore
                     {
                         // Update from the same client is missing.
                         stack.Add(stackHead);
-                        updateMissingSv(stackHead.Id.Client, stackHead.Id.Clock - 1);
+                        UpdateMissingSv(stackHead.Id.Client, stackHead.Id.Clock - 1);
 
                         // Hit a dead wall, add all items from stack to restSS.
-                        addStackToRestSS();
+                        AddStackToRestSS();
                     }
                     else
                     {
-                        var missing = (stackHead as Item)?.FindMissing(getState);
+                        var missing = (stackHead as Item)?.FindMissing(_getState);
                         if (missing != null)
                         {
                             stack.Add(stackHead);
@@ -628,8 +656,8 @@ internal sealed partial class StructStore
                             if (!clientsStructRefs.TryGetValue(missing.Value, out var structRefs) || structRefs.Refs.Count == structRefs.NextReadOperation)
                             {
                                 // This update message causally depends on another update message that doesn't exist yet.
-                                updateMissingSv(missing.Value, GetState(missing.Value));
-                                addStackToRestSS();
+                                UpdateMissingSv(missing.Value, GetState(missing.Value));
+                                AddStackToRestSS();
                             }
                             else
                             {
@@ -668,7 +696,7 @@ internal sealed partial class StructStore
                 }
                 else
                 {
-                    curStructsTarget = getNextStructTarget();
+                    curStructsTarget = GetNextStructTarget();
                     if (curStructsTarget == null)
                     {
                         // We are done!
@@ -678,6 +706,63 @@ internal sealed partial class StructStore
                     stackHead = curStructsTarget.Refs[curStructsTarget.NextReadOperation++];
                 }
             }
+        }
+
+        private ClientStructRefs GetNextStructTarget()
+        {
+            var ids = _clientsStructRefsIds;
+            while (ids.Count > 0)
+            {
+                var target = _clientsStructRefs[ids[^1]];
+                if (target.NextReadOperation < target.Refs.Count)
+                {
+                    return target;
+                }
+
+                ids.RemoveAt(ids.Count - 1);
+            }
+
+            return null;
+        }
+
+        private void UpdateMissingSv(long client, long clock)
+        {
+            Missing ??= new Dictionary<long, long>();
+            if (!Missing.TryGetValue(client, out var mclock) || mclock > clock)
+            {
+                Missing[client] = clock;
+            }
+        }
+
+        private void AddStackToRestSS()
+        {
+            Rest ??= new StructStore();
+            foreach (var item in _stack)
+            {
+                var client = item.Id.Client;
+                if (_clientsStructRefs.TryGetValue(client, out var inapplicableItems))
+                {
+                    // Decrement because we weren't able to apply previous operation.
+                    inapplicableItems.NextReadOperation--;
+                    Rest.Clients[client] = inapplicableItems.Refs.GetRange(inapplicableItems.NextReadOperation, inapplicableItems.Refs.Count - inapplicableItems.NextReadOperation);
+                    _clientsStructRefs.Remove(client);
+
+                    // The plan may still read it as its current target: it is empty now.
+                    inapplicableItems.NextReadOperation = 0;
+                    inapplicableItems.Refs = NoRefs;
+                    _freeRefs.Add(inapplicableItems);
+                }
+                else
+                {
+                    // Item was the last item on clientsStructRefs and the field was already cleared. Add item to restStructs and continue.
+                    Rest.Clients[client] = new List<AbstractStruct> { item };
+                }
+
+                // Remove client from clientsStructRefsIds to prevent users from applying the same update again.
+                _clientsStructRefsIds.Remove(client);
+            }
+
+            _stack.Clear();
         }
 
         /// <summary>
@@ -700,7 +785,8 @@ internal sealed partial class StructStore
         private int ParentDepth(Item item)
         {
             _parentDepths ??= new Dictionary<Item, int>();
-            var chain = new List<Item>();
+            var chain = _chain;
+            chain.Clear();
             int depth;
 
             while (true)
@@ -808,12 +894,12 @@ internal sealed partial class StructStore
         }
 
         /// <summary>By how much <see cref="Bytes"/> would grow if the parts of <paramref name="ds"/> beyond <paramref name="getState"/> were added.</summary>
-        public long Growth(DeleteSet ds, Func<long, long> getState)
+        public long Growth(DeleteSet ds, IntegrationPlan plan)
         {
             long growth = 0;
             foreach (var (client, deletes) in ds.Clients)
             {
-                var state = getState(client);
+                var state = plan.GetState(client);
                 var added = false;
                 foreach (var delete in deletes)
                 {

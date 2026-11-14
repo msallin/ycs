@@ -36,7 +36,7 @@ public partial class AbstractType
 {
     internal Item _item = null;
     internal Item _start = null;
-    internal IDictionary<string, Item> _map = new Dictionary<string, Item>();
+    internal Dictionary<string, Item> _map = new Dictionary<string, Item>();
 
     public event EventHandler<YEventArgs> EventHandler;
     public event EventHandler<YDeepEventArgs> DeepEventHandler;
@@ -119,6 +119,31 @@ public partial class AbstractType
     }
 
     /// <summary>
+    /// Whether an event for a change of this type in <paramref name="transaction"/> reaches anyone: a
+    /// handler on this type, a deep handler on it or an ancestor, or a document-level transaction
+    /// listener (<see cref="YDoc.HasTransactionListeners"/>). When not, <see cref="CallObserver"/>
+    /// builds no event, and the type and its ancestors are not added to
+    /// <see cref="Transaction.ChangedParentTypes"/>.
+    /// </summary>
+    internal bool IsObserved(Transaction transaction)
+    {
+        if (EventHandler != null || transaction.Doc.HasTransactionListeners)
+        {
+            return true;
+        }
+
+        for (var type = this; type != null; type = type._item?.Parent as AbstractType)
+        {
+            if (type.DeepEventHandler != null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Call event listeners with an event. This will also add an event to all parents
     /// for observeDeep handlers.
     /// </summary>
@@ -176,9 +201,12 @@ public partial class AbstractType
         DeepEventHandler?.Invoke(this, new YDeepEventArgs(events, transaction));
     }
 
+    // The name of a root type: it never changes, and finding it walks the document's root types.
+    private string _rootTypeKey;
+
     internal string FindRootTypeKey()
     {
-        return Doc.FindRootTypeKey(this);
+        return _rootTypeKey ??= Doc.FindRootTypeKey(this);
     }
 
     protected void TypeMapDelete(Transaction transaction, string key)
@@ -202,7 +230,7 @@ public partial class AbstractType
 
         if (value == null)
         {
-            content = new ContentAny(new object[] { value });
+            content = ContentAny.Single(null);
         }
         else
         {
@@ -220,7 +248,7 @@ public partial class AbstractType
                     break;
                 default:
                     AnyEncoding.Validate(value);
-                    content = new ContentAny(new[] { value });
+                    content = ContentAny.Single(value);
                     break;
             }
         }
@@ -233,7 +261,7 @@ public partial class AbstractType
     {
         if (_map.TryGetValue(key, out var val) && !val.Deleted)
         {
-            value = val.Content.GetContent()[val.Length - 1];
+            value = ValueAt(val.Content, val.Length - 1);
             return true;
         }
 
@@ -253,17 +281,36 @@ public partial class AbstractType
             v = v.Left as Item;
         }
 
-        return v != null && v.IsVisible(snapshot) ? v.Content.GetContent()[v.Length - 1] : null;
+        return v != null && v.IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
     }
 
     protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
+
+    /// <summary>The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.</summary>
+    internal static object ValueAt(IContent content, int index) =>
+        content is ContentAny any ? any.ValueAt(index) : content.GetContent()[index];
+
+    /// <summary>How many keys have a value that is not deleted; walks the map without allocating.</summary>
+    internal int TypeMapCount()
+    {
+        var count = 0;
+        foreach (var value in _map.Values)
+        {
+            if (!value.Deleted)
+            {
+                count++;
+            }
+        }
+
+        return count;
+    }
 
     protected IEnumerable<KeyValuePair<string, object>> TypeMapEnumerateValues()
     {
         foreach (var kvp in TypeMapEnumerate())
         {
             var key = kvp.Key;
-            var value = kvp.Value.Content.GetContent()[kvp.Value.Length - 1];
+            var value = ValueAt(kvp.Value.Content, kvp.Value.Length - 1);
             yield return new KeyValuePair<string, object>(key, value);
         }
     }

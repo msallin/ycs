@@ -44,7 +44,7 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
         _prelimContent = entries != null ? new Dictionary<string, object>(entries) : new Dictionary<string, object>();
     }
 
-    public int Count => _prelimContent?.Count ?? TypeMapEnumerate().Count();
+    public int Count => _prelimContent?.Count ?? TypeMapCount();
 
     /// <summary>
     /// Returns the size of the YMap (count of key/value pairs). Mirrors Yjs' <c>size</c> getter;
@@ -105,7 +105,7 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
 
     public IEnumerable<string> Keys() => TypeMapEnumerate().Select(kvp => kvp.Key);
 
-    public IEnumerable<object> Values() => TypeMapEnumerate().Select(kvp => kvp.Value.Content.GetContent()[kvp.Value.Length - 1]);
+    public IEnumerable<object> Values() => TypeMapEnumerate().Select(kvp => ValueAt(kvp.Value.Content, kvp.Value.Length - 1));
 
     /// <summary>
     /// Returns an enumerable of (key, value) pairs. Mirrors Yjs' <c>entries()</c>; C# idiom: since
@@ -199,7 +199,10 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
 
     internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
     {
-        CallTypeObservers(transaction, new YMapEvent(this, transaction, parentSubs));
+        if (IsObserved(transaction))
+        {
+            CallTypeObservers(transaction, new YMapEvent(this, transaction, parentSubs));
+        }
     }
 
     internal override void Write(IUpdateEncoder encoder)

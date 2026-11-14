@@ -247,7 +247,10 @@ public class YXmlFragment : YArrayBase
     internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
     {
         base.CallObserver(transaction, parentSubs);
-        CallTypeObservers(transaction, new YXmlEvent(this, parentSubs, transaction));
+        if (IsObserved(transaction))
+        {
+            CallTypeObservers(transaction, new YXmlEvent(this, parentSubs, transaction));
+        }
     }
 
     /// <summary>

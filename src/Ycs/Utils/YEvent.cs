@@ -37,6 +37,60 @@ public class ChangeKey
     public object OldValue;
 }
 
+/// <summary>
+/// The sets in <see cref="Transaction.Changed"/>: per changed type, the map keys that changed, and
+/// <c>null</c> when its list of children changed.
+/// </summary>
+internal static class ChangedKeys
+{
+    /// <summary>An empty set, for a type that is not in <see cref="Transaction.Changed"/>.</summary>
+    public static readonly ISet<string> None = new System.Collections.ObjectModel.ReadOnlySet<string>(new HashSet<string>());
+
+    /// <summary>
+    /// The set of a type whose children changed and none of its keys: most changed types are lists
+    /// (a text, an array), and they all share this one, read-only, instead of a set each.
+    /// </summary>
+    public static readonly ISet<string> ChildList = new System.Collections.ObjectModel.ReadOnlySet<string>(new HashSet<string> { null });
+
+    /// <summary>
+    /// Returns the set that records <paramref name="parentSub"/> on top of <paramref name="changed"/>
+    /// (null for none yet): <see cref="ChildList"/>, <paramref name="changed"/> itself, or a new set.
+    /// </summary>
+    public static ISet<string> Add(ISet<string> changed, string parentSub)
+    {
+        if (changed == null)
+        {
+            return parentSub == null ? ChildList : new HashSet<string> { parentSub };
+        }
+
+        if (ReferenceEquals(changed, ChildList) || ReferenceEquals(changed, None))
+        {
+            return changed.Contains(parentSub) ? changed : new HashSet<string>(changed) { parentSub };
+        }
+
+        changed.Add(parentSub);
+        return changed;
+    }
+
+    /// <summary>The keys in <paramref name="changed"/> other than <c>null</c>, as a new set.</summary>
+    public static ISet<string> WithoutChildList(ISet<string> changed)
+    {
+        var keys = new HashSet<string>();
+        if (changed != null)
+        {
+            foreach (var key in changed)
+            {
+                if (key != null)
+                {
+                    keys.Add(key);
+                }
+            }
+        }
+
+        return keys;
+    }
+}
+
 public partial class YEvent
 {
     private ChangesCollection _changes = null;
@@ -96,13 +150,12 @@ public partial class YEvent
         if (_keys == null)
         {
             var target = Target;
+            // Cached only once complete: a read after the transaction ended throws on every try.
             var keys = new Dictionary<string, ChangeKey>();
-            _keys = keys;
 
             if (!Transaction.Changed.TryGetValue(Target, out var changed))
             {
-                changed = new HashSet<string>();
-                Transaction.Changed[Target] = changed;
+                changed = ChangedKeys.None;
             }
 
             foreach (var key in changed)
@@ -165,6 +218,8 @@ public partial class YEvent
                     keys[key] = new ChangeKey { Action = action, OldValue = oldValue };
                 }
             }
+
+            _keys = keys;
         }
 
         return _keys;
@@ -179,7 +234,7 @@ public partial class YEvent
             var deleted = new HashSet<Item>();
             var delta = new List<Delta>();
 
-            _changes = new ChangesCollection
+            var changes = new ChangesCollection
             {
                 Added = added,
                 Deleted = deleted,
@@ -189,8 +244,7 @@ public partial class YEvent
 
             if (!Transaction.Changed.TryGetValue(Target, out var changed))
             {
-                changed = new HashSet<string>();
-                Transaction.Changed[Target] = changed;
+                changed = ChangedKeys.None;
             }
 
             if (changed.Contains(null))
@@ -256,6 +310,8 @@ public partial class YEvent
                     packOp();
                 }
             }
+
+            _changes = changes;
         }
 
         return _changes;

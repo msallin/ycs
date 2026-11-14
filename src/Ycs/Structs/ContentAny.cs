@@ -37,12 +37,20 @@ public class ContentAny : IContentEx
         _content = content;
     }
 
+    /// <summary>Content of one value.</summary>
+    internal static ContentAny Single(object value) => new ContentAny(new List<object>(1) { value });
+
+    /// <summary>Content that takes <paramref name="content"/> over, without a copy.</summary>
+    internal static ContentAny Own(List<object> content) => new ContentAny(content);
+
     public bool Countable => true;
     public int Length => _content.Count;
 
     int IContentEx.Ref => _ref;
 
     public IReadOnlyList<object> GetContent() => _content.AsReadOnly();
+
+    internal object ValueAt(int index) => _content[index];
 
     public IContent Copy() => new ContentAny(_content.ToList());
 

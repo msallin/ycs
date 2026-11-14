@@ -288,8 +288,6 @@ abstract class Ycs.YArrayBase : AbstractType, System.Collections.Generic.IEnumer
     protected System.Collections.Generic.IEnumerable<object> EnumerateContent()
     protected System.Collections.Generic.IReadOnlyList<object> InternalSlice(int start, int end)
     protected YArrayBase(bool useSearchMarkers = true)
-    protected YArrayBase.ArraySearchMarker FindMarker(int index)
-    protected YArrayBase.ArraySearchMarkerCollection _searchMarkers
     protected void Delete(Transaction transaction, int index, int length)
     protected void ForEach(System.Action<object, int, YArrayBase> fun)
     protected void ForEachSnapshot(System.Action<object, int, YArrayBase> fun, Snapshot snapshot)
@@ -399,6 +397,7 @@ class Ycs.YText : YArrayBase
     YText(string str)
     bool RemoveNonText()
     int CleanupFormatting()
+    int CopyTo(System.Span<char> destination)
     object GetAttribute(string name)
     override object ToJson()
     override string ToString()
@@ -410,6 +409,7 @@ class Ycs.YText : YArrayBase
     void InsertEmbed(int index, object embed, System.Collections.Generic.IDictionary<string, object> attributes = null)
     void RemoveAttribute(string name)
     void SetAttribute(string name, object value)
+    void WriteTo(System.Buffers.IBufferWriter<char> writer)
 class Ycs.YText.YTextChangeAttributes
     YText.YTextChangeType State { get; set; }
     YText.YTextChangeType Type { get; set; }
