@@ -4,33 +4,29 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System;
-using System.IO;
+namespace Ycs;
 
-namespace Ycs
+internal interface IDSDecoder : IDisposable
 {
-    internal interface IDSDecoder : IDisposable
-    {
-        Stream Reader { get; }
+    Stream Reader { get; }
 
-        void ResetDsCurVal();
-        long ReadDsClock();
-        long ReadDsLength();
-    }
+    void ResetDsCurVal();
+    long ReadDsClock();
+    long ReadDsLength();
+}
 
-    internal interface IUpdateDecoder : IDSDecoder
-    {
-        ID ReadLeftId();
-        ID ReadRightId();
-        long ReadClient();
-        byte ReadInfo();
-        string ReadString();
-        bool ReadParentInfo();
-        uint ReadTypeRef();
-        int ReadLength();
-        object ReadAny();
-        byte[] ReadBuffer();
-        string ReadKey();
-        object ReadJson();
-    }
+internal interface IUpdateDecoder : IDSDecoder
+{
+    ID ReadLeftId();
+    ID ReadRightId();
+    long ReadClient();
+    byte ReadInfo();
+    string ReadString();
+    bool ReadParentInfo();
+    uint ReadTypeRef();
+    int ReadLength();
+    object ReadAny();
+    byte[] ReadBuffer();
+    string ReadKey();
+    object ReadJson();
 }

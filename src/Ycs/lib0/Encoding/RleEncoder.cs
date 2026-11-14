@@ -4,50 +4,49 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-namespace Ycs
+namespace Ycs;
+
+/// <summary>
+/// Basic Run Length Encoder - a basic compression implementation.
+/// Encodes <c>[1, 1, 1, 7]</c> to <c>[1, 3, 7, 1]</c> (3 times '1', 1 time '7').
+/// <br/>
+/// This encoder might do more harm than good if there are a lot of values that are not repeated.
+/// <br/>
+/// It was originally used for image compression.
+/// </summary>
+/// <seealso cref="RleDecoder"/>
+internal class RleEncoder : AbstractStreamEncoder<byte>
 {
-    /// <summary>
-    /// Basic Run Length Encoder - a basic compression implementation.
-    /// Encodes <c>[1, 1, 1, 7]</c> to <c>[1, 3, 7, 1]</c> (3 times '1', 1 time '7').
-    /// <br/>
-    /// This encoder might do more harm than good if there are a lot of values that are not repeated.
-    /// <br/>
-    /// It was originally used for image compression.
-    /// </summary>
-    /// <seealso cref="RleDecoder"/>
-    internal class RleEncoder : AbstractStreamEncoder<byte>
+    private byte? _state = null;
+    private uint _count = 0;
+
+    public RleEncoder()
     {
-        private byte? _state = null;
-        private uint _count = 0;
+        // Do nothing.
+    }
 
-        public RleEncoder()
+    /// <inheritdoc/>
+    public override void Write(byte value)
+    {
+        CheckDisposed();
+
+        if (_state == value)
         {
-            // Do nothing.
+            _count++;
         }
-
-        /// <inheritdoc/>
-        public override void Write(byte value)
+        else
         {
-            CheckDisposed();
-
-            if (_state == value)
+            if (_count > 0)
             {
-                _count++;
+                // Flush counter, unless this is the first value (count = 0).
+                // Since 'count' is always >0, we can decrement by one. Non-standard encoding.
+                Stream.WriteVarUint(_count - 1);
             }
-            else
-            {
-                if (_count > 0)
-                {
-                    // Flush counter, unless this is the first value (count = 0).
-                    // Since 'count' is always >0, we can decrement by one. Non-standard encoding.
-                    Stream.WriteVarUint(_count - 1);
-                }
 
-                Stream.WriteByte(value);
+            Stream.WriteByte(value);
 
-                _count = 1;
-                _state = value;
-            }
+            _count = 1;
+            _state = value;
         }
     }
 }

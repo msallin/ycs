@@ -4,60 +4,57 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System;
 using System.Diagnostics;
-using System.IO;
 
-namespace Ycs
+namespace Ycs;
+
+/// <seealso cref="AbstractStreamEncoder{T}"/>
+internal abstract class AbstractStreamDecoder<T> : IDecoder<T>
 {
-    /// <seealso cref="AbstractStreamEncoder{T}"/>
-    internal abstract class AbstractStreamDecoder<T> : IDecoder<T>
+    private readonly bool _leaveOpen;
+
+    protected AbstractStreamDecoder(Stream input, bool leaveOpen = false)
     {
-        private readonly bool _leaveOpen;
+        Debug.Assert(input != null);
 
-        protected AbstractStreamDecoder(Stream input, bool leaveOpen = false)
+        Stream = input;
+        _leaveOpen = leaveOpen;
+    }
+
+    protected Stream Stream { get; private set; }
+    protected bool Disposed { get; private set; }
+
+    protected bool HasContent => Stream.Position < Stream.Length;
+
+    /// <inheritdoc/>
+    public abstract T Read();
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!Disposed)
         {
-            Debug.Assert(input != null);
-
-            Stream = input;
-            _leaveOpen = leaveOpen;
-        }
-
-        protected Stream Stream { get; private set; }
-        protected bool Disposed { get; private set; }
-
-        protected bool HasContent => Stream.Position < Stream.Length;
-
-        /// <inheritdoc/>
-        public abstract T Read();
-
-        public void Dispose()
-        {
-            Dispose(disposing: true);
-            System.GC.SuppressFinalize(this);
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!Disposed)
+            if (disposing && !_leaveOpen)
             {
-                if (disposing && !_leaveOpen)
-                {
-                    Stream?.Dispose();
-                }
-
-                Stream = null;
-                Disposed = true;
+                Stream?.Dispose();
             }
+
+            Stream = null;
+            Disposed = true;
         }
+    }
 
-        [Conditional("DEBUG")]
-        protected void CheckDisposed()
+    [Conditional("DEBUG")]
+    protected void CheckDisposed()
+    {
+        if (Disposed)
         {
-            if (Disposed)
-            {
-                throw new ObjectDisposedException(GetType().ToString());
-            }
+            throw new ObjectDisposedException(GetType().ToString());
         }
     }
 }

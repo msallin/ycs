@@ -4,79 +4,76 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System;
 using System.Diagnostics;
-using System.IO;
 
-namespace Ycs
+namespace Ycs;
+
+/// <seealso cref="StringEncoder"/>
+internal class StringDecoder : IDecoder<string>
 {
-    /// <seealso cref="StringEncoder"/>
-    internal class StringDecoder : IDecoder<string>
+    private UintOptRleDecoder _lengthDecoder;
+    private string _value;
+    private int _pos;
+    private bool _disposed;
+
+    public StringDecoder(Stream input, bool leaveOpen = false)
     {
-        private UintOptRleDecoder _lengthDecoder;
-        private string _value;
-        private int _pos;
-        private bool _disposed;
+        Debug.Assert(input != null);
 
-        public StringDecoder(Stream input, bool leaveOpen = false)
+        _value = input.ReadVarString();
+        _lengthDecoder = new UintOptRleDecoder(input, leaveOpen);
+    }
+
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc/>
+    public string Read()
+    {
+        CheckDisposed();
+
+        var length = (int)_lengthDecoder.Read();
+        if (length == 0)
         {
-            Debug.Assert(input != null);
-
-            _value = input.ReadVarString();
-            _lengthDecoder = new UintOptRleDecoder(input, leaveOpen);
+            return string.Empty;
         }
 
-        public void Dispose()
+        var result = _value.Substring(_pos, length);
+        _pos += length;
+
+        // No need to keep the string in memory anymore.
+        // This also covers the case when nothing but empty strings are left.
+        if (_pos >= _value.Length)
         {
-            Dispose(disposing: true);
-            System.GC.SuppressFinalize(this);
+            _value = null;
         }
 
-        /// <inheritdoc/>
-        public string Read()
+        return result;
+    }
+
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
         {
-            CheckDisposed();
-
-            var length = (int)_lengthDecoder.Read();
-            if (length == 0)
+            if (disposing)
             {
-                return string.Empty;
+                _lengthDecoder?.Dispose();
             }
 
-            var result = _value.Substring(_pos, length);
-            _pos += length;
-
-            // No need to keep the string in memory anymore.
-            // This also covers the case when nothing but empty strings are left.
-            if (_pos >= _value.Length)
-            {
-                _value = null;
-            }
-
-            return result;
+            _lengthDecoder = null;
+            _disposed = true;
         }
+    }
 
-        protected virtual void Dispose(bool disposing)
+    [Conditional("DEBUG")]
+    protected void CheckDisposed()
+    {
+        if (_disposed)
         {
-            if (!_disposed)
-            {
-                if (disposing)
-                {
-                    _lengthDecoder?.Dispose();
-                }
-
-                _lengthDecoder = null;
-                _disposed = true;
-            }
-        }
-
-        [Conditional("DEBUG")]
-        protected void CheckDisposed()
-        {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(GetType().ToString());
-            }
+            throw new ObjectDisposedException(GetType().ToString());
         }
     }
 }

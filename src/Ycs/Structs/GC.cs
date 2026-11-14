@@ -6,52 +6,51 @@
 
 using System.Diagnostics;
 
-namespace Ycs
+namespace Ycs;
+
+public partial class GC : AbstractStruct
 {
-    public partial class GC : AbstractStruct
+    internal const byte StructGCRefNumber = 0;
+
+    internal GC(ID id, int length)
+        : base(id, length)
     {
-        internal const byte StructGCRefNumber = 0;
+        // Do nothing.
+    }
 
-        internal GC(ID id, int length)
-            : base(id, length)
+    public override bool Deleted => true;
+
+    internal override bool MergeWith(AbstractStruct right)
+    {
+        Debug.Assert(right is GC);
+        Length += right.Length;
+        return true;
+    }
+
+    internal override void Delete(Transaction transaction)
+    {
+        // Do nothing.
+    }
+
+    internal override void Integrate(Transaction transaction, int offset)
+    {
+        if (offset > 0)
         {
-            // Do nothing.
+            Id = new ID(Id.Client, Id.Clock + offset);
+            Length -= offset;
         }
 
-        public override bool Deleted => true;
+        transaction.Doc.Store.AddStruct(this);
+    }
 
-        internal override bool MergeWith(AbstractStruct right)
-        {
-            Debug.Assert(right is GC);
-            Length += right.Length;
-            return true;
-        }
+    internal override long? GetMissing(Transaction transaction, StructStore store)
+    {
+        return null;
+    }
 
-        internal override void Delete(Transaction transaction)
-        {
-            // Do nothing.
-        }
-
-        internal override void Integrate(Transaction transaction, int offset)
-        {
-            if (offset > 0)
-            {
-                Id = new ID(Id.Client, Id.Clock + offset);
-                Length -= offset;
-            }
-
-            transaction.Doc.Store.AddStruct(this);
-        }
-
-        internal override long? GetMissing(Transaction transaction, StructStore store)
-        {
-            return null;
-        }
-
-        internal override void Write(IUpdateEncoder encoder, int offset)
-        {
-            encoder.WriteInfo(StructGCRefNumber);
-            encoder.WriteLength(Length - offset);
-        }
+    internal override void Write(IUpdateEncoder encoder, int offset)
+    {
+        encoder.WriteInfo(StructGCRefNumber);
+        encoder.WriteLength(Length - offset);
     }
 }

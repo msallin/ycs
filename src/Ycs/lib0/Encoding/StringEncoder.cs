@@ -4,92 +4,89 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System;
 using System.Diagnostics;
-using System.IO;
 using System.Text;
 
-namespace Ycs
+namespace Ycs;
+
+/// <summary>
+/// Optimized String Encoder.
+/// <br/>
+/// The lengths are encoded using the <see cref="UintOptRleEncoder"/>.
+/// </summary>
+/// <seealso cref="StringDecoder"/>
+internal class StringEncoder : IEncoder<string>
 {
-    /// <summary>
-    /// Optimized String Encoder.
-    /// <br/>
-    /// The lengths are encoded using the <see cref="UintOptRleEncoder"/>.
-    /// </summary>
-    /// <seealso cref="StringDecoder"/>
-    internal class StringEncoder : IEncoder<string>
+    private StringBuilder _sb;
+    private UintOptRleEncoder _lengthEncoder;
+    private bool _disposed;
+
+    public StringEncoder()
     {
-        private StringBuilder _sb;
-        private UintOptRleEncoder _lengthEncoder;
-        private bool _disposed;
+        _sb = new StringBuilder();
+        _lengthEncoder = new UintOptRleEncoder();
+    }
 
-        public StringEncoder()
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        Dispose(disposing: true);
+        System.GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc/>
+    public void Write(string value)
+    {
+        _sb.Append(value);
+        _lengthEncoder.Write((uint)value.Length);
+    }
+
+    public void Write(char[] value, int offset, int count)
+    {
+        _sb.Append(value, offset, count);
+        _lengthEncoder.Write((uint)count);
+    }
+
+    public byte[] ToArray()
+    {
+        using (var stream = new MemoryStream())
         {
-            _sb = new StringBuilder();
-            _lengthEncoder = new UintOptRleEncoder();
+            stream.WriteVarString(_sb.ToString());
+
+            var (buffer, length) = _lengthEncoder.GetBuffer();
+            stream.Write(buffer, 0, length);
+
+            return stream.ToArray();
         }
+    }
 
-        /// <inheritdoc/>
-        public void Dispose()
-        {
-            Dispose(disposing: true);
-            System.GC.SuppressFinalize(this);
-        }
+    public (byte[] buffer, int length) GetBuffer()
+    {
+        throw new NotSupportedException($"{nameof(StringEncoder)} doesn't use temporary byte buffers");
+    }
 
-        /// <inheritdoc/>
-        public void Write(string value)
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!_disposed)
         {
-            _sb.Append(value);
-            _lengthEncoder.Write((uint)value.Length);
-        }
-
-        public void Write(char[] value, int offset, int count)
-        {
-            _sb.Append(value, offset, count);
-            _lengthEncoder.Write((uint)count);
-        }
-
-        public byte[] ToArray()
-        {
-            using (var stream = new MemoryStream())
+            if (disposing)
             {
-                stream.WriteVarString(_sb.ToString());
-
-                var (buffer, length) = _lengthEncoder.GetBuffer();
-                stream.Write(buffer, 0, length);
-
-                return stream.ToArray();
+                _sb.Clear();
+                _lengthEncoder.Dispose();
             }
+
+            _sb = null;
+            _lengthEncoder = null;
+            _disposed = true;
         }
+    }
 
-        public (byte[] buffer, int length) GetBuffer()
+    [Conditional("DEBUG")]
+    protected void CheckDisposed()
+    {
+        if (_disposed)
         {
-            throw new NotSupportedException($"{nameof(StringEncoder)} doesn't use temporary byte buffers");
-        }
-
-        protected virtual void Dispose(bool disposing)
-        {
-            if (!_disposed)
-            {
-                if (disposing)
-                {
-                    _sb.Clear();
-                    _lengthEncoder.Dispose();
-                }
-
-                _sb = null;
-                _lengthEncoder = null;
-                _disposed = true;
-            }
-        }
-
-        [Conditional("DEBUG")]
-        protected void CheckDisposed()
-        {
-            if (_disposed)
-            {
-                throw new ObjectDisposedException(GetType().ToString());
-            }
+            throw new ObjectDisposedException(GetType().ToString());
         }
     }
 }

@@ -4,40 +4,37 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.Collections.Generic;
+namespace Ycs;
 
-namespace Ycs
+/// <summary>
+/// An event that describes changes on a YXmlElement or YXmlFragment.
+/// </summary>
+public class YXmlEvent : YEvent
 {
     /// <summary>
-    /// An event that describes changes on a YXmlElement or YXmlFragment.
+    /// Whether the children changed.
     /// </summary>
-    public class YXmlEvent : YEvent
+    public bool ChildListChanged { get; private set; }
+
+    /// <summary>
+    /// The set of all changed attributes.
+    /// </summary>
+    public ISet<string> AttributesChanged { get; } = new HashSet<string>();
+
+    internal YXmlEvent(AbstractType target, ISet<string> subs, Transaction transaction)
+        : base(target, transaction)
     {
-        /// <summary>
-        /// Whether the children changed.
-        /// </summary>
-        public bool ChildListChanged { get; private set; }
-
-        /// <summary>
-        /// The set of all changed attributes.
-        /// </summary>
-        public ISet<string> AttributesChanged { get; } = new HashSet<string>();
-
-        internal YXmlEvent(AbstractType target, ISet<string> subs, Transaction transaction)
-            : base(target, transaction)
+        if (subs != null)
         {
-            if (subs != null)
+            foreach (var sub in subs)
             {
-                foreach (var sub in subs)
+                if (sub == null)
                 {
-                    if (sub == null)
-                    {
-                        ChildListChanged = true;
-                    }
-                    else
-                    {
-                        AttributesChanged.Add(sub);
-                    }
+                    ChildListChanged = true;
+                }
+                else
+                {
+                    AttributesChanged.Add(sub);
                 }
             }
         }

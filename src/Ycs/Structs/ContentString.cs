@@ -4,117 +4,114 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
 using System.Text;
 
-namespace Ycs
+namespace Ycs;
+
+public class ContentString : IContentEx
 {
-    public class ContentString : IContentEx
+    internal const int _ref = 4;
+
+    private readonly List<object> _content;
+
+    internal ContentString(string value)
+        : this(value.Cast<object>().ToList())
     {
-        internal const int _ref = 4;
+        // Do nothing.
+    }
 
-        private readonly List<object> _content;
+    private ContentString(List<object> content)
+    {
+        _content = content;
+    }
 
-        internal ContentString(string value)
-            : this(value.Cast<object>().ToList())
+    int IContentEx.Ref => _ref;
+
+    public bool Countable => true;
+    public int Length => _content.Count;
+
+    internal void AppendToBuilder(StringBuilder sb)
+    {
+        foreach (var c in _content)
         {
-            // Do nothing.
+            sb.Append((char)c);
+        }
+    }
+
+    public string GetString()
+    {
+        var sb = new StringBuilder();
+
+        foreach (var c in _content)
+        {
+            sb.Append((char)c);
         }
 
-        private ContentString(List<object> content)
+        return sb.ToString();
+    }
+
+    public IReadOnlyList<object> GetContent() => _content.AsReadOnly();
+
+    public IContent Copy() => new ContentString(_content.ToList());
+
+    public IContent Splice(int offset)
+    {
+        var right = new ContentString(_content.GetRange(offset, _content.Count - offset));
+        _content.RemoveRange(offset, _content.Count - offset);
+
+        // Prevent encoding invalid documents because of splitting of surrogate pairs.
+        var firstCharCode = (char)_content[offset - 1];
+        if (firstCharCode >= 0xD800 && firstCharCode <= 0xDBFF)
         {
-            _content = content;
+            // Last character of the left split is the start of a surrogate utf16/ucs2 pair.
+            // We don't support splitting of surrogate pairs because this may lead to invalid documents.
+            // Replace the invalid character with a unicode replacement character U+FFFD.
+            _content[offset - 1] = '\uFFFD';
+
+            // Replace right as well.
+            right._content[0] = '\uFFFD';
         }
 
-        int IContentEx.Ref => _ref;
+        return right;
+    }
 
-        public bool Countable => true;
-        public int Length => _content.Count;
+    public bool MergeWith(IContent right)
+    {
+        Debug.Assert(right is ContentString);
+        _content.AddRange((right as ContentString)._content);
+        return true;
+    }
 
-        internal void AppendToBuilder(StringBuilder sb)
+    void IContentEx.Integrate(Transaction transaction, Item item)
+    {
+        // Do nothing.
+    }
+
+    void IContentEx.Delete(Transaction transaction)
+    {
+        // Do nothing.
+    }
+
+    void IContentEx.Gc(StructStore store)
+    {
+        // Do nothing.
+    }
+
+    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    {
+        var sb = new StringBuilder(_content.Count - offset);
+        for (int i = offset; i < _content.Count; i++)
         {
-            foreach (var c in _content)
-            {
-                sb.Append((char)c);
-            }
+            sb.Append((char)_content[i]);
         }
 
-        public string GetString()
-        {
-            var sb = new StringBuilder();
+        var str = sb.ToString();
+        encoder.WriteString(str);
+    }
 
-            foreach (var c in _content)
-            {
-                sb.Append((char)c);
-            }
-
-            return sb.ToString();
-        }
-
-        public IReadOnlyList<object> GetContent() => _content.AsReadOnly();
-
-        public IContent Copy() => new ContentString(_content.ToList());
-
-        public IContent Splice(int offset)
-        {
-            var right = new ContentString(_content.GetRange(offset, _content.Count - offset));
-            _content.RemoveRange(offset, _content.Count - offset);
-
-            // Prevent encoding invalid documents because of splitting of surrogate pairs.
-            var firstCharCode = (char)_content[offset - 1];
-            if (firstCharCode >= 0xD800 && firstCharCode <= 0xDBFF)
-            {
-                // Last character of the left split is the start of a surrogate utf16/ucs2 pair.
-                // We don't support splitting of surrogate pairs because this may lead to invalid documents.
-                // Replace the invalid character with a unicode replacement character U+FFFD.
-                _content[offset - 1] = '\uFFFD';
-
-                // Replace right as well.
-                right._content[0] = '\uFFFD';
-            }
-
-            return right;
-        }
-
-        public bool MergeWith(IContent right)
-        {
-            Debug.Assert(right is ContentString);
-            _content.AddRange((right as ContentString)._content);
-            return true;
-        }
-
-        void IContentEx.Integrate(Transaction transaction, Item item)
-        {
-            // Do nothing.
-        }
-
-        void IContentEx.Delete(Transaction transaction)
-        {
-            // Do nothing.
-        }
-
-        void IContentEx.Gc(StructStore store)
-        {
-            // Do nothing.
-        }
-
-        void IContentEx.Write(IUpdateEncoder encoder, int offset)
-        {
-            var sb = new StringBuilder(_content.Count - offset);
-            for (int i = offset; i < _content.Count; i++)
-            {
-                sb.Append((char)_content[i]);
-            }
-
-            var str = sb.ToString();
-            encoder.WriteString(str);
-        }
-
-        internal static ContentString Read(IUpdateDecoder decoder)
-        {
-            return new ContentString(decoder.ReadString());
-        }
+    internal static ContentString Read(IUpdateDecoder decoder)
+    {
+        return new ContentString(decoder.ReadString());
     }
 }

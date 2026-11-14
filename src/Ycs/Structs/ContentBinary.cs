@@ -4,65 +4,61 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System;
-using System.Collections.Generic;
+namespace Ycs;
 
-namespace Ycs
+public class ContentBinary : IContentEx
 {
-    public class ContentBinary : IContentEx
+    internal const int _ref = 3;
+
+    private readonly byte[] _content;
+
+    internal ContentBinary(byte[] data)
     {
-        internal const int _ref = 3;
+        _content = data;
+    }
 
-        private readonly byte[] _content;
+    int IContentEx.Ref => _ref;
 
-        internal ContentBinary(byte[] data)
-        {
-            _content = data;
-        }
+    public bool Countable => true;
+    public int Length => 1;
 
-        int IContentEx.Ref => _ref;
+    public IReadOnlyList<object> GetContent() => new object[] { _content };
 
-        public bool Countable => true;
-        public int Length => 1;
+    public IContent Copy() => new ContentBinary(_content);
 
-        public IReadOnlyList<object> GetContent() => new object[] { _content };
+    public IContent Splice(int offset)
+    {
+        throw new NotImplementedException();
+    }
 
-        public IContent Copy() => new ContentBinary(_content);
+    public bool MergeWith(IContent right)
+    {
+        return false;
+    }
 
-        public IContent Splice(int offset)
-        {
-            throw new NotImplementedException();
-        }
+    void IContentEx.Integrate(Transaction transaction, Item item)
+    {
+        // Do nothing.
+    }
 
-        public bool MergeWith(IContent right)
-        {
-            return false;
-        }
+    void IContentEx.Delete(Transaction transaction)
+    {
+        // Do nothing.
+    }
 
-        void IContentEx.Integrate(Transaction transaction, Item item)
-        {
-            // Do nothing.
-        }
+    void IContentEx.Gc(StructStore store)
+    {
+        // Do nothing.
+    }
 
-        void IContentEx.Delete(Transaction transaction)
-        {
-            // Do nothing.
-        }
+    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    {
+        encoder.WriteBuffer(_content);
+    }
 
-        void IContentEx.Gc(StructStore store)
-        {
-            // Do nothing.
-        }
-
-        void IContentEx.Write(IUpdateEncoder encoder, int offset)
-        {
-            encoder.WriteBuffer(_content);
-        }
-
-        internal static ContentBinary Read(IUpdateDecoder decoder)
-        {
-            var content = decoder.ReadBuffer();
-            return new ContentBinary(content);
-        }
+    internal static ContentBinary Read(IUpdateDecoder decoder)
+    {
+        var content = decoder.ReadBuffer();
+        return new ContentBinary(content);
     }
 }

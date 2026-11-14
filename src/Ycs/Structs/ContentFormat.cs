@@ -4,68 +4,64 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System;
-using System.Collections.Generic;
+namespace Ycs;
 
-namespace Ycs
+public class ContentFormat : IContentEx
 {
-    public class ContentFormat : IContentEx
+    internal const int _ref = 6;
+
+    public readonly string Key;
+    public readonly object Value;
+
+    internal ContentFormat(string key, object value)
     {
-        internal const int _ref = 6;
+        Key = key;
+        Value = value;
+    }
 
-        public readonly string Key;
-        public readonly object Value;
+    int IContentEx.Ref => _ref;
 
-        internal ContentFormat(string key, object value)
-        {
-            Key = key;
-            Value = value;
-        }
+    public bool Countable => false;
+    public int Length => 1;
 
-        int IContentEx.Ref => _ref;
+    public IContent Copy() => new ContentFormat(Key, Value);
 
-        public bool Countable => false;
-        public int Length => 1;
+    // Yjs: ContentFormat#getContent returns an empty array - formatting carries no user content.
+    public IReadOnlyList<object> GetContent() => System.Array.Empty<object>();
 
-        public IContent Copy() => new ContentFormat(Key, Value);
+    public IContent Splice(int offset) => throw new NotImplementedException();
 
-        // Yjs: ContentFormat#getContent returns an empty array - formatting carries no user content.
-        public IReadOnlyList<object> GetContent() => System.Array.Empty<object>();
+    public bool MergeWith(IContent right)
+    {
+        return false;
+    }
 
-        public IContent Splice(int offset) => throw new NotImplementedException();
+    void IContentEx.Integrate(Transaction transaction, Item item)
+    {
+        // Search markers are currently unsupported for rich text documents.
+        (item.Parent as YArrayBase)?.ClearSearchMarkers();
+    }
 
-        public bool MergeWith(IContent right)
-        {
-            return false;
-        }
+    void IContentEx.Delete(Transaction transaction)
+    {
+        // Do nothing.
+    }
 
-        void IContentEx.Integrate(Transaction transaction, Item item)
-        {
-            // Search markers are currently unsupported for rich text documents.
-            (item.Parent as YArrayBase)?.ClearSearchMarkers();
-        }
+    void IContentEx.Gc(StructStore store)
+    {
+        // Do nothing.
+    }
 
-        void IContentEx.Delete(Transaction transaction)
-        {
-            // Do nothing.
-        }
+    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    {
+        encoder.WriteKey(Key);
+        encoder.WriteJson(Value);
+    }
 
-        void IContentEx.Gc(StructStore store)
-        {
-            // Do nothing.
-        }
-
-        void IContentEx.Write(IUpdateEncoder encoder, int offset)
-        {
-            encoder.WriteKey(Key);
-            encoder.WriteJson(Value);
-        }
-
-        internal static ContentFormat Read(IUpdateDecoder decoder)
-        {
-            var key = decoder.ReadKey();
-            var value = decoder.ReadJson();
-            return new ContentFormat(key, value);
-        }
+    internal static ContentFormat Read(IUpdateDecoder decoder)
+    {
+        var key = decoder.ReadKey();
+        var value = decoder.ReadJson();
+        return new ContentFormat(key, value);
     }
 }

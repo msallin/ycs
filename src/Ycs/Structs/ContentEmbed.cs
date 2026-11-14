@@ -4,65 +4,61 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System;
-using System.Collections.Generic;
+namespace Ycs;
 
-namespace Ycs
+public class ContentEmbed : IContentEx
 {
-    public class ContentEmbed : IContentEx
+    internal const int _ref = 5;
+
+    public readonly object Embed;
+
+    internal ContentEmbed(object embed)
     {
-        internal const int _ref = 5;
+        Embed = embed;
+    }
 
-        public readonly object Embed;
+    int IContentEx.Ref => _ref;
 
-        internal ContentEmbed(object embed)
-        {
-            Embed = embed;
-        }
+    public bool Countable => true;
+    public int Length => 1;
 
-        int IContentEx.Ref => _ref;
+    public IReadOnlyList<object> GetContent() => new object[] { Embed };
 
-        public bool Countable => true;
-        public int Length => 1;
+    public IContent Copy() => new ContentEmbed(Embed);
 
-        public IReadOnlyList<object> GetContent() => new object[] { Embed };
+    public IContent Splice(int offset)
+    {
+        throw new NotImplementedException();
+    }
 
-        public IContent Copy() => new ContentEmbed(Embed);
+    public bool MergeWith(IContent right)
+    {
+        return false;
+    }
 
-        public IContent Splice(int offset)
-        {
-            throw new NotImplementedException();
-        }
+    void IContentEx.Integrate(Transaction transaction, Item item)
+    {
+        // Do nothing.
+    }
 
-        public bool MergeWith(IContent right)
-        {
-            return false;
-        }
+    void IContentEx.Delete(Transaction transaction)
+    {
+        // Do nothing.
+    }
 
-        void IContentEx.Integrate(Transaction transaction, Item item)
-        {
-            // Do nothing.
-        }
+    void IContentEx.Gc(StructStore store)
+    {
+        // Do nothing.
+    }
 
-        void IContentEx.Delete(Transaction transaction)
-        {
-            // Do nothing.
-        }
+    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    {
+        encoder.WriteJson(Embed);
+    }
 
-        void IContentEx.Gc(StructStore store)
-        {
-            // Do nothing.
-        }
-
-        void IContentEx.Write(IUpdateEncoder encoder, int offset)
-        {
-            encoder.WriteJson(Embed);
-        }
-
-        internal static ContentEmbed Read(IUpdateDecoder decoder)
-        {
-            var content = decoder.ReadJson();
-            return new ContentEmbed(content);
-        }
+    internal static ContentEmbed Read(IUpdateDecoder decoder)
+    {
+        var content = decoder.ReadJson();
+        return new ContentEmbed(content);
     }
 }

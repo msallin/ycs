@@ -4,28 +4,25 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.IO;
+namespace Ycs;
 
-namespace Ycs
+/// <seealso cref="IntDiffEncoder"/>
+internal class IntDiffDecoder : AbstractStreamDecoder<long>
 {
-    /// <seealso cref="IntDiffEncoder"/>
-    internal class IntDiffDecoder : AbstractStreamDecoder<long>
+    private long _state;
+
+    public IntDiffDecoder(Stream input, long start, bool leaveOpen = false)
+        : base(input, leaveOpen)
     {
-        private long _state;
+        _state = start;
+    }
 
-        public IntDiffDecoder(Stream input, long start, bool leaveOpen = false)
-            : base(input, leaveOpen)
-        {
-            _state = start;
-        }
+    /// <inheritdoc/>
+    public override long Read()
+    {
+        CheckDisposed();
 
-        /// <inheritdoc/>
-        public override long Read()
-        {
-            CheckDisposed();
-
-            _state += Stream.ReadVarInt().Value;
-            return _state;
-        }
+        _state += Stream.ReadVarInt().Value;
+        return _state;
     }
 }
