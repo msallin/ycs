@@ -201,9 +201,12 @@ public partial class AbstractType
         DeepEventHandler?.Invoke(this, new YDeepEventArgs(events, transaction));
     }
 
+    // The name of a root type: it never changes, and finding it walks the document's root types.
+    private string _rootTypeKey;
+
     internal string FindRootTypeKey()
     {
-        return Doc.FindRootTypeKey(this);
+        return _rootTypeKey ??= Doc.FindRootTypeKey(this);
     }
 
     protected void TypeMapDelete(Transaction transaction, string key)
