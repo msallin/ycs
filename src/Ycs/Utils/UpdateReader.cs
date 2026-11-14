@@ -64,6 +64,9 @@ internal sealed class UpdateReader
         return new Lease(reader, version);
     }
 
+    /// <summary>Whether this thread's reader is free, that is no lease of it is open (for tests).</summary>
+    internal static bool IsFreeOnCurrentThread => t_free != null;
+
     private void ReadCore(byte[] buffer, int offset, int count, bool v2, bool trusted)
     {
         _input.Reset(buffer, offset, count);

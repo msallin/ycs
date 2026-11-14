@@ -448,7 +448,7 @@ public partial class YDoc
     public void ApplyUpdateV1(byte[] update, object transactionOrigin = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(new Lib0Reader(update), v2: false, transactionOrigin);
+        ApplyUpdate(update, update.Length, v2: false, transactionOrigin);
     }
 
     /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
@@ -464,7 +464,7 @@ public partial class YDoc
     public void ApplyUpdateV2(byte[] update, object transactionOrigin = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(new Lib0Reader(update), v2: true, transactionOrigin);
+        ApplyUpdate(update, update.Length, v2: true, transactionOrigin);
     }
 
     /// <inheritdoc cref="ApplyUpdateV2(byte[], object)"/>
@@ -513,124 +513,83 @@ public partial class YDoc
         EncodeStateAsUpdateV1(destination, encodedTargetStateVector);
 
     /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public byte[] EncodeStateAsUpdateV1(ReadOnlySpan<byte> encodedTargetStateVector = default)
-    {
-        var encoder = new UpdateEncoderV1();
-        WriteStateAsUpdate(encoder, DecodeTargetStateVector(encodedTargetStateVector));
-        return encoder.ToArray();
-    }
+    public byte[] EncodeStateAsUpdateV1(ReadOnlySpan<byte> encodedTargetStateVector = default) =>
+        EncodingUtils.EncodeStateAsUpdate(Store, encodedTargetStateVector, v2: false);
 
     /// <inheritdoc cref="EncodeStateAsUpdate(IBufferWriter{byte}, ReadOnlySpan{byte})"/>
-    public void EncodeStateAsUpdateV1(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default)
-    {
-        ArgumentNullException.ThrowIfNull(destination);
-        var encoder = new UpdateEncoderV1();
-        WriteStateAsUpdate(encoder, DecodeTargetStateVector(encodedTargetStateVector));
-        encoder.WriteTo(destination);
-    }
+    public void EncodeStateAsUpdateV1(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default) =>
+        EncodingUtils.EncodeStateAsUpdate(Store, destination, encodedTargetStateVector, v2: false);
 
     /// <summary>
     /// Encodes the document as one update in the v2 format (Yjs' <c>Y.encodeStateAsUpdateV2</c>).
     /// </summary>
     /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public byte[] EncodeStateAsUpdateV2(ReadOnlySpan<byte> encodedTargetStateVector = default)
-    {
-        var encoder = new UpdateEncoderV2();
-        WriteStateAsUpdate(encoder, DecodeTargetStateVector(encodedTargetStateVector));
-        return encoder.ToArray();
-    }
+    public byte[] EncodeStateAsUpdateV2(ReadOnlySpan<byte> encodedTargetStateVector = default) =>
+        EncodingUtils.EncodeStateAsUpdate(Store, encodedTargetStateVector, v2: true);
 
     /// <summary>
     /// Writes the document as one update in the v2 format into <paramref name="destination"/>.
     /// </summary>
     /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public void EncodeStateAsUpdateV2(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default)
-    {
-        ArgumentNullException.ThrowIfNull(destination);
-        var encoder = new UpdateEncoderV2();
-        WriteStateAsUpdate(encoder, DecodeTargetStateVector(encodedTargetStateVector));
-        encoder.WriteTo(destination);
-    }
+    public void EncodeStateAsUpdateV2(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default) =>
+        EncodingUtils.EncodeStateAsUpdate(Store, destination, encodedTargetStateVector, v2: true);
 
     /// <summary>
     /// Encodes the document's state vector (Yjs' <c>Y.encodeStateVector</c>). The state vector has the
     /// same bytes in both update formats.
     /// </summary>
-    public byte[] EncodeStateVector()
-    {
-        var encoder = new DSEncoderV1();
-        WriteStateVector(encoder);
-        return encoder.ToArray();
-    }
+    public byte[] EncodeStateVector() => EncodingUtils.EncodeStateVector(Store);
+
+    /// <summary>
+    /// Writes the document's state vector into <paramref name="destination"/>.
+    /// </summary>
+    /// <inheritdoc cref="EncodeStateVector()"/>
+    public void EncodeStateVector(IBufferWriter<byte> destination) => EncodingUtils.EncodeStateVector(Store, destination);
 
     /// <inheritdoc cref="EncodeStateVector()"/>
     public byte[] EncodeStateVectorV1() => EncodeStateVector();
 
     /// <inheritdoc cref="EncodeStateVector()"/>
-    public byte[] EncodeStateVectorV2()
-    {
-        var encoder = new DSEncoderV2();
-        WriteStateVector(encoder);
-        return encoder.ToArray();
-    }
-
-    // Only read: an empty target state vector asks for everything.
-    private static readonly Dictionary<long, long> EmptyStateVector = new();
-
-    private static IDictionary<long, long> DecodeTargetStateVector(ReadOnlySpan<byte> encodedTargetStateVector)
-    {
-        if (encodedTargetStateVector.IsEmpty)
-        {
-            return EmptyStateVector;
-        }
-
-        var buffer = ArrayPool<byte>.Shared.Rent(encodedTargetStateVector.Length);
-        try
-        {
-            encodedTargetStateVector.CopyTo(buffer);
-            return EncodingUtils.DecodeStateVector(new Lib0Reader(buffer, 0, encodedTargetStateVector.Length));
-        }
-        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
-        {
-            throw YUpdateException.Wrap(e);
-        }
-        finally
-        {
-            ArrayPool<byte>.Shared.Return(buffer);
-        }
-    }
+    public byte[] EncodeStateVectorV2() => EncodeStateVector();
 
     /// <summary>
     /// Decodes the whole update (structs and delete set) before the document is touched, then applies
     /// it (<see cref="StructStore.ApplyUpdate"/>), which checks what depends on the document before it
     /// changes anything.
     /// </summary>
-    private void ApplyUpdate(Lib0Reader reader, bool v2, object transactionOrigin)
+    private void ApplyUpdate(byte[] buffer, int count, bool v2, object transactionOrigin)
     {
-        Dictionary<long, List<AbstractStruct>> structs;
-        DeleteSet ds;
+        UpdateReader.Lease update;
         try
         {
-            IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader) : new UpdateDecoderV1(reader);
-            structs = EncodingUtils.ReadClientStructRefs(decoder);
-            ds = DeleteSet.Read(decoder);
+            update = UpdateReader.Read(buffer, 0, count, v2);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {
             throw YUpdateException.Wrap(e);
         }
 
-        Transact((store: Store, structs, ds, _opts.MaxPendingBytes), static (s, tr) =>
+        // The decoded lists are reused for the next update once the lease is disposed; the structs
+        // themselves are integrated (or encoded as pending) inside the transaction.
+        try
         {
-            // As Yjs' readUpdateV2: also when this runs in the caller's transaction.
-            tr.Local = false;
-            s.store.ApplyUpdate(tr, s.structs, s.ds, s.MaxPendingBytes);
-        }, transactionOrigin, local: false);
+            Transact((store: Store, update, _opts.MaxPendingBytes), static (s, tr) =>
+            {
+                // As Yjs' readUpdateV2: also when this runs in the caller's transaction.
+                tr.Local = false;
+                s.store.ApplyUpdate(tr, s.update.Structs, s.update.DeleteSet, s.MaxPendingBytes);
+            }, transactionOrigin, local: false);
+        }
+        finally
+        {
+            update.Dispose();
+        }
     }
 
     /// <summary>
     /// The decoders read from an array; a span is copied into a pooled one first. Nothing
-    /// decoded keeps a reference to the input, so the array can be returned afterwards.
+    /// decoded keeps a reference to the input once the lease is disposed, so the array can be
+    /// returned afterwards.
     /// </summary>
     private void ApplyPooledCopy(ReadOnlySpan<byte> update, bool v2, object transactionOrigin)
     {
@@ -638,27 +597,12 @@ public partial class YDoc
         try
         {
             update.CopyTo(buffer);
-            ApplyUpdate(new Lib0Reader(buffer, 0, update.Length), v2, transactionOrigin);
+            ApplyUpdate(buffer, update.Length, v2, transactionOrigin);
         }
         finally
         {
             ArrayPool<byte>.Shared.Return(buffer);
         }
-    }
-
-    /// <summary>
-    /// Write all the document as a single update message. If you specify the satte of the remote client, it will only
-    /// write the operations that are missing.
-    /// </summary>
-    internal void WriteStateAsUpdate(IUpdateEncoder encoder, IDictionary<long, long> targetStateVector)
-    {
-        EncodingUtils.WriteClientsStructs(encoder, Store, targetStateVector);
-        new DeleteSet(Store).Write(encoder);
-    }
-
-    internal void WriteStateVector(IDSEncoder encoder)
-    {
-        EncodingUtils.WriteStateVector(encoder, Store.GetStateVector());
     }
 
     internal void InvokeSubdocsChanged(ISet<YDoc> loaded, ISet<YDoc> added, ISet<YDoc> removed)
@@ -706,11 +650,24 @@ public partial class YDoc
         var handler = Update;
         if (handler != null)
         {
-            var encoder = new UpdateEncoderV1();
-            var hasContent = transaction.WriteUpdateMessageFromTransaction(encoder);
-            if (hasContent)
+            // The encoder goes back before the handler runs, which may encode updates itself.
+            byte[] update = null;
+            var encoder = UpdateEncoderV1.Rent();
+            try
             {
-                handler.Invoke(this, (encoder.ToArray(), transaction.Origin, transaction));
+                if (transaction.WriteUpdateMessageFromTransaction(encoder))
+                {
+                    update = encoder.ToArray();
+                }
+            }
+            finally
+            {
+                encoder.Return();
+            }
+
+            if (update != null)
+            {
+                handler.Invoke(this, (update, transaction.Origin, transaction));
             }
         }
     }
@@ -720,11 +677,24 @@ public partial class YDoc
         var handler = UpdateV2;
         if (handler != null)
         {
-            var encoder = new UpdateEncoderV2();
-            var hasContent = transaction.WriteUpdateMessageFromTransaction(encoder);
-            if (hasContent)
+            // The encoder goes back before the handler runs, which may encode updates itself.
+            byte[] update = null;
+            var encoder = UpdateEncoderV2.Rent();
+            try
             {
-                handler.Invoke(this, (encoder.ToArray(), transaction.Origin, transaction));
+                if (transaction.WriteUpdateMessageFromTransaction(encoder))
+                {
+                    update = encoder.ToArray();
+                }
+            }
+            finally
+            {
+                encoder.Return();
+            }
+
+            if (update != null)
+            {
+                handler.Invoke(this, (update, transaction.Origin, transaction));
             }
         }
     }

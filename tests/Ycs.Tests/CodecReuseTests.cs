@@ -320,6 +320,137 @@ public class CodecReuseTests
     }
 
     [TestMethod]
+    public void ApplyUpdate_ObserverThrows_ReleasesTheDecodedUpdateAndTheCopy()
+    {
+        var update = SampleDoc(1).EncodeStateAsUpdateV1();
+        var doc = new YDoc();
+        doc.GetText("text").EventHandler += (_, _) => throw new InvalidOperationException("observer");
+        var outstanding = BufferPool<byte>.OutstandingOnCurrentThread;
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => doc.ApplyUpdate(update.AsSpan()));
+
+        Assert.AreEqual($"True|{outstanding}", $"{UpdateReader.IsFreeOnCurrentThread}|{BufferPool<byte>.OutstandingOnCurrentThread}");
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void TryApplyUpdate_Malformed_ReleasesTheDecodedUpdate(bool v2)
+    {
+        var update = v2 ? SampleDoc(1).EncodeStateAsUpdateV2() : SampleDoc(1).EncodeStateAsUpdateV1();
+        var doc = new YDoc();
+
+        var applied = v2 ? doc.TryApplyUpdateV2(update.AsSpan(0, update.Length - 3)) : doc.TryApplyUpdate(update.AsSpan(0, update.Length - 3));
+
+        Assert.AreEqual("False|True", $"{applied}|{UpdateReader.IsFreeOnCurrentThread}");
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_ObserverAppliesAnotherUpdate_AppliesBothAndReleasesThem()
+    {
+        var first = SampleDoc(1).EncodeStateAsUpdateV1();
+        var second = SampleDoc(2).EncodeStateAsUpdateV1();
+        var doc = new YDoc();
+        var text = doc.GetText("text");
+        var applied = false;
+        text.EventHandler += (_, _) =>
+        {
+            if (!applied)
+            {
+                applied = true;
+                doc.ApplyUpdate(second);
+            }
+        };
+
+        doc.ApplyUpdate(first);
+
+        var expected = new YDoc();
+        expected.ApplyUpdate(first);
+        expected.ApplyUpdate(second);
+        Assert.AreEqual($"{expected.GetText("text")}|True", $"{text}|{UpdateReader.IsFreeOnCurrentThread}");
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyUpdate_PendingUpdateThenTheMissingOne_IntegratesBothAndReleasesThem(bool v2)
+    {
+        var source = new YDoc(new YDocOptions { ClientId = 1 });
+        var updates = new List<byte[]>();
+        source.Update += (_, e) => updates.Add(e.data);
+        source.UpdateV2 += (_, e) => updates.Add(e.data);
+        var text = source.GetText("text");
+        text.Insert(0, "abc");
+        text.Insert(3, "def");
+        text.Delete(1, 2);
+        var doc = new YDoc();
+        var pick = v2 ? 1 : 0;
+
+        for (var i = updates.Count - 2 + pick; i >= 0; i -= 2)
+        {
+            if (v2)
+            {
+                doc.ApplyUpdateV2(updates[i]);
+            }
+            else
+            {
+                doc.ApplyUpdate(updates[i]);
+            }
+        }
+
+        Assert.AreEqual("adef|False|True", $"{doc.GetText("text")}|{doc.HasPending}|{UpdateReader.IsFreeOnCurrentThread}");
+    }
+
+    [TestMethod]
+    public void YDoc_EncodeStateVectorIntoBufferWriter_WritesTheArraysBytes()
+    {
+        var doc = SampleDoc(3);
+        var destination = new ArrayBufferWriter<byte>(1);
+
+        doc.EncodeStateVector(destination);
+
+        CollectionAssert.AreEqual(doc.EncodeStateVector(), destination.WrittenSpan.ToArray());
+    }
+
+    [TestMethod]
+    public void YDoc_EncodeStateVectorV2_IsTheV1Bytes()
+    {
+        var doc = SampleDoc(3);
+
+        CollectionAssert.AreEqual(doc.EncodeStateVectorV1(), doc.EncodeStateVectorV2());
+    }
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void UpdateEvent_HandlerEncodesTheDocument_GetsItsOwnUpdateAndReturnsTheBuffers(bool v2)
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 7 });
+        var received = new List<byte[]>();
+        var encodedInTheHandler = new List<byte[]>();
+        EventHandler<(byte[] data, object origin, Transaction transaction)> handler = (_, e) =>
+        {
+            received.Add(e.data);
+            encodedInTheHandler.Add(v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1());
+        };
+        if (v2)
+        {
+            doc.UpdateV2 += handler;
+        }
+        else
+        {
+            doc.Update += handler;
+        }
+
+        var outstanding = BufferPool<byte>.OutstandingOnCurrentThread;
+        doc.GetText("text").Insert(0, "abc");
+
+        // The first update of a document is the whole document.
+        CollectionAssert.AreEqual(encodedInTheHandler[0], received[0]);
+        Assert.AreEqual(outstanding, BufferPool<byte>.OutstandingOnCurrentThread);
+    }
+
+    [TestMethod]
     public void UpdateReader_DamagedUpdates_ReadsWhatFreshDecodersRead()
     {
         // Reused after every failure, the reader must still read (or reject) each update exactly as new decoders do.

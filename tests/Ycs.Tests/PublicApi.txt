@@ -344,6 +344,7 @@ class Ycs.YDoc
     void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     void EncodeStateAsUpdateV1(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     void EncodeStateAsUpdateV2(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    void EncodeStateVector(System.Buffers.IBufferWriter<byte> destination)
     void Load()
     void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
     void Transact<TState>(TState state, System.Action<TState, Transaction> action, object origin = null, bool local = true)

@@ -417,9 +417,8 @@ internal sealed partial class StructStore
             // encoded form, as Yjs does.
             var update = Pending.Merge();
             Pending = null;
-            var decoder = new UpdateDecoderV2(new Lib0Reader(update), trusted: true);
-            var refs = EncodingUtils.ReadClientStructRefs(decoder);
-            ApplyUpdate(transaction, refs, DeleteSet.Read(decoder), long.MaxValue);
+            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, trusted: true);
+            ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, long.MaxValue);
         }
     }
 
@@ -558,12 +557,19 @@ internal sealed partial class StructStore
                 return null;
             }
 
-            var encoder = new UpdateEncoderV2();
-            EncodingUtils.WriteClientsStructs(encoder, Rest, EmptyStateVector);
+            var encoder = UpdateEncoderV2.Rent();
+            try
+            {
+                EncodingUtils.WriteClientsStructs(encoder, Rest, EmptyStateVector);
 
-            // Write an empty delete set: there is no need for an extra function call, just write 0 deletes.
-            encoder.RestWriter.WriteVarUint(0);
-            return encoder.ToArray();
+                // Write an empty delete set: there is no need for an extra function call, just write 0 deletes.
+                encoder.RestWriter.WriteVarUint(0);
+                return encoder.ToArray();
+            }
+            finally
+            {
+                encoder.Return();
+            }
         }
 
         /// <summary>Forgets the update, so that the plan can be used for the next one.</summary>

@@ -76,7 +76,19 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// </summary>
     internal static byte[] EncodeRestoreUpdateV2(YDoc originDoc, DeleteSet ds, IDictionary<long, long> stateVector)
     {
-        var encoder = new UpdateEncoderV2();
+        var encoder = UpdateEncoderV2.Rent();
+        try
+        {
+            return EncodeRestoreUpdateV2(encoder, originDoc, ds, stateVector);
+        }
+        finally
+        {
+            encoder.Return();
+        }
+    }
+
+    private static byte[] EncodeRestoreUpdateV2(UpdateEncoderV2 encoder, YDoc originDoc, DeleteSet ds, IDictionary<long, long> stateVector)
+    {
         originDoc.Transact(tr =>
         {
             int size = stateVector.Count(kvp => kvp.Value /* clock */ > 0);
