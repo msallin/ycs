@@ -7,6 +7,7 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 
 namespace Ycs;
 
@@ -74,9 +75,10 @@ public partial class Transaction
     public IDictionary<string, object> Meta { get; }
 
     /// <summary>
-    /// Whether this change originates from this doc.
+    /// Whether this change originates from this doc. Applying an update makes the transaction it
+    /// runs in non-local, as in Yjs.
     /// </summary>
-    public bool Local { get; }
+    public bool Local { get; internal set; }
 
     public ISet<YDoc> SubdocsAdded { get; }
 
@@ -113,187 +115,218 @@ public partial class Transaction
         }
     }
 
+    /// <summary>
+    /// Cleans up the transactions from <paramref name="i"/> on, including those that observers start
+    /// meanwhile. Whatever throws (an observer, or a bug), every transaction is cleaned up and the
+    /// document is left ready for the next one; the first exception is rethrown at the end.
+    /// </summary>
     internal static void CleanupTransactions(IList<Transaction> transactionCleanups, int i)
     {
-        if (i < transactionCleanups.Count)
+        var doc = transactionCleanups[i].Doc;
+        ExceptionDispatchInfo error = null;
+
+        try
         {
-            var transaction = transactionCleanups[i];
-            var doc = transaction.Doc;
-            var store = doc.Store;
-            var ds = transaction.DeleteSet;
-            var mergeStructs = transaction._mergeStructs;
-            var actions = new List<Action>();
+            for (; i < transactionCleanups.Count; i++)
+            {
+                try
+                {
+                    CleanupTransaction(transactionCleanups[i]);
+                }
+                catch (Exception e)
+                {
+                    error ??= ExceptionDispatchInfo.Capture(e);
+                }
+            }
+        }
+        finally
+        {
+            doc._transaction = null;
+            var all = transactionCleanups.ToList();
+            doc._transactionCleanups.Clear();
 
             try
             {
-                ds.SortAndMergeDeleteSet();
-                transaction.AfterState = store.GetStateVector();
-                doc._transaction = null;
-
-                actions.Add(() =>
-                {
-                    doc.InvokeOnBeforeObserverCalls(transaction);
-                });
-
-                actions.Add(() =>
-                {
-                    foreach (var kvp in transaction.Changed)
-                    {
-                        var itemType = kvp.Key;
-                        var subs = kvp.Value;
-
-                        if (itemType._item == null || !itemType._item.Deleted)
-                        {
-                            itemType.CallObserver(transaction, subs);
-                        }
-                    }
-                });
-
-                actions.Add(() =>
-                {
-                    // Deep observe events.
-                    foreach (var kvp in transaction.ChangedParentTypes)
-                    {
-                        var type = kvp.Key;
-                        var events = kvp.Value;
-
-                        // We need to think about the possibility that the user transforms the YDoc in the event.
-                        if (type._item == null || !type._item.Deleted)
-                        {
-                            foreach (var evt in events)
-                            {
-                                if (evt.Target._item == null || !evt.Target._item.Deleted)
-                                {
-                                    evt.CurrentTarget = type;
-                                }
-                            }
-
-                            // Sort events by path length so that top-level events are fired first.
-                            var sortedEvents = events.ToList();
-                            sortedEvents.Sort((a, b) => a.Path.Count - b.Path.Count);
-                            Debug.Assert(sortedEvents.Count > 0);
-
-                            actions.Add(() =>
-                            {
-                                type.CallDeepEventHandlerListeners(sortedEvents, transaction);
-                            });
-                        }
-                    }
-                });
-
-                actions.Add(() =>
-                {
-                    doc.InvokeOnAfterTransaction(transaction);
-                });
-
-                CallAll(actions);
+                doc.InvokeAfterAllTransactions(all);
             }
-            finally
+            catch (Exception e)
             {
-                // Replace deleted items with ItemDeleted / GC.
-                // This is where content is actually removed from the Yjs Doc.
-                if (doc.Gc)
+                error ??= ExceptionDispatchInfo.Capture(e);
+            }
+        }
+
+        error?.Throw();
+    }
+
+    private static void CleanupTransaction(Transaction transaction)
+    {
+        var doc = transaction.Doc;
+        var store = doc.Store;
+        var ds = transaction.DeleteSet;
+        var mergeStructs = transaction._mergeStructs;
+        var actions = new List<Action>();
+
+        doc._transaction = null;
+
+        try
+        {
+            ds.SortAndMergeDeleteSet();
+            transaction.AfterState = store.GetStateVector();
+
+            actions.Add(() =>
+            {
+                doc.InvokeOnBeforeObserverCalls(transaction);
+            });
+
+            actions.Add(() =>
+            {
+                foreach (var kvp in transaction.Changed)
                 {
-                    ds.TryGcDeleteSet(store, doc.GcFilter);
-                }
+                    var itemType = kvp.Key;
+                    var subs = kvp.Value;
 
-                ds.TryMergeDeleteSet(store);
-
-                // On all affected store.clients props, try to merge.
-                foreach (var kvp in transaction.AfterState)
-                {
-                    var client = kvp.Key;
-                    var clock = kvp.Value;
-
-                    if (!transaction.BeforeState.TryGetValue(client, out var beforeClock))
+                    if (itemType._item == null || !itemType._item.Deleted)
                     {
-                        beforeClock = 0;
+                        itemType.CallObserver(transaction, subs);
                     }
+                }
+            });
 
-                    if (beforeClock != clock)
+            actions.Add(() =>
+            {
+                // Deep observe events.
+                foreach (var kvp in transaction.ChangedParentTypes)
+                {
+                    var type = kvp.Key;
+                    var events = kvp.Value;
+
+                    // We need to think about the possibility that the user transforms the YDoc in the event.
+                    if (type._item == null || !type._item.Deleted)
                     {
-                        var structs = store.Clients[client];
-                        var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
-                        for (int j = structs.Count - 1; j >= firstChangePos; j--)
+                        foreach (var evt in events)
                         {
-                            DeleteSet.TryToMergeWithLeft(structs, j);
+                            if (evt.Target._item == null || !evt.Target._item.Deleted)
+                            {
+                                evt.CurrentTarget = type;
+                            }
                         }
+
+                        // Sort events by path length so that top-level events are fired first.
+                        var sortedEvents = events.ToList();
+                        sortedEvents.Sort((a, b) => a.Path.Count - b.Path.Count);
+                        Debug.Assert(sortedEvents.Count > 0);
+
+                        actions.Add(() =>
+                        {
+                            type.CallDeepEventHandlerListeners(sortedEvents, transaction);
+                        });
                     }
                 }
+            });
 
-                // Try to merge mergeStructs.
-                // TODO: It makes more sense to transform mergeStructs to a DS, sort it, and merge from right to left
-                //       but at the moment DS does not handle duplicates.
-                for (int j = 0; j < mergeStructs.Count; j++)
+            actions.Add(() =>
+            {
+                doc.InvokeOnAfterTransaction(transaction);
+            });
+
+            CallAll(actions);
+        }
+        finally
+        {
+            // Replace deleted items with ItemDeleted / GC.
+            // This is where content is actually removed from the Yjs Doc.
+            if (doc.Gc)
+            {
+                ds.TryGcDeleteSet(store, doc.GcFilter);
+            }
+
+            ds.TryMergeDeleteSet(store);
+
+            // On all affected store.clients props, try to merge.
+            foreach (var kvp in transaction.AfterState)
+            {
+                var client = kvp.Key;
+                var clock = kvp.Value;
+
+                if (!transaction.BeforeState.TryGetValue(client, out var beforeClock))
                 {
-                    var client = mergeStructs[j].Id.Client;
-                    var clock = mergeStructs[j].Id.Clock;
+                    beforeClock = 0;
+                }
+
+                if (beforeClock != clock)
+                {
                     var structs = store.Clients[client];
-                    var replacedStructPos = StructStore.FindIndexSS(structs, clock);
-
-                    if (replacedStructPos + 1 < structs.Count)
+                    var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
+                    for (int j = structs.Count - 1; j >= firstChangePos; j--)
                     {
-                        DeleteSet.TryToMergeWithLeft(structs, replacedStructPos + 1);
+                        DeleteSet.TryToMergeWithLeft(structs, j);
                     }
-
-                    if (replacedStructPos > 0)
-                    {
-                        DeleteSet.TryToMergeWithLeft(structs, replacedStructPos);
-                    }
-                }
-
-                if (!transaction.Local)
-                {
-                    if (!transaction.AfterState.TryGetValue(doc.ClientId, out var afterClock))
-                    {
-                        afterClock = -1;
-                    }
-
-                    if (!transaction.BeforeState.TryGetValue(doc.ClientId, out var beforeClock))
-                    {
-                        beforeClock = -1;
-                    }
-
-                    if (afterClock != beforeClock)
-                    {
-                        doc.ClientId = YDoc.GenerateNewClientId();
-                        // Debug.WriteLine($"{nameof(Transaction)}: Changed the client-id because another client seems to be using it.");
-                    }
-                }
-
-                // @todo: Merge all the transactions into one and provide send the data as a single update message.
-                doc.InvokeOnAfterTransactionCleanup(transaction);
-
-                doc.InvokeUpdateV1(transaction);
-                doc.InvokeUpdateV2(transaction);
-
-                foreach (var subDoc in transaction.SubdocsAdded)
-                {
-                    doc.Subdocs.Add(subDoc);
-                }
-
-                foreach (var subDoc in transaction.SubdocsRemoved)
-                {
-                    doc.Subdocs.Remove(subDoc);
-                }
-
-                doc.InvokeSubdocsChanged(transaction.SubdocsLoaded, transaction.SubdocsAdded, transaction.SubdocsRemoved);
-
-                foreach (var subDoc in transaction.SubdocsRemoved)
-                {
-                    subDoc.Destroy();
-                }
-
-                if (transactionCleanups.Count <= i + 1)
-                {
-                    doc._transactionCleanups.Clear();
-                    doc.InvokeAfterAllTransactions(transactionCleanups);
-                }
-                else
-                {
-                    CleanupTransactions(transactionCleanups, i + 1);
                 }
             }
+
+            // Try to merge mergeStructs.
+            // TODO: It makes more sense to transform mergeStructs to a DS, sort it, and merge from right to left
+            //       but at the moment DS does not handle duplicates.
+            for (int j = 0; j < mergeStructs.Count; j++)
+            {
+                var client = mergeStructs[j].Id.Client;
+                var clock = mergeStructs[j].Id.Clock;
+                var structs = store.Clients[client];
+                var replacedStructPos = StructStore.FindIndexSS(structs, clock);
+
+                if (replacedStructPos + 1 < structs.Count)
+                {
+                    DeleteSet.TryToMergeWithLeft(structs, replacedStructPos + 1);
+                }
+
+                if (replacedStructPos > 0)
+                {
+                    DeleteSet.TryToMergeWithLeft(structs, replacedStructPos);
+                }
+            }
+
+            if (!transaction.Local)
+            {
+                if (!transaction.AfterState.TryGetValue(doc.ClientId, out var afterClock))
+                {
+                    afterClock = -1;
+                }
+
+                if (!transaction.BeforeState.TryGetValue(doc.ClientId, out var beforeClock))
+                {
+                    beforeClock = -1;
+                }
+
+                if (afterClock != beforeClock)
+                {
+                    doc.ClientId = YDoc.GenerateNewClientId();
+                    // Debug.WriteLine($"{nameof(Transaction)}: Changed the client-id because another client seems to be using it.");
+                }
+            }
+
+            // @todo: Merge all the transactions into one and provide send the data as a single update message.
+            doc.InvokeOnAfterTransactionCleanup(transaction);
+
+            doc.InvokeUpdateV1(transaction);
+            doc.InvokeUpdateV2(transaction);
+
+            foreach (var subDoc in transaction.SubdocsAdded)
+            {
+                doc.Subdocs.Add(subDoc);
+            }
+
+            foreach (var subDoc in transaction.SubdocsRemoved)
+            {
+                doc.Subdocs.Remove(subDoc);
+            }
+
+            doc.InvokeSubdocsChanged(transaction.SubdocsLoaded, transaction.SubdocsAdded, transaction.SubdocsRemoved);
+
+            foreach (var subDoc in transaction.SubdocsRemoved)
+            {
+                subDoc.Destroy();
+            }
+
         }
     }
 
@@ -463,21 +496,22 @@ public partial class Transaction
         return true;
     }
 
-    private static void CallAll(IList<Action> funcs, int index = 0)
+    /// <summary>Calls every function, also after one throws (the list may grow meanwhile); rethrows the first exception.</summary>
+    private static void CallAll(List<Action> funcs)
     {
-        try
+        ExceptionDispatchInfo error = null;
+        for (var index = 0; index < funcs.Count; index++)
         {
-            for (; index < funcs.Count; index++)
+            try
             {
                 funcs[index]();
             }
-        }
-        finally
-        {
-            if (index < funcs.Count)
+            catch (Exception e)
             {
-                CallAll(funcs, index + 1);
+                error ??= ExceptionDispatchInfo.Capture(e);
             }
         }
+
+        error?.Throw();
     }
 }
