@@ -1,16 +1,49 @@
 Ycs
 -------
 
-A compatible `.Net` implementation of the [Yjs](https://github.com/yjs/yjs) CRDT framework.
+A `.NET` implementation of the [Yjs](https://github.com/yjs/yjs) CRDT framework: host Yjs documents
+in a .NET application and synchronize them with Yjs running anywhere else.
 
-With this, you can host CRDTs in your `.Net` application and synchronize them with the existing
-`Yjs` models running elsewhere.
+This is a modernized fork of [yjs/ycs](https://github.com/yjs/ycs) (dormant since 2023). It builds on
+three open upstream pull requests — #12 (v1 update format), #13 (parity with Yjs 13.6: XML types,
+`updates.js`, snapshots, relative positions) and #14 (an RLE encoder fix) — and then:
 
-#### Verified against Yjs [13.6.32](https://github.com/yjs/yjs) (latest stable) and 14.0.0-16 (beta)
+* targets **.NET 11 only**, with nullable reference types (partly annotated), implicit usings and
+  file-scoped namespaces;
+* has **no reflection, no `dynamic` and no third-party dependency**, is marked
+  `IsAotCompatible`/`IsTrimmable` with zero trim/AOT warnings, and ships a Native AOT sample
+  (`samples/Ycs.AotSample`, about 2 MB) that CI publishes and runs;
+* encodes and decodes with byte buffers and spans instead of `MemoryStream`s
+  (`ApplyUpdate(ReadOnlySpan<byte>)`, `EncodeStateAsUpdate(IBufferWriter<byte>)`), and uses v1 as the
+  default format, as Yjs does — see [`docs/api.md`](docs/api.md) for every API change and how the API
+  compares to Yjs and [YDotNet](https://github.com/y-crdt/ydotnet);
+* fixes divergences from Yjs found by differential testing (below).
 
-Every shared type, both update formats, snapshots and relative positions round-trip in both
-directions against the real library — see [`interop/`](interop/) and the `*ParityTests` /
-`YjsInteropTests` suites. Runs on .NET 8 / .NET 10; the package still targets `netstandard2.0`.
+#### Why only .NET 11
+
+The previous builds targeted `netstandard2.0`, which has no `Span<T>`-based `Encoding`,
+`BinaryPrimitives` overloads, `ArgumentNullException.ThrowIfNull`, `Convert.ToHexString`,
+`RandomNumberGenerator.GetInt32` or trimming/AOT annotations, and needed `#if` branches and a
+System.Text.Json package to make up for it. Dropping it removes those branches and lets the
+encoding layer use spans throughout. If you need .NET Framework, Unity or older runtimes, use
+upstream ycs.
+
+#### Verified against Yjs 13.6.32 and 13.6.33 (and 14.0.0-16 beta)
+
+* `tests/Ycs.Tests` (363 tests) pins updates written by real Yjs as base64 and checks byte-identical
+  re-encoding, and `TextDifferentialTests` replays 40 seeded random concurrent editing sessions on
+  2–4 replicas that were run in Yjs 13.6.33 (`interop/differential/gen.mjs`), asserting the same final
+  text and byte-identical v1 re-encoding.
+* `tests/Ycs.Corpus` (486 tests) replays a recorded corpus of Yjs 13.6.32 sessions
+  ([`interop/corpus/`](interop/corpus/README.md)).
+* `interop/run.sh` and `interop/corpus/roundtrip.sh` run Ycs and Yjs against each other live
+  (Node needed).
+
+#### Thread safety
+
+As in Yjs, a `YDoc` is not thread-safe: the caller must make sure that no two threads use the same
+document (or its shared types) at the same time, e.g. with one lock or one channel per document.
+Observers run synchronously on the thread that made the change.
 
 ### Shared types
 
@@ -25,11 +58,12 @@ they exist for is: `YXmlFragment.QuerySelector` / `QuerySelectorAll` and `YXmlTr
 
 | | Yjs | Ycs |
 |---|---|---|
-| v1 (default; what `y-protocols` and every provider speaks) | `Y.encodeStateAsUpdate` / `Y.applyUpdate` | `EncodeStateAsUpdateV1` / `ApplyUpdateV1` |
+| v1 (default; what `y-protocols` and every provider speaks) | `Y.encodeStateAsUpdate` / `Y.applyUpdate` | `EncodeStateAsUpdate` / `ApplyUpdate` (or `…V1`) |
 | v2 (denser) | `Y.encodeStateAsUpdateV2` / `Y.applyUpdateV2` | `EncodeStateAsUpdateV2` / `ApplyUpdateV2` |
 
+`ApplyUpdate`, `EncodeStateAsUpdate` and `EncodeStateVector` without a suffix use v1, as in Yjs.
 `SyncProtocol` speaks v1 by default, matching `y-protocols/sync`; pass `v2: true` on both ends for
-the v2 encoding. `YDoc` raises `UpdateV1` and `UpdateV2` for the two formats.
+the v2 encoding. `YDoc` raises `Update` (v1) and `UpdateV2` for the two formats.
 
 ### Update manipulation (`Ycs.UpdateOperations`)
 
@@ -48,58 +82,71 @@ least useful entry in that list).
 `assoc` directions) and `PermanentUserData` are all present and byte-compatible. Note Yjs' rule:
 snapshots are only meaningful on a document created with `Gc = false`.
 
-Changes against upstream `main`
+### Not supported
+
+* `ObfuscateUpdate`, and the DOM bindings (`toDOM`) of the XML types.
+* `undefined` is read as `null` (and written back as `null`); JavaScript objects with integer-like
+  keys are written in insertion order, not in JavaScript's key order.
+* A document's own client id is a non-negative `int` (31 bits); ids up to 2^32 from other clients
+  are read fine.
+* Integers beyond ±(2^53 - 1) are rejected (no exact JavaScript number); use `BigInteger`.
+
+Changes in this fork
 -------
 
-Upstream was last tested against Yjs 13.4.14 and had never been able to talk to a real JS provider.
+The commit history is meant to be read: each commit is one step, and each bug fix says what Yjs
+does. In short:
 
-**Compatibility**
-* v1 update encoder/decoder — upstream implemented only v2, which no JS provider speaks.
-* v2 `writeJSON`/`readJSON` now uses the `any` encoding, as Yjs does. The previous JSON-string
-  encoding made every formatted text run and every embed unreadable by Yjs.
-* `ReadJson` yields plain CLR values (`Dictionary<string, object>`, `List<object>`, `long`/`double`,
-  `string`, `bool`, `null`), and JSON in the v1 format is written by `JSON.stringify`'s rules
-  (`Utils/YJson.cs`: `1` not `1.0`, ISO-looking strings stay strings) on System.Text.Json — no
-  Newtonsoft.Json dependency.
-* The XML shared types, the `updates.js` operations, `PermanentUserData`, and the missing parts of
-  the `Snapshot` / `RelativePosition` / `YMap` / `YArray` / `YText` / `YEvent` / `UndoManager` APIs.
-* `RelativePosition` and `AbsolutePosition` are public — they were `internal`, which put shared
-  cursors out of reach entirely.
+**Divergences from Yjs fixed here** (each with a test)
+* Search markers were never created (`FindMarker` bailed out when none existed), so every index
+  lookup in a text or array walked from the start; enabling them needed four alignments with Yjs
+  (no markers for XML fragments, markers disabled once a text has formatting, markers moved on
+  merge, markers only where Yjs' `findPosition` uses them).
+* A `Y.Text` holding an embedded shared type was indexed wrongly.
+* State vectors and delete sets were written in dictionary order instead of highest client first.
+* While one struct waited for a missing dependency, nothing else integrated; and pending structs
+  kept a stale root placeholder, losing content when the root was realized in between. Pending
+  structs are now kept as an encoded update, as in Yjs 13.6.
+* The 'any' encoding now follows lib0's number rules (an integral `double` is a var-int, exact
+  floats are float32, JavaScript's canonical NaN), so values written by Ycs have Yjs' bytes.
 
-**Bugs found on the way** (all pre-existing, all with a regression test)
-* `GenerateNewClientId` used a clock-seeded `Random`: two documents created in the same tick — or two
-  server processes started together — could share a client id and silently corrupt the merge.
-* `SortAndMergeDeleteSet` coalesced only exactly-adjacent delete ranges, never overlapping ones.
-* `DecodeSnapshot(Stream)` decoded with the **v2** decoder despite its name.
-* The snapshot helpers did not split snapshot-affected structs, leaking post-snapshot content.
-* `YTextEvent.Delta`'s trailing-retain trim was inverted: it dropped retains that assign attributes
-  and kept the bare ones Yjs discards. `YTextTests.TestBasicFormat` had encoded the wrong behaviour;
-  its expectations are now the output of yjs 13.6.32, quoted in the test.
-* `YEvent`'s per-key loop used `break` where it needed `continue`, dropping changed keys.
-* `YEvent.GetPathTo` counted preceding *items* rather than their content length.
-* Flushing prelim list content during `Integrate` double-counted `Length` (`YArray`, and the same
-  shape in `YXmlFragment`).
-* `YMap.Clone` stored the raw `Item` instead of the value and never recursed into nested types.
-* `ContentFormat.GetContent` threw instead of returning an empty list.
+**Performance** (the automerge-paper editing trace, 260k edits, `tests/Ycs.Benchmarks`,
+median of 5 runs on the same machine, before = upstream PRs merged, after = this branch)
 
-**Build**
-* Retargeted to `netstandard2.0;net8.0;net10.0`, MSTest 3; no third-party runtime dependency (System.Text.Json is a package only on netstandard2.0).
-* The 3.1-era `samples/YcsSample` is no longer part of the solution (stale SPA toolchain).
+| | before | after |
+| --- | --- | --- |
+| replay the trace locally, one transaction per edit | 11 786 ms | 658 ms |
+| apply the 260k v1 updates to a fresh document | 398 ms, 860 MiB | 371 ms, 921 MiB |
+| encode the final document, v1, 10× | 14.2 ms, 26.2 MiB | 7.6 ms, 14.0 MiB |
+| encode the final document, v2, 10× | 12.0 ms, 31.3 MiB | 9.3 ms, 15.2 MiB |
+| decode the final document, v1, 10× | 217 ms, 87.7 MiB | 65 ms, 36.6 MiB |
+| decode the final document, v2, 10× | 258 ms, 89.6 MiB | 68 ms, 38.6 MiB |
+
+Run it with `tests/Ycs.Benchmarks/get-trace.sh` and
+`dotnet run -c Release --project tests/Ycs.Benchmarks -- <trace.json.gz>`.
+
+**From the upstream pull requests** (#12, #13 by Yuriy Habarov; #14 by Kieren Johnstone): the v1
+format, the XML types, `UpdateOperations`, `PermanentUserData`, snapshots and relative positions,
+a CSPRNG client id, delete-set coalescing, the v2 JSON encoding, the `IntDiffOptRleEncoder` sign fix
+and many smaller fixes listed in those pull requests.
 
 Running the checks
 -------
 
 ```bash
-dotnet test tests/Ycs.Tests/Ycs.Tests.csproj   # 296 tests, no Node needed
-./interop/run.sh                                # live round-trips against yjs 13.6.32 + 14 beta
+dotnet test tests/Ycs.Tests      # unit, interop fixtures and differential tests; no Node needed
+dotnet test tests/Ycs.Corpus     # the recorded Yjs corpus; no Node needed
+dotnet publish samples/Ycs.AotSample -c Release -o out/aot && ./out/aot/Ycs.AotSample
+./interop/run.sh                 # live round-trips against yjs 13.6.32 and 14 beta (Node)
+./interop/corpus/roundtrip.sh    # Ycs encodings of the corpus read back by Yjs (Node)
+(cd interop/differential && npm ci && node gen.mjs > ../../tests/Ycs.Tests/Fixtures/text-differential.json)
 ```
-
-The test suite pins base64 updates produced by the real library, so format drift fails the build
-without Node installed. `interop/run.sh` goes further and runs both implementations against each
-other; see [`interop/README.md`](interop/README.md).
 
 Demo
 -------
+
+`samples/YcsSample` is a SignalR server with a React/Monaco client. The server targets .NET 11 and
+starts; the client (`ClientApp`, 2021 dependencies built with yarn) was not updated or tested.
 
 Client: [`Yjs`](https://github.com/yjs/yjs), [`MonacoEditor`](https://github.com/microsoft/monaco-editor), [`SignalR`](https://github.com/dotnet/aspnetcore/tree/master/src/SignalR).
 
