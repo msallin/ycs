@@ -72,12 +72,19 @@ public sealed class PermanentUserData
 
         void InitUser(YMap user, string userDescription)
         {
-            var ds = (YArray)user.Get("ds");
-            var ids = (YArray)user.Get("ids");
+            // Written by other peers: entries of an unexpected shape are ignored.
+            if (user.Get("ds") is not YArray ds || user.Get("ids") is not YArray ids)
+            {
+                return;
+            }
 
             void AddClientId(object clientIdValue)
             {
-                Clients[Convert.ToInt32(clientIdValue)] = userDescription;
+                if (clientIdValue is int or long or double && Convert.ToDouble(clientIdValue, System.Globalization.CultureInfo.InvariantCulture) is var d
+                    && d >= 0 && d <= int.MaxValue && Math.Floor(d) == d)
+                {
+                    Clients[(int)d] = userDescription;
+                }
             }
 
             ds.EventHandler += (s, e) =>
@@ -86,16 +93,16 @@ public sealed class PermanentUserData
                 {
                     foreach (var content in item.Content.GetContent())
                     {
-                        if (content is byte[] encodedDs)
+                        if (content is byte[] encodedDs && TryDecodeDeleteSet(encodedDs) is DeleteSet decoded)
                         {
                             var existing = Dss.TryGetValue(userDescription, out var prev) ? prev : new DeleteSet();
-                            Dss[userDescription] = new DeleteSet(new List<DeleteSet> { existing, DecodeDeleteSet(encodedDs) });
+                            Dss[userDescription] = new DeleteSet(new List<DeleteSet> { existing, decoded });
                         }
                     }
                 }
             };
 
-            Dss[userDescription] = new DeleteSet(ds.Select(encodedDs => DecodeDeleteSet((byte[])encodedDs)).ToList());
+            Dss[userDescription] = new DeleteSet(ds.OfType<byte[]>().Select(TryDecodeDeleteSet).Where(d => d != null).ToList());
 
             ids.EventHandler += (s, e) =>
             {
@@ -122,7 +129,10 @@ public sealed class PermanentUserData
             {
                 if (storeType.ContainsKey(userDescription))
                 {
-                    InitUser((YMap)storeType.Get(userDescription), userDescription);
+                    if (storeType.Get(userDescription) is YMap user)
+                    {
+                        InitUser(user, userDescription);
+                    }
                 }
             }
         };
@@ -130,7 +140,10 @@ public sealed class PermanentUserData
         // Add initial data.
         foreach (var kvp in storeType)
         {
-            InitUser((YMap)kvp.Value, kvp.Key);
+            if (kvp.Value is YMap user)
+            {
+                InitUser(user, kvp.Key);
+            }
         }
     }
 
@@ -216,11 +229,17 @@ public sealed class PermanentUserData
         return null;
     }
 
-    private static DeleteSet DecodeDeleteSet(byte[] encoded)
+    /// <summary>The delete set another peer stored, or null when it is malformed (it is ignored, not fatal).</summary>
+    private static DeleteSet TryDecodeDeleteSet(byte[] encoded)
     {
-        var stream = new Lib0Reader(encoded);
-        var decoder = new DSDecoderV1(stream);
-        return DeleteSet.Read(decoder);
+        try
+        {
+            return DeleteSet.Read(new DSDecoderV1(new Lib0Reader(encoded)));
+        }
+        catch (YUpdateException)
+        {
+            return null;
+        }
     }
 
     private static byte[] EncodeDeleteSet(DeleteSet ds)

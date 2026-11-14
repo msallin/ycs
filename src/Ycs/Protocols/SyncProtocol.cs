@@ -45,24 +45,57 @@ public static class SyncProtocol
             var r = stream.ReadByte();
             if (r < 0)
             {
-                throw new EndOfStreamException();
+                throw new YUpdateException("The message ended early.");
             }
 
             num |= (ulong)(r & 0x7F) << shift;
             if (r < 0x80)
             {
-                return num <= uint.MaxValue ? (uint)num : throw new InvalidDataException("Integer out of range.");
+                return num <= uint.MaxValue ? (uint)num : throw new YUpdateException("A variable-length integer is out of range.");
             }
         }
 
-        throw new InvalidDataException("Integer out of range.");
+        throw new YUpdateException("A variable-length integer is out of range.");
     }
 
+    /// <summary>
+    /// The length comes from the peer, so the buffer grows with the bytes that actually arrive instead
+    /// of being allocated up front.
+    /// </summary>
     private static byte[] ReadVarUint8Array(Stream stream)
     {
-        var data = new byte[ReadVarUint(stream)];
-        stream.ReadExactly(data);
-        return data;
+        var length = ReadVarUint(stream);
+        const int Chunk = 64 * 1024;
+        if (length <= Chunk)
+        {
+            var small = new byte[length];
+            ReadExactly(stream, small);
+            return small;
+        }
+
+        var buffer = new MemoryStream();
+        var chunk = new byte[Chunk];
+        for (long remaining = length; remaining > 0;)
+        {
+            var part = chunk.AsSpan(0, (int)Math.Min(Chunk, remaining));
+            ReadExactly(stream, part);
+            buffer.Write(part);
+            remaining -= part.Length;
+        }
+
+        return buffer.ToArray();
+    }
+
+    private static void ReadExactly(Stream stream, Span<byte> destination)
+    {
+        try
+        {
+            stream.ReadExactly(destination);
+        }
+        catch (EndOfStreamException e)
+        {
+            throw new YUpdateException("The message ended early.", e);
+        }
     }
 
     public static void WriteSyncStep1(Stream stream, YDoc doc, bool v2 = false)
@@ -125,7 +158,7 @@ public static class SyncProtocol
                 ReadUpdate(reader, doc, transactionOrigin, v2);
                 break;
             default:
-                throw new InvalidDataException($"Unknown message type: {messageType}");
+                throw new YUpdateException($"Unknown sync message type: {messageType}.");
         }
 
         return messageType;

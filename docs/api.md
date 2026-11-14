@@ -35,6 +35,10 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | `void Observe(handler)`, `void ObserveDeep(handler)` (PR #13) | return `IDisposable`; disposing unsubscribes | the YDotNet idiom; makes lambdas easy to unsubscribe. `Unobserve` and `+=`/`-=` still work |
 | map/array values: anything, failing at encode time; `Newtonsoft.Json` tokens and reflection for JSON | the closed set of values above, checked when a value is inserted; numbers encoded with JavaScript's rules | Native AOT, byte-identical output, errors at the call that caused them |
 | `UndoManager` tracked origin `Type` matched subclasses | matches that exact type | Yjs compares `origin.constructor` |
+| `ApplyUpdate…(update, origin, bool local = false)` | `ApplyUpdate…(update, origin)`; the transaction an update is applied in is not local, also the caller's | Yjs' `readUpdateV2` forces `transaction.local = false`; a local transaction kept stale search markers (an insert after a nested apply landed 5 characters early) |
+| malformed updates threw `EndOfStreamException`, `InvalidDataException`, `JsonReaderException`, `InvalidCastException`, `NullReferenceException`, `DivideByZeroException`, bare `Exception`, …, some after half the update was applied | `YUpdateException` (a `FormatException`), and the document is unchanged; `TryApplyUpdate` / `TryApplyUpdateV2` return false instead | see [Untrusted input](#untrusted-input) |
+| `YDocOptions.Meta`, `YDoc.Meta`: `IDictionary<string, string>` (always null when read from an update) | `IDictionary<string, object>` | Yjs' `meta` is any object; the old cast always failed |
+| pending structs and deletions: unbounded | `YDocOptions.MaxPendingBytes` (16 MiB) | a peer could send updates that never integrate and fill memory |
 | `ID.Write(Stream)`, `RelativePosition.Write(Stream)`/`Read(Stream)`, `Snapshot.DecodeSnapshot(Stream)` | internal; use `RelativePosition.ToArray()`/`Read(byte[])`, `Snapshot.DecodeSnapshot(byte[])` | these exposed the internal encoding layer |
 
 ## Proposed, not done
@@ -53,6 +57,43 @@ for a discussion with the maintainers:
 - `YMap.Get` returns `object`. Typed accessors (`TryGet<T>(key, out T value)`) would remove casts
   without introducing YDotNet's `Output` wrapper.
 - Nullable annotations cover the encoding layer only; the public types are not annotated yet.
+
+## Untrusted input
+
+Ycs is meant to apply updates from peers it does not trust (a server relaying for browsers, a
+Blazor WebAssembly client). Every API that decodes bytes — `ApplyUpdate…`, `TryApplyUpdate…`,
+`EncodeStateAsUpdate…(stateVector)`, everything in `UpdateOperations`, `Snapshot.DecodeSnapshot…`,
+`SnapshotContainsUpdate…`, `RelativePosition.Read`, `SyncProtocol.Read…` — throws only
+`YUpdateException` for malformed input, with a message that says what was wrong (never the
+input's content).
+
+**Atomicity.** `ApplyUpdate` decodes the whole update (structs and delete set) before it touches
+the document, then plans the integration against the document without changing it (which structs
+integrate in which order, which wait for others), and only then carries it out. A failure in
+either step leaves the document exactly as it was: same text, state vector and encoding, no events
+(an empty transaction may be observed when the failure is found in the planning step). What is
+checked before anything changes:
+
+* every value is in range: client ids up to 2^32 - 1, and **clocks**: every struct, delete range and
+  state-vector entry ends at clock 2^31 - 1 or before (about two billion operations per client id),
+  so no clock arithmetic overflows;
+* no struct of length 0, no client listed twice, no reference to a later struct of the item's own
+  client, no unknown content or type;
+* nesting: 'any' and JSON values, and shared types inside each other, at most 256 levels deep (an
+  insert beyond that throws `ArgumentException` / `InvalidOperationException`), so nothing recurses
+  without bound;
+* size: a collection is never allocated larger than the remaining input can fill, and a v2 update
+  (whose run-length encoded columns can describe any number of structs in a few bytes) holds at most
+  64 structs per byte plus 4096;
+* pending data: what waits for structs the document does not have yet may grow to
+  `YDocOptions.MaxPendingBytes` (16 MiB by default), counted as encoded bytes; an update that would
+  grow it further is rejected (a duplicate is merged away first).
+
+After these checks the integration does not fail on input alone; an exception from it would be a
+bug in Ycs and cannot be rolled back. Structurally odd but well-formed updates (an item whose two
+origins are in different parents, say) are integrated as Yjs integrates them. Observers run after
+the update was applied; an exception from one propagates to the caller of `ApplyUpdate` after all
+other observers ran, and the document stays usable.
 
 ## Thread safety
 

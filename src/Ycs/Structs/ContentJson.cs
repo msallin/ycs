@@ -33,7 +33,7 @@ public class ContentJson : IContentEx
 
     public IReadOnlyList<object> GetContent() => _content.AsReadOnly();
 
-    public IContent Copy() => new ContentJson(_content);
+    public IContent Copy() => new ContentJson(_content.ToList());
 
     public IContent Splice(int offset)
     {
@@ -67,7 +67,7 @@ public class ContentJson : IContentEx
     void IContentEx.Write(IUpdateEncoder encoder, int offset)
     {
         var len = _content.Count;
-        encoder.WriteLength(len);
+        encoder.WriteLength(len - offset);
         for (int i = offset; i < len; i++)
         {
             var jsonStr = YJson.Stringify(_content[i]);
@@ -78,7 +78,9 @@ public class ContentJson : IContentEx
     internal static ContentJson Read(IUpdateDecoder decoder)
     {
         var len = decoder.ReadLength();
-        var content = new List<object>(len);
+
+        // Each value takes at least one byte (in v1; in v2 the strings are in their own column).
+        var content = new List<object>(Limits.Capacity(len, decoder.Reader.Remaining));
 
         for (int i = 0; i < len; i++)
         {

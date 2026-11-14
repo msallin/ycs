@@ -6,8 +6,6 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
-using System.Diagnostics;
-
 namespace Ycs;
 
 /// <summary>
@@ -30,12 +28,7 @@ internal class DSDecoderV1 : IDSDecoder
 
     public long ReadDsClock() => Reader.ReadVarUint();
 
-    public long ReadDsLength()
-    {
-        var length = Reader.ReadVarUint();
-        Debug.Assert(length > 0);
-        return length;
-    }
+    public long ReadDsLength() => Reader.ReadVarUint();
 }
 
 internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
@@ -45,9 +38,13 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
     {
     }
 
-    public ID ReadLeftId() => new ID(Reader.ReadVarUint(), Reader.ReadVarUint());
+    // Every struct costs at least one byte.
+    public long MaxStructs => long.MaxValue;
 
-    public ID ReadRightId() => new ID(Reader.ReadVarUint(), Reader.ReadVarUint());
+    // A var-uint is at most 2^32 - 1, the client id range; the clock is checked.
+    public ID ReadLeftId() => new ID(Reader.ReadVarUint(), Limits.CheckClock(Reader.ReadVarUint()));
+
+    public ID ReadRightId() => new ID(Reader.ReadVarUint(), Limits.CheckClock(Reader.ReadVarUint()));
 
     public long ReadClient() => Reader.ReadVarUint();
 
@@ -62,9 +59,9 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
     public int ReadLength()
     {
         var value = Reader.ReadVarUint();
-        if (value > int.MaxValue)
+        if (value > Limits.MaxClock)
         {
-            throw new InvalidDataException("Length out of range.");
+            throw new YUpdateException("A length is out of range.");
         }
 
         return (int)value;

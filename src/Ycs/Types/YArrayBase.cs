@@ -263,6 +263,15 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         var store = doc.Store;
         var right = referenceItem == null ? _start : referenceItem.Right as Item;
 
+        foreach (var c in content)
+        {
+            if (c is AbstractType)
+            {
+                CheckCanNest();
+                break;
+            }
+        }
+
         var jsonContent = new List<object>();
 
         void packJsonContent()

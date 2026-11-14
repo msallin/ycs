@@ -46,10 +46,23 @@ public partial class AbstractType
 
     public virtual int Length { get; internal set; }
 
+    /// <summary>How deeply this type is nested in other types: 0 for a root type (see <see cref="Limits.MaxDepth"/>).</summary>
+    internal int Depth { get; private set; }
+
     internal virtual void Integrate(YDoc doc, Item item)
     {
         Doc = doc;
         _item = item;
+        Depth = item?.Parent is AbstractType parent ? parent.Depth + 1 : 0;
+    }
+
+    /// <summary>Throws when a type inserted into this one would be nested deeper than <see cref="Limits.MaxDepth"/>.</summary>
+    internal void CheckCanNest()
+    {
+        if (Depth + 1 > Limits.MaxDepth)
+        {
+            throw new InvalidOperationException($"Shared types cannot be nested deeper than {Limits.MaxDepth} levels.");
+        }
     }
 
     internal virtual AbstractType InternalCopy() { throw new NotImplementedException(); }
@@ -199,6 +212,7 @@ public partial class AbstractType
                     content = new ContentDoc(d);
                     break;
                 case AbstractType at:
+                    CheckCanNest();
                     content = new ContentType(at);
                     break;
                 case byte[] ba:

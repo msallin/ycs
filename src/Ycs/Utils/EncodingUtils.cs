@@ -29,8 +29,6 @@ internal static class EncodingUtils
     {
         switch (info & Bits.Bits5)
         {
-            case 0: // GC
-                throw new Exception("GC is not ItemContent");
             case 1: // Deleted
                 return ContentDeleted.Read(decoder);
             case 2: // JSON
@@ -50,59 +48,8 @@ internal static class EncodingUtils
             case 9: // Doc
                 return ContentDoc.Read(decoder);
             default:
-                throw new InvalidOperationException($"Content type not recognized: {info}");
+                throw new YUpdateException($"Unknown content type: {info & Bits.Bits5}.");
         }
-    }
-
-    /// <summary>
-    /// Read the next Item in a Decoder and fill this Item with the read data.
-    /// <br/>
-    /// This is called when data is received from a remote peer.
-    /// </summary>
-    /// <summary>
-    /// Reads the structs of an update and integrates what can be integrated (the struct part of Yjs'
-    /// <c>readUpdateV2</c>). Returns whether structs that were pending before can now be retried.
-    /// </summary>
-    public static bool ReadStructs(IUpdateDecoder decoder, Transaction transaction, StructStore store)
-    {
-        var ss = ReadClientStructRefs(decoder, transaction.Doc);
-        var restStructs = store.IntegrateStructs(transaction, ss.ToDictionary(kvp => kvp.Key, kvp => new StructStore.ClientStructRefs { Refs = kvp.Value }));
-        var retry = false;
-        var pending = store.Pending;
-
-        if (pending != null)
-        {
-            // Check if we can apply something.
-            foreach (var kvp in pending.Missing)
-            {
-                if (kvp.Value < store.GetState(kvp.Key))
-                {
-                    retry = true;
-                    break;
-                }
-            }
-
-            if (restStructs != null)
-            {
-                // Merge restStructs into store.pending.
-                foreach (var kvp in restStructs.Missing)
-                {
-                    if (!pending.Missing.TryGetValue(kvp.Key, out var mclock) || mclock > kvp.Value)
-                    {
-                        pending.Missing[kvp.Key] = kvp.Value;
-                    }
-                }
-
-                pending.Update = UpdateOperations.MergeUpdatesV2(new List<byte[]> { pending.Update, restStructs.Update });
-            }
-        }
-        else
-        {
-            store.Pending = restStructs;
-        }
-
-        store.TryResumePendingDeleteReaders(transaction);
-        return retry;
     }
 
     /// <param name="structs">All structs by 'client'.</param>
@@ -167,70 +114,118 @@ internal static class EncodingUtils
         }
     }
 
-    public static IDictionary<long, List<AbstractStruct>> ReadClientStructRefs(IUpdateDecoder decoder, YDoc doc)
+    /// <summary>
+    /// The structs of an update grouped by client, each list in clock order (Yjs' <c>readClientsStructRefs</c>).
+    /// Parents stay unresolved (a root type's name or the id of the parent's item) until the struct is
+    /// integrated, so reading changes no document.
+    /// </summary>
+    public static Dictionary<long, List<AbstractStruct>> ReadClientStructRefs(IUpdateDecoder decoder)
     {
         var clientRefs = new Dictionary<long, List<AbstractStruct>>();
-        var numOfStateUpdates = decoder.Reader.ReadVarUint();
+        List<AbstractStruct> refs = null;
 
-        for (var i = 0; i < numOfStateUpdates; i++)
+        foreach (var str in ReadStructSection(decoder))
         {
-            var numberOfStructs = (int)decoder.Reader.ReadVarUint();
-            Debug.Assert(numberOfStructs >= 0);
-
-            var refs = new List<AbstractStruct>(numberOfStructs);
-            long client = decoder.ReadClient();
-            long clock = decoder.Reader.ReadVarUint();
-
-            clientRefs[client] = refs;
-
-            for (var j = 0; j < numberOfStructs; j++)
+            if (refs == null || refs[0].Id.Client != str.Id.Client)
             {
-                var info = decoder.ReadInfo();
-                if ((Bits.Bits5 & info) == Skip.StructSkipRefNumber)
-                {
-                    // A range of clocks this update has no data for (written by mergeUpdates).
-                    var skipLength = (int)decoder.Reader.ReadVarUint();
-                    refs.Add(new Skip(new ID(client, clock), skipLength));
-                    clock += skipLength;
-                }
-                else if ((Bits.Bits5 & info) != 0)
-                {
-                    // The item that was originally to the left of this item.
-                    var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ID?)decoder.ReadLeftId() : null;
-                    // The item that was originally to the right of this item.
-                    var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ID?)decoder.ReadRightId() : null;
-                    var cantCopyParentInfo = (info & (Bit.Bit7 | Bit.Bit8)) == 0;
-                    var hasParentYKey = cantCopyParentInfo ? decoder.ReadParentInfo() : false;
-
-                    // If parent == null and neither left nor right are defined, then we know that 'parent' is child of 'y'
-                    // and we read the next string as parentYKey.
-                    // It indicates how we store/retrieve parent from 'y.share'.
-                    var parentYKey = cantCopyParentInfo && hasParentYKey ? decoder.ReadString() : null;
-
-                    var str = new Item(
-                        new ID(client, clock),
-                        null, // left
-                        leftOrigin,
-                        null, // right
-                        rightOrigin, // rightOrigin
-                        cantCopyParentInfo && !hasParentYKey ? decoder.ReadLeftId() : (parentYKey != null ? (object)doc.Get<AbstractType>(parentYKey) : null), // parent
-                        cantCopyParentInfo && (info & Bit.Bit6) == Bit.Bit6 ? decoder.ReadString() : null, // parentSub
-                        ReadItemContent(decoder, info) // content
-                        );
-
-                    refs.Add(str);
-                    clock += str.Length;
-                }
-                else
-                {
-                    var length = decoder.ReadLength();
-                    refs.Add(new GC(new ID(client, clock), length));
-                    clock += length;
-                }
+                refs = new List<AbstractStruct>();
+                clientRefs[str.Id.Client] = refs;
             }
+
+            refs.Add(str);
         }
 
         return clientRefs;
+    }
+
+    /// <summary>
+    /// Reads the struct section of an update one struct at a time, checking everything that can be
+    /// checked without a document: every value within its range, no empty struct, no struct ending
+    /// beyond <see cref="Limits.MaxClock"/>, no client listed twice, an origin or parent of the same
+    /// client only at an earlier clock (it must have existed when the struct was created), and no more
+    /// structs than <see cref="IUpdateDecoder.MaxStructs"/>. Throws <see cref="YUpdateException"/>.
+    /// </summary>
+    public static IEnumerable<AbstractStruct> ReadStructSection(IUpdateDecoder decoder)
+    {
+        var numOfStateUpdates = decoder.Reader.ReadVarUint();
+        var clients = numOfStateUpdates > 1 ? new HashSet<long>() : null;
+        long structCount = 0;
+
+        for (long i = 0; i < numOfStateUpdates; i++)
+        {
+            long numberOfStructs = decoder.Reader.ReadVarUint();
+            var client = Limits.CheckClient(decoder.ReadClient());
+            var clock = Limits.CheckClock(decoder.Reader.ReadVarUint());
+
+            if (clients != null && !clients.Add(client))
+            {
+                throw new YUpdateException($"The update lists client {client} more than once.");
+            }
+
+            if (numberOfStructs > decoder.MaxStructs - structCount)
+            {
+                throw new YUpdateException($"The update holds more structs than its size allows ({decoder.MaxStructs}).");
+            }
+
+            structCount += numberOfStructs;
+
+            for (long j = 0; j < numberOfStructs; j++)
+            {
+                var str = ReadStruct(decoder, client, clock);
+                clock += str.Length;
+                yield return str;
+            }
+        }
+    }
+
+    private static AbstractStruct ReadStruct(IUpdateDecoder decoder, long client, long clock)
+    {
+        var id = new ID(client, clock);
+        var info = decoder.ReadInfo();
+        AbstractStruct str;
+
+        switch (info & Bits.Bits5)
+        {
+            case GC.StructGCRefNumber:
+                str = new GC(id, decoder.ReadLength());
+                break;
+            case Skip.StructSkipRefNumber:
+                // A range of clocks this update has no data for (written by mergeUpdates).
+                var skipLength = decoder.Reader.ReadVarUint();
+                Limits.CheckRange(clock, skipLength);
+                str = new Skip(id, (int)skipLength);
+                break;
+            default:
+                // The items that were originally to the left and to the right of this item.
+                var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ID?)CheckEarlier(decoder.ReadLeftId(), id) : null;
+                var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ID?)CheckEarlier(decoder.ReadRightId(), id) : null;
+
+                // Without origins the parent is given: a root type by name, or the item of a nested type.
+                object parent = null;
+                string parentSub = null;
+                if ((info & (Bit.Bit7 | Bit.Bit8)) == 0)
+                {
+                    parent = decoder.ReadParentInfo() ? decoder.ReadString() : CheckEarlier(decoder.ReadLeftId(), id);
+                    parentSub = (info & Bit.Bit6) == Bit.Bit6 ? decoder.ReadString() : null;
+                }
+
+                str = new Item(id, null, leftOrigin, null, rightOrigin, parent, parentSub, ReadItemContent(decoder, info));
+                break;
+        }
+
+        Limits.CheckRange(clock, str.Length);
+        return str;
+    }
+
+    private static ID CheckEarlier(ID reference, ID id)
+    {
+        Limits.CheckClient(reference.Client);
+        if (reference.Client == id.Client && reference.Clock >= id.Clock)
+        {
+            throw new YUpdateException("A struct refers to a later struct of its own client.");
+        }
+
+        return reference;
     }
 
     public static void WriteStateVector(IDSEncoder encoder, IDictionary<long, long> sv)
@@ -250,13 +245,15 @@ internal static class EncodingUtils
 
     public static IDictionary<long, long> ReadStateVector(IDSDecoder decoder)
     {
-        var ssLength = (int)decoder.Reader.ReadVarUint();
-        var ss = new Dictionary<long, long>(ssLength);
+        var ssLength = decoder.Reader.ReadVarUint();
 
-        for (var i = 0; i < ssLength; i++)
+        // Each entry takes at least two bytes.
+        var ss = new Dictionary<long, long>(Limits.Capacity(ssLength, decoder.Reader.Remaining / 2));
+
+        for (long i = 0; i < ssLength; i++)
         {
             var client = decoder.Reader.ReadVarUint();
-            var clock = decoder.Reader.ReadVarUint();
+            var clock = Limits.CheckClock(decoder.Reader.ReadVarUint());
             ss[client] = clock;
         }
 

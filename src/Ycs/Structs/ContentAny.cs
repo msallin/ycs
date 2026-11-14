@@ -90,7 +90,9 @@ public class ContentAny : IContentEx
     internal static ContentAny Read(IUpdateDecoder decoder)
     {
         var length = decoder.ReadLength();
-        var cs = new List<object>(length);
+
+        // Each value takes at least one byte.
+        var cs = new List<object>(Limits.Capacity(length, decoder.Reader.Remaining));
 
         for (int i = 0; i < length; i++)
         {

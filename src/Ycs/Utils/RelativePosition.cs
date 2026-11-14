@@ -244,10 +244,10 @@ public partial class RelativePosition : IEquatable<RelativePosition>
                 typeId = ID.Read(reader);
                 break;
             default:
-                throw new Exception();
+                throw new YUpdateException("Unknown kind of relative position.");
         }
 
-        var assoc = reader.HasContent ? (int)reader.ReadVarInt().Value : 0;
+        var assoc = reader.HasContent ? (int)Math.Clamp(reader.ReadVarInt().Value, int.MinValue, int.MaxValue) : 0;
         return new RelativePosition(typeId, tName, itemId, assoc);
     }
 

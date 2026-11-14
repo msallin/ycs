@@ -18,8 +18,22 @@ public class YDocOptions
     public bool Gc { get; set; } = true;
     public Predicate<Item> GcFilter { get; set; } = DefaultPredicate;
     public string Guid { get; set; } = System.Guid.NewGuid().ToString("D");
-    public IDictionary<string, string> Meta { get; set; } = null;
+    public IDictionary<string, object> Meta { get; set; } = null;
     public bool AutoLoad { get; set; } = false;
+
+    /// <summary>
+    /// The most an applied update may add to what waits for missing structs (structs and deletions
+    /// of other clients this document has not received yet), counted as encoded bytes. An update that
+    /// would grow it beyond this is rejected with a <see cref="YUpdateException"/> and the document
+    /// is unchanged. Default 16 MiB.
+    /// </summary>
+    public long MaxPendingBytes
+    {
+        get => _maxPendingBytes;
+        set => _maxPendingBytes = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "The limit cannot be negative.");
+    }
+
+    private long _maxPendingBytes = 16 * 1024 * 1024;
 
     /// <summary>
     /// The client id to start with instead of a random one; for tests and reproducible benchmarks.
@@ -40,8 +54,9 @@ public class YDocOptions
             Gc = Gc,
             GcFilter = GcFilter,
             Guid = Guid,
-            Meta = Meta == null ? null : new Dictionary<string, string>(Meta),
-            AutoLoad = AutoLoad
+            Meta = Meta == null ? null : new Dictionary<string, object>(Meta),
+            AutoLoad = AutoLoad,
+            MaxPendingBytes = MaxPendingBytes,
         };
     }
 
@@ -60,17 +75,28 @@ public class YDocOptions
         encoder.WriteAny(dict);
     }
 
+    /// <summary>A subdocument's options as another peer wrote them; anything of the wrong type is a <see cref="YUpdateException"/>.</summary>
     internal static YDocOptions Read(IUpdateDecoder decoder)
     {
-        var dict = (IDictionary<string, object>)decoder.ReadAny();
+        if (decoder.ReadAny() is not IDictionary<string, object> dict)
+        {
+            throw new YUpdateException("A subdocument's options are not an object.");
+        }
 
-        var result = new YDocOptions();
-        result.Gc = dict.TryGetValue("gc", out object value) ? (bool)value : true;
-        result.Guid = dict.TryGetValue("guid", out object value1) ? value1.ToString() : System.Guid.NewGuid().ToString("D");
-        result.Meta = dict.TryGetValue("meta", out object value2) ? value2 as Dictionary<string, string> : null;
-        result.AutoLoad = dict.TryGetValue("autoLoad", out object value3) ? (bool)value3 : false;
+        return new YDocOptions
+        {
+            Gc = Get(dict, "gc", true),
+            AutoLoad = Get(dict, "autoLoad", false),
+            // The guid is read before the options (Yjs ignores 'guid' in the options as well).
+            Meta = dict.TryGetValue("meta", out var meta) && meta != null
+                ? meta as Dictionary<string, object> ?? throw new YUpdateException("A subdocument's 'meta' is not an object.")
+                : null,
+        };
 
-        return result;
+        static bool Get(IDictionary<string, object> dict, string key, bool defaultValue) =>
+            !dict.TryGetValue(key, out var value) || value == null ? defaultValue
+            : value is bool b ? b
+            : throw new YUpdateException($"A subdocument's '{key}' is not a boolean.");
     }
 }
 
@@ -85,7 +111,7 @@ public partial class YDoc
     public bool Gc => _opts.Gc;
     public Predicate<Item> GcFilter => _opts.GcFilter;
     public bool AutoLoad => _opts.AutoLoad;
-    public IDictionary<string, string> Meta => _opts.Meta;
+    public IDictionary<string, object> Meta => _opts.Meta;
 
     internal bool ShouldLoad;
     internal readonly IList<Transaction> _transactionCleanups;
@@ -241,19 +267,35 @@ public partial class YDoc
             InvokeOnBeforeTransaction(_transaction);
         }
 
+        var completed = false;
         try
         {
             fun(_transaction);
+            completed = true;
         }
         finally
         {
-            if (initialCall && _transactionCleanups[0] == _transaction)
+            if (initialCall && _transactionCleanups.Count > 0 && _transactionCleanups[0] == _transaction)
             {
                 // The first transaction ended, now process observer calls.
                 // Observer call may create new transacations for which we need to call the observers and do cleanup.
                 // We don't want to nest these calls, so we execute these calls one after another.
                 // Also we need to ensure that all cleanups are called, even if the observers throw errors.
-                Transaction.CleanupTransactions(_transactionCleanups, 0);
+                if (completed)
+                {
+                    Transaction.CleanupTransactions(_transactionCleanups, 0);
+                }
+                else
+                {
+                    try
+                    {
+                        Transaction.CleanupTransactions(_transactionCleanups, 0);
+                    }
+                    catch (Exception)
+                    {
+                        // The exception of 'fun' propagates; one from an observer would hide it.
+                    }
+                }
             }
         }
     }
@@ -323,42 +365,72 @@ public partial class YDoc
 
     /// <summary>
     /// Applies an update in the original ('v1') format, the output of Yjs' <c>Y.encodeStateAsUpdate</c>
-    /// and of every y-protocols provider (Yjs' <c>Y.applyUpdate</c>).
+    /// and of every y-protocols provider (Yjs' <c>Y.applyUpdate</c>). The transaction it runs in is
+    /// not local, as in Yjs, also when it is the caller's.
+    /// <br/>
+    /// A malformed update, or one beyond a limit (see <see cref="YDocOptions.MaxPendingBytes"/>), throws
+    /// <see cref="YUpdateException"/> and leaves the document as it was.
     /// </summary>
     /// <param name="update">The update.</param>
     /// <param name="transactionOrigin">Stored on the transaction; observers and the undo manager see it.</param>
-    /// <param name="local">Whether the transaction counts as a local change.</param>
-    public void ApplyUpdate(byte[] update, object transactionOrigin = null, bool local = false) => ApplyUpdateV1(update, transactionOrigin, local);
+    /// <exception cref="YUpdateException">The update is malformed or beyond a limit; the document is unchanged.</exception>
+    public void ApplyUpdate(byte[] update, object transactionOrigin = null) => ApplyUpdateV1(update, transactionOrigin);
 
-    /// <inheritdoc cref="ApplyUpdate(byte[], object, bool)"/>
-    public void ApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false) => ApplyUpdateV1(update, transactionOrigin, local);
+    /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
+    public void ApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null) => ApplyUpdateV1(update, transactionOrigin);
 
-    /// <inheritdoc cref="ApplyUpdate(byte[], object, bool)"/>
-    public void ApplyUpdateV1(byte[] update, object transactionOrigin = null, bool local = false)
+    /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
+    public void ApplyUpdateV1(byte[] update, object transactionOrigin = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(new UpdateDecoderV1(new Lib0Reader(update)), transactionOrigin, local);
+        ApplyUpdate(new Lib0Reader(update), v2: false, transactionOrigin);
     }
 
-    /// <inheritdoc cref="ApplyUpdate(byte[], object, bool)"/>
-    public void ApplyUpdateV1(ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
+    /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
+    public void ApplyUpdateV1(ReadOnlySpan<byte> update, object transactionOrigin = null)
     {
-        WithPooledCopy(update, buffer => ApplyUpdate(new UpdateDecoderV1(buffer), transactionOrigin, local));
+        WithPooledCopy(update, buffer => ApplyUpdate(buffer, v2: false, transactionOrigin));
     }
 
     /// <summary>
     /// Applies an update in the v2 format (Yjs' <c>Y.applyUpdateV2</c>).
     /// </summary>
-    public void ApplyUpdateV2(byte[] update, object transactionOrigin = null, bool local = false)
+    /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
+    public void ApplyUpdateV2(byte[] update, object transactionOrigin = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(new UpdateDecoderV2(new Lib0Reader(update)), transactionOrigin, local);
+        ApplyUpdate(new Lib0Reader(update), v2: true, transactionOrigin);
     }
 
-    /// <inheritdoc cref="ApplyUpdateV2(byte[], object, bool)"/>
-    public void ApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
+    /// <inheritdoc cref="ApplyUpdateV2(byte[], object)"/>
+    public void ApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null)
     {
-        WithPooledCopy(update, buffer => ApplyUpdate(new UpdateDecoderV2(buffer), transactionOrigin, local));
+        WithPooledCopy(update, buffer => ApplyUpdate(buffer, v2: true, transactionOrigin));
+    }
+
+    /// <summary>
+    /// Like <see cref="ApplyUpdate(ReadOnlySpan{byte}, object)"/> (v1), but returns false instead of throwing
+    /// <see cref="YUpdateException"/>; the document is then unchanged.
+    /// </summary>
+    public bool TryApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null) => TryApply(update, v2: false, transactionOrigin);
+
+    /// <summary>
+    /// Like <see cref="ApplyUpdateV2(ReadOnlySpan{byte}, object)"/>, but returns false instead of throwing
+    /// <see cref="YUpdateException"/>; the document is then unchanged.
+    /// </summary>
+    public bool TryApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null) => TryApply(update, v2: true, transactionOrigin);
+
+    private bool TryApply(ReadOnlySpan<byte> update, bool v2, object transactionOrigin)
+    {
+        try
+        {
+            WithPooledCopy(update, buffer => ApplyUpdate(buffer, v2, transactionOrigin));
+            return true;
+        }
+        catch (YUpdateException)
+        {
+            return false;
+        }
     }
 
     /// <summary>
@@ -437,27 +509,43 @@ public partial class YDoc
         return encoder.ToArray();
     }
 
-    private static IDictionary<long, long> DecodeTargetStateVector(ReadOnlySpan<byte> encodedTargetStateVector) =>
-        encodedTargetStateVector.IsEmpty
-            ? new Dictionary<long, long>()
-            : EncodingUtils.DecodeStateVector(new Lib0Reader(encodedTargetStateVector.ToArray()));
-
-    private void ApplyUpdate(IUpdateDecoder structDecoder, object transactionOrigin, bool local)
+    private static IDictionary<long, long> DecodeTargetStateVector(ReadOnlySpan<byte> encodedTargetStateVector)
     {
+        if (encodedTargetStateVector.IsEmpty)
+        {
+            return new Dictionary<long, long>();
+        }
+
+        var bytes = encodedTargetStateVector.ToArray();
+        return YUpdateException.Decode(() => EncodingUtils.DecodeStateVector(new Lib0Reader(bytes)));
+    }
+
+    /// <summary>
+    /// Decodes the whole update (structs and delete set) before the document is touched, then applies
+    /// it (<see cref="StructStore.ApplyUpdate"/>), which checks what depends on the document before it
+    /// changes anything.
+    /// </summary>
+    private void ApplyUpdate(Lib0Reader reader, bool v2, object transactionOrigin)
+    {
+        Dictionary<long, List<AbstractStruct>> structs;
+        DeleteSet ds;
+        try
+        {
+            IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader) : new UpdateDecoderV1(reader);
+            structs = EncodingUtils.ReadClientStructRefs(decoder);
+            ds = DeleteSet.Read(decoder);
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
+
         Transact(tr =>
         {
-            var retry = EncodingUtils.ReadStructs(structDecoder, tr, Store);
-            Store.ReadAndApplyDeleteSet(structDecoder, tr);
-
-            if (retry)
-            {
-                // Something the pending structs were waiting for arrived: read them again, from their
-                // encoded form, as Yjs does.
-                var update = Store.Pending.Update;
-                Store.Pending = null;
-                ApplyUpdate(new UpdateDecoderV2(new Lib0Reader(update)), transactionOrigin, local);
-            }
-        }, transactionOrigin, local);
+            // As Yjs' readUpdateV2: also when this runs in the caller's transaction.
+            tr.Local = false;
+            Store.ApplyUpdate(tr, structs, ds, _opts.MaxPendingBytes);
+        }, transactionOrigin, local: false);
     }
 
     /// <summary>

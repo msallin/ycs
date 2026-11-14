@@ -24,19 +24,19 @@ internal sealed class StringDecoder : IDecoder<string>
 
     public string Read()
     {
-        var length = (int)_lengthDecoder.Read();
+        var length = _lengthDecoder.Read();
         if (length == 0)
         {
             return string.Empty;
         }
 
-        if (_value == null || (uint)length > (uint)(_value.Length - _pos))
+        if (_value == null || length > (uint)(_value.Length - _pos))
         {
-            throw new InvalidDataException("String length out of range.");
+            throw new YUpdateException("A string in a v2 update is longer than the string column.");
         }
 
-        var result = _value.Substring(_pos, length);
-        _pos += length;
+        var result = _value.Substring(_pos, (int)length);
+        _pos += (int)length;
 
         // No need to keep the string in memory anymore.
         // This also covers the case when nothing but empty strings are left.

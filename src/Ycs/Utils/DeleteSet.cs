@@ -6,8 +6,6 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
-using System.Diagnostics;
-
 namespace Ycs;
 
 /// <summary>
@@ -336,14 +334,16 @@ internal class DeleteSet
         }
     }
 
+    /// <summary>
+    /// Reads a delete set. Every range is checked against the clock range; empty ranges, which
+    /// delete nothing, are dropped.
+    /// </summary>
     public static DeleteSet Read(IDSDecoder decoder)
     {
         var ds = new DeleteSet();
-
         var numClients = decoder.Reader.ReadVarUint();
-        Debug.Assert(numClients >= 0);
 
-        for (var i = 0; i < numClients; i++)
+        for (long i = 0; i < numClients; i++)
         {
             decoder.ResetDsCurVal();
 
@@ -354,14 +354,28 @@ internal class DeleteSet
             {
                 if (!ds.Clients.TryGetValue(client, out var dsField))
                 {
-                    dsField = new List<DeleteItem>((int)numberOfDeletes);
+                    // Each range takes at least two bytes.
+                    dsField = new List<DeleteItem>(Limits.Capacity(numberOfDeletes, decoder.Reader.Remaining / 2));
                     ds.Clients[client] = dsField;
                 }
 
-                for (var j = 0; j < numberOfDeletes; j++)
+                for (long j = 0; j < numberOfDeletes; j++)
                 {
-                    var deleteItem = new DeleteItem(decoder.ReadDsClock(), decoder.ReadDsLength());
-                    dsField.Add(deleteItem);
+                    var clock = decoder.ReadDsClock();
+                    var length = decoder.ReadDsLength();
+                    if (length == 0)
+                    {
+                        Limits.CheckClock(clock);
+                        continue;
+                    }
+
+                    Limits.CheckRange(clock, length);
+                    dsField.Add(new DeleteItem(clock, length));
+                }
+
+                if (dsField.Count == 0)
+                {
+                    ds.Clients.Remove(client);
                 }
             }
         }

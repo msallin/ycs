@@ -94,7 +94,7 @@ public static class UpdateOperations
     {
         ArgumentNullException.ThrowIfNull(updates);
 
-        return MergeUpdatesCore(updates, s => new UpdateDecoderV1(s), () => new UpdateEncoderV1());
+        return YUpdateException.Decode(() => MergeUpdatesCore(updates, s => new UpdateDecoderV1(s), () => new UpdateEncoderV1()));
     }
 
     /// <summary>
@@ -104,7 +104,29 @@ public static class UpdateOperations
     {
         ArgumentNullException.ThrowIfNull(updates);
 
-        return MergeUpdatesCore(updates, s => new UpdateDecoderV2(s), () => new UpdateEncoderV2());
+        return YUpdateException.Decode(() => MergeUpdatesCore(updates, s => new UpdateDecoderV2(s), () => new UpdateEncoderV2()));
+    }
+
+    /// <summary>
+    /// Merges v2 updates this library wrote (pending structs), any number of them: in groups of a few,
+    /// because <see cref="MergeUpdatesCore"/> re-sorts its inputs for every struct it writes.
+    /// </summary>
+    internal static byte[] MergeUpdatesTrusted(List<byte[]> updates)
+    {
+        const int GroupSize = 8;
+        while (updates.Count > 1)
+        {
+            var next = new List<byte[]>((updates.Count + GroupSize - 1) / GroupSize);
+            for (var i = 0; i < updates.Count; i += GroupSize)
+            {
+                var group = updates.GetRange(i, Math.Min(GroupSize, updates.Count - i));
+                next.Add(MergeUpdatesCore(group, s => new UpdateDecoderV2(s, trusted: true), () => new UpdateEncoderV2()));
+            }
+
+            updates = next;
+        }
+
+        return updates[0];
     }
 
     private static byte[] MergeUpdatesCore(IList<byte[]> updates, Func<Lib0Reader, IUpdateDecoder> newDecoder, Func<IUpdateEncoder> newEncoder)
@@ -390,10 +412,14 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] DiffUpdate(byte[] update, byte[] stateVector)
     {
-        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
-        var encoder = new UpdateEncoderV1();
-        DiffUpdateCore(decoder, stateVector, encoder);
-        return encoder.ToArray();
+        ArgumentNullException.ThrowIfNull(update);
+        ArgumentNullException.ThrowIfNull(stateVector);
+        return YUpdateException.Decode(() =>
+        {
+            var encoder = new UpdateEncoderV1();
+            DiffUpdateCore(new UpdateDecoderV1(new Lib0Reader(update)), stateVector, encoder);
+            return encoder.ToArray();
+        });
     }
 
     /// <summary>
@@ -401,10 +427,14 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] DiffUpdateV2(byte[] update, byte[] stateVector)
     {
-        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
-        var encoder = new UpdateEncoderV2();
-        DiffUpdateCore(decoder, stateVector, encoder);
-        return encoder.ToArray();
+        ArgumentNullException.ThrowIfNull(update);
+        ArgumentNullException.ThrowIfNull(stateVector);
+        return YUpdateException.Decode(() =>
+        {
+            var encoder = new UpdateEncoderV2();
+            DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(update)), stateVector, encoder);
+            return encoder.ToArray();
+        });
     }
 
     private static void DiffUpdateCore(IUpdateDecoder decoder, byte[] stateVector, IUpdateEncoder encoder)
@@ -465,8 +495,8 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] EncodeStateVectorFromUpdate(byte[] update)
     {
-        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
-        return EncodeStateVectorFromUpdateCore(decoder);
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV1(new Lib0Reader(update))));
     }
 
     /// <summary>
@@ -474,8 +504,8 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] EncodeStateVectorFromUpdateV2(byte[] update)
     {
-        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
-        return EncodeStateVectorFromUpdateCore(decoder);
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV2(new Lib0Reader(update))));
     }
 
     private static byte[] EncodeStateVectorFromUpdateCore(IUpdateDecoder decoder)
@@ -545,8 +575,8 @@ public static class UpdateOperations
     /// </summary>
     public static UpdateMeta ParseUpdateMeta(byte[] update)
     {
-        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
-        return ParseUpdateMetaCore(decoder);
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV1(new Lib0Reader(update))));
     }
 
     /// <summary>
@@ -554,8 +584,8 @@ public static class UpdateOperations
     /// </summary>
     public static UpdateMeta ParseUpdateMetaV2(byte[] update)
     {
-        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
-        return ParseUpdateMetaCore(decoder);
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV2(new Lib0Reader(update))));
     }
 
     private static UpdateMeta ParseUpdateMetaCore(IUpdateDecoder decoder)
@@ -603,10 +633,13 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] ConvertUpdateFormatV1ToV2(byte[] update)
     {
-        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
-        var encoder = new UpdateEncoderV2();
-        ConvertUpdateFormatCore(decoder, encoder);
-        return encoder.ToArray();
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() =>
+        {
+            var encoder = new UpdateEncoderV2();
+            ConvertUpdateFormatCore(new UpdateDecoderV1(new Lib0Reader(update)), encoder);
+            return encoder.ToArray();
+        });
     }
 
     /// <summary>
@@ -614,10 +647,13 @@ public static class UpdateOperations
     /// </summary>
     public static byte[] ConvertUpdateFormatV2ToV1(byte[] update)
     {
-        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
-        var encoder = new UpdateEncoderV1();
-        ConvertUpdateFormatCore(decoder, encoder);
-        return encoder.ToArray();
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() =>
+        {
+            var encoder = new UpdateEncoderV1();
+            ConvertUpdateFormatCore(new UpdateDecoderV2(new Lib0Reader(update)), encoder);
+            return encoder.ToArray();
+        });
     }
 
     private static void ConvertUpdateFormatCore(IUpdateDecoder decoder, IUpdateEncoder encoder)
@@ -646,8 +682,8 @@ public static class UpdateOperations
     /// </summary>
     public static DecodedUpdate DecodeUpdate(byte[] update)
     {
-        var decoder = new UpdateDecoderV1(new Lib0Reader(update));
-        return DecodeUpdateCore(decoder);
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV1(new Lib0Reader(update))));
     }
 
     /// <summary>
@@ -655,8 +691,8 @@ public static class UpdateOperations
     /// </summary>
     public static DecodedUpdate DecodeUpdateV2(byte[] update)
     {
-        var decoder = new UpdateDecoderV2(new Lib0Reader(update));
-        return DecodeUpdateCore(decoder);
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV2(new Lib0Reader(update))));
     }
 
     private static DecodedUpdate DecodeUpdateCore(IUpdateDecoder decoder)

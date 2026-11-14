@@ -45,7 +45,7 @@ internal sealed class Lib0Reader
     {
         if (_pos >= _end)
         {
-            throw new EndOfStreamException();
+            throw EndOfInput();
         }
 
         return _buffer[_pos++];
@@ -55,7 +55,7 @@ internal sealed class Lib0Reader
     {
         if ((uint)count > (uint)(_end - _pos))
         {
-            throw new EndOfStreamException();
+            throw EndOfInput();
         }
 
         var span = _buffer.AsSpan(_pos, count);
@@ -93,7 +93,7 @@ internal sealed class Lib0Reader
             {
                 if (num > uint.MaxValue)
                 {
-                    throw new InvalidDataException("Integer out of range.");
+                    throw new YUpdateException("A variable-length integer is out of range.");
                 }
 
                 return (uint)num;
@@ -101,7 +101,7 @@ internal sealed class Lib0Reader
 
             if (shift > 35)
             {
-                throw new InvalidDataException("Integer out of range.");
+                throw new YUpdateException("A variable-length integer is out of range.");
             }
         }
     }
@@ -126,12 +126,14 @@ internal sealed class Lib0Reader
 
             if (shift > 53 + 7 || num > (1UL << 53) - 1)
             {
-                throw new InvalidDataException("Integer out of range.");
+                throw new YUpdateException("A variable-length integer is out of range.");
             }
         }
 
         return (sign * (long)num, sign);
     }
+
+    private static YUpdateException EndOfInput() => new("The input ended early.");
 
     /// <summary>UTF-8 string prefixed by its byte length (lib0 <c>readVarString</c>).</summary>
     public string ReadVarString()
@@ -152,7 +154,7 @@ internal sealed class Lib0Reader
         var length = (int)ReadVarUint();
         if ((uint)length > (uint)(_end - _pos))
         {
-            throw new EndOfStreamException();
+            throw EndOfInput();
         }
 
         var reader = new Lib0Reader(_buffer, _pos, length);

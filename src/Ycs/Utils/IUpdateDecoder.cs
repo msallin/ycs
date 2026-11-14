@@ -17,6 +17,9 @@ internal interface IDSDecoder
 
 internal interface IUpdateDecoder : IDSDecoder
 {
+    /// <summary>How many structs this update may hold at most (see <see cref="Limits.MaxStructsPerByteV2"/>).</summary>
+    long MaxStructs { get; }
+
     ID ReadLeftId();
     ID ReadRightId();
     long ReadClient();

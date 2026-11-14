@@ -6,8 +6,6 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
-using System.Diagnostics;
-
 namespace Ycs;
 
 internal class DSDecoderV2 : IDSDecoder
@@ -27,10 +25,10 @@ internal class DSDecoderV2 : IDSDecoder
         _dsCurVal = 0;
     }
 
+    // At most 2^32 per step and checked by the caller after each range, so the sum cannot overflow.
     public long ReadDsClock()
     {
         _dsCurVal += Reader.ReadVarUint();
-        Debug.Assert(_dsCurVal >= 0);
         return _dsCurVal;
     }
 
@@ -59,9 +57,13 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     private readonly UintOptRleDecoder _typeRefDecoder;
     private readonly UintOptRleDecoder _lengthDecoder;
 
-    public UpdateDecoderV2(Lib0Reader input)
+    /// <param name="input">The update.</param>
+    /// <param name="trusted">Written by this library (pending structs): no limit on the number of structs.</param>
+    public UpdateDecoderV2(Lib0Reader input, bool trusted = false)
         : base(input)
     {
+        MaxStructs = trusted ? long.MaxValue : (long)input.Remaining * Limits.MaxStructsPerByteV2 + Limits.MinStructs;
+
         // Read feature flag - currently unused.
         Reader.ReadByte();
 
@@ -77,9 +79,11 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         _lengthDecoder = new UintOptRleDecoder(Reader.ReadVarUint8ArrayAsReader());
     }
 
-    public ID ReadLeftId() => new ID(_clientDecoder.Read(), _leftClockDecoder.Read());
+    public long MaxStructs { get; }
 
-    public ID ReadRightId() => new ID(_clientDecoder.Read(), _rightClockDecoder.Read());
+    public ID ReadLeftId() => new ID(_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
+
+    public ID ReadRightId() => new ID(_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
 
     /// <summary>
     /// Read the next client Id.
@@ -97,9 +101,9 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     public int ReadLength()
     {
         var value = _lengthDecoder.Read();
-        if (value > int.MaxValue)
+        if (value > Limits.MaxClock)
         {
-            throw new InvalidDataException("Length out of range.");
+            throw new YUpdateException("A length is out of range.");
         }
 
         return (int)value;
@@ -111,10 +115,16 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
 
     public string ReadKey()
     {
-        var keyClock = (int)_keyClockDecoder.Read();
+        // As in Yjs: a known index returns a cached key, any higher one reads the next new key.
+        var keyClock = _keyClockDecoder.Read();
+        if (keyClock < 0)
+        {
+            throw new YUpdateException("A key index is negative.");
+        }
+
         if (keyClock < _keys.Count)
         {
-            return _keys[keyClock];
+            return _keys[(int)keyClock];
         }
 
         var key = _stringDecoder.Read();

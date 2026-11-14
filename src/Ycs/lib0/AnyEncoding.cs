@@ -41,8 +41,15 @@ internal static class AnyEncoding
 {
     private const long MaxSafeInteger = (1L << 53) - 1;
 
-    public static void WriteAny(this Lib0Writer writer, object? o)
+    public static void WriteAny(this Lib0Writer writer, object? o) => WriteAny(writer, o, 0);
+
+    private static void WriteAny(Lib0Writer writer, object? o, int depth)
     {
+        if (depth > Limits.MaxDepth)
+        {
+            throw TooDeep();
+        }
+
         switch (o)
         {
             case null: // TYPE 126: null
@@ -99,7 +106,7 @@ internal static class AnyEncoding
                 foreach (var kvp in map)
                 {
                     writer.WriteVarString(kvp.Key);
-                    writer.WriteAny(kvp.Value);
+                    WriteAny(writer, kvp.Value, depth + 1);
                 }
                 break;
             case IReadOnlyDictionary<string, object?> map: // TYPE 118: object
@@ -108,7 +115,7 @@ internal static class AnyEncoding
                 foreach (var kvp in map)
                 {
                     writer.WriteVarString(kvp.Key);
-                    writer.WriteAny(kvp.Value);
+                    WriteAny(writer, kvp.Value, depth + 1);
                 }
                 break;
             case IDictionary dict: // TYPE 118: object, e.g. Dictionary<string, string>
@@ -117,7 +124,7 @@ internal static class AnyEncoding
                 foreach (DictionaryEntry entry in dict)
                 {
                     writer.WriteVarString(entry.Key as string ?? throw NotAStringKey(entry.Key));
-                    writer.WriteAny(entry.Value);
+                    WriteAny(writer, entry.Value, depth + 1);
                 }
                 break;
             case IList list: // TYPE 117: Array
@@ -125,7 +132,7 @@ internal static class AnyEncoding
                 writer.WriteVarUint((uint)list.Count);
                 foreach (var item in list)
                 {
-                    writer.WriteAny(item);
+                    WriteAny(writer, item, depth + 1);
                 }
                 break;
             default:
@@ -133,8 +140,11 @@ internal static class AnyEncoding
         }
     }
 
-    public static object? ReadAny(this Lib0Reader reader)
+    public static object? ReadAny(this Lib0Reader reader) => ReadAny(reader, 0);
+
+    private static object? ReadAny(Lib0Reader reader, int depth)
     {
+        Limits.CheckDepth(depth);
         var type = reader.ReadByte();
         switch (type)
         {
@@ -167,29 +177,29 @@ internal static class AnyEncoding
                 return reader.ReadVarUint8Array();
             case 117: // Array<object>
                 {
-                    var len = (int)reader.ReadVarUint();
-                    var arr = new List<object?>(Math.Min(len, reader.Remaining));
-                    for (int i = 0; i < len; i++)
+                    var len = reader.ReadVarUint();
+                    var arr = new List<object?>(Limits.Capacity(len, reader.Remaining));
+                    for (long i = 0; i < len; i++)
                     {
-                        arr.Add(reader.ReadAny());
+                        arr.Add(ReadAny(reader, depth + 1));
                     }
 
                     return arr;
                 }
             case 118: // object (Dictionary<string, object>)
                 {
-                    var len = (int)reader.ReadVarUint();
-                    var obj = new Dictionary<string, object?>(Math.Min(len, reader.Remaining));
-                    for (int i = 0; i < len; i++)
+                    var len = reader.ReadVarUint();
+                    var obj = new Dictionary<string, object?>(Limits.Capacity(len, reader.Remaining / 2));
+                    for (long i = 0; i < len; i++)
                     {
                         var key = reader.ReadVarString();
-                        obj[key] = reader.ReadAny();
+                        obj[key] = ReadAny(reader, depth + 1);
                     }
 
                     return obj;
                 }
             default:
-                throw new InvalidDataException($"Unknown 'any' type: {type}");
+                throw new YUpdateException($"Unknown 'any' type: {type}.");
         }
     }
 
@@ -198,8 +208,15 @@ internal static class AnyEncoding
     /// <see cref="WriteAny"/> accepts. Called when a value enters a document, so a bad value
     /// fails at the call that inserted it rather than at the next encode.
     /// </summary>
-    public static void Validate(object? value)
+    public static void Validate(object? value) => Validate(value, 0);
+
+    private static void Validate(object? value, int depth)
     {
+        if (depth > Limits.MaxDepth)
+        {
+            throw TooDeep();
+        }
+
         switch (value)
         {
             case null or string or bool or double or float or int or long or short or sbyte or byte or ushort or uint or byte[]:
@@ -216,13 +233,13 @@ internal static class AnyEncoding
             case IDictionary<string, object?> map:
                 foreach (var kvp in map)
                 {
-                    Validate(kvp.Value);
+                    Validate(kvp.Value, depth + 1);
                 }
                 return;
             case IReadOnlyDictionary<string, object?> map:
                 foreach (var kvp in map)
                 {
-                    Validate(kvp.Value);
+                    Validate(kvp.Value, depth + 1);
                 }
                 return;
             case IDictionary dict:
@@ -233,13 +250,13 @@ internal static class AnyEncoding
                         throw NotAStringKey(entry.Key);
                     }
 
-                    Validate(entry.Value);
+                    Validate(entry.Value, depth + 1);
                 }
                 return;
             case IList list:
                 foreach (var item in list)
                 {
-                    Validate(item);
+                    Validate(item, depth + 1);
                 }
                 return;
             default:
@@ -298,6 +315,9 @@ internal static class AnyEncoding
 
     private static ArgumentException NotAStringKey(object? key) =>
         new($"Object keys must be strings, not '{key?.GetType().Name ?? "null"}'.", "value");
+
+    internal static ArgumentException TooDeep() =>
+        new($"Values nested deeper than {Limits.MaxDepth} levels (or a value that contains itself) cannot be stored in a Yjs document.", "value");
 
     internal static NotSupportedException Unsupported(object value) =>
         new($"Values of type '{value.GetType().Name}' cannot be stored in a Yjs document. Use null, bool, a number, " +

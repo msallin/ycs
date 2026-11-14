@@ -32,18 +32,31 @@ internal static class YJson
 {
     private const long MaxSafeInteger = (1L << 53) - 1;
 
-    private static readonly JsonReaderOptions ReaderOptions = new() { MaxDepth = 256 };
+    private static readonly JsonReaderOptions ReaderOptions = new() { MaxDepth = Limits.MaxDepth };
 
     public static string Stringify(object? value)
     {
         var sb = new StringBuilder();
-        Write(sb, value);
+        Write(sb, value, 0);
         return sb.ToString();
     }
 
     public static object? Parse(string json) => Parse(Encoding.UTF8.GetBytes(json));
 
+    /// <summary>Parses JSON read from an update; malformed JSON is a <see cref="YUpdateException"/>.</summary>
     public static object? Parse(ReadOnlySpan<byte> utf8Json)
+    {
+        try
+        {
+            return ParseCore(utf8Json);
+        }
+        catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException)
+        {
+            throw YUpdateException.Wrap(e);
+        }
+    }
+
+    private static object? ParseCore(ReadOnlySpan<byte> utf8Json)
     {
         var reader = new Utf8JsonReader(utf8Json, ReaderOptions);
         if (!reader.Read())
@@ -110,8 +123,13 @@ internal static class YJson
         }
     }
 
-    private static void Write(StringBuilder sb, object? value)
+    private static void Write(StringBuilder sb, object? value, int depth)
     {
+        if (depth > Limits.MaxDepth)
+        {
+            throw AnyEncoding.TooDeep();
+        }
+
         switch (value)
         {
             case null:
@@ -150,10 +168,10 @@ internal static class YJson
                 sb.Append('}');
                 return;
             case IDictionary<string, object?> map:
-                WriteObject(sb, map);
+                WriteObject(sb, map, depth);
                 return;
             case IReadOnlyDictionary<string, object?> map:
-                WriteObject(sb, map);
+                WriteObject(sb, map, depth);
                 return;
             case IDictionary map:
                 {
@@ -165,7 +183,7 @@ internal static class YJson
                         first = false;
                         WriteString(sb, kv.Key as string ?? throw new ArgumentException("Object keys must be strings.", nameof(value)));
                         sb.Append(':');
-                        Write(sb, kv.Value);
+                        Write(sb, kv.Value, depth + 1);
                     }
                     sb.Append('}');
                     return;
@@ -176,7 +194,7 @@ internal static class YJson
                     for (int i = 0; i < items.Count; i++)
                     {
                         if (i > 0) sb.Append(',');
-                        Write(sb, items[i]);
+                        Write(sb, items[i], depth + 1);
                     }
                     sb.Append(']');
                     return;
@@ -186,7 +204,7 @@ internal static class YJson
         }
     }
 
-    private static void WriteObject(StringBuilder sb, IEnumerable<KeyValuePair<string, object?>> map)
+    private static void WriteObject(StringBuilder sb, IEnumerable<KeyValuePair<string, object?>> map, int depth)
     {
         sb.Append('{');
         var first = true;
@@ -196,7 +214,7 @@ internal static class YJson
             first = false;
             WriteString(sb, kv.Key);
             sb.Append(':');
-            Write(sb, kv.Value);
+            Write(sb, kv.Value, depth + 1);
         }
         sb.Append('}');
     }

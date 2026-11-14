@@ -10,7 +10,7 @@ namespace Ycs;
 internal class IncUintOptRleDecoder : AbstractStreamDecoder<uint>
 {
     private uint _state;
-    private uint _count;
+    private ulong _count;
 
     public IncUintOptRleDecoder(Lib0Reader input)
         : base(input)
@@ -28,19 +28,17 @@ internal class IncUintOptRleDecoder : AbstractStreamDecoder<uint>
 
             // If the sign is negative, we read the count too; otherwise. count is 1.
             bool isNegative = sign < 0;
-            if (isNegative)
+            var magnitude = isNegative ? -value : value;
+            if (magnitude > uint.MaxValue)
             {
-                _state = (uint)(-value);
-                _count = Reader.ReadVarUint() + 2;
+                throw new YUpdateException("A value in a v2 column is out of range.");
             }
-            else
-            {
-                _state = (uint)value;
-                _count = 1;
-            }
+
+            _state = (uint)magnitude;
+            _count = isNegative ? Reader.ReadVarUint() + 2UL : 1;
         }
 
         _count--;
-        return _state++;
+        return unchecked(_state++);
     }
 }

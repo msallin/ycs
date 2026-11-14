@@ -69,7 +69,7 @@ internal sealed class LazyStructWriter
             lazyWriter.Encoder.RestWriter.WriteVarUint((uint)(str.Id.Clock + offset));
         }
 
-        WriteStructForLazyOps(str, lazyWriter.Encoder, offset);
+        str.Write(lazyWriter.Encoder, offset);
         lazyWriter.Written++;
     }
 
@@ -114,81 +114,5 @@ internal sealed class LazyStructWriter
         restWriter.Clear();
 
         lazyWriter.Written = 0;
-    }
-
-    /// <summary>
-    /// Dispatches to <see cref="AbstractStruct.Write"/> for GC/Skip (whose Write is already
-    /// correct), but uses <see cref="WriteItemForLazyOps"/> for Item: structs produced by
-    /// <see cref="LazyStructReader"/> may carry an unresolved parent (a key string or an ID
-    /// rather than an <see cref="AbstractType"/>), which <see cref="Item.Write"/> - a file we
-    /// don't own - does not know how to serialize.
-    /// </summary>
-    private static void WriteStructForLazyOps(AbstractStruct str, IUpdateEncoder encoder, int offset)
-    {
-        if (str is Item item)
-        {
-            WriteItemForLazyOps(item, encoder, offset);
-        }
-        else
-        {
-            str.Write(encoder, offset);
-        }
-    }
-
-    /// <summary>
-    /// Re-implements <see cref="Item.Write"/> for the lazy-struct-reading path, adding the
-    /// case (marked in real Yjs as "this edge case was added by differential updates") where
-    /// an item at the start of its type has an unresolved parent: a raw key string (this
-    /// item's type lives directly in the document's root map) or the ID of the item that
-    /// defines the parent type, rather than a resolved <see cref="AbstractType"/>.
-    /// </summary>
-    private static void WriteItemForLazyOps(Item item, IUpdateEncoder encoder, int offset)
-    {
-        var origin = offset > 0 ? (ID?)new ID(item.Id.Client, item.Id.Clock + offset - 1) : item.LeftOrigin;
-        var rightOrigin = item.RightOrigin;
-        var parentSub = item.ParentSub;
-        var info = (item.Content.Ref & Bits.Bits5) |
-            (origin == null ? 0 : Bit.Bit8) |
-            (rightOrigin == null ? 0 : Bit.Bit7) |
-            (parentSub == null ? 0 : Bit.Bit6);
-        encoder.WriteInfo((byte)info);
-
-        if (origin != null)
-        {
-            encoder.WriteLeftId(origin.Value);
-        }
-
-        if (rightOrigin != null)
-        {
-            encoder.WriteRightId(rightOrigin.Value);
-        }
-
-        if (origin == null && rightOrigin == null)
-        {
-            switch (item.Parent)
-            {
-                case string yKey:
-                    encoder.WriteParentInfo(true);
-                    encoder.WriteString(yKey);
-                    break;
-                case ID parentId:
-                    encoder.WriteParentInfo(false);
-                    encoder.WriteLeftId(parentId);
-                    break;
-                default:
-                    // Structs flowing through UpdateOperations always originate from
-                    // LazyStructReader (or from slicing/merging such structs), which never
-                    // resolves 'parent' to an AbstractType - so this should be unreachable.
-                    throw new InvalidOperationException(
-                        "Item has an unresolved parent that is neither a key string nor an ID.");
-            }
-
-            if (parentSub != null)
-            {
-                encoder.WriteString(parentSub);
-            }
-        }
-
-        item.Content.Write(encoder, offset);
     }
 }

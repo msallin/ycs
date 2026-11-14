@@ -237,28 +237,23 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     public bool SnapshotContainsUpdateV2(byte[] update) => SnapshotContainsUpdateCore(update, isV1: false);
 
     /// <summary>
-    /// Yjs's version lazily reads just the struct headers (id/length) out of <paramref name="update"/>
-    /// so it can bail out on the first client whose range the snapshot doesn't cover, without paying
-    /// for full struct/content decoding (see utils/Snapshot.js' use of LazyStructReader). This port
-    /// does not have a lazy reader lying around and mergeUpdates/diffUpdate (which would need one
-    /// too) are being written independently in a different clone, so - per this task's instructions
-    /// to implement only the minimum needed here rather than depend on or duplicate that work -
-    /// this reuses the already-existing eager <see cref="EncodingUtils.ReadClientStructRefs"/> to
-    /// parse every struct up front instead. The <see cref="YDoc"/> it hands that method is a
-    /// disposable scratch document: it is only consulted to resolve a struct's parent-by-name
-    /// (<c>doc.Get&lt;AbstractType&gt;(parentYKey)</c>), which has no effect on how many bytes are
-    /// consumed and therefore no effect on the id/length pairs this method actually cares about.
-    /// Slower than Yjs' early-exit version, but produces the same answer.
+    /// Unlike Yjs' version, which reads the struct headers lazily and stops at the first client the
+    /// snapshot does not cover, this reads all structs first.
     /// </summary>
     private bool SnapshotContainsUpdateCore(byte[] update, bool isV1)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        return YUpdateException.Decode(() => ContainsUpdate(update, isV1));
+    }
+
+    private bool ContainsUpdate(byte[] update, bool isV1)
     {
         var stream = new Lib0Reader(update);
         IUpdateDecoder decoder = isV1
             ? (IUpdateDecoder)new UpdateDecoderV1(stream)
             : new UpdateDecoderV2(stream);
 
-        var scratchDoc = new YDoc();
-        var clientStructRefs = EncodingUtils.ReadClientStructRefs(decoder, scratchDoc);
+        var clientStructRefs = EncodingUtils.ReadClientStructRefs(decoder);
 
         foreach (var kvp in clientStructRefs)
         {

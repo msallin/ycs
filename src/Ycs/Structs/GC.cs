@@ -43,11 +43,6 @@ public partial class GC : AbstractStruct
         transaction.Doc.Store.AddStruct(this);
     }
 
-    internal override long? GetMissing(Transaction transaction, StructStore store)
-    {
-        return null;
-    }
-
     internal override void Write(IUpdateEncoder encoder, int offset)
     {
         encoder.WriteInfo(StructGCRefNumber);

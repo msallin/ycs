@@ -410,26 +410,41 @@ public partial class Item : AbstractStruct
     }
 
     /// <summary>
-    /// Returns the creator ClientID of the missing OP or define missing items and return null.
+    /// The client of a struct this item refers to that <paramref name="getState"/> does not cover
+    /// yet, or null (the check half of Yjs' <c>Item.getMissing</c>). References to the item's own
+    /// client are earlier clocks (checked when it was read), so they are always there.
     /// </summary>
-    internal override long? GetMissing(Transaction transaction, StructStore store)
+    internal long? FindMissing(Func<long, long> getState)
     {
-        if (LeftOrigin != null && LeftOrigin.Value.Client != Id.Client && LeftOrigin.Value.Clock >= store.GetState(LeftOrigin.Value.Client))
+        if (LeftOrigin is ID left && left.Client != Id.Client && left.Clock >= getState(left.Client))
         {
-            return LeftOrigin.Value.Client;
+            return left.Client;
         }
 
-        if (RightOrigin != null && RightOrigin.Value.Client != Id.Client && RightOrigin.Value.Clock >= store.GetState(RightOrigin.Value.Client))
+        if (RightOrigin is ID right && right.Client != Id.Client && right.Clock >= getState(right.Client))
         {
-            return RightOrigin.Value.Client;
+            return right.Client;
         }
 
-        if ((Parent is ID parentId) && Id.Client != parentId.Client && parentId.Clock >= store.GetState(parentId.Client))
+        if (Parent is ID parentId && parentId.Client != Id.Client && parentId.Clock >= getState(parentId.Client))
         {
             return parentId.Client;
         }
 
-        // We have all missing ids, now find the items.
+        return null;
+    }
+
+    /// <summary>
+    /// Finds the items this item refers to, once they are all there (the second half of Yjs'
+    /// <c>Item.getMissing</c>): left and right are set, splitting items where needed, and the parent
+    /// is resolved to a type, or to null when this item is to be integrated as a GC struct.
+    /// </summary>
+    internal void ResolveReferences(Transaction transaction, StructStore store)
+    {
+        if (Parent is string rootName)
+        {
+            Parent = transaction.Doc.Get<AbstractType>(rootName);
+        }
 
         if (LeftOrigin != null)
         {
@@ -465,17 +480,8 @@ public partial class Item : AbstractStruct
         else if (Parent is ID pid)
         {
             var parentItem = store.Find(pid);
-            if (parentItem is GC)
-            {
-                Parent = null;
-            }
-            else
-            {
-                Parent = ((parentItem as Item)?.Content as ContentType)?.Type;
-            }
+            Parent = parentItem is GC ? null : ((parentItem as Item)?.Content as ContentType)?.Type;
         }
-
-        return null;
     }
 
     internal void Gc(StructStore store, bool parentGCd)
@@ -543,26 +549,28 @@ public partial class Item : AbstractStruct
 
         if (origin == null && rightOrigin == null)
         {
-            var parent = Parent;
-            var parentItem = (parent as AbstractType)?._item;
-            if (parent is ID parentId)
+            switch (Parent)
             {
-                // Not integrated yet (a pending struct being set aside): the parent is still an id.
-                encoder.WriteParentInfo(false);
-                encoder.WriteLeftId(parentId);
-            }
-            else if (parentItem == null)
-            {
-                // parent type on y._map.
-                // find the correct key
-                var yKey = (parent as AbstractType).FindRootTypeKey();
-                encoder.WriteParentInfo(true);
-                encoder.WriteString(yKey);
-            }
-            else
-            {
-                encoder.WriteParentInfo(false);
-                encoder.WriteLeftId(parentItem.Id);
+                case string yKey:
+                    // Not integrated (pending, or read by UpdateOperations): a root type by name.
+                    encoder.WriteParentInfo(true);
+                    encoder.WriteString(yKey);
+                    break;
+                case ID parentId:
+                    // Not integrated: the id of the parent type's item.
+                    encoder.WriteParentInfo(false);
+                    encoder.WriteLeftId(parentId);
+                    break;
+                case AbstractType { _item: null } root:
+                    encoder.WriteParentInfo(true);
+                    encoder.WriteString(root.FindRootTypeKey());
+                    break;
+                case AbstractType type:
+                    encoder.WriteParentInfo(false);
+                    encoder.WriteLeftId(type._item.Id);
+                    break;
+                default:
+                    throw new InvalidOperationException("An item without origins has no parent.");
             }
 
             if (parentSub != null)

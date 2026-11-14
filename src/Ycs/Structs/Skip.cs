@@ -57,11 +57,6 @@ public sealed class Skip : AbstractStruct
         throw new NotSupportedException("Skip structs cannot be integrated.");
     }
 
-    internal override long? GetMissing(Transaction transaction, StructStore store)
-    {
-        return null;
-    }
-
     internal override void Write(IUpdateEncoder encoder, int offset)
     {
         encoder.WriteInfo(StructSkipRefNumber);

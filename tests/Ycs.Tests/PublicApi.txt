@@ -301,7 +301,7 @@ class Ycs.YDeepEventArgs
     Transaction Transaction { get; }
 class Ycs.YDoc
     Snapshot CreateSnapshot()
-    System.Collections.Generic.IDictionary<string, string> Meta { get; }
+    System.Collections.Generic.IDictionary<string, object> Meta { get; }
     System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
     System.Predicate<Item> GcFilter { get; }
     T Get<T>(string name) where T : AbstractType, new()
@@ -315,6 +315,8 @@ class Ycs.YDoc
     YXmlText GetXmlText(string name = "")
     bool AutoLoad { get; }
     bool Gc { get; }
+    bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
+    bool TryApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
     byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     byte[] EncodeStateAsUpdateV1(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     byte[] EncodeStateAsUpdateV2(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
@@ -333,12 +335,12 @@ class Ycs.YDoc
     event System.EventHandler<Transaction> BeforeTransaction
     int ClientId { get; }
     string Guid { get; }
-    void ApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
-    void ApplyUpdate(byte[] update, object transactionOrigin = null, bool local = false)
-    void ApplyUpdateV1(System.ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
-    void ApplyUpdateV1(byte[] update, object transactionOrigin = null, bool local = false)
-    void ApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null, bool local = false)
-    void ApplyUpdateV2(byte[] update, object transactionOrigin = null, bool local = false)
+    void ApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
+    void ApplyUpdate(byte[] update, object transactionOrigin = null)
+    void ApplyUpdateV1(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
+    void ApplyUpdateV1(byte[] update, object transactionOrigin = null)
+    void ApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
+    void ApplyUpdateV2(byte[] update, object transactionOrigin = null)
     void Destroy()
     void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     void EncodeStateAsUpdateV1(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
@@ -346,12 +348,13 @@ class Ycs.YDoc
     void Load()
     void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
 class Ycs.YDocOptions
-    System.Collections.Generic.IDictionary<string, string> Meta { get; set; }
+    System.Collections.Generic.IDictionary<string, object> Meta { get; set; }
     System.Predicate<Item> GcFilter { get; set; }
     YDocOptions()
     bool AutoLoad { get; set; }
     bool Gc { get; set; }
     int? ClientId { get; set; }
+    long MaxPendingBytes { get; set; }
     string Guid { get; set; }
 class Ycs.YEvent
     AbstractType CurrentTarget { get; set; }
@@ -416,6 +419,10 @@ class Ycs.YTextEvent : YEvent
     System.Collections.Generic.ISet<string> KeysChanged { get; }
     bool ChildListChanged { get; }
     override System.Collections.Generic.IList<Delta> Delta { get; }
+sealed class Ycs.YUpdateException : System.FormatException
+    YUpdateException()
+    YUpdateException(string message)
+    YUpdateException(string message, System.Exception innerException)
 class Ycs.YXmlElement : YXmlFragment
     System.Collections.Generic.IDictionary<string, object> GetAttributes(Snapshot snapshot = null)
     YXmlElement Clone()

@@ -131,7 +131,7 @@ public class ContentType : IContentEx
                 var xmlText = YXmlText.Read(decoder);
                 return new ContentType(xmlText);
             default:
-                throw new NotSupportedException($"Unknown Yjs type ref: {typeRef}");
+                throw new YUpdateException($"Unknown shared type: {typeRef}.");
         }
     }
 }

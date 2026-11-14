@@ -9,8 +9,10 @@ namespace Ycs;
 /// <seealso cref="IntDiffOptRleEncoder"/>
 internal class IntDiffOptRleDecoder : AbstractStreamDecoder<long>
 {
+    private const long MaxSafeInteger = (1L << 53) - 1;
+
     private long _state;
-    private uint _count;
+    private ulong _count;
     private long _diff;
 
     public IntDiffOptRleDecoder(Lib0Reader input)
@@ -35,10 +37,16 @@ internal class IntDiffOptRleDecoder : AbstractStreamDecoder<long>
             // shift of the magnitude instead rounds towards zero, reading a negative run one short.
             _diff = diff >> 1;
 
-            _count = hasCount ? Reader.ReadVarUint() + 2 : 1;
+            _count = hasCount ? Reader.ReadVarUint() + 2UL : 1;
         }
 
+        // Both stay within ±2^53, so the sum cannot overflow; the result must stay there too.
         _state += _diff;
+        if (_state > MaxSafeInteger || _state < -MaxSafeInteger)
+        {
+            throw new YUpdateException("A value in a v2 column is out of range.");
+        }
+
         _count--;
         return _state;
     }

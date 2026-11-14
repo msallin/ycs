@@ -26,6 +26,5 @@ public abstract partial class AbstractStruct
     internal abstract bool MergeWith(AbstractStruct right);
     internal abstract void Delete(Transaction transaction);
     internal abstract void Integrate(Transaction transaction, int offset);
-    internal abstract long? GetMissing(Transaction transaction, StructStore store);
     internal abstract void Write(IUpdateEncoder encoder, int offset);
 }

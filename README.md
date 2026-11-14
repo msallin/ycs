@@ -39,6 +39,13 @@ upstream ycs.
 * `interop/run.sh` and `interop/corpus/roundtrip.sh` run Ycs and Yjs against each other live
   (Node needed).
 
+#### Untrusted input
+
+Updates from peers can be malformed or hostile: applying, merging or diffing them throws only
+`YUpdateException`, leaves the document unchanged, and is bounded in time, memory and stack depth
+(clocks up to 2^31 - 1, nesting up to 256 levels, pending data up to `YDocOptions.MaxPendingBytes`).
+`TryApplyUpdate` returns false instead. See [`docs/api.md`](docs/api.md#untrusted-input).
+
 #### Thread safety
 
 As in Yjs, a `YDoc` is not thread-safe: the caller must make sure that no two threads use the same
