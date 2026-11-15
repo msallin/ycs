@@ -143,6 +143,9 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     // their left neighbour (OnMerge moves the hint there) or when the whole type is collected (ForgetPushHint).
     private Item _pushHint;
 
+    // An empty list for the values of the next insert (see InsertGenericsAfterReturningLast), or null.
+    private List<object> _spareValues;
+
     protected YArrayBase(bool useSearchMarkers = true)
     {
         _searchMarkers = useSearchMarkers ? new ArraySearchMarkerCollection() : null;
@@ -381,16 +384,29 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         var store = doc.Store;
         var right = referenceItem == null ? _start : referenceItem.Right as Item;
 
-        foreach (var c in content)
+        // Indexed where the content allows it: a foreach over the interface boxes the enumerator.
+        var list = content as IList<object>;
+        var count = content.Count;
+        if (list != null)
         {
-            if (c is AbstractType)
+            for (var i = 0; i < count; i++)
             {
-                CheckCanNest();
-                break;
+                if (list[i] is AbstractType)
+                {
+                    CheckCanNest();
+                    break;
+                }
             }
         }
+        else if (content.Any(static c => c is AbstractType))
+        {
+            CheckCanNest();
+        }
 
-        var jsonContent = new List<object>();
+        // The values between the other kinds of content, packed into one item each. The list goes to the item, or,
+        // when the run before takes the values (Item.ExtendRun), back to _spareValues for the next insert.
+        var jsonContent = _spareValues ?? new List<object>();
+        _spareValues = null;
 
         void packJsonContent()
         {
@@ -409,7 +425,30 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
-        foreach (var c in content)
+        if (list != null)
+        {
+            for (var i = 0; i < count; i++)
+            {
+                Insert(list[i]);
+            }
+        }
+        else
+        {
+            foreach (var c in content)
+            {
+                Insert(c);
+            }
+        }
+
+        packJsonContent();
+        if (jsonContent.Capacity <= 16)
+        {
+            _spareValues = jsonContent;
+        }
+
+        return left;
+
+        void Insert(object c)
         {
             switch (c)
             {
@@ -436,9 +475,6 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                     break;
             }
         }
-
-        packJsonContent();
-        return left;
     }
 
     protected void Delete(Transaction transaction, int index, int length)

@@ -67,16 +67,76 @@ internal static class ChangedKeys
     {
         if (changed == null)
         {
-            return parentSub == null ? ChildList : new HashSet<string> { parentSub };
+            return parentSub == null ? ChildList : new SingleKey(parentSub);
         }
 
-        if (ReferenceEquals(changed, ChildList) || ReferenceEquals(changed, None))
+        // The shared sets and a single key are read-only: a second key makes a set of its own.
+        if (changed.IsReadOnly)
         {
             return changed.Contains(parentSub) ? changed : new HashSet<string>(changed) { parentSub };
         }
 
         changed.Add(parentSub);
         return changed;
+    }
+
+    /// <summary>
+    /// The set of a type of which one key changed (most map changes: a set or a delete of one key), read-only as
+    /// <see cref="ChildList"/>; a HashSet costs several times its size.
+    /// </summary>
+    private sealed class SingleKey : ISet<string>, IReadOnlySet<string>
+    {
+        private readonly string _key;
+
+        public SingleKey(string key) => _key = key;
+
+        public int Count => 1;
+
+        public bool IsReadOnly => true;
+
+        public bool Contains(string item) => string.Equals(item, _key, StringComparison.Ordinal);
+
+        public IEnumerator<string> GetEnumerator()
+        {
+            yield return _key;
+        }
+
+        System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
+
+        public void CopyTo(string[] array, int arrayIndex) => array[arrayIndex] = _key;
+
+        public bool IsProperSubsetOf(IEnumerable<string> other) => AsSet().IsProperSubsetOf(other);
+
+        public bool IsProperSupersetOf(IEnumerable<string> other) => AsSet().IsProperSupersetOf(other);
+
+        public bool IsSubsetOf(IEnumerable<string> other) => AsSet().IsSubsetOf(other);
+
+        public bool IsSupersetOf(IEnumerable<string> other) => AsSet().IsSupersetOf(other);
+
+        public bool Overlaps(IEnumerable<string> other) => AsSet().Overlaps(other);
+
+        public bool SetEquals(IEnumerable<string> other) => AsSet().SetEquals(other);
+
+        public bool Add(string item) => throw ReadOnly();
+
+        void ICollection<string>.Add(string item) => throw ReadOnly();
+
+        public void Clear() => throw ReadOnly();
+
+        public bool Remove(string item) => throw ReadOnly();
+
+        public void ExceptWith(IEnumerable<string> other) => throw ReadOnly();
+
+        public void IntersectWith(IEnumerable<string> other) => throw ReadOnly();
+
+        public void SymmetricExceptWith(IEnumerable<string> other) => throw ReadOnly();
+
+        public void UnionWith(IEnumerable<string> other) => throw ReadOnly();
+
+        private HashSet<string> AsSet() => new() { _key };
+
+        // As the shared sets (ReadOnlySet) answer a change.
+        private static NotSupportedException ReadOnly() => new("Collection is read-only.");
     }
 
     /// <summary>The keys in <paramref name="changed"/> other than <c>null</c>, as a new set.</summary>

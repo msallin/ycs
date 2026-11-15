@@ -52,15 +52,33 @@ internal class DeleteSet
 
     public Dictionary<long, List<DeleteItem>> Clients { get; }
 
+    // Lists of a transaction's set, kept by ClearForReuse for the next transaction (nobody else holds them then).
+    private Stack<List<DeleteItem>> _spare;
+
     public void Add(long client, long clock, long length)
     {
         if (!Clients.TryGetValue(client, out var deletes))
         {
-            deletes = new List<DeleteItem>(2);
+            deletes = _spare is { Count: > 0 } spare ? spare.Pop() : new List<DeleteItem>(2);
             Clients[client] = deletes;
         }
 
         deletes.Add(new DeleteItem(clock, length));
+    }
+
+    /// <summary>Empties the set and keeps its small lists for <see cref="Add"/>; only for a set no one else holds.</summary>
+    internal void ClearForReuse()
+    {
+        foreach (var list in Clients.Values)
+        {
+            if (list.Capacity <= 16 && (_spare ??= new Stack<List<DeleteItem>>()).Count < 8)
+            {
+                list.Clear();
+                _spare.Push(list);
+            }
+        }
+
+        Clients.Clear();
     }
 
     /// <summary>

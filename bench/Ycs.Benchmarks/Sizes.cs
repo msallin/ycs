@@ -64,7 +64,8 @@ internal static class Sizes
                 array.Insert(0, value);
                 array.Insert(0, value);
                 array.Delete(0, 1);
-            });
+            }
+            );
         });
     }
 

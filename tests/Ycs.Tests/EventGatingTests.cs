@@ -96,14 +96,33 @@ public class EventGatingTests
     }
 
     [TestMethod]
-    public void ChangedKeys_KeyThenChildList_AddsToTheSameSet()
+    public void ChangedKeys_KeyThenChildList_HoldsBoth()
     {
         var keys = ChangedKeys.Add(null, "key");
 
         var both = ChangedKeys.Add(keys, null);
 
-        Assert.AreSame(keys, both);
         CollectionAssert.AreEquivalent(new[] { "key", null }, new List<string>(both));
+    }
+
+    [TestMethod]
+    public void ChangedKeys_OneKey_IsReadOnlyAndAddingAgainKeepsIt()
+    {
+        var keys = ChangedKeys.Add(null, "key");
+
+        var again = ChangedKeys.Add(keys, "key");
+
+        Assert.IsTrue(keys.IsReadOnly && ReferenceEquals(keys, again) && keys.Count == 1 && keys.Contains("key") && !keys.Contains("other"));
+    }
+
+    [TestMethod]
+    public void ChangedKeys_ThirdKey_AddsToTheSetOfTwo()
+    {
+        var two = ChangedKeys.Add(ChangedKeys.Add(null, "a"), "b");
+
+        var three = ChangedKeys.Add(two, "c");
+
+        Assert.IsTrue(ReferenceEquals(two, three) && three.SetEquals(new[] { "a", "b", "c" }));
     }
 
     [TestMethod]

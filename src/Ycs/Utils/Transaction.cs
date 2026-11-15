@@ -277,7 +277,8 @@ public partial class Transaction
         }
         else
         {
-            _deleteSet.Clients.Clear();
+            // Not taken: nobody else holds the set or its lists.
+            _deleteSet.ClearForReuse();
         }
 
         _beforeState = _beforeStateTaken || _beforeState.Count > KeepCapacity ? null : Cleared(_beforeState);
