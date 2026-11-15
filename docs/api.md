@@ -62,6 +62,7 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | `YArray.Push`/`Add` inserted at `Length` | appends after the last item, deleted ones included, as Yjs' `push` | the bytes differed, and the place among concurrent appends could |
 | `Insert` beyond the length inserted at the front; on a type outside a document `Insert`/`Delete` out of range threw; `Slice(start, end)` with `start > end` threw | `Insert` beyond the length throws `ArgumentOutOfRangeException` (Yjs: "Length exceeded!"); outside a document they splice as JavaScript; `Slice` never throws | Yjs' `typeListInsertGenerics`, `splice`, `typeListSlice` |
 | `YXmlElement.ToString` wrote values with .NET formatting and the current culture (`True`, `1,5`); `GetAttributes(snapshot)` dropped null values | values as JavaScript's `String(value)` (`true`, `1.5`, `null`, `[object Object]`); null values kept | Yjs' `toString`, `typeMapGetAllSnapshot` |
+| `Unobserve`/`UnobserveDeep` of a handler registered twice removed one registration | every registration of it, as Yjs' `removeEventHandlerListener` (`-=` on the events still removes one; an unknown handler is ignored, where Yjs logs an error) | Yjs' `unobserve` |
 
 ## Proposed, not done
 

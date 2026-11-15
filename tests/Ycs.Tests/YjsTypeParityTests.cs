@@ -6,6 +6,7 @@
 
 #nullable disable
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -299,6 +300,29 @@ public class YjsTypeParityTests
         var all = map.GetAllSnapshot(snapshot);
 
         Assert.AreEqual("null k=null", $"{value ?? "null"} {string.Join(",", all.Select(kv => $"{kv.Key}={kv.Value ?? "null"}"))}");
+    }
+
+    [TestMethod]
+    public void Unobserve_HandlerRegisteredTwice_RemovesBothAsYjs()
+    {
+        // Yjs 13.6.32: observe(f) twice, insert, unobserve(f), insert, observeDeep likewise: f ran 2 times each.
+        var doc = new YDoc();
+        var text = doc.GetText("t");
+        var calls = 0;
+        var deepCalls = 0;
+        EventHandler<YEventArgs> handler = (_, _) => calls++;
+        EventHandler<YDeepEventArgs> deepHandler = (_, _) => deepCalls++;
+        text.Observe(handler);
+        text.Observe(handler);
+        text.ObserveDeep(deepHandler);
+        text.ObserveDeep(deepHandler);
+        text.Insert(0, "a");
+
+        text.Unobserve(handler);
+        text.UnobserveDeep(deepHandler);
+        text.Insert(0, "b");
+
+        Assert.AreEqual((2, 2), (calls, deepCalls));
     }
 
     [TestMethod]

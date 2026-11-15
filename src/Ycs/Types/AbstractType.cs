@@ -99,7 +99,17 @@ public partial class AbstractType
     /// <summary>
     /// Unregister an observer function previously registered with <see cref="Observe"/> (or <c>+=</c>).
     /// </summary>
-    public void Unobserve(EventHandler<YEventArgs> handler) => EventHandler -= handler;
+    /// <remarks>As Yjs' <c>unobserve</c>: a handler registered more than once is removed every time.</remarks>
+    public void Unobserve(EventHandler<YEventArgs> handler)
+    {
+        EventHandler<YEventArgs> before;
+        do
+        {
+            before = EventHandler;
+            EventHandler -= handler;
+        }
+        while (!ReferenceEquals(before, EventHandler));
+    }
 
     /// <summary>
     /// Observe all events that are created by this type and its children (Yjs' <c>observeDeep(f)</c>).
@@ -114,7 +124,17 @@ public partial class AbstractType
     /// <summary>
     /// Unregister a deep observer function previously registered with <see cref="ObserveDeep"/> (or <c>+=</c>).
     /// </summary>
-    public void UnobserveDeep(EventHandler<YDeepEventArgs> handler) => DeepEventHandler -= handler;
+    /// <remarks>As Yjs' <c>unobserveDeep</c>: a handler registered more than once is removed every time.</remarks>
+    public void UnobserveDeep(EventHandler<YDeepEventArgs> handler)
+    {
+        EventHandler<YDeepEventArgs> before;
+        do
+        {
+            before = DeepEventHandler;
+            DeepEventHandler -= handler;
+        }
+        while (!ReferenceEquals(before, DeepEventHandler));
+    }
 
     private sealed class Subscription(Action unsubscribe) : IDisposable
     {
