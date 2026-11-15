@@ -354,10 +354,23 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
     private void Grow(int min)
     {
         var capacity = Math.Max(min, _structs.Length * 2);
-        Array.Resize(ref _structs, capacity);
-        Array.Resize(ref _starts, capacity);
-        Array.Resize(ref _flags, capacity);
-        Array.Resize(ref _sums, BlockOf(capacity - 1) + 1);
-        Array.Resize(ref _breaks, _sums.Length);
+        var blocks = BlockOf(capacity - 1) + 1;
+
+        // All allocated before any is assigned: an OutOfMemoryException leaves the list as it was.
+        var structs = new AbstractStruct[capacity];
+        var starts = new long[capacity];
+        var flags = new byte[capacity];
+        var sums = new long[blocks];
+        var breaks = new int[blocks];
+        Array.Copy(_structs, structs, _count);
+        Array.Copy(_starts, starts, _count);
+        Array.Copy(_flags, flags, _count);
+        Array.Copy(_sums, sums, _sums.Length);
+        Array.Copy(_breaks, breaks, _breaks.Length);
+        _structs = structs;
+        _starts = starts;
+        _flags = flags;
+        _sums = sums;
+        _breaks = breaks;
     }
 }
