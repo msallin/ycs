@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    A model of the item layout of docs/design-item-layout.md: items as structs in a slab with 32-bit handles. It
+    loads documents ycs built (through ycs' internals) and measures what they hold and what three operations cost.
+    Not a part of the library; results in README.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- Tier-0 code keeps locals alive to the end of a method: a document set to null would still be measured. -->
+    <TieredCompilation>false</TieredCompilation>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The same inputs and the same workload code as the comparison with YDotNet. -->
+    <Compile Include="..\Ycs.Compare\Inputs.cs" Link="Compare\Inputs.cs" />
+    <Compile Include="..\Ycs.Compare\Prepared.cs" Link="Compare\Prepared.cs" />
+    <Compile Include="..\Ycs.Compare\YcsCases.cs" Link="Compare\YcsCases.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ycs\Ycs.csproj" />
+  </ItemGroup>
+
+</Project>
