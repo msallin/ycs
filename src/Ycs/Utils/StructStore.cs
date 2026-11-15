@@ -64,6 +64,8 @@ internal sealed partial class StructStore
     /// <summary>Deletions of structs this store does not have yet (Yjs' <c>store.pendingDs</c>).</summary>
     internal PendingDeletes PendingDs { get; } = new();
 
+    internal bool HasPending => Pending != null || PendingDs.Count != 0;
+
     /// <summary>The encoded size of what is pending, as <see cref="YDocOptions.MaxPendingBytes"/> counts it.</summary>
     internal long PendingBytes => (Pending?.Bytes ?? 0) + PendingDs.Bytes;
 
@@ -953,6 +955,19 @@ internal sealed partial class StructStore
 
                 Bytes += entry.Bytes;
             }
+        }
+
+        /// <summary>A copy of every client's ranges, sorted and merged (the v2 encoding needs them ascending).</summary>
+        public DeleteSet ToDeleteSet()
+        {
+            var ds = new DeleteSet();
+            foreach (var (client, entry) in _clients)
+            {
+                ds.Clients[client] = new List<DeleteSet.DeleteItem>(entry.Ranges);
+            }
+
+            ds.SortAndMergeDeleteSet();
+            return ds;
         }
 
         /// <summary>Removes and returns the ranges of the clients whose state reached one of them, or null.</summary>

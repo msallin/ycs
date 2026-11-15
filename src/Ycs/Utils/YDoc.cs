@@ -214,11 +214,11 @@ public partial class YDoc
 
     /// <summary>
     /// Whether received structs or deletions wait for an update this document has not received (Yjs'
-    /// <c>doc.store.pendingStructs</c> and <c>pendingDs</c>). What waits is not in the document yet, and
-    /// <see cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/> leaves it out; it is integrated when the
-    /// missing update arrives. Updates that do not depend on it are integrated meanwhile.
+    /// <c>doc.store.pendingStructs</c> and <c>pendingDs</c>). What waits is not in the document yet; it is
+    /// integrated when the missing update arrives, and updates that do not depend on it are integrated
+    /// meanwhile. <see cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/> includes it, as Yjs does.
     /// </summary>
-    public bool HasPending => Store.Pending != null || Store.PendingDs.Count != 0;
+    public bool HasPending => Store.HasPending;
 
     /// <summary>
     /// Changes that happen inside of a transaction are bundled.

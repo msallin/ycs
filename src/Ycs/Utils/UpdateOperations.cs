@@ -393,9 +393,52 @@ public static class UpdateOperations
         });
     }
 
-    private static void DiffUpdateCore(IUpdateDecoder decoder, byte[] stateVector, IUpdateEncoder encoder)
+    private static void DiffUpdateCore(IUpdateDecoder decoder, byte[] stateVector, IUpdateEncoder encoder) =>
+        DiffUpdateCore(decoder, EncodingUtils.DecodeStateVector(new Lib0Reader(stateVector)), encoder);
+
+    /// <summary>
+    /// What <see cref="EncodingUtils.EncodeStateAsUpdate(StructStore, ReadOnlySpan{byte}, bool)"/>
+    /// adds while something is pending, as Yjs 13.6's <c>encodeStateAsUpdateV2</c>: the state, the
+    /// pending deletions and the pending structs beyond <paramref name="targetStateVector"/>, merged.
+    /// </summary>
+    internal static byte[] MergeWithPending(byte[] state, StructStore store, IDictionary<long, long> targetStateVector, bool v2)
     {
-        var state = EncodingUtils.DecodeStateVector(new Lib0Reader(stateVector));
+        var updates = new List<byte[]>(3) { state };
+        if (store.PendingDs.Count != 0)
+        {
+            var encoder = v2 ? (IUpdateEncoder)UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
+            try
+            {
+                encoder.RestWriter.WriteVarUint(0);
+                store.PendingDs.ToDeleteSet().Write(encoder);
+                updates.Add(encoder.ToArray());
+            }
+            finally
+            {
+                EncodingUtils.ReturnEncoder(encoder);
+            }
+        }
+
+        if (store.Pending != null)
+        {
+            var encoder = v2 ? (IUpdateEncoder)UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
+            try
+            {
+                var pending = store.Pending.Merge();
+                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(pending), trusted: true), targetStateVector, encoder);
+                updates.Add(encoder.ToArray());
+            }
+            finally
+            {
+                EncodingUtils.ReturnEncoder(encoder);
+            }
+        }
+
+        return MergeUpdatesCore(updates, v2, trusted: true);
+    }
+
+    private static void DiffUpdateCore(IUpdateDecoder decoder, IDictionary<long, long> state, IUpdateEncoder encoder)
+    {
         var lazyStructWriter = new LazyStructWriter(encoder);
         var reader = new LazyStructReader(decoder, filterSkips: false);
 

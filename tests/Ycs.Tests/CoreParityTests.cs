@@ -109,4 +109,60 @@ public class CoreParityTests
 
         Assert.AreEqual("AQICACEBAXIBbgEABAECAQAF", S(doc.EncodeStateAsUpdate()));
     }
+
+    // Client 20: "one" (u1), " two" (u2), delete clock 0 (u3); client 21: "B". A server has B, u2 and u3.
+    private static YDoc ServerWithPending()
+    {
+        var doc = new YDoc();
+        doc.ApplyUpdate(B("AQEVAAQBAXQBQgA="));
+        doc.ApplyUpdate(B("AQEUA4QUAgQgdHdvAA=="));
+        doc.ApplyUpdate(B("AAEUAQAB"));
+        return doc;
+    }
+
+    [TestMethod]
+    public void EncodeStateAsUpdate_WithPending_IncludesPendingStructsAndDeletions()
+    {
+        var doc = ServerWithPending();
+
+        Assert.AreEqual(
+            ("AgEVAAQBAXQBQgEUA4QUAgQgdHdvARQBAAE=", "AAADFVQAAQQAAwQAhAoGdEIgdHdvQQAEAQEAAAIBAAEDARQBAAA="),
+            (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())));
+    }
+
+    [TestMethod]
+    [DataRow("ARQD", "AgEVAAQBAXQBQgEUA4QUAgQgdHdvARQBAAE=")]
+    [DataRow("ARQH", "AQEVAAQBAXQBQgEUAQAB")]
+    public void EncodeStateAsUpdate_WithPendingAndTargetStateVector_DiffsOnlyThePendingStructs(string target, string expected)
+    {
+        var doc = ServerWithPending();
+
+        Assert.AreEqual(expected, S(doc.EncodeStateAsUpdate(B(target))));
+    }
+
+    [TestMethod]
+    public void EncodeStateAsUpdate_WithPending_IntoBufferWriterEqualsTheArray()
+    {
+        var doc = ServerWithPending();
+        var v1 = new System.Buffers.ArrayBufferWriter<byte>();
+        var v2 = new System.Buffers.ArrayBufferWriter<byte>();
+
+        doc.EncodeStateAsUpdate(v1);
+        doc.EncodeStateAsUpdateV2(v2);
+
+        Assert.AreEqual(
+            (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())),
+            (S(v1.WrittenSpan.ToArray()), S(v2.WrittenSpan.ToArray())));
+    }
+
+    [TestMethod]
+    public void EncodeStateAsUpdate_PersistedWithPendingThenRestarted_KeepsWhatWasPending()
+    {
+        var restarted = new YDoc();
+        restarted.ApplyUpdate(ServerWithPending().EncodeStateAsUpdate());
+
+        restarted.ApplyUpdate(B("AQEUAAQBAXQDb25lAA=="));
+
+        Assert.AreEqual("ne twoB", restarted.GetText("t").ToString());
+    }
 }
