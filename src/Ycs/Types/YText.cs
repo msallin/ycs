@@ -1390,7 +1390,8 @@ public partial class YText : YArrayBase
     {
         var doc = transaction.Doc;
         var store = doc.Store;
-        List<YText> needFullCleanup = null;
+        // Enumerated in the order of adding, as Yjs' Set: nothing is removed.
+        HashSet<YText> needFullCleanup = null;
 
         // Check if another formatting item was inserted.
         foreach (var (client, afterClock) in transaction.AfterState)
@@ -1449,14 +1450,7 @@ public partial class YText : YArrayBase
             }
         });
 
-        static void AddOnce(ref List<YText> texts, YText text)
-        {
-            texts ??= new List<YText>();
-            if (!texts.Contains(text))
-            {
-                texts.Add(text);
-            }
-        }
+        static void AddOnce(ref HashSet<YText> texts, YText text) => (texts ??= new HashSet<YText>()).Add(text);
     }
 
     private static void DeleteText(Transaction transaction, ref ItemTextListPosition curPos, int length)

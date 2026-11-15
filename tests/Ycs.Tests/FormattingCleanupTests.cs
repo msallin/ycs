@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -93,6 +94,35 @@ public class FormattingCleanupTests
         }
 
         return parts.ToString();
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_FormatsInManyTexts_CleansUpInLinearTime()
+    {
+        // Every formatted text is cleaned up once; finding it among those already found took O(n).
+        var source = new YDoc(new YDocOptions { ClientId = 2 });
+        var target = new YDoc(new YDocOptions { ClientId = 3 });
+        var map = source.GetMap("m");
+        var texts = new List<YText>();
+        source.Transact(_ =>
+        {
+            for (var i = 0; i < 40_000; i++)
+            {
+                var text = new YText();
+                map.Set("t" + i, text);
+                text.Insert(0, "ab", Bold());
+                texts.Add(text);
+            }
+        });
+        target.ApplyUpdate(source.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
+        byte[] update = null;
+        source.Update += (_, e) => update = e.data;
+        source.Transact(_ => texts.ForEach(text => text.Format(0, 2, new Dictionary<string, object> { ["italic"] = true })));
+
+        var stopwatch = Stopwatch.StartNew();
+        target.ApplyUpdate(update, null, UpdateLimits.Unlimited);
+
+        Assert.IsLessThan(1_500, stopwatch.ElapsedMilliseconds);
     }
 
     private static Dictionary<string, object> Bold() => new() { ["bold"] = true };
