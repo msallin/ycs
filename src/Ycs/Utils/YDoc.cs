@@ -17,7 +17,14 @@ public class YDocOptions
 
     public bool Gc { get; set; } = true;
     public Predicate<Item> GcFilter { get; set; } = DefaultPredicate;
-    public string Guid { get; set; } = System.Guid.NewGuid().ToString("D");
+    /// <summary>A random one unless set (only when first read, so that one that is set costs nothing).</summary>
+    public string Guid
+    {
+        get => _guid ??= System.Guid.NewGuid().ToString("D");
+        set => _guid = value;
+    }
+
+    private string _guid;
 
     /// <summary>
     /// Yjs' <c>collectionid</c>: associates the document with a collection of the provider. A
@@ -179,7 +186,7 @@ public partial class YDoc
             var content = item.Content as ContentDoc;
             if (content != null)
             {
-                content.Doc = ContentDoc.CreateDocFromOpts(Guid, content.Opts, shouldLoad: false);
+                content.Doc = ContentDoc.CreateDocFromOpts(Guid, content.Opts, shouldLoad: false, _opts.Limits);
                 content.Doc._item = item;
             }
 
