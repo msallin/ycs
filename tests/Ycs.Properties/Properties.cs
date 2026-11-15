@@ -449,9 +449,16 @@ internal static class Properties
             return null;
         }
 
-        return Differs("diff-update", "DiffUpdate", Content(a), Content(run.Clients[b].Replica))
-            ?? Differs("diff-update", "EncodeStateAsUpdate(sv)", Content(a), Content(run.Clients[c].Replica))
-            ?? Differs("diff-update", "sv", Sv(a), Sv(run.Clients[b].Replica));
+        // B and C make no change of their own but their formatting cleanups after a remote transaction, which depend on
+        // what each transaction brought (as for merge-partition): then the content is compared without attributes,
+        // and the state vector without their own clients.
+        var (rb, rc) = (run.Clients[b].Replica, run.Clients[c].Replica);
+        var cleanedUp = run.Clients[b].Log.Count > 0 || run.Clients[c].Log.Count > 0;
+        string Seen(Replica r) => cleanedUp ? Canonical(WithoutAttributes(r.Content())) : Content(r);
+        string SvOf(Replica r) => Canonical(ScriptRun.Clocks(Lib0.DecodeStateVector(r.StateVector()).Where(kv => kv.Key != rb.ClientId && kv.Key != rc.ClientId).ToList()));
+        return Differs("diff-update", "DiffUpdate", Seen(a), Seen(rb))
+            ?? Differs("diff-update", "EncodeStateAsUpdate(sv)", Seen(a), Seen(rc))
+            ?? Differs("diff-update", "sv", SvOf(a), SvOf(rb));
     });
 
     private static Violation Conversion(Dictionary<string, object> script) => Guard("v1-v2-conversion", () =>

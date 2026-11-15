@@ -32,6 +32,12 @@ internal static class YjsLaws
             "brings the replacement. Client 1 ends with 'abc\\ud834\\udd1e', clients 0 and 2 with 'abc\\ufffd\\ufffd'. " +
             "diff-update is generated without lone surrogates and characters outside the BMP.",
             """{"clients":[{"gc":false,"id":6},{"gc":false,"id":1000004},{"gc":false,"id":1000005}],"roots":[{"kind":"text","name":"t"}],"steps":[{"c":0,"delta":[{"insert":"abc"},{"insert":"𝄞"}],"op":"delta","path":["t"]},{"c":0,"delta":[{"retain":4}],"op":"delta","path":["t"]},{"from":0,"k":0,"op":"deliver","to":1,"via":"v1"},{"diff":true,"from":0,"op":"sync","to":1,"via":"v2"},{"from":0,"op":"sync","to":2,"via":"v2"}]}"""),
+        new("format-cleanup-depends-on-what-arrived", "diff-update",
+            "The formatting cleanup after a remote transaction (see format-cleanup-depends-on-grouping) depends on what the " +
+            "transaction brought: client 2, which received client 0's updates one by one and then the diff, deleted the " +
+            "'bold' that client 3, which received the whole state, and client 0 keep. diff-update compares the content " +
+            "without attributes, and the state vector without the receivers' own clients, when a receiver cleaned up.",
+            """{"clients":[{"gc":false,"id":2147483301},{"gc":false,"id":895405},{"gc":false,"id":1000004},{"gc":false,"id":1000005}],"roots":[{"kind":"text","name":"t"},{"kind":"array","name":"a"}],"steps":[{"c":0,"delta":[{"attrs":{"bold":12},"retain":1}],"op":"delta","path":["t"]},{"from":0,"k":0,"op":"deliver","to":1,"via":"v1"},{"at":0,"c":0,"op":"embed","path":["t"],"value":{"image":"a","w":0}},{"at":0,"attrs":{"bold":12},"c":1,"len":3,"op":"format","path":["t"]},{"at":0,"c":0,"op":"ains","path":["a"],"values":[{"$t":"xmle","n":"span"}]},{"from":1,"k":0,"op":"deliver","to":0,"via":"v2to1"},{"at":0,"c":0,"len":2,"op":"delete","path":["t"]},{"from":0,"k":0,"op":"deliver","to":2,"via":"v1"},{"from":0,"k":3,"op":"deliver","to":2,"via":"v1"},{"diff":true,"from":0,"op":"sync","to":2,"via":"v2"},{"from":0,"op":"sync","to":3,"via":"v2"}]}"""),
         new("undo-redo-splits-lone-surrogate", "undo-redo-pair",
             "Undoing the insert of 'a' after a lone surrogate splits the text there, which replaces the surrogate with " +
             "U+FFFD; the redo then restores 'a' as U+FFFD too ('\\n\\ud800a' becomes '\\n\\ufffd\\ufffd'). The undo " +
