@@ -173,4 +173,27 @@ public class SubdocumentParityTests
 
         Assert.AreSame(subdoc, doc.GetMap("m").Get("b"));
     }
+
+    [TestMethod]
+    public void Destroy_NestedSubdocuments_EventsAndStateAsYjs()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 5 });
+        var a = new YDoc(new YDocOptions { Guid = "A" });
+        doc.GetMap("m").Set("a", a);
+        var b = new YDoc(new YDocOptions { Guid = "B" });
+        a.GetMap("m").Set("b", b);
+        var events = new List<string>();
+        doc.SubdocsChanged += (_, e) => events.Add("d:" + Describe(e));
+        a.SubdocsChanged += (_, e) => events.Add("a:" + Describe(e));
+
+        doc.Destroy();
+        var replacement = (YDoc)doc.GetMap("m").Get("a");
+
+        Assert.AreEqual(
+            ("a:B|B|;d:A|A|;a:B|B|", 5L, "A", false, false, "B", "AQEFACkBAW0BYQFBdgAA"),
+            (string.Join(";", events), b.ClientId, replacement.Guid, ReferenceEquals(replacement, a), replacement.ShouldLoad, string.Join(",", a.GetSubdocGuids()), S(doc.EncodeStateAsUpdate())));
+
+        static string Describe((ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed) e) =>
+            $"{string.Join(",", e.Added.Select(d => d.Guid))}|{string.Join(",", e.Removed.Select(d => d.Guid))}|{string.Join(",", e.Loaded.Select(d => d.Guid))}";
+    }
 }
