@@ -2,7 +2,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
 
-/// <summary>Every transaction of this suite ends with a recount of the struct lists (starts and run-head index, in blocks of 2 positions).</summary>
+/// <summary>Every transaction of this suite ends with a recount of the struct lists (starts, leaves and run-head index, in leaves of 2 positions).</summary>
 [TestClass]
 public static class StoreChecks
 {
@@ -11,7 +11,7 @@ public static class StoreChecks
     {
         StructStore.CheckAfterTransactionsForTests = true;
 
-        // Blocks of 2 positions in the run-head index, so that short lists cross block boundaries.
-        ClientStructs.BlockShiftForTests = 1;
+        // Leaves of 2 positions, so that short lists split and merge leaves.
+        ClientStructs.LeafCapacityForTests = 2;
     }
 }

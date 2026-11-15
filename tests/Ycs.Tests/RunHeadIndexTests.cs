@@ -63,19 +63,103 @@ public class RunHeadIndexTests
     /// transaction. After every step each walk gives the same content, markers and lookups.
     /// </summary>
     [TestMethod]
-    [DataRow(true)]
-    [DataRow(false)]
-    public void RandomEdits_EveryLookupEndsWhereYjsLoopsEnd(bool text)
+    [DataRow(true, 128)]
+    [DataRow(false, 128)]
+    [DataRow(true, 4)]
+    [DataRow(false, 2)]
+    public void RandomEdits_EveryLookupEndsWhereYjsLoopsEnd(bool text, int capacity)
     {
         for (var seed = 0; seed < 60; seed++)
         {
-            var runs = Walks.Select(walk => new Run(text, walk, seed)).ToList();
+            var runs = ClientStructsTests.WithLeafCapacity(capacity, () => Walks.Select(walk => new Run(text, walk, seed)).ToList());
             for (var step = 0; step < 150; step++)
             {
                 var observed = runs.Select(r => r.Step()).ToList();
                 Assert.IsTrue(observed.All(o => o == observed[0]), $"seed {seed} step {step}:{Environment.NewLine}{string.Join(Environment.NewLine, observed)}");
             }
         }
+    }
+
+    /// <summary>
+    /// One item of 3,000 values; single deletes split it into 3,000 structs, alternately live and deleted; then
+    /// deletes of c live values merge 2c + 1 structs (3 to 81) that end one before, at and one after a leaf boundary,
+    /// that start at one and that are centred on one, followed by reads and inserts. After each step the walks give
+    /// the same content, markers and lookups, and the list equals a recount.
+    /// </summary>
+    [TestMethod]
+    [DataRow(128)]
+    [DataRow(8)]
+    [DataRow(4)]
+    public void MergesAroundLeafBoundaries_EveryLookupEndsWhereYjsLoopsEnd(int capacity)
+    {
+        var outcomes = Walks.Select(walk => ClientStructsTests.WithLeafCapacity(capacity, () => Boundaries(walk))).ToList();
+
+        Assert.IsTrue(outcomes.All(o => o == outcomes[0]), string.Join(Environment.NewLine, outcomes.Select(o => o.Length > 4000 ? o[..4000] : o)));
+    }
+
+    private static string Boundaries(string walk)
+    {
+        var log = new System.Text.StringBuilder();
+        var doc = Doc(1, walk);
+        var a = doc.GetArray("a");
+        a.EventHandler += (_, _) => { };
+        a.Insert(0, Enumerable.Range(0, 3000).Select(v => (object)(long)v).ToList());
+        for (var k = 0; k < 1500; k++)
+        {
+            a.Delete(k, 1);
+        }
+
+        var structs = doc.Store.Clients[1];
+        log.Append(structs.Count).Append(' ').Append(Recounted(structs)).Append(' ').Append(Lookups(doc)).Append('\n');
+        var random = new Random(5);
+        foreach (var pick in new[] { 0, 1, -1, 3 })
+        {
+            foreach (var c in new[] { 1, 2, 15, 16, 17, 40 })
+            {
+                foreach (var shape in new[] { -1, 0, 1, 2, 3 })
+                {
+                    if (a.Length < c + 2)
+                    {
+                        continue;
+                    }
+
+                    var bounds = LeafStarts(structs);
+                    var b = bounds.Count == 0 ? 3 : bounds[pick >= 0 ? Math.Min(pick, bounds.Count - 1) : Math.Max(0, bounds.Count + pick)];
+                    var first = shape switch { -1 => b - 1 - (2 * c + 1), 0 => b - (2 * c + 1), 1 => b + 1 - (2 * c + 1), 2 => b, _ => b - c };
+                    a.Delete(Math.Clamp(first / 2, 0, a.Length - c), c);
+                    log.Append(b).Append('/').Append(shape).Append('/').Append(c).Append(": ").Append(structs.Count).Append(' ').Append(Recounted(structs)).Append(' ');
+                    for (var k = 0; k < 4; k++)
+                    {
+                        log.Append(a.Get(random.Next(a.Length))).Append(',');
+                        a.Insert(random.Next(a.Length + 1), new object[] { (long)-k });
+                    }
+
+                    log.Append(Lookups(doc)).Append(' ').Append(a.DescribeSearchMarkers()).Append(' ').Append(Recounted(structs)).Append('\n');
+                }
+            }
+        }
+
+        log.Append(string.Join(",", a.ToArray()));
+        return log.ToString();
+    }
+
+    // The number of structs, after a recount that throws on a difference.
+    private static int Recounted(ClientStructs structs) =>
+        structs.Violations() is { } violation ? throw new InvalidOperationException(violation) : structs.Count;
+
+    // The positions where the leaves after the first start: the clocks of their first structs, found back by position.
+    private static List<int> LeafStarts(ClientStructs structs)
+    {
+        var starts = new List<int>();
+        for (var i = 1; i < structs.Count; i++)
+        {
+            if (structs.IsLeafStartForTests(i))
+            {
+                starts.Add(i);
+            }
+        }
+
+        return starts;
     }
 
     /// <summary>
@@ -86,12 +170,20 @@ public class RunHeadIndexTests
     /// lookups.
     /// </summary>
     [TestMethod]
-    public void PlaceholderTextWithFormats_EveryLookupEndsWhereYjsLoopsEnd()
+    [DataRow(128)]
+    [DataRow(4)]
+    public void PlaceholderTextWithFormats_EveryLookupEndsWhereYjsLoopsEnd(int capacity)
     {
         var withMarkers = 0;
         for (var seed = 0; seed < 100; seed++)
         {
-            var outcomes = Walks.Select(walk => Placeholder(walk, seed, ref withMarkers)).ToList();
+            var outcomes = Walks.Select(walk => ClientStructsTests.WithLeafCapacity(capacity, () =>
+            {
+                var markers = 0;
+                var outcome = Placeholder(walk, seed, ref markers);
+                withMarkers += markers;
+                return outcome;
+            })).ToList();
             Assert.IsTrue(outcomes.All(o => o == outcomes[0]), $"seed {seed}:{Environment.NewLine}{string.Join(Environment.NewLine, outcomes)}");
         }
 

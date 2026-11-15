@@ -1,15 +1,40 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
 
-/// <summary>The start clocks of a client's structs (<see cref="ClientStructs"/>) against a linear scan of the structs.</summary>
+/// <summary>The start clocks and leaves of a client's structs (<see cref="ClientStructs"/>) against a linear scan of the structs.</summary>
 [TestClass]
 public class ClientStructsTests
 {
+    /// <summary>Lists made in <paramref name="body"/> have leaves of <paramref name="capacity"/> positions.</summary>
+    internal static T WithLeafCapacity<T>(int capacity, Func<T> body)
+    {
+        var before = ClientStructs.LeafCapacityForTests;
+        ClientStructs.LeafCapacityForTests = capacity;
+        try
+        {
+            return body();
+        }
+        finally
+        {
+            ClientStructs.LeafCapacityForTests = before;
+        }
+    }
+
     [TestMethod]
-    public void FindIndex_RandomEditsSplitsAndMerges_EqualsLinearScan()
+    [DataRow(2)]
+    [DataRow(4)]
+    [DataRow(128)]
+    public void FindIndex_RandomEditsSplitsAndMerges_EqualsLinearScan(int capacity) => WithLeafCapacity(capacity, () =>
+    {
+        RandomEdits();
+        return 0;
+    });
+
+    private static void RandomEdits()
     {
         var random = new Random(11);
         for (var round = 0; round < 60; round++)
@@ -60,6 +85,39 @@ public class ClientStructsTests
 
             CheckAgainstLinearScan(doc.Store, random);
         }
+    }
+
+    /// <summary>
+    /// A list that grows past one leaf gets a directory, and loses it when merges bring it back to one leaf: the
+    /// structs, starts and every derived number equal a recount on the way.
+    /// </summary>
+    [TestMethod]
+    public void RemoveMerged_DownToOneLeaf_DropsTheDirectory()
+    {
+        var outcome = WithLeafCapacity(4, () =>
+        {
+            var doc = new YDoc(new YDocOptions { ClientId = 1 });
+            var array = doc.GetArray("a");
+            array.Insert(0, new object[] { 0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L });
+            for (var k = 0; k < 6; k++)
+            {
+                array.Delete(k, 1);
+            }
+
+            var structs = doc.Store.Clients[1];
+            var split = (structs.Count, structs.Violations());
+            doc.Transact(_ =>
+            {
+                while (array.Length > 0)
+                {
+                    array.Delete(0, 1);
+                }
+            });
+
+            return (split, structs.Count, structs.Violations(), string.Join(",", structs.Select(s => s.Length)));
+        });
+
+        Assert.AreEqual(((12, (string)null), 1, (string)null, "12"), outcome);
     }
 
     [TestMethod]

@@ -12,9 +12,9 @@ using System.Diagnostics;
 namespace Ycs;
 
 /// <summary>
-/// The run-head index of a client's structs (docs/design-item-layout.md, section 3.3): per position whether it is a
-/// break of Yjs' marker walk-left, and per block of positions the visible length (countable, undeleted) and the number
-/// of breaks.
+/// The run-head index of a client's structs (docs/design-item-layout.md, section 1.2): per position whether it is a
+/// break of Yjs' marker walk-left, and per leaf the visible length (countable, undeleted), the number of breaks and of
+/// live formats.
 /// </summary>
 /// <remarks>
 /// Yjs' walk-left steps from p to p.left while p.left has p's client and ends at p's clock. The struct that ends at a
@@ -32,44 +32,20 @@ internal sealed partial class ClientStructs
     // A live non-countable item (a format): the walks of a text read it, so they do not jump over it.
     private const byte Format = 4;
 
-    /// <summary>
-    /// The log2 of the block size of the lists made from now on: 512 positions (a split or a merge updates the sums of
-    /// the blocks after it, a lookup scans at most a block on each side and the block sums between); the property
-    /// tests make blocks of 2, so that their short lists cross block boundaries.
-    /// </summary>
-    internal static int BlockShiftForTests = 9;
-
-    // Per list, so that lists of different block sizes live side by side (the differential tests compare them in one
-    // process) and a change of BlockShiftForTests leaves the lists already made intact.
-    private readonly int _blockShift = BlockShiftForTests;
-
     // The flag values with Break set, and with Format set.
     private static readonly SearchValues<byte> Breaks = SearchValues.Create([Break, Break | Visible, Break | Format]);
-    private static readonly SearchValues<byte> Formats = SearchValues.Create([Format, Break | Format]);
 
-    // A rebuild of the sums after a merge, instead of their update, when more structs than this merged at once.
-    private const int MaxIncrementalMerge = 32;
-
-    // Per position: Break, Visible, Format; kept with the structs (FlagsAt says what they are).
-    private byte[] _flags;
-
-    // Per block of positions, the sum of the visible lengths. long: a block of int lengths can exceed int.
-    private long[] _sums;
-
-    // Per block of positions, how many are breaks: the searches for a run's head and end skip the blocks without one.
-    private int[] _breaks;
-
-    private int BlockOf(int position) => position >> _blockShift;
-
-    /// <summary>The flags of the struct at <paramref name="i"/>, computed from it and its predecessor.</summary>
-    private byte FlagsAt(int i)
+    /// <summary>The flags of the struct at offset <paramref name="i"/> of leaf <paramref name="k"/>, computed from it and its predecessor.</summary>
+    private byte FlagsAt(int k, int i)
     {
-        if (_structs[i] is not Item item)
+        var leaf = LeafAt(k);
+        if (leaf.Structs[i] is not Item item)
         {
             return Break;
         }
 
-        var flags = i > 0 && _structs[i - 1] is Item before && ReferenceEquals(item.Left, before) ? (byte)0 : Break;
+        var before = i > 0 ? leaf.Structs[i - 1] : k > 0 ? _leaves[k - 1].Structs[_leaves[k - 1].Count - 1] : null;
+        var flags = before is Item && ReferenceEquals(item.Left, before) ? (byte)0 : Break;
         if (!item.Deleted)
         {
             flags |= item.Countable ? Visible : Format;
@@ -78,133 +54,81 @@ internal sealed partial class ClientStructs
         return flags;
     }
 
-    private long LengthAt(int i) => (i + 1 < _count ? _starts[i + 1] : _end) - _starts[i];
-
-    /// <summary>The visible length of position <paramref name="i"/> as the index holds it (0 beyond the list).</summary>
-    private long Value(int i) => i < _count && (_flags[i] & Visible) != 0 ? LengthAt(i) : 0;
-
-    /// <summary>Sets the flags of position <paramref name="i"/>, whose current flags its block's break count holds.</summary>
-    private void SetFlags(int i, byte flags)
+    /// <summary>The visible length of offset <paramref name="i"/> of leaf <paramref name="k"/> as the index holds it: its clock length when the flag says visible.</summary>
+    private long ValueAt(int k, int i)
     {
-        _breaks[BlockOf(i)] += (flags & Break) - (_flags[i] & Break);
-        _flags[i] = flags;
+        var leaf = LeafAt(k);
+        if ((leaf.Flags[i] & Visible) == 0)
+        {
+            return 0;
+        }
+
+        return (i + 1 < leaf.Count ? leaf.Starts[i + 1] : NextFirstStart(k)) - leaf.Starts[i];
     }
 
-    private void IndexAdded()
+    /// <summary>The visible length of the offsets [<paramref name="from"/>, <paramref name="to"/>) of leaf <paramref name="k"/>.</summary>
+    private long LeafVisible(int k, int from, int to)
     {
-        var i = _count - 1;
-        _flags[i] = 0;
-        SetFlags(i, FlagsAt(i));
-        _sums[BlockOf(i)] += Value(i);
+        var leaf = LeafAt(k);
+        var flags = leaf.Flags;
+        var starts = leaf.Starts;
+        var sum = 0L;
+        var inner = Math.Min(to, leaf.Count - 1);
+        for (var i = from; i < inner; i++)
+        {
+            if ((flags[i] & Visible) != 0)
+            {
+                sum += starts[i + 1] - starts[i];
+            }
+        }
+
+        if (from < to && to == leaf.Count && (flags[to - 1] & Visible) != 0)
+        {
+            sum += NextFirstStart(k) - starts[to - 1];
+        }
+
+        return sum;
     }
 
     /// <summary>
-    /// The right part of a split went in at <paramref name="index"/> (the arrays are shifted). The prefix sum at a
-    /// position x after it is the old one at x - 1, and at <paramref name="index"/> the old one minus the right
-    /// part: so each block from the left part's on changes by E(its end) - E(its start), E(x) = -Value(x) for x at
-    /// or after <paramref name="index"/>, else 0. Every block after the one of <paramref name="index"/> gains, as a
-    /// break, the position that moved in at its start and loses the one that moved out at its end.
+    /// Sets the flags of offset <paramref name="i"/> of leaf <paramref name="k"/>, whose current flags its leaf's
+    /// counts and the directory's bits hold. The leaf's sum is the caller's: a change of Visible changes it by the
+    /// position's length.
     /// </summary>
-    private void IndexSplit(int index)
+    private void SetFlags(int k, int i, byte flags)
     {
-        // The new position is in no block's break count until its flags are set.
-        _flags[index] = 0;
-        var lastBlock = BlockOf(_count - 1);
-        var carried = 0;
-        for (var b = BlockOf(index); b <= lastBlock; b++)
+        var leaf = LeafAt(k);
+        var changed = leaf.Flags[i] ^ flags;
+        leaf.Flags[i] = flags;
+        if ((changed & Break) != 0)
         {
-            var end = (b + 1) << _blockShift;
-            var leaving = end < _count ? _flags[end] & Break : 0;
-            _breaks[b] += carried - leaving;
-            carried = leaving;
+            leaf.Breaks += (flags & Break) != 0 ? 1 : -1;
+            if (_leaves != null)
+            {
+                SetBit(_hasBreak, k, leaf.Breaks != 0);
+            }
         }
 
-        SetFlags(index, FlagsAt(index));
-        if (index + 1 < _count)
+        if ((changed & Format) != 0)
         {
-            SetFlags(index + 1, FlagsAt(index + 1));
-        }
-
-        Debug.Assert((_flags[index] & ~Break) == (_flags[index - 1] & ~Break));
-        var last = BlockOf(_count - 1);
-        var previous = 0L;
-        for (var b = BlockOf(index - 1); b <= last; b++)
-        {
-            var end = (b + 1) << _blockShift;
-            var next = end >= index ? -Value(end) : 0;
-            _sums[b] += next - previous;
-            previous = next;
+            leaf.Formats += (flags & Format) != 0 ? 1 : -1;
+            if (_leaves != null)
+            {
+                SetBit(_hasFormat, k, leaf.Formats != 0);
+            }
         }
     }
 
-    /// <summary>
-    /// Before <paramref name="count"/> structs from <paramref name="index"/> are removed (they merged into the one
-    /// before, which takes their visible length): the prefix sum at x at or after <paramref name="index"/> becomes
-    /// the old one at x + <paramref name="count"/>, so each block changes by E(its end) - E(its start), E(x) the old
-    /// visible length of [x, x + count). The break counts change the same way, with the breaks of [x, x + count) for
-    /// E(x), once the removed positions are no breaks. Returns whether the sums and counts are rebuilt after the removal
-    /// instead.
-    /// </summary>
-    private bool IndexMerging(int index, int count)
+    /// <summary>Recomputes the flags of the position after offset <paramref name="i"/> of leaf <paramref name="k"/>, if there is one (its predecessor changed).</summary>
+    private void RefreshSuccessor(int k, int i)
     {
-        for (var k = index; k < index + count; k++)
+        if (i + 1 < LeafAt(k).Count)
         {
-            Debug.Assert((_flags[k] & (Visible | Format)) == (_flags[index - 1] & (Visible | Format)));
+            SetFlags(k, i + 1, FlagsAt(k, i + 1));
         }
-
-        if (count > MaxIncrementalMerge)
+        else if (k + 1 < _leafCount)
         {
-            return true;
-        }
-
-        for (var k = index; k < index + count; k++)
-        {
-            SetFlags(k, (byte)(_flags[k] & ~Break));
-        }
-
-        var last = BlockOf(_count - 1);
-        var previous = 0L;
-        var previousBreaks = 0;
-        for (var b = BlockOf(index - 1); b <= last; b++)
-        {
-            var end = (b + 1) << _blockShift;
-            var next = 0L;
-            var nextBreaks = 0;
-            if (end >= index)
-            {
-                for (var k = end; k < end + count && k < _count; k++)
-                {
-                    next += Value(k);
-                    nextBreaks += _flags[k] & Break;
-                }
-            }
-
-            _sums[b] += next - previous;
-            _breaks[b] += nextBreaks - previousBreaks;
-            previous = next;
-            previousBreaks = nextBreaks;
-        }
-
-        return false;
-    }
-
-    private void IndexMerged(int index, bool rebuild)
-    {
-        if (index < _count)
-        {
-            SetFlags(index, FlagsAt(index));
-        }
-
-        if (rebuild)
-        {
-            var first = BlockOf(index - 1);
-            Array.Clear(_sums, first, _sums.Length - first);
-            Array.Clear(_breaks, first, _breaks.Length - first);
-            for (var k = first << _blockShift; k < _count; k++)
-            {
-                _sums[BlockOf(k)] += Value(k);
-                _breaks[BlockOf(k)] += _flags[k] & Break;
-            }
+            SetFlags(k + 1, 0, FlagsAt(k + 1, 0));
         }
     }
 
@@ -214,26 +138,31 @@ internal sealed partial class ClientStructs
     /// </summary>
     internal void Refresh(int index)
     {
-        var old = Value(index);
-        SetFlags(index, FlagsAt(index));
-        _sums[BlockOf(index)] += Value(index) - old;
+        var k = Locate(index, out var i);
+        var old = ValueAt(k, i);
+        SetFlags(k, i, FlagsAt(k, i));
+        var value = ValueAt(k, i);
+        if (value != old)
+        {
+            AddSum(k, value - old);
+        }
     }
 
     /// <summary>The last break at or before position <paramref name="index"/> (position 0 is one).</summary>
     private int LastBreak(int index)
     {
-        var block = BlockOf(index);
-        var start = block << _blockShift;
-        var at = _flags.AsSpan(start, index + 1 - start).LastIndexOfAny(Breaks);
+        var k = Locate(index, out var i);
+        var leaf = LeafAt(k);
+        var at = leaf.Flags.AsSpan(0, i + 1).LastIndexOfAny(Breaks);
         if (at >= 0)
         {
-            return start + at;
+            return FirstPosition(k) + at;
         }
 
-        block = _breaks.AsSpan(0, block).LastIndexOfAnyExcept(0);
-        Debug.Assert(block >= 0, "Position 0 is a break.");
-        start = block << _blockShift;
-        return start + _flags.AsSpan(start, 1 << _blockShift).LastIndexOfAny(Breaks);
+        Debug.Assert(k > 0, "Position 0 is a break.");
+        k = PreviousWithBit(_hasBreak, k);
+        leaf = _leaves[k];
+        return _firstPositions[k] + leaf.Flags.AsSpan(0, leaf.Count).LastIndexOfAny(Breaks);
     }
 
     /// <summary>The first break at or after position <paramref name="from"/>, or -1.</summary>
@@ -244,22 +173,21 @@ internal sealed partial class ClientStructs
             return -1;
         }
 
-        var block = BlockOf(from);
-        var end = Math.Min((block + 1) << _blockShift, _count);
-        var at = _flags.AsSpan(from, end - from).IndexOfAny(Breaks);
+        var k = Locate(from, out var i);
+        var leaf = LeafAt(k);
+        var at = leaf.Flags.AsSpan(i, leaf.Count - i).IndexOfAny(Breaks);
         if (at >= 0)
         {
-            return from + at;
+            return FirstPosition(k) + i + at;
         }
 
-        var next = _breaks.AsSpan(block + 1, BlockOf(_count - 1) - block).IndexOfAnyExcept(0);
-        if (next < 0)
+        if (_leaves == null || (k = NextWithBit(_hasBreak, k)) < 0)
         {
             return -1;
         }
 
-        var start = (block + 1 + next) << _blockShift;
-        return start + _flags.AsSpan(start, Math.Min(1 << _blockShift, _count - start)).IndexOfAny(Breaks);
+        leaf = _leaves[k];
+        return _firstPositions[k] + leaf.Flags.AsSpan(0, leaf.Count).IndexOfAny(Breaks);
     }
 
     /// <summary>
@@ -286,31 +214,56 @@ internal sealed partial class ClientStructs
     {
         var next = NextBreak(index + 1);
         var last = next < 0 ? _count - 1 : next - 1;
-        var block = 1 << _blockShift;
+        var lastLeaf = Locate(last, out var lastOffset);
+        var k = Locate(index, out var i);
         var sum = 0L;
-        var k = index;
-        while (k < last)
+        while (true)
         {
-            if ((k & (block - 1)) == 0 && k + block <= last && sum + _sums[BlockOf(k)] < target
-                && (!stopAtFormats || !_flags.AsSpan(k, block).ContainsAny(Formats)))
+            // Position by position in leaf k, up to the run's last position, which the walk never passes.
+            var leaf = LeafAt(k);
+            var end = k == lastLeaf ? lastOffset : leaf.Count;
+            for (; i < end; i++)
             {
-                sum += _sums[BlockOf(k)];
-                k += block;
-                continue;
+                var value = ValueAt(k, i);
+                if (sum + value >= target || (stopAtFormats && (leaf.Flags[i] & Format) != 0))
+                {
+                    passed = sum;
+                    return FirstPosition(k) + i;
+                }
+
+                sum += value;
             }
 
-            var value = Value(k);
-            if (sum + value >= target || (stopAtFormats && (_flags[k] & Format) != 0))
+            if (k == lastLeaf)
             {
-                break;
+                passed = sum;
+                return last;
             }
 
-            sum += value;
-            k++;
+            // Whole leaves before the run's last leaf (and, with stopAtFormats, before the next leaf with a live
+            // format) while the sum stays below the target: up to the leaf c in which it reaches it, the smallest c
+            // with SumBefore(c + 1) >= SumBefore(k + 1) + target - sum.
+            var bound = lastLeaf;
+            if (stopAtFormats && NextWithBit(_hasFormat, k) is var format && format >= 0 && format < bound)
+            {
+                bound = format;
+            }
+
+            if (bound > k + 1)
+            {
+                var before = SumBefore(k + 1);
+                var reaching = LeavesUpTo(before + target - sum - 1);
+                var stop = Math.Min(reaching, bound);
+                sum += SumBefore(stop) - before;
+                k = stop;
+            }
+            else
+            {
+                k++;
+            }
+
+            i = 0;
         }
-
-        passed = sum;
-        return k;
     }
 
     /// <summary>
@@ -322,93 +275,82 @@ internal sealed partial class ClientStructs
     internal int SeekLeft(int index, long target, out long passed)
     {
         var head = LastBreak(index);
-        var block = 1 << _blockShift;
+        var headLeaf = Locate(head, out var headOffset);
+        var k = Locate(index, out var j);
         var sum = 0L;
-        var j = index;
-        while (j > head)
+        while (true)
         {
-            if ((j & (block - 1)) == 0 && j - block >= head && sum + _sums[BlockOf(j - 1)] < target)
+            // Position by position in leaf k, down to the run's head.
+            var low = k == headLeaf ? headOffset : 0;
+            for (; j > low; j--)
             {
-                sum += _sums[BlockOf(j - 1)];
-                j -= block;
-                continue;
+                var value = ValueAt(k, j - 1);
+                if (sum + value >= target)
+                {
+                    passed = sum;
+                    return FirstPosition(k) + j;
+                }
+
+                sum += value;
             }
 
-            var value = Value(j - 1);
-            if (sum + value >= target)
+            if (k == headLeaf)
             {
-                break;
+                passed = sum;
+                return head;
             }
 
-            sum += value;
-            j--;
+            // Whole leaves after the head's leaf while the sum stays below the target: down to the leaf m in which it
+            // reaches it, the largest m with SumBefore(m) <= SumBefore(k) + sum - target.
+            k--;
+            if (k > headLeaf)
+            {
+                var top = SumBefore(k + 1);
+                var stop = Math.Max(LeavesUpTo(top + sum - target), headLeaf);
+                sum += top - SumBefore(stop + 1);
+                k = stop;
+            }
+
+            j = LeafAt(k).Count;
         }
-
-        passed = sum;
-        return j;
     }
 
     /// <summary>The visible length of the positions from <paramref name="from"/> up to <paramref name="to"/> (exclusive).</summary>
     private long VisibleBetween(int from, int to)
     {
-        var sum = 0L;
-        var k = from;
-        for (; k < to && (k & ((1 << _blockShift) - 1)) != 0; k++)
+        if (from >= to)
         {
-            sum += Value(k);
+            return 0;
         }
 
-        for (; k + (1 << _blockShift) <= to; k += 1 << _blockShift)
+        var first = Locate(from, out var i);
+        var last = Locate(to - 1, out var end);
+        if (first == last)
         {
-            sum += _sums[BlockOf(k)];
+            return LeafVisible(first, i, end + 1);
         }
 
-        for (; k < to; k++)
-        {
-            sum += Value(k);
-        }
-
-        return sum;
+        return LeafVisible(first, i, LeafAt(first).Count) + SumBefore(last) - SumBefore(first + 1) + LeafVisible(last, 0, end + 1);
     }
 
     /// <summary>What is wrong with the run-head index against a recount, or null.</summary>
     private string IndexViolations()
     {
-        for (var i = 0; i < _count; i++)
+        var position = 0;
+        for (var k = 0; k < _leafCount; k++)
         {
-            if (_flags[i] != FlagsAt(i))
+            var leaf = LeafAt(k);
+            for (var i = 0; i < leaf.Count; i++, position++)
             {
-                return $"position {i} ({_structs[i].Id.Client}:{_structs[i].Id.Clock}) has flags {_flags[i]}, a recount gives {FlagsAt(i)}";
-            }
+                if (leaf.Flags[i] != FlagsAt(k, i))
+                {
+                    return $"position {position} ({leaf.Structs[i].Id.Client}:{leaf.Structs[i].Id.Clock}) has flags {leaf.Flags[i]}, a recount gives {FlagsAt(k, i)}";
+                }
 
-            if (i > 0 && (_flags[i] & Break) == 0 && ((Item)_structs[i - 1]).Right != _structs[i])
-            {
-                return $"position {i} is linked to its left, which does not have it on its right";
-            }
-        }
-
-        for (var b = 0; b < _sums.Length; b++)
-        {
-            var sum = 0L;
-            for (var k = b << _blockShift; k < Math.Min((b + 1) << _blockShift, _count); k++)
-            {
-                sum += Value(k);
-            }
-
-            if (_sums[b] != sum)
-            {
-                return $"block {b} sums to {_sums[b]}, a recount gives {sum}";
-            }
-
-            var breaks = 0;
-            for (var k = b << _blockShift; k < Math.Min((b + 1) << _blockShift, _count); k++)
-            {
-                breaks += _flags[k] & Break;
-            }
-
-            if (_breaks[b] != breaks)
-            {
-                return $"block {b} counts {_breaks[b]} breaks, a recount gives {breaks}";
+                if (position > 0 && (leaf.Flags[i] & Break) == 0 && ((Item)this[position - 1]).Right != leaf.Structs[i])
+                {
+                    return $"position {position} is linked to its left, which does not have it on its right";
+                }
             }
         }
 

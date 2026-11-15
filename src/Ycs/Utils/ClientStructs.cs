@@ -13,31 +13,25 @@ namespace Ycs;
 
 /// <summary>
 /// The structs of one client in clock order (Yjs' <c>store.clients.get(client)</c>), with their start clocks beside
-/// them in an array of their own, so that finding the struct that holds a clock reads the array, not the structs.
+/// them, so that finding the struct that holds a clock reads the starts, not the structs; in leaves
+/// (ClientStructs.Leaves.cs), so that a split or a merge shifts one leaf, not the rest of the list.
 /// </summary>
 /// <remarks>
 /// The structs are contiguous by clock: the end of position i is the start of i + 1, and <see cref="End"/> is the end
-/// of the last one. Every change of the list goes through this class, which keeps the starts and the run-head index
-/// (ClientStructs.RunHeads.cs) in step. Three changes of items made elsewhere change what the index holds and call
-/// <see cref="StructStore.Refresh"/>: an item deleted (<see cref="Item.MarkDeleted()"/>), a deleted content
-/// integrated (<see cref="ContentDeleted"/>), an item integrated between a struct and its predecessor
+/// of the last one. Every change of the list goes through this class, which keeps the starts, the leaves and the
+/// run-head index (ClientStructs.RunHeads.cs) in step. Three changes of items made elsewhere change what the index
+/// holds and call <see cref="StructStore.Refresh"/>: an item deleted (<see cref="Item.MarkDeleted()"/>), a deleted
+/// content integrated (<see cref="ContentDeleted"/>), an item integrated between a struct and its predecessor
 /// (<see cref="Item.Left"/>).
 /// </remarks>
 internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
 {
-    private AbstractStruct[] _structs;
-    private long[] _starts;
     private int _count;
     private long _end;
 
     public ClientStructs(int capacity = 4)
     {
-        capacity = Math.Max(capacity, 1);
-        _structs = new AbstractStruct[capacity];
-        _starts = new long[capacity];
-        _flags = new byte[capacity];
-        _sums = new long[BlockOf(capacity - 1) + 1];
-        _breaks = new int[_sums.Length];
+        _single = new Leaf(Math.Clamp(capacity, 1, _leafCapacity));
     }
 
     /// <summary>A copy of <paramref name="count"/> structs of <paramref name="source"/> from <paramref name="start"/>.</summary>
@@ -64,21 +58,27 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
                 ThrowOutOfRange(index, _count);
             }
 
-            return _structs[index];
+            if (_leaves == null)
+            {
+                return _single.Structs[index];
+            }
+
+            var k = LeafOf(index);
+            return _leaves[k].Structs[index - _firstPositions[k]];
         }
     }
 
-    public long StartAt(int index) => _starts[index];
-
-    public ReadOnlySpan<AbstractStruct> AsSpan() => _structs.AsSpan(0, _count);
-
-    public ReadOnlySpan<AbstractStruct>.Enumerator GetEnumerator() => AsSpan().GetEnumerator();
+    public Enumerator GetEnumerator() => new(this);
 
     IEnumerator<AbstractStruct> IEnumerable<AbstractStruct>.GetEnumerator()
     {
-        for (var i = 0; i < _count; i++)
+        for (var k = 0; k < _leafCount; k++)
         {
-            yield return _structs[i];
+            var leaf = LeafAt(k);
+            for (var i = 0; i < leaf.Count; i++)
+            {
+                yield return leaf.Structs[i];
+            }
         }
     }
 
@@ -86,90 +86,260 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
 
     public void EnsureCapacity(int capacity)
     {
-        if (capacity > _structs.Length)
+        if (_leaves == null)
         {
-            Grow(capacity);
+            if (capacity > _single.Capacity && _single.Capacity < _leafCapacity)
+            {
+                GrowSingle(capacity);
+            }
+        }
+        else
+        {
+            ReserveLeaves((capacity / _leafCapacity) + 1);
         }
     }
 
     /// <summary>Appends <paramref name="str"/>, which starts where the last struct ends (the caller checked).</summary>
     public void Add(AbstractStruct str)
     {
-        if (_count == _structs.Length)
+        var k = _leafCount - 1;
+        var leaf = LeafAt(k);
+        if (leaf.Count == leaf.Capacity)
         {
-            Grow(_count + 1);
+            if (leaf.Capacity == _leafCapacity)
+            {
+                AppendLeaf(str);
+                k++;
+                SetFlags(k, 0, FlagsAt(k, 0));
+                AddSum(k, ValueAt(k, 0));
+                return;
+            }
+
+            GrowSingle(leaf.Count + 1);
+            leaf = _single;
         }
 
-        _structs[_count] = str;
-        _starts[_count] = str.Id.Clock;
+        // The last struct's length is unchanged: the new one starts where it ended.
+        var offset = leaf.Count;
+        leaf.Structs[offset] = str;
+        leaf.Starts[offset] = str.Id.Clock;
+        leaf.Flags[offset] = 0;
+        leaf.Count++;
         _count++;
         _end = str.Id.Clock + str.Length;
-        IndexAdded();
+        SetFlags(k, offset, FlagsAt(k, offset));
+        AddSum(k, ValueAt(k, offset));
     }
 
     /// <summary>Inserts the right part of a split at <paramref name="index"/>, right after its left part.</summary>
     public void InsertSplit(int index, AbstractStruct right)
     {
-        Debug.Assert(index > 0 && index <= _count && _structs[index - 1].Id.Clock + _structs[index - 1].Length == right.Id.Clock);
-        if (_count == _structs.Length)
+        Debug.Assert(index > 0 && index <= _count && this[index - 1].Id.Clock + this[index - 1].Length == right.Id.Clock);
+
+        // The right part goes into its left part's leaf, right after it.
+        var k = Locate(index - 1, out var offset);
+        offset++;
+        var leaf = LeafAt(k);
+        if (leaf.Count == leaf.Capacity)
         {
-            Grow(_count + 1);
+            if (leaf.Capacity < _leafCapacity)
+            {
+                GrowSingle(leaf.Count + 1);
+            }
+            else
+            {
+                SplitLeaf(k);
+                var half = LeafAt(k).Count;
+                if (offset > half)
+                {
+                    k++;
+                    offset -= half;
+                }
+            }
+
+            leaf = LeafAt(k);
         }
 
-        Array.Copy(_structs, index, _structs, index + 1, _count - index);
-        Array.Copy(_starts, index, _starts, index + 1, _count - index);
-        Array.Copy(_flags, index, _flags, index + 1, _count - index);
-        _structs[index] = right;
-        _starts[index] = right.Id.Clock;
+        var tail = leaf.Count - offset;
+        Array.Copy(leaf.Structs, offset, leaf.Structs, offset + 1, tail);
+        Array.Copy(leaf.Starts, offset, leaf.Starts, offset + 1, tail);
+        Array.Copy(leaf.Flags, offset, leaf.Flags, offset + 1, tail);
+        leaf.Structs[offset] = right;
+        leaf.Starts[offset] = right.Id.Clock;
+        leaf.Flags[offset] = 0;
+        leaf.Count++;
         _count++;
-        IndexSplit(index);
+        for (var j = k + 1; j < _leafCount; j++)
+        {
+            _firstPositions[j]++;
+        }
+
+        // The right part takes the left part's flags but Break, and the rest of its visible length: both are in one
+        // leaf, so the leaf's sum stays.
+        SetFlags(k, offset, FlagsAt(k, offset));
+        Debug.Assert((leaf.Flags[offset] & ~Break) == (leaf.Flags[offset - 1] & ~Break));
+        RefreshSuccessor(k, offset);
     }
 
     /// <summary>Removes the <paramref name="count"/> structs from <paramref name="index"/>, which merged into the one before.</summary>
     public void RemoveMerged(int index, int count)
     {
         Debug.Assert(index > 0 && count > 0 && index + count <= _count);
-        var tail = _count - index - count;
-        var rebuild = IndexMerging(index, count);
-        Array.Copy(_structs, index + count, _structs, index, tail);
-        Array.Copy(_starts, index + count, _starts, index, tail);
-        Array.Copy(_flags, index + count, _flags, index, tail);
-        Array.Clear(_structs, _count - count, count);
+        var k0 = Locate(index - 1, out var left);
+        var k0Flags = LeafAt(k0).Flags[left];
+
+        // The removed positions leave the counts and sums (their visible length goes to the struct before, whose old
+        // length leaves its leaf's sum here and whose new one comes back below).
+        var leftDelta = -ValueAt(k0, left);
+        var k = k0;
+        var offset = left + 1;
+        for (var remaining = count; remaining > 0; k++, offset = 0)
+        {
+            var leaf = LeafAt(k);
+            var n = Math.Min(remaining, leaf.Count - offset);
+            var removed = 0L;
+            for (var i = offset; i < offset + n; i++)
+            {
+                Debug.Assert((leaf.Flags[i] & (Visible | Format)) == (k0Flags & (Visible | Format)));
+                removed += ValueAt(k, i);
+                SetFlags(k, i, 0);
+            }
+
+            if (k == k0)
+            {
+                leftDelta -= removed;
+            }
+            else
+            {
+                AddSum(k, -removed);
+            }
+
+            remaining -= n;
+        }
+
+        var lastLeaf = k0;
+        var emptied = false;
+        k = k0;
+        offset = left + 1;
+        for (var remaining = count; remaining > 0; k++, offset = 0)
+        {
+            var leaf = LeafAt(k);
+            var n = Math.Min(remaining, leaf.Count - offset);
+            if (n == 0)
+            {
+                continue;
+            }
+
+            var tail = leaf.Count - offset - n;
+            Array.Copy(leaf.Structs, offset + n, leaf.Structs, offset, tail);
+            Array.Copy(leaf.Starts, offset + n, leaf.Starts, offset, tail);
+            Array.Copy(leaf.Flags, offset + n, leaf.Flags, offset, tail);
+            Array.Clear(leaf.Structs, leaf.Count - n, n);
+            leaf.Count -= n;
+            emptied |= leaf.Count == 0;
+            remaining -= n;
+            lastLeaf = k;
+        }
+
         _count -= count;
-        IndexMerged(index, rebuild);
+        if (lastLeaf > k0)
+        {
+            // Across leaves: the emptied ones go (after k0, which keeps the struct before), the others that lost
+            // their first positions start at the next struct.
+            for (var j = lastLeaf; j > k0; j--)
+            {
+                if (emptied && _leaves[j].Count == 0)
+                {
+                    lastLeaf--;
+                    RemoveLeaf(j);
+                    if (_leaves == null)
+                    {
+                        break;
+                    }
+                }
+                else
+                {
+                    _firstStarts[j] = _leaves[j].Starts[0];
+                }
+            }
+        }
+
+        if (_leaves != null)
+        {
+            for (var j = k0 + 1; j <= lastLeaf; j++)
+            {
+                _firstPositions[j] = _firstPositions[j - 1] + _leaves[j - 1].Count;
+            }
+
+            for (var j = lastLeaf + 1; j < _leafCount; j++)
+            {
+                _firstPositions[j] -= count;
+            }
+        }
+
+        AddSum(k0, leftDelta + ValueAt(k0, left));
+        RefreshSuccessor(k0, left);
+        MergeIfSparse(k0 + 1);
+        MergeIfSparse(k0);
     }
 
     /// <summary>Puts <paramref name="str"/> (a GC struct of the same clocks) in place of the struct at <paramref name="index"/>.</summary>
     public void Replace(int index, AbstractStruct str)
     {
-        Debug.Assert(_structs[index].Id.Equals(str.Id) && _structs[index].Length == str.Length && Value(index) == 0);
-        _structs[index] = str;
-        SetFlags(index, FlagsAt(index));
-        if (index + 1 < _count)
-        {
-            SetFlags(index + 1, FlagsAt(index + 1));
-        }
+        var k = Locate(index, out var offset);
+        var leaf = LeafAt(k);
+        Debug.Assert(leaf.Structs[offset].Id.Equals(str.Id) && leaf.Structs[offset].Length == str.Length && ValueAt(k, offset) == 0);
+        leaf.Structs[offset] = str;
+        SetFlags(k, offset, FlagsAt(k, offset));
+        RefreshSuccessor(k, offset);
     }
 
     /// <summary>The last struct grew in place by <paramref name="length"/> (<see cref="Item.ExtendRun"/>).</summary>
     public void LastExtended(int length)
     {
         _end += length;
-        Debug.Assert(_end == _structs[_count - 1].Id.Clock + _structs[_count - 1].Length);
-        if ((_flags[_count - 1] & Visible) != 0)
+        var k = _leafCount - 1;
+        var leaf = LeafAt(k);
+        Debug.Assert(_end == leaf.Structs[leaf.Count - 1].Id.Clock + leaf.Structs[leaf.Count - 1].Length);
+        if ((leaf.Flags[leaf.Count - 1] & Visible) != 0)
         {
-            _sums[BlockOf(_count - 1)] += length;
+            AddSum(k, length);
         }
     }
 
     /// <summary>
-    /// The index of the struct that holds <paramref name="clock"/>: a binary search on the starts, after a look at the
-    /// last one (integrating in clock order mostly asks for it), with Yjs' pivot.
+    /// The index of the struct that holds <paramref name="clock"/>: the leaf by its first start, then a binary search
+    /// on the leaf's starts, after a look at the last one (integrating in clock order mostly asks for it), with Yjs'
+    /// pivot.
     /// </summary>
-    public int FindIndex(long clock) => FindIndex(new Starts(_starts, _count, _end), clock);
+    public int FindIndex(long clock)
+    {
+        if (_leaves == null)
+        {
+            return FindIndex(new Starts(_single.Starts, _single.Count, _end), clock);
+        }
+
+        CheckInList(clock);
+        var k = LeafOfClock(clock);
+        var leaf = _leaves[k];
+        return _firstPositions[k] + FindIndex(new Starts(leaf.Starts, leaf.Count, NextFirstStart(k)), clock);
+    }
 
     /// <inheritdoc cref="FindIndex{T}(T, long, ref int)"/>
-    public int FindIndex(long clock, ref int hint) => FindIndex(new Starts(_starts, _count, _end), clock, ref hint);
+    public int FindIndex(long clock, ref int hint)
+    {
+        if (_leaves == null)
+        {
+            return FindIndex(new Starts(_single.Starts, _single.Count, _end), clock, ref hint);
+        }
+
+        CheckInList(clock);
+        var k = LeafOfClock(clock);
+        var leaf = _leaves[k];
+        var offset = hint - _firstPositions[k];
+        FindIndex(new Starts(leaf.Starts, leaf.Count, NextFirstStart(k)), clock, ref offset);
+        return hint = _firstPositions[k] + offset;
+    }
 
     /// <summary>The search of <see cref="FindIndex(long)"/> on any list of structs in clock order.</summary>
     internal static int FindIndex<T>(T order, long clock)
@@ -303,18 +473,28 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
     /// <summary>What is wrong with the starts or the run-head index (against a recount), or null (for tests and Debug checks).</summary>
     internal string Violations()
     {
-        for (var i = 0; i < _count; i++)
+        if (LeafViolations() is { } violation)
         {
-            var s = _structs[i];
-            if (_starts[i] != s.Id.Clock)
-            {
-                return $"position {i} starts at {_starts[i]}, its struct at {s.Id.Clock}";
-            }
+            return violation;
+        }
 
-            var end = i + 1 < _count ? _starts[i + 1] : _end;
-            if (s.Id.Clock + s.Length != end)
+        var position = 0;
+        for (var k = 0; k < _leafCount; k++)
+        {
+            var leaf = LeafAt(k);
+            for (var i = 0; i < leaf.Count; i++, position++)
             {
-                return $"position {i} ends at {s.Id.Clock + s.Length}, the next starts at {end}";
+                var s = leaf.Structs[i];
+                if (leaf.Starts[i] != s.Id.Clock)
+                {
+                    return $"position {position} starts at {leaf.Starts[i]}, its struct at {s.Id.Clock}";
+                }
+
+                var end = i + 1 < leaf.Count ? leaf.Starts[i + 1] : NextFirstStart(k);
+                if (s.Id.Clock + s.Length != end)
+                {
+                    return $"position {position} ends at {s.Id.Clock + s.Length}, the next starts at {end}";
+                }
             }
         }
 
@@ -350,30 +530,42 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
         public long StartAt(int index) => structs[index].Id.Clock;
     }
 
+    /// <summary>The structs in order, without a copy (a <c>foreach</c> over the list).</summary>
+    internal struct Enumerator(ClientStructs list)
+    {
+        private int _leaf;
+        private int _offset = -1;
+
+        public readonly AbstractStruct Current => list.LeafAt(_leaf).Structs[_offset];
+
+        public bool MoveNext()
+        {
+            if (_offset + 1 < list.LeafAt(_leaf).Count)
+            {
+                _offset++;
+                return true;
+            }
+
+            if (_leaf + 1 < list._leafCount)
+            {
+                _leaf++;
+                _offset = 0;
+                return true;
+            }
+
+            return false;
+        }
+    }
+
+    private void CheckInList(long clock)
+    {
+        if (clock < 0 || clock >= _end)
+        {
+            throw new InvalidOperationException($"Clock {clock} is not in the store (it ends at {_end}).");
+        }
+    }
+
     [System.Diagnostics.CodeAnalysis.DoesNotReturn]
     private static void ThrowOutOfRange(int index, int count) =>
         throw new ArgumentOutOfRangeException(nameof(index), index, $"The client has {count} structs.");
-
-    private void Grow(int min)
-    {
-        var capacity = Math.Max(min, _structs.Length * 2);
-        var blocks = BlockOf(capacity - 1) + 1;
-
-        // All allocated before any is assigned: an OutOfMemoryException leaves the list as it was.
-        var structs = new AbstractStruct[capacity];
-        var starts = new long[capacity];
-        var flags = new byte[capacity];
-        var sums = new long[blocks];
-        var breaks = new int[blocks];
-        Array.Copy(_structs, structs, _count);
-        Array.Copy(_starts, starts, _count);
-        Array.Copy(_flags, flags, _count);
-        Array.Copy(_sums, sums, _sums.Length);
-        Array.Copy(_breaks, breaks, _breaks.Length);
-        _structs = structs;
-        _starts = starts;
-        _flags = flags;
-        _sums = sums;
-        _breaks = breaks;
-    }
 }
