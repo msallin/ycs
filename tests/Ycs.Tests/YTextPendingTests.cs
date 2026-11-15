@@ -23,6 +23,19 @@ public class YTextPendingTests
         Assert.IsNull(prelim.GetAttribute("gone"));
     }
 
+    [TestMethod]
+    public void Integrate_PendingApplyDeltaWithoutSanitize_KeepsTheTrailingNewlineAsYjs()
+    {
+        // Yjs' pending applyDelta is 'this._pending.push(() => this.applyDelta(delta))': the option is not kept, so the
+        // delta is applied with sanitize (the default), which keeps the newline that sanitize: false would drop.
+        var prelim = new YText();
+        prelim.ApplyDelta(new List<Delta> { new() { Insert = "x\n" } }, sanitize: false);
+
+        new YDoc(new YDocOptions { ClientId = 1 }).GetMap("map").Set("text", prelim);
+
+        Assert.AreEqual("x\n", prelim.ToString());
+    }
+
     private static void Edit(YText text, bool skipFirstInsert = false)
     {
         if (!skipFirstInsert)

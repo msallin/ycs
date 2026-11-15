@@ -596,7 +596,9 @@ public partial class YText : YArrayBase
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.ApplyDelta, 0, sanitize ? 1 : 0, null, delta, null));
+            // As Yjs ('this._pending.push(() => this.applyDelta(delta))'): applied with the default 'sanitize' once
+            // the text is in a document, whatever was given.
+            AddPending(new PendingOperation(PendingKind.ApplyDelta, 0, 1, null, delta, null));
         }
     }
 
