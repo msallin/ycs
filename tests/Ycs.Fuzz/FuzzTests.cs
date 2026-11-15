@@ -20,10 +20,27 @@ public sealed class FuzzTests
     {
         using var harness = new Harness();
         var failures = Seeds.All
-            .Select(seed => (seed, outcome: harness.Run(FuzzInput.From(seed, seed.Update))))
+            .SelectMany(seed => new[] { false, true }.Select(observed => (seed, outcome: harness.Run(FuzzInput.From(seed, seed.Update, observed)))))
             .Where(r => r.outcome.Verdict != Verdict.Applied)
             .Select(r => $"{r.seed}: {r.outcome.Signature} {r.outcome.Detail}")
             .ToList();
+
+        Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
+    }
+
+    [TestMethod]
+    public void HostileUpdates_ApplyOrFailCleanlyWithinTheCeilings()
+    {
+        using var harness = new Harness();
+        var outcomes = Hostile.All
+            .SelectMany(seed => new[] { false, true }.Select(observed => (seed, observed, outcome: harness.Run(FuzzInput.From(seed, seed.Update, observed)))))
+            .ToList();
+        foreach (var (seed, observed, outcome) in outcomes)
+        {
+            TestContext.WriteLine($"{seed}{(observed ? " observed" : "")}: {outcome.Verdict} {outcome.Elapsed.TotalMilliseconds:F0} ms {outcome.AllocatedBytes >> 20} MiB");
+        }
+
+        var failures = outcomes.Where(r => r.outcome.IsViolation).Select(r => $"{r.seed}: {r.outcome.Signature} {r.outcome.Detail}").ToList();
 
         Assert.IsEmpty(failures, string.Join(Environment.NewLine, failures));
     }
@@ -38,10 +55,10 @@ public sealed class FuzzTests
         var randomSeed = seedSetting is null or "" ? 1
             : seedSetting == "random" ? Environment.TickCount
             : int.Parse(seedSetting, CultureInfo.InvariantCulture);
-        TestContext.WriteLine($"YCS_FUZZ_SEED={randomSeed} YCS_FUZZ_ITERATIONS={iterations}, {Seeds.All.Count} seeds");
+        TestContext.WriteLine($"YCS_FUZZ_SEED={randomSeed} YCS_FUZZ_ITERATIONS={iterations}, {Seeds.All.Count} seeds, {Hostile.All.Count} hostile seeds, half of the inputs observed");
 
         var random = new Random(randomSeed);
-        var seeds = Seeds.All;
+        IReadOnlyList<Seed> seeds = [.. Seeds.All, .. Hostile.All];
         var known = KnownFailures.All.Select(k => k.Signature).ToHashSet(StringComparer.Ordinal);
         var verdicts = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var rejections = new SortedDictionary<string, int>(StringComparer.Ordinal);
@@ -51,7 +68,7 @@ public sealed class FuzzTests
         for (var i = 0; i < iterations; i++)
         {
             var seed = seeds[random.Next(seeds.Count)];
-            var input = FuzzInput.From(seed, Mutator.Mutate(seed.Update, random));
+            var input = FuzzInput.From(seed, Mutator.Mutate(seed.Update, random), observed: random.Next(2) == 0);
             var outcome = harness.Run(input);
             Count(verdicts, outcome.Verdict.ToString());
             if (outcome.ExceptionType is not null)

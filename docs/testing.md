@@ -36,17 +36,24 @@ cd interop/traces && npm ci && node gen.mjs
 
 ## Fuzzing (`tests/Ycs.Fuzz`)
 
-The seeds are every update of the Yjs corpus (applied on top of the updates before it) and
-updates generated in C# (`Seeds.cs`), in v1 and v2. `Mutator.cs` damages them: bit flips,
-truncation, inserted, deleted, duplicated, swapped and overwritten chunks, var-uints replaced by
-huge values, random bytes. For each input (`Harness.cs`):
+The seeds are every update of the Yjs corpus (applied on top of the updates before it), updates
+generated in C# (`Seeds.cs`), in v1 and v2, and valid hostile updates (`Hostile.cs`: run-length bombs
+of GC structs, deleted items, texts and subdocuments beyond and at the limits, and a quadratic
+conflict; `HostileUpdates_ApplyOrFailCleanlyWithinTheCeilings` replays them unmutated). `Mutator.cs`
+damages them: bit flips, truncation, inserted, deleted, duplicated, swapped and overwritten chunks,
+var-uints replaced by huge values, random bytes. Half of the inputs go to an observed document: a
+document listener reads every lazily computed member of every event and the texts' deltas, and an
+UndoManager captures the change. The documents' limits are `Harness.Limits` (32,768 structs per
+update, 2^20 conflict steps), so that no valid input can exceed the ceilings below. For each input
+(`Harness.cs`):
 
-* it finishes within 2 s (it runs on a worker thread; a hung one is abandoned);
+* it finishes within 500 ms (`Slow`), and within 2 s (it runs on a worker thread; a hung one is abandoned);
 * it allocates at most 64 MiB (for an input over 4 KiB, 16 KiB per input byte). The test process runs with a
   512 MiB GC heap limit (`runtimeconfig.template.json`), so a decoder that trusts a huge length
   fails at once with `OutOfMemoryException`, and the throw site names the allocation;
 * it throws nothing but `YUpdateException` (`Harness.AllowedExceptionTypes`);
-* when it throws, the document's text, state vector and v1 encoding are unchanged.
+* when it throws, the document's text, state vector and v1 encoding are unchanged (when the conflict
+  budget ran out, `PartlyApplied`, the document must still be readable).
 
 A violation is identified by its signature: the verdict, the exception type and the innermost Ycs
 method it was thrown from (tiered compilation is off in this project, so inlining, and with it

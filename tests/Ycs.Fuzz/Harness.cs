@@ -15,6 +15,9 @@ internal enum Verdict
     /// <summary>Did not finish within the time budget.</summary>
     Hang,
 
+    /// <summary>Finished, but took longer than <see cref="Harness.TimeCeiling"/>: an input that is slow for its size.</summary>
+    Slow,
+
     /// <summary>Allocated more than the budget (or ran out of memory).</summary>
     Allocation,
 
@@ -34,6 +37,7 @@ internal sealed record Outcome(Verdict Verdict, string? ExceptionType, string? T
     public string Signature => Verdict switch
     {
         Verdict.Hang => "Hang",
+        Verdict.Slow => "Slow",
         // Out of memory under the heap limit: the site is where the huge allocation was attempted.
         Verdict.Allocation when ExceptionType == typeof(OutOfMemoryException).FullName => $"Allocation at {ThrowSite}",
         Verdict.Allocation => "Allocation under the heap limit",
@@ -41,10 +45,13 @@ internal sealed record Outcome(Verdict Verdict, string? ExceptionType, string? T
     };
 }
 
-/// <summary>One input: an update to apply, in a format, to a document holding <see cref="BaseState"/>.</summary>
-internal sealed record FuzzInput(bool Gc, bool V2, byte[] BaseState, byte[] Update, IReadOnlyList<string> TextRoots)
+/// <summary>
+/// One input: an update to apply, in a format, to a document holding <see cref="BaseState"/>;
+/// <see cref="Observed"/>: a document whose every change is read by observers (see <see cref="Harness"/>).
+/// </summary>
+internal sealed record FuzzInput(bool Gc, bool V2, byte[] BaseState, byte[] Update, IReadOnlyList<string> TextRoots, bool Observed = false)
 {
-    public static FuzzInput From(Seed seed, byte[] update) => new(seed.Gc, seed.V2, seed.BaseState, update, seed.TextRoots);
+    public static FuzzInput From(Seed seed, byte[] update, bool observed = false) => new(seed.Gc, seed.V2, seed.BaseState, update, seed.TextRoots, observed);
 }
 
 /// <summary>
@@ -65,6 +72,20 @@ internal sealed class Harness : IDisposable
 
     /// <summary>Per input, generous: a valid update of this size applies in well under a millisecond.</summary>
     public static readonly TimeSpan TimeBudget = TimeSpan.FromSeconds(2);
+
+    /// <summary>
+    /// What one input may take, applied or rejected. The document's limits (<see cref="Limits"/>) keep
+    /// every valid input well below it: the conflict loop to about 10 ms, the structs to about 40 ms.
+    /// An input that takes longer is slow for its size (a quadratic path, a limit that does not hold).
+    /// </summary>
+    public static readonly TimeSpan TimeCeiling = TimeSpan.FromMilliseconds(500);
+
+    /// <summary>
+    /// The fuzzed documents' limits: at most about 1.1 KB per decoded struct (a shared type), so a run
+    /// of structs at this limit (a run-length bomb) stays within <see cref="AllocationBudget"/>; and a
+    /// conflict loop of at most 2^20 steps.
+    /// </summary>
+    public static readonly UpdateLimits Limits = new() { MaxStructsPerUpdate = 32_768, MaxIntegrationSteps = 1 << 20 };
 
     /// <summary>
     /// Per input under 4 KiB; larger inputs get 16 KiB per input byte. The test process runs with a
@@ -136,6 +157,11 @@ internal sealed class Harness : IDisposable
             return new Outcome(Verdict.Allocation, type, site, allocated, stopwatch.Elapsed, detail);
         }
 
+        if (stopwatch.Elapsed > TimeCeiling)
+        {
+            return new Outcome(Verdict.Slow, type, site, allocated, stopwatch.Elapsed, $"{stopwatch.Elapsed.TotalMilliseconds:F0} ms");
+        }
+
         if (failure is null)
         {
             return new Outcome(Verdict.Applied, null, null, allocated, stopwatch.Elapsed, null);
@@ -146,7 +172,10 @@ internal sealed class Harness : IDisposable
             return new Outcome(Verdict.UnexpectedException, type, site, allocated, stopwatch.Elapsed, failure.Message);
         }
 
-        var difference = before.DifferenceTo(doc, input.TextRoots);
+        // Beyond MaxIntegrationSteps the update stays in part: the document must still be readable.
+        var difference = failure is YUpdateException { PartlyApplied: true }
+            ? Snapshot.ReadFailure(doc, input.TextRoots)
+            : before.DifferenceTo(doc, input.TextRoots);
         return difference is null
             ? new Outcome(Verdict.Rejected, type, site, allocated, stopwatch.Elapsed, null)
             : new Outcome(Verdict.NonAtomic, type, site, allocated, stopwatch.Elapsed, difference);
@@ -154,14 +183,59 @@ internal sealed class Harness : IDisposable
 
     private static YDoc Load(FuzzInput input)
     {
-        // At most about 1.1 KB per decoded struct (a shared type): a run of structs at this limit stays within the allocation budget.
-        var doc = new YDoc(new YDocOptions { Gc = input.Gc, ClientId = 1, Limits = new UpdateLimits { MaxStructsPerUpdate = 32_768 } });
+        var doc = new YDoc(new YDocOptions { Gc = input.Gc, ClientId = 1, Limits = Limits });
         if (input.BaseState.Length > 0)
         {
-            doc.ApplyUpdateV1(input.BaseState);
+            doc.ApplyUpdateV1(input.BaseState, null, UpdateLimits.Unlimited);
+        }
+
+        if (input.Observed)
+        {
+            Observe(doc, input.TextRoots);
         }
 
         return doc;
+    }
+
+    /// <summary>
+    /// What an editor binding does: a document listener (with it every changed type builds its event)
+    /// that reads every lazily computed member of every event, the texts' deltas, and an UndoManager on
+    /// the texts that captures the remote changes (its default tracked origin is null, as Yjs').
+    /// </summary>
+    private static void Observe(YDoc doc, IReadOnlyList<string> textRoots)
+    {
+        var texts = textRoots.Select(doc.GetText).ToList();
+        if (texts.Count > 0)
+        {
+            _ = new UndoManager(texts.Cast<object>().ToList(), new UndoManagerOptions { CaptureTimeout = 0 });
+        }
+
+        doc.AfterTransaction += (_, tr) =>
+        {
+            long sink = 0;
+            foreach (var events in tr.ChangedParentTypes.Values)
+            {
+                foreach (var e in events)
+                {
+                    sink += e.Path.Count + e.Keys.Count + e.Delta.Count;
+                    var changes = e.Changes;
+                    sink += (changes.Added?.Count ?? 0) + (changes.Deleted?.Count ?? 0) + (changes.Delta?.Count ?? 0) + (changes.Keys?.Count ?? 0);
+                    sink += e switch
+                    {
+                        YTextEvent text => text.KeysChanged.Count,
+                        YXmlEvent xml => xml.AttributesChanged.Count + (xml.ChildListChanged ? 1 : 0),
+                        _ => 0,
+                    };
+                }
+            }
+
+            foreach (var text in texts)
+            {
+                sink += text.ToDelta().Count;
+            }
+
+            System.GC.KeepAlive(sink);
+        };
     }
 
     /// <summary>The innermost Ycs method on the stack where the exception was thrown.</summary>
@@ -180,6 +254,20 @@ internal sealed class Harness : IDisposable
             textRoots.Select(name => doc.GetText(name).ToString()).ToList(),
             doc.EncodeStateVector(),
             doc.EncodeStateAsUpdateV1());
+
+        /// <summary>Why the document can no longer be read, or null.</summary>
+        public static string? ReadFailure(YDoc doc, IReadOnlyList<string> textRoots)
+        {
+            try
+            {
+                _ = Of(doc, textRoots);
+                return null;
+            }
+            catch (Exception e)
+            {
+                return $"reading the document afterwards threw {e.GetType().Name}";
+            }
+        }
 
         public string? DifferenceTo(YDoc doc, IReadOnlyList<string> textRoots)
         {
