@@ -29,7 +29,7 @@ internal enum Verdict
 
     /// <summary>
     /// Afterwards (applied, rejected or applied in part) the document is not a complete, encodable Yjs document:
-    /// its state does not round-trip into a fresh document, or an item list breaks <c>ItemListInvariants</c>.
+    /// its state does not round-trip into a fresh document, or an item list breaks the representation invariants (Consistency).
     /// </summary>
     Inconsistent,
 }

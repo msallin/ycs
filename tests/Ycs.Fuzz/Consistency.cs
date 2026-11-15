@@ -1,5 +1,4 @@
 using System.Runtime.CompilerServices;
-using Ycs.Corpus;
 
 namespace Ycs.Fuzz;
 
@@ -7,7 +6,7 @@ namespace Ycs.Fuzz;
 /// Whether a document is a complete, encodable Yjs document after an update was applied, rejected or applied in
 /// part: its state (v1 and v2) applies to a fresh document, which then (when nothing was pending) has the same
 /// state vector; and every item list it and the fresh document hold, of the roots and of every type nested in them,
-/// satisfies the structural part of <see cref="ItemListInvariants"/> (see <see cref="Structural"/>).
+/// satisfies the representation invariants of tests/Ycs.Corpus/ItemListInvariants.cs (see <see cref="ListInvariants"/>).
 /// </summary>
 internal static class Consistency
 {
@@ -70,12 +69,13 @@ internal static class Consistency
         return fresh.HasPending ? $"a fresh document from its {format} state has pending structs" : null;
     }
 
-    // The invariants every list holds whatever the updates were: its links, parents, lengths and ids. The order
-    // invariants (origins to the left, right origins to the right, YATA's order) hold for what Yjs writes; a crafted
-    // update that Yjs applies too (a right origin left of the item, origins in another parent) breaks them in both.
-    private static bool Structural(string violation) =>
-        violation.StartsWith("Item ", StringComparison.Ordinal) || violation.StartsWith("uniqueId:", StringComparison.Ordinal);
-
+    // The invariants every list holds whatever the updates were, those of ItemListInvariants' representation part:
+    // each struct is an item linked back to the one before it, of a positive length, and no id is in two of them.
+    // Not its order invariants (origins to the left, right origins to the right, YATA's order), which hold for what
+    // Yjs writes: a crafted update that Yjs applies too (a right origin left of the item, a slice of a struct that
+    // lands next to its origin in another parent) breaks them in Yjs as well; nor its check that every item's parent
+    // is the list, which such a slice breaks in Yjs too. Its expansion into elements would also allocate per
+    // element, and a deleted run may be 2^31 - 1 long.
     private static string? ListInvariants(YDoc doc)
     {
         var open = new Stack<(string Path, AbstractType Type)>(Share(doc).Select(kv => (kv.Key, kv.Value)));
@@ -88,37 +88,40 @@ internal static class Consistency
                 continue;
             }
 
-            var runs = new List<ItemRun>();
+            var ids = new List<(long Client, long Clock, long End)>();
             AbstractStruct? previous = null;
             for (AbstractStruct? s = type._start; s != null; s = (s as Item)?.Right)
             {
                 if (s is not Item item)
                 {
-                    runs.Add(new ItemRun(s.Id.Client, s.Id.Clock, s.Length, null, null, s.Deleted, s.GetType().Name, LinkedBack: true, InParent: false));
                     break;
                 }
 
-                runs.Add(new ItemRun(
-                    item.Id.Client,
-                    item.Id.Clock,
-                    item.Length,
-                    item.LeftOrigin is ID o ? (o.Client, o.Clock) : null,
-                    item.RightOrigin is ID r ? (r.Client, r.Clock) : null,
-                    item.Deleted,
-                    ItemRun.ItemKind,
-                    LinkedBack: ReferenceEquals(item.Left, previous),
-                    InParent: ReferenceEquals(item.Parent, type) && item.ParentSub == null));
+                if (!ReferenceEquals(item.Left, previous))
+                {
+                    return $"the item list of '{path}': item {item.Id.Client}:{item.Id.Clock} is not linked back to the one before it";
+                }
+
+                if (item.Length <= 0)
+                {
+                    return $"the item list of '{path}': item {item.Id.Client}:{item.Id.Clock} has length {item.Length}";
+                }
+
+                ids.Add((item.Id.Client, item.Id.Clock, item.Id.Clock + item.Length));
                 previous = item;
                 if (item.Content is ContentType nested)
                 {
-                    open.Push(($"{path}[{runs.Count - 1}]", nested.Type));
+                    open.Push(($"{path}[{ids.Count - 1}]", nested.Type));
                 }
             }
 
-            var broken = ItemListInvariants.Check(runs, full: runs.Count < 200).Violations.Where(Structural).ToList();
-            if (broken.Count > 0)
+            ids.Sort();
+            for (var k = 1; k < ids.Count; k++)
             {
-                return $"the item list of '{path}' breaks ItemListInvariants: {string.Join("; ", broken)}";
+                if (ids[k].Client == ids[k - 1].Client && ids[k].Clock < ids[k - 1].End)
+                {
+                    return $"the item list of '{path}': id {ids[k].Client}:{ids[k].Clock} is in two items";
+                }
             }
 
             foreach (var (key, value) in type._map)

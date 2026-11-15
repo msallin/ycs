@@ -22,10 +22,6 @@
     <ProjectReference Include="..\..\src\Ycs\Ycs.csproj" />
   </ItemGroup>
 
-  <!-- The item-list invariants of tests/Ycs.Corpus, for Consistency. -->
-  <ItemGroup>
-    <Compile Include="..\Ycs.Corpus\ItemListInvariants.cs" Link="Shared\ItemListInvariants.cs" />
-  </ItemGroup>
 
   <!-- Seeds: the updates recorded from real Yjs (interop/corpus/cases), read only. -->
   <ItemGroup>

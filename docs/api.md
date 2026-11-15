@@ -183,7 +183,7 @@ pending. The conflict budget counts the retry's steps too; running out there is 
 what the retry integrated stays, the rest of what waited is dropped. So whatever `ApplyUpdate` throws,
 the document holds a causally complete part of what it was given, whose `EncodeStateAsUpdate` (v1 or
 v2) applies to a fresh document, with the same state vector when nothing is pending
-(`tests/Ycs.Fuzz` checks this after every input, with the structural invariants of its item lists).
+(`tests/Ycs.Fuzz` checks this after every input, with the representation invariants of its item lists).
 
 **Trusted input.** A document's own state can hold far more structs than the defaults allow (a
 million characters typed one at a time and never merged are a million structs, about 7 MB of v1).
