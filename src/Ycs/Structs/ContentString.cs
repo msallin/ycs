@@ -16,17 +16,28 @@ public class ContentString : IContentEx
     // Above this length a run that grows by merging moves into a StringBuilder.
     private const int BuilderThreshold = 32;
 
-    // Yjs keeps a string and appends to it on merge. Here the text is a string as long as it is short
-    // or never grew: an insert keeps the caller's string, a decoded item the decoder's, without a
-    // copy. A run that keeps growing by merges (typing at its end) moves into a StringBuilder once it
-    // is longer than BuilderThreshold, where '+=' would copy the whole run on every keystroke.
-    // Exactly one of the two is set.
+    // Yjs keeps a string, appends to it on merge and slices it on split (V8 shares a sliced string's
+    // characters). Here the text is a slice of a string (_string from _start, _length long) as long as
+    // it is short or never grew: an insert keeps the caller's string, a decoded item the decoder's, a
+    // split shares its string between both halves, and merging two halves that are still adjacent in
+    // it only lengthens the slice. A run that keeps growing by other merges (typing at its end) moves
+    // into a StringBuilder once it is longer than BuilderThreshold, where '+=' would copy the whole run
+    // on every keystroke. Exactly one of _string and _builder is set.
     private string? _string;
+    private int _start;
+    private int _length;
     private StringBuilder? _builder;
 
     internal ContentString(string value)
+        : this(value, 0, value.Length)
+    {
+    }
+
+    private ContentString(string value, int start, int length)
     {
         _string = value;
+        _start = start;
+        _length = length;
     }
 
     int IContentEx.Ref => _ref;
@@ -34,20 +45,37 @@ public class ContentString : IContentEx
     public bool Countable => true;
 
     /// <summary>Length in UTF-16 code units, as in JavaScript.</summary>
-    public int Length => _string?.Length ?? _builder!.Length;
+    public int Length => _builder?.Length ?? _length;
 
-    public string GetString() => _string ?? _builder!.ToString();
+    private ReadOnlySpan<char> Slice => _string.AsSpan(_start, _length);
+
+    public string GetString()
+    {
+        if (_builder != null)
+        {
+            return _builder.ToString();
+        }
+
+        if (_start != 0 || _length != _string!.Length)
+        {
+            // Keeps the copy: the slice no longer holds on to the rest of the string.
+            _string = Slice.ToString();
+            _start = 0;
+        }
+
+        return _string;
+    }
 
     /// <summary>Copies the text into <paramref name="destination"/>, which is at least <see cref="Length"/> long.</summary>
     internal void CopyTo(Span<char> destination)
     {
-        if (_string != null)
+        if (_builder != null)
         {
-            _string.CopyTo(destination);
+            _builder.CopyTo(0, destination, _builder.Length);
         }
         else
         {
-            _builder!.CopyTo(0, destination, _builder.Length);
+            Slice.CopyTo(destination);
         }
     }
 
@@ -71,39 +99,34 @@ public class ContentString : IContentEx
 
     public IContent Splice(int offset)
     {
-        string right;
-        if (_string != null)
+        if (_builder != null)
         {
-            right = _string.Substring(offset);
-            _string = _string.Substring(0, offset);
-        }
-        else
-        {
-            right = _builder!.ToString(offset, _builder.Length - offset);
-            _builder.Length = offset;
+            // Copied once into a string, which the halves (and their later splits) then share.
+            _string = _builder.ToString();
+            _start = 0;
+            _length = _string.Length;
+            _builder = null;
         }
 
+        var right = new ContentString(_string!, _start + offset, _length - offset);
+        _length = offset;
+
         // Prevent encoding invalid documents because of splitting of surrogate pairs.
-        var firstCharCode = _string != null ? _string[offset - 1] : _builder![offset - 1];
+        var firstCharCode = _string![_start + offset - 1];
         if (firstCharCode >= 0xD800 && firstCharCode <= 0xDBFF)
         {
             // Last character of the left split is the start of a surrogate utf16/ucs2 pair.
             // We don't support splitting of surrogate pairs because this may lead to invalid documents.
             // Replace the invalid character with a unicode replacement character U+FFFD.
-            if (_string != null)
-            {
-                _string = string.Concat(_string.AsSpan(0, offset - 1), "\uFFFD");
-            }
-            else
-            {
-                _builder![offset - 1] = '\uFFFD';
-            }
+            _string = string.Concat(_string.AsSpan(_start, offset - 1), "\uFFFD");
+            _start = 0;
 
             // Replace right as well.
-            right = string.Concat("\uFFFD", right.AsSpan(1));
+            right._string = string.Concat("\uFFFD", right.Slice[1..]);
+            right._start = 0;
         }
 
-        return new ContentString(right);
+        return right;
     }
 
     public bool MergeWith(IContent right)
@@ -112,10 +135,19 @@ public class ContentString : IContentEx
         var other = (ContentString)right;
         if (_builder == null)
         {
-            var length = _string!.Length + other.Length;
+            if (other._builder == null && ReferenceEquals(_string, other._string) && _start + _length == other._start)
+            {
+                // Two halves of one split, still adjacent in the string they share.
+                _length += other._length;
+                return true;
+            }
+
+            var length = _length + other.Length;
             if (length <= BuilderThreshold)
             {
-                _string = string.Concat(_string, other.GetString());
+                _string = string.Concat(Slice, other.GetString());
+                _start = 0;
+                _length = _string.Length;
                 return true;
             }
 
@@ -124,24 +156,26 @@ public class ContentString : IContentEx
                 // A short run merging into a long one in front of it (deleting backwards, or undoing
                 // typing): the long run's builder is taken over and this one inserted at its front,
                 // which costs the short run, not the long one. The right content is dropped with its item.
-                _builder = other._builder.Insert(0, _string);
+                _builder = other._builder.Insert(0, GetString());
                 _string = null;
                 other._builder = null;
                 other._string = string.Empty;
+                other._start = 0;
+                other._length = 0;
                 return true;
             }
 
-            _builder = new StringBuilder(Math.Max(2 * length, 2 * BuilderThreshold)).Append(_string);
+            _builder = new StringBuilder(Math.Max(2 * length, 2 * BuilderThreshold)).Append(Slice);
             _string = null;
         }
 
-        if (other._string != null)
+        if (other._builder != null)
         {
-            _builder.Append(other._string);
+            _builder.Append(other._builder);
         }
         else
         {
-            _builder.Append(other._builder);
+            _builder.Append(other.Slice);
         }
 
         return true;
@@ -164,9 +198,9 @@ public class ContentString : IContentEx
 
     void IContentEx.Write(IUpdateEncoder encoder, int offset)
     {
-        if (_string != null)
+        if (_builder == null)
         {
-            encoder.WriteString(_string.AsSpan(offset));
+            encoder.WriteString(Slice[offset..]);
             return;
         }
 

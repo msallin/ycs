@@ -26,6 +26,7 @@ internal static class Budgets
         ["text.insert-formatted-char-100k"] = new(576, 2500),          // 500 B, 210 µs (finds the position without search markers, as Yjs does)
         ["text.event-delta-read-100k"] = new(1072, 6000),              // 932 B, 550 µs (the delta walks the whole text, as Yjs' does)
         ["undo.undo-redo-typing-100k"] = new(3416, 50),                // 2 968 B, 2 µs
+        ["undo.redo-after-undoing-typing-100k"] = new(2120, 50),       // 1 840 B, 2 µs (was about 40 KB: each split copied the rest of the undone run)
         ["undo.delete-backwards-one-capture-100k"] = new(864, 50),     // 746 B, 4 µs (was 3 100 B: the deleted run was copied on every merge)
         ["doc.encode-state-with-pending-100k"] = new(7836896, 80000),  // 6.8 MB, 7.8 ms (the state merged with what is pending, as Yjs does)
     };

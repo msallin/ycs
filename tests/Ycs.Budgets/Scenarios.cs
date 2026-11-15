@@ -146,6 +146,25 @@ internal static class Scenarios
             };
         }),
 
+        new("undo.redo-after-undoing-typing-100k", 500, () =>
+        {
+            // Every redo splits the undone run (merged while deleted) at its front.
+            var (_, text) = LargeText();
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            const int typed = 20_000;
+            for (var i = 0; i < typed; i++)
+            {
+                text.Insert(TextLength / 2 + i, "x");
+            }
+
+            for (var i = 0; i < typed; i++)
+            {
+                undoManager.Undo();
+            }
+
+            return _ => undoManager.Redo();
+        }),
+
         new("undo.delete-backwards-one-capture-100k", 500, () =>
         {
             // Backspace with an UndoManager whose capture never ends: the deleted characters are kept.

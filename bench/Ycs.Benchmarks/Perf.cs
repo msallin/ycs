@@ -46,6 +46,30 @@ internal static class Perf
             };
         });
 
+        Case("redo 40,000 keystrokes", () =>
+        {
+            var doc = new YDoc(new YDocOptions { ClientId = 1 });
+            var text = doc.GetText("t");
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            for (var i = 0; i < 40_000; i++)
+            {
+                text.Insert(i, "a");
+            }
+
+            for (var i = 0; i < 40_000; i++)
+            {
+                undoManager.Undo();
+            }
+
+            return () =>
+            {
+                for (var i = 0; i < 40_000; i++)
+                {
+                    undoManager.Redo();
+                }
+            };
+        });
+
         // P2: every transaction merged into the stack item rebuilt both of its delete sets.
         Case("P2 40,000 edits at random places in one capture", () =>
         {
