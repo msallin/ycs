@@ -22,7 +22,7 @@ internal static class Catalog
 {
     private static string Typed() => string.Concat(Inputs.Typing);
 
-    private static string Typed(int n) => string.Concat(Inputs.Typing.Take(n));
+    private static string Typed(int n) => string.Concat(Inputs.TypingOf(n));
 
     public static readonly IReadOnlyList<Case> All =
     [
@@ -36,6 +36,10 @@ internal static class Catalog
             f => YcsCases.TextAppendOneTxn(f, 25_000), f => YrsCases.TextAppendOneTxn(f, 25_000), _ => Typed(25_000)),
         new("text-append-1txn-observed", "text", "text-append-1txn with a text observer that counts its events (Yjs' items, merged at the end)", "text",
             f => YcsCases.TextAppendOneTxnObserved(f, Inputs.TypingN), f => YrsCases.TextAppendOneTxnObserved(f, Inputs.TypingN), _ => $"1 {Typed()}") { Heavy = true, LightOnYcs = true },
+        new("text-append-1txn-observed-200k", "text", "text-append-1txn-observed with 200,000 characters (how the observed form scales)", "text",
+            f => YcsCases.TextAppendOneTxnObserved(f, 200_000), f => YrsCases.TextAppendOneTxnObserved(f, 200_000), _ => $"1 {Typed(200_000)}") { Heavy = true, LightOnYcs = true },
+        new("text-append-1txn-observed-400k", "text", "the same with 400,000 characters", "text",
+            f => YcsCases.TextAppendOneTxnObserved(f, 400_000), f => YrsCases.TextAppendOneTxnObserved(f, 400_000), _ => $"1 {Typed(400_000)}") { Heavy = true, LightOnYcs = true },
         new("text-append-1txn-observed-25k", "text", "the first 25,000 of them, observed, in one transaction", "text",
             f => YcsCases.TextAppendOneTxnObserved(f, 25_000), f => YrsCases.TextAppendOneTxnObserved(f, 25_000), _ => $"1 {Typed(25_000)}"),
         new("txn-empty", "text", "100,000 empty write transactions (the fixed cost of a transaction)", "text",

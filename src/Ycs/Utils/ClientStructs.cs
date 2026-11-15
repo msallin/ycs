@@ -34,6 +34,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
         _starts = new long[capacity];
         _flags = new byte[capacity];
         _sums = new long[BlockOf(capacity - 1) + 1];
+        _breaks = new int[_sums.Length];
     }
 
     /// <summary>A copy of <paramref name="count"/> structs of <paramref name="source"/> from <paramref name="start"/>.</summary>
@@ -140,10 +141,10 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
     {
         Debug.Assert(_structs[index].Id.Equals(str.Id) && _structs[index].Length == str.Length && Value(index) == 0);
         _structs[index] = str;
-        _flags[index] = FlagsAt(index);
+        SetFlags(index, FlagsAt(index));
         if (index + 1 < _count)
         {
-            _flags[index + 1] = FlagsAt(index + 1);
+            SetFlags(index + 1, FlagsAt(index + 1));
         }
     }
 
@@ -357,5 +358,6 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
         Array.Resize(ref _starts, capacity);
         Array.Resize(ref _flags, capacity);
         Array.Resize(ref _sums, BlockOf(capacity - 1) + 1);
+        Array.Resize(ref _breaks, _sums.Length);
     }
 }

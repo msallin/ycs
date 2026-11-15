@@ -46,7 +46,7 @@ internal static class YcsCases
     {
         var doc = NewDoc();
         var text = doc.GetText("text");
-        var chars = Inputs.Typing.AsSpan(0, n).ToArray();
+        var chars = Inputs.TypingOf(n);
         long seen = 0;
         text.Observe((_, _) => seen++);
         return new Prepared(

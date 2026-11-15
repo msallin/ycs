@@ -13,7 +13,8 @@ namespace Ycs;
 
 /// <summary>
 /// The run-head index of a client's structs (docs/design-item-layout.md, section 3.3): per position whether it is a
-/// break of Yjs' marker walk-left, and the visible length (countable, undeleted) per block of positions.
+/// break of Yjs' marker walk-left, and per block of positions the visible length (countable, undeleted) and the number
+/// of breaks.
 /// </summary>
 /// <remarks>
 /// Yjs' walk-left steps from p to p.left while p.left has p's client and ends at p's clock. The struct that ends at a
@@ -53,6 +54,9 @@ internal sealed partial class ClientStructs
     // Per block of positions, the sum of the visible lengths. long: a block of int lengths can exceed int.
     private long[] _sums;
 
+    // Per block of positions, how many are breaks: the searches for a run's head and end skip the blocks without one.
+    private int[] _breaks;
+
     private int BlockOf(int position) => position >> _blockShift;
 
     /// <summary>The flags of the struct at <paramref name="i"/>, computed from it and its predecessor.</summary>
@@ -77,10 +81,18 @@ internal sealed partial class ClientStructs
     /// <summary>The visible length of position <paramref name="i"/> as the index holds it (0 beyond the list).</summary>
     private long Value(int i) => i < _count && (_flags[i] & Visible) != 0 ? LengthAt(i) : 0;
 
+    /// <summary>Sets the flags of position <paramref name="i"/>, whose current flags its block's break count holds.</summary>
+    private void SetFlags(int i, byte flags)
+    {
+        _breaks[BlockOf(i)] += (flags & Break) - (_flags[i] & Break);
+        _flags[i] = flags;
+    }
+
     private void IndexAdded()
     {
         var i = _count - 1;
-        _flags[i] = FlagsAt(i);
+        _flags[i] = 0;
+        SetFlags(i, FlagsAt(i));
         _sums[BlockOf(i)] += Value(i);
     }
 
@@ -88,14 +100,27 @@ internal sealed partial class ClientStructs
     /// The right part of a split went in at <paramref name="index"/> (the arrays are shifted). The prefix sum at a
     /// position x after it is the old one at x - 1, and at <paramref name="index"/> the old one minus the right
     /// part: so each block from the left part's on changes by E(its end) - E(its start), E(x) = -Value(x) for x at
-    /// or after <paramref name="index"/>, else 0.
+    /// or after <paramref name="index"/>, else 0. Every block after the one of <paramref name="index"/> gains, as a
+    /// break, the position that moved in at its start and loses the one that moved out at its end.
     /// </summary>
     private void IndexSplit(int index)
     {
-        _flags[index] = FlagsAt(index);
+        // The new position is in no block's break count until its flags are set.
+        _flags[index] = 0;
+        var lastBlock = BlockOf(_count - 1);
+        var carried = 0;
+        for (var b = BlockOf(index); b <= lastBlock; b++)
+        {
+            var end = (b + 1) << _blockShift;
+            var leaving = end < _count ? _flags[end] & Break : 0;
+            _breaks[b] += carried - leaving;
+            carried = leaving;
+        }
+
+        SetFlags(index, FlagsAt(index));
         if (index + 1 < _count)
         {
-            _flags[index + 1] = FlagsAt(index + 1);
+            SetFlags(index + 1, FlagsAt(index + 1));
         }
 
         Debug.Assert((_flags[index] & ~Break) == (_flags[index - 1] & ~Break));
@@ -114,7 +139,9 @@ internal sealed partial class ClientStructs
     /// Before <paramref name="count"/> structs from <paramref name="index"/> are removed (they merged into the one
     /// before, which takes their visible length): the prefix sum at x at or after <paramref name="index"/> becomes
     /// the old one at x + <paramref name="count"/>, so each block changes by E(its end) - E(its start), E(x) the old
-    /// visible length of [x, x + count). Returns whether the sums are rebuilt after the removal instead.
+    /// visible length of [x, x + count). The break counts change the same way, with the breaks of [x, x + count) for
+    /// E(x), once the removed positions are no breaks. Returns whether the sums and counts are rebuilt after the removal
+    /// instead.
     /// </summary>
     private bool IndexMerging(int index, int count)
     {
@@ -128,22 +155,32 @@ internal sealed partial class ClientStructs
             return true;
         }
 
+        for (var k = index; k < index + count; k++)
+        {
+            SetFlags(k, (byte)(_flags[k] & ~Break));
+        }
+
         var last = BlockOf(_count - 1);
         var previous = 0L;
+        var previousBreaks = 0;
         for (var b = BlockOf(index - 1); b <= last; b++)
         {
             var end = (b + 1) << _blockShift;
             var next = 0L;
+            var nextBreaks = 0;
             if (end >= index)
             {
                 for (var k = end; k < end + count && k < _count; k++)
                 {
                     next += Value(k);
+                    nextBreaks += _flags[k] & Break;
                 }
             }
 
             _sums[b] += next - previous;
+            _breaks[b] += nextBreaks - previousBreaks;
             previous = next;
+            previousBreaks = nextBreaks;
         }
 
         return false;
@@ -153,16 +190,18 @@ internal sealed partial class ClientStructs
     {
         if (index < _count)
         {
-            _flags[index] = FlagsAt(index);
+            SetFlags(index, FlagsAt(index));
         }
 
         if (rebuild)
         {
             var first = BlockOf(index - 1);
             Array.Clear(_sums, first, _sums.Length - first);
+            Array.Clear(_breaks, first, _breaks.Length - first);
             for (var k = first << _blockShift; k < _count; k++)
             {
                 _sums[BlockOf(k)] += Value(k);
+                _breaks[BlockOf(k)] += _flags[k] & Break;
             }
         }
     }
@@ -174,8 +213,51 @@ internal sealed partial class ClientStructs
     internal void Refresh(int index)
     {
         var old = Value(index);
-        _flags[index] = FlagsAt(index);
+        SetFlags(index, FlagsAt(index));
         _sums[BlockOf(index)] += Value(index) - old;
+    }
+
+    /// <summary>The last break at or before position <paramref name="index"/> (position 0 is one).</summary>
+    private int LastBreak(int index)
+    {
+        var block = BlockOf(index);
+        var start = block << _blockShift;
+        var at = _flags.AsSpan(start, index + 1 - start).LastIndexOfAny(Breaks);
+        if (at >= 0)
+        {
+            return start + at;
+        }
+
+        block = _breaks.AsSpan(0, block).LastIndexOfAnyExcept(0);
+        Debug.Assert(block >= 0, "Position 0 is a break.");
+        start = block << _blockShift;
+        return start + _flags.AsSpan(start, 1 << _blockShift).LastIndexOfAny(Breaks);
+    }
+
+    /// <summary>The first break at or after position <paramref name="from"/>, or -1.</summary>
+    private int NextBreak(int from)
+    {
+        if (from >= _count)
+        {
+            return -1;
+        }
+
+        var block = BlockOf(from);
+        var end = Math.Min((block + 1) << _blockShift, _count);
+        var at = _flags.AsSpan(from, end - from).IndexOfAny(Breaks);
+        if (at >= 0)
+        {
+            return from + at;
+        }
+
+        var next = _breaks.AsSpan(block + 1, BlockOf(_count - 1) - block).IndexOfAnyExcept(0);
+        if (next < 0)
+        {
+            return -1;
+        }
+
+        var start = (block + 1 + next) << _blockShift;
+        return start + _flags.AsSpan(start, Math.Min(1 << _blockShift, _count - start)).IndexOfAny(Breaks);
     }
 
     /// <summary>
@@ -184,8 +266,7 @@ internal sealed partial class ClientStructs
     /// </summary>
     internal int RunHead(int index, out long passed)
     {
-        var head = _flags.AsSpan(0, index + 1).LastIndexOfAny(Breaks);
-        Debug.Assert(head >= 0, "Position 0 is a break.");
+        var head = LastBreak(index);
         passed = VisibleBetween(head, index);
         return head;
     }
@@ -201,8 +282,8 @@ internal sealed partial class ClientStructs
     /// </summary>
     internal int SeekRight(int index, long target, bool stopAtFormats, out long passed)
     {
-        var next = _flags.AsSpan(index + 1, _count - index - 1).IndexOfAny(Breaks);
-        var last = next < 0 ? _count - 1 : index + next;
+        var next = NextBreak(index + 1);
+        var last = next < 0 ? _count - 1 : next - 1;
         var block = 1 << _blockShift;
         var sum = 0L;
         var k = index;
@@ -238,7 +319,7 @@ internal sealed partial class ClientStructs
     /// </summary>
     internal int SeekLeft(int index, long target, out long passed)
     {
-        var head = _flags.AsSpan(0, index + 1).LastIndexOfAny(Breaks);
+        var head = LastBreak(index);
         var block = 1 << _blockShift;
         var sum = 0L;
         var j = index;
@@ -315,6 +396,17 @@ internal sealed partial class ClientStructs
             if (_sums[b] != sum)
             {
                 return $"block {b} sums to {_sums[b]}, a recount gives {sum}";
+            }
+
+            var breaks = 0;
+            for (var k = b << _blockShift; k < Math.Min((b + 1) << _blockShift, _count); k++)
+            {
+                breaks += _flags[k] & Break;
+            }
+
+            if (_breaks[b] != breaks)
+            {
+                return $"block {b} counts {_breaks[b]} breaks, a recount gives {breaks}";
             }
         }
 

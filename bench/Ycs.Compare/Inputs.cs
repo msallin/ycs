@@ -54,11 +54,7 @@ internal static class Inputs
 
     private static readonly string[] Letters = [.. Enumerable.Range('a', 26).Select(c => ((char)c).ToString())];
 
-    private static readonly Lazy<string[]> LazyTyping = new(() =>
-    {
-        var rng = new Rng(Seed + 1);
-        return [.. Enumerable.Range(0, TypingN).Select(_ => Letters[rng.Below(26)])];
-    });
+    private static readonly Lazy<string[]> LazyTyping = new(() => TypingOf(TypingN));
 
     private static readonly Lazy<Edit[]> LazyRandomTyping = new(() =>
     {
@@ -124,6 +120,13 @@ internal static class Inputs
 
     /// <summary>One single-character string per keystroke of the typing workloads.</summary>
     public static string[] Typing => LazyTyping.Value;
+
+    /// <summary>The first <paramref name="n"/> characters of the typing stream (<see cref="Typing"/> is its first <see cref="TypingN"/>).</summary>
+    public static string[] TypingOf(int n)
+    {
+        var rng = new Rng(Seed + 1);
+        return [.. Enumerable.Range(0, n).Select(_ => Letters[rng.Below(26)])];
+    }
 
     /// <summary>A single-character insert at a random position of the growing text, per keystroke.</summary>
     public static Edit[] RandomTyping => LazyRandomTyping.Value;

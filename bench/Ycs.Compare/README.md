@@ -432,10 +432,33 @@ is managed + native as above (the native part is noise here).
   start clock and the flag byte beside the reference) and updates the block sums after it: `apply-updates` (+19%)
   and `trace-replay` (+15%), which split and merge in the middle of the trace's 11,000-struct list for every edit,
   pay for it. The design's B+tree order (step 7: leaves of 128 positions) is what removes that shift.
-* **Memory:** the index costs 9 bytes per struct (8 for the start, 1 for the flags, 8 per 512 for the block sums),
+* **Memory:** the index costs 9 bytes per struct (8 for the start, 1 for the flags, 8 per 512 for the block sums and 4 per 512 for the break counts),
   plus the arrays' doubling slack, and a client's list object is a little larger than a `List`: held memory grows by
   0.5 MiB (`array-insert-random`, 50,000 structs) to 1.2 MiB (`concurrent-20`, 128,560 structs over 20 documents;
   `text-random-100k`, 100,000 structs), about 4% of what those documents hold.
+
+### Break counts per block (2026-11-15, ycs only)
+
+The walk left through the index searched the flag bytes before the position for the last break, and the walk right
+those after it for the next one, both to the run's ends: typing into an observed text in one transaction stayed
+quadratic in the run. Each block of 512 positions now counts its breaks, so the searches scan one block's bytes on
+each side and skip the blocks without a break. `ab.py`, b7f02f3 and the commit, the observed workloads 2 processes x 3
+timed runs each (`text-append-1txn-observed-200k` and `-400k` are new: the same typing stream, longer), the two others
+4 x 6, interleaved, load 0.9 to 2.0 (`results/2026-11-15-break-counts/`):
+
+| workload | b7f02f3 | break counts | change |
+| --- | ---: | ---: | --- |
+| `text-append-1txn-observed-25k` | 96 ms (above) | 73 ms | |
+| `text-append-1txn-observed` | 751 ms | 379 ms | 2.0x |
+| `text-append-1txn-observed-200k` | 2,517 ms | 993 ms | 2.5x |
+| `text-append-1txn-observed-400k` | 8,836 ms | 2,666 ms | 3.3x |
+| `apply-updates/ycs` | 286.0 ms | 289.7 ms | +1.3% (pass medians 284-291 / 284-294: noise) |
+| `trace-replay` | 276.0 ms | 279.5 ms | +1.3% (pass medians 273-280 / 272-284: noise) |
+
+* What stays is the sums: a lookup ends at the run's head, so it adds the block sums from there and up to a block of
+  positions on each side (`VisibleBetween`, the walk right's jumps), O(512 + n/512) per lookup; blocks of 4,096
+  positions make it slower (9.3 s for 400,000 characters). A tree of the sums (the design's B+tree order) removes it.
+* A split or a merge also moves the break counts of the later blocks, in the loop that moves their sums.
 
 ## Not compared
 

@@ -78,7 +78,7 @@ internal static class YrsCases
     {
         var doc = NewDoc();
         var text = doc.Text("text");
-        var chars = Inputs.Typing.AsSpan(0, n).ToArray();
+        var chars = Inputs.TypingOf(n);
         long seen = 0;
         var subscription = text.Observe(_ => seen++);
         return new Prepared(

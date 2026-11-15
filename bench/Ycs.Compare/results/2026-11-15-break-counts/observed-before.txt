@@ -1,0 +1,3 @@
+text-append-1txn-observed base median     751.4 ms (min 744.3 max 813.1; pass medians 756.0, 750.7)  alloc    21.24 MiB  held 4.4 MiB  peak RSS 83 MiB  load 0.86
+text-append-1txn-observed-200k base median    2516.9 ms (min 2431.2 max 2607.6; pass medians 2530.5, 2503.2)  alloc    42.47 MiB  held 8.7 MiB  peak RSS 102 MiB  load 0.90
+text-append-1txn-observed-400k base median    8835.5 ms (min 8775.3 max 9336.0; pass medians 9302.7, 8811.7)  alloc    84.93 MiB  held 17.4 MiB  peak RSS 151 MiB  load 1.72

@@ -5,6 +5,8 @@ after the design review and the review of steps 1 and 2 (2026-11-15). Parity tar
 content, events and update bytes. No unsafe code: arrays of structs and `ref` to their elements only. Numbers come
 from `bench/Ycs.Layout` (the model; README and `results/`), `bench/Ycs.Compare` (README, "After layout steps 1 and 2")
 and the two reviews (findings H, M, L: the design review's; N: the review of steps 1 and 2, also "review" alone).
+The run-head index also keeps a count of breaks per block: the searches for a run's head and end skip the blocks
+without one.
 
 ## Summary
 
