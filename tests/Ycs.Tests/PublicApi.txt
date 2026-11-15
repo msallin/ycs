@@ -180,9 +180,7 @@ sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
     static bool EqualSnapshots(Snapshot snap1, Snapshot snap2)
     static readonly Snapshot Empty
 class Ycs.StackItem
-    System.Collections.Generic.IDictionary<long, long> AfterState
-    System.Collections.Generic.IDictionary<long, long> BeforeState
-    System.Collections.Generic.IDictionary<string, object> Meta
+    System.Collections.Generic.IDictionary<string, object> Meta { get; }
 static class Ycs.SyncProtocol
     const uint MessageYjsSyncStep1 = 0
     const uint MessageYjsSyncStep2 = 1
@@ -207,20 +205,23 @@ class Ycs.Transaction
     bool Local { get; }
     object Origin { get; }
 class Ycs.UndoManager
+    StackItem CurrentStackItem { get; }
     StackItem Redo()
     StackItem Undo()
+    System.Collections.Generic.IReadOnlyList<StackItem> RedoStack { get; }
+    System.Collections.Generic.IReadOnlyList<StackItem> UndoStack { get; }
     System.Collections.Generic.IReadOnlyList<object> Scope { get; }
-    UndoManager(AbstractType typeScope)
-    UndoManager(System.Collections.Generic.IEnumerable<object> scope, int captureTimeout = 500, System.Func<Item, bool> deleteFilter = null, System.Collections.Generic.ISet<object> trackedOrigins = null)
-    UndoManager(System.Collections.Generic.IList<AbstractType> typeScopes, int captureTimeout, System.Func<Item, bool> deleteFilter, System.Collections.Generic.ISet<object> trackedOrigins)
-    UndoManager(YDoc doc, int captureTimeout = 500, System.Func<Item, bool> deleteFilter = null, System.Collections.Generic.ISet<object> trackedOrigins = null)
+    UndoManager(AbstractType typeScope, UndoManagerOptions options = null)
+    UndoManager(System.Collections.Generic.IReadOnlyList<object> typeScope, UndoManagerOptions options = null)
+    UndoManager(YDoc doc, UndoManagerOptions options = null)
     YDoc Doc { get; }
     bool CanRedo()
     bool CanUndo()
+    bool IgnoreRemoteMapChanges { get; set; }
     event System.EventHandler<UndoManager.StackClearedEventArgs> StackCleared
     event System.EventHandler<UndoManager.StackEventArgs> StackItemAdded
     event System.EventHandler<UndoManager.StackEventArgs> StackItemPopped
-    int Count { get; }
+    event System.EventHandler<UndoManager.StackEventArgs> StackItemUpdated
     void AddToScope(System.Collections.Generic.IEnumerable<object> scopeEntries)
     void AddToScope(object scopeEntry)
     void AddTrackedOrigin(object origin)
@@ -242,6 +243,14 @@ class Ycs.UndoManager.StackEventArgs : System.EventArgs
     System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.IList<YEvent>> ChangedParentTypes { get; }
     UndoManager.OperationType Type { get; }
     object Origin { get; }
+sealed class Ycs.UndoManagerOptions
+    System.Collections.Generic.ISet<object> TrackedOrigins { get; set; }
+    System.Func<Item, bool> DeleteFilter { get; set; }
+    System.Func<Transaction, bool> CaptureTransaction { get; set; }
+    UndoManagerOptions()
+    YDoc Doc { get; set; }
+    bool IgnoreRemoteMapChanges { get; set; }
+    int CaptureTimeout { get; set; }
 sealed class Ycs.UpdateMeta
     System.Collections.Generic.IReadOnlyDictionary<long, long> From { get; }
     System.Collections.Generic.IReadOnlyDictionary<long, long> To { get; }

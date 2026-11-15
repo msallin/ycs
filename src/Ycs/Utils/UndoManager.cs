@@ -8,33 +8,60 @@
 
 namespace Ycs;
 
+/// <summary>
+/// One undo or redo step: what its transactions inserted and what they deleted. Yjs' <c>StackItem</c>.
+/// </summary>
 public class StackItem
 {
-    public IDictionary<long, long> BeforeState;
-    public IDictionary<long, long> AfterState;
-    // Use this to save and restore metadata like selection range.
-    public IDictionary<string, object> Meta;
+    /// <summary>Metadata to save and restore with the step, like a selection range.</summary>
+    public IDictionary<string, object> Meta { get; } = new Dictionary<string, object>();
 
-    internal DeleteSet DeleteSet;
+    // The ranges the captured transactions created, and the ranges they deleted.
+    internal DeleteSet Insertions;
+    internal DeleteSet Deletions;
 
-    internal StackItem(DeleteSet ds, IDictionary<long, long> beforeState, IDictionary<long, long> afterState)
+    internal StackItem(DeleteSet deletions, DeleteSet insertions)
     {
-        DeleteSet = ds;
-        BeforeState = beforeState;
-        AfterState = afterState;
-        // TODO: [alekseyk] Always needed?
-        Meta = new Dictionary<string, object>();
+        Deletions = deletions;
+        Insertions = insertions;
     }
 }
 
 /// <summary>
-/// Fires 'stack-item-added' event when a stack item was added to either the undo- or
-/// the redo-stack. You may store additional stack information via the metadata property
-/// on 'event.stackItem.meta' (it is a collection of metadata properties).
-/// Fires 'stack-item-popped' event when a stack item was popped from either the undo- or
-/// the redo-stack. You may restore the saved stack information from 'event.stackItem.Meta'.
-/// Fires 'stack-cleared' (<see cref="StackCleared"/>) event when <see cref="Clear()"/> empties
-/// either (or both) stacks.
+/// Options of an <see cref="UndoManager"/>; Yjs' <c>UndoManagerOptions</c>.
+/// </summary>
+public sealed class UndoManagerOptions
+{
+    /// <summary>Changes made within this many milliseconds of the last one are merged into one stack item.</summary>
+    public int CaptureTimeout { get; set; } = 500;
+
+    /// <summary>A transaction for which this returns false is not captured. Default: every transaction.</summary>
+    public Func<Transaction, bool> CaptureTransaction { get; set; }
+
+    /// <summary>An item for which this returns false is not deleted by an undo or redo. Default: every item.</summary>
+    public Func<Item, bool> DeleteFilter { get; set; }
+
+    /// <summary>
+    /// The origins (or origin types, compared exactly) whose transactions are captured. Default: <c>{ null }</c>.
+    /// The UndoManager adds itself to the set.
+    /// </summary>
+    public ISet<object> TrackedOrigins { get; set; }
+
+    /// <summary>
+    /// When true, an undo or redo overwrites a key of a map (or an attribute) that another change set
+    /// since; by default it leaves such a key alone.
+    /// </summary>
+    public bool IgnoreRemoteMapChanges { get; set; }
+
+    /// <summary>The document; only needed when the scope is empty.</summary>
+    public YDoc Doc { get; set; }
+}
+
+/// <summary>
+/// Fires <see cref="StackItemAdded"/> when a stack item was added to either the undo or the redo stack,
+/// <see cref="StackItemUpdated"/> when a change was merged into the last one, <see cref="StackItemPopped"/>
+/// when one was popped (restore what was saved in <see cref="StackItem.Meta"/> there), and
+/// <see cref="StackCleared"/> when <see cref="Clear(bool, bool)"/> emptied a stack. Yjs 13.6's <c>UndoManager</c>.
 /// </summary>
 public class UndoManager
 {
@@ -46,7 +73,6 @@ public class UndoManager
 
     public class StackEventArgs : EventArgs
     {
-        // TODO: [alekseyk] To Read-Only.
         public StackEventArgs(StackItem item, OperationType type, IDictionary<AbstractType, IList<YEvent>> changedParentTypes, object origin)
         {
             StackItem = item;
@@ -62,8 +88,7 @@ public class UndoManager
     }
 
     /// <summary>
-    /// Payload for the <see cref="StackCleared"/> event. Mirrors Yjs' <c>'stack-cleared'</c>
-    /// event, which reports which of the two stacks were actually emptied.
+    /// Payload of <see cref="StackCleared"/>: which of the two stacks were emptied.
     /// </summary>
     public class StackClearedEventArgs : EventArgs
     {
@@ -77,23 +102,21 @@ public class UndoManager
         public bool RedoStackCleared { get; }
     }
 
-    // Scope entries are either an AbstractType (only that type's subtree is tracked) or a YDoc
-    // (the whole document is tracked). C# idiom: Yjs represents this as
-    // `Array<AbstractType<any> | Doc>`; since AbstractType and YDoc are unrelated classes in
-    // this port, `object` plays the role of that union, exactly as elsewhere in this codebase
-    // (e.g. `ISet<object> trackedOrigins`).
+    // Each entry is an AbstractType (its subtree is tracked) or a YDoc (the whole document is).
     private readonly List<object> _scope = new List<object>();
-    private Func<Item, bool> _deleteFilter;
-    private ISet<object> _trackedOrigins;
-    private Stack<StackItem> _undoStack;
-    private Stack<StackItem> _redoStack;
+    private readonly Func<Item, bool> _deleteFilter;
+    private readonly Func<Transaction, bool> _captureTransaction;
+    private readonly ISet<object> _trackedOrigins;
+    private readonly YDoc _doc;
+    private readonly int _captureTimeout;
 
-    // Whether the client is currently undoing (calling UndoManager.Undo()).
+    // The top of a stack is its last element, as in Yjs.
+    private List<StackItem> _undoStack = new List<StackItem>();
+    private List<StackItem> _redoStack = new List<StackItem>();
+
     private bool _undoing;
     private bool _redoing;
-    private YDoc _doc;
     private DateTime _lastChange;
-    private int _captureTimeout;
     private bool _destroyed;
 
     // The transaction of the running Undo or Redo, and its changed parent types as they were at its
@@ -101,116 +124,85 @@ public class UndoManager
     private Transaction _popTransaction;
     private IDictionary<AbstractType, IList<YEvent>> _poppedChangedParentTypes;
 
-    public UndoManager(AbstractType typeScope)
-        : this(new[] { typeScope }, 500, it => true, new HashSet<object> { null })
+    public UndoManager(AbstractType typeScope, UndoManagerOptions options = null)
+        : this(new object[] { typeScope ?? throw new ArgumentNullException(nameof(typeScope)) }, options)
     {
-        // Do nothing.
     }
 
-    // TODO: [alekseyk] Set default parameters (not for the Func<>), or create options, like YDocOptions.
-    public UndoManager(IList<AbstractType> typeScopes, int captureTimeout, Func<Item, bool> deleteFilter, ISet<object> trackedOrigins)
-        : this(typeScopes?.Cast<object>(), typeScopes != null && typeScopes.Count > 0 ? typeScopes[0].Doc : null, captureTimeout, deleteFilter, trackedOrigins)
+    /// <summary>Tracks every change of <paramref name="doc"/>, whichever type it touched.</summary>
+    public UndoManager(YDoc doc, UndoManagerOptions options = null)
+        : this(new object[] { doc ?? throw new ArgumentNullException(nameof(doc)) }, options)
     {
-        // Do nothing.
-    }
-
-    /// <summary>
-    /// Limits the scope of the UndoManager to the whole document: every change on <paramref name="doc"/>
-    /// will be tracked, regardless of which type it touched. Mirrors Yjs' <c>new UndoManager(doc, options)</c>.
-    /// </summary>
-    public UndoManager(YDoc doc, int captureTimeout = 500, Func<Item, bool> deleteFilter = null, ISet<object> trackedOrigins = null)
-        : this(new object[] { doc ?? throw new ArgumentNullException(nameof(doc)) }, doc, captureTimeout, deleteFilter, trackedOrigins)
-    {
-        // Do nothing.
     }
 
     /// <summary>
-    /// Limits the scope of the UndoManager to a mix of types and/or the owning document.
-    /// Mirrors Yjs' <c>new UndoManager(typeScope, options)</c> where <c>typeScope</c> may be an
-    /// array containing both <c>AbstractType</c>s and a <c>Doc</c>.
+    /// Tracks changes of the given types (and their children) and, for a <see cref="YDoc"/> entry, of the whole document.
     /// </summary>
-    public UndoManager(IEnumerable<object> scope, int captureTimeout = 500, Func<Item, bool> deleteFilter = null, ISet<object> trackedOrigins = null)
-        : this(scope, InferDoc(scope), captureTimeout, deleteFilter, trackedOrigins)
+    public UndoManager(IReadOnlyList<object> typeScope, UndoManagerOptions options = null)
     {
-        // Do nothing.
-    }
+        ArgumentNullException.ThrowIfNull(typeScope);
+        _doc = options?.Doc ?? InferDoc(typeScope)
+            ?? throw new ArgumentException("The document cannot be determined from an empty scope; set UndoManagerOptions.Doc.", nameof(typeScope));
 
-    private UndoManager(IEnumerable<object> scope, YDoc doc, int captureTimeout, Func<Item, bool> deleteFilter, ISet<object> trackedOrigins)
-    {
-        if (doc == null)
-        {
-            throw new ArgumentException("Could not determine the owning YDoc from the given scope; pass a non-empty scope or use the (YDoc, ...) constructor.");
-        }
-
-        _doc = doc;
-        _deleteFilter = deleteFilter ?? (_ => true);
-        // Match Yjs' actual default (`trackedOrigins = new Set([null])`): untracked transactions
-        // (the common case -- a plain edit with no explicit origin) must be tracked by default.
-        _trackedOrigins = trackedOrigins ?? new HashSet<object> { null };
+        AddToScope(typeScope);
+        _captureTimeout = options?.CaptureTimeout ?? 500;
+        _captureTransaction = options?.CaptureTransaction ?? (_ => true);
+        _deleteFilter = options?.DeleteFilter ?? (_ => true);
+        _trackedOrigins = options?.TrackedOrigins ?? new HashSet<object> { null };
         _trackedOrigins.Add(this);
-        _undoStack = new Stack<StackItem>();
-        _redoStack = new Stack<StackItem>();
-        _undoing = false;
-        _redoing = false;
+        IgnoreRemoteMapChanges = options?.IgnoreRemoteMapChanges ?? false;
         _lastChange = DateTime.MinValue;
-        _captureTimeout = captureTimeout;
-
-        AddToScope(scope);
 
         _doc.AfterTransaction += OnAfterTransaction;
         _doc.Destroyed += OnDocDestroyed;
     }
 
-    private static YDoc InferDoc(IEnumerable<object> scope)
+    private static YDoc InferDoc(IReadOnlyList<object> scope) => scope.Count == 0 ? null : scope[0] switch
     {
-        foreach (var entry in scope ?? Enumerable.Empty<object>())
-        {
-            switch (entry)
-            {
-                case YDoc d:
-                    return d;
-                case AbstractType at when at.Doc != null:
-                    return at.Doc;
-            }
-        }
-
-        return null;
-    }
+        YDoc d => d,
+        AbstractType at => at.Doc,
+        _ => null,
+    };
 
     public event EventHandler<StackEventArgs> StackItemAdded;
+
+    /// <summary>Fires when a captured change was merged into the stack item on top of the undo stack.</summary>
+    public event EventHandler<StackEventArgs> StackItemUpdated;
+
     public event EventHandler<StackEventArgs> StackItemPopped;
 
-    /// <summary>
-    /// Fires when <see cref="Clear()"/> (or <see cref="Clear(bool, bool)"/>) empties either stack.
-    /// Mirrors Yjs' <c>'stack-cleared'</c> event.
-    /// </summary>
+    /// <summary>Fires inside the transaction of <see cref="Clear(bool, bool)"/> when it empties a stack.</summary>
     public event EventHandler<StackClearedEventArgs> StackCleared;
 
-    public int Count => _undoStack.Count;
-
-    /// <summary>
-    /// The document this UndoManager operates on. Mirrors Yjs' <c>undoManager.doc</c>.
-    /// </summary>
     public YDoc Doc => _doc;
 
-    /// <summary>
-    /// The current tracking scope (a read-only view of <see cref="AbstractType"/> and/or
-    /// <see cref="YDoc"/> entries). Mirrors Yjs' <c>undoManager.scope</c>.
-    /// </summary>
+    /// <summary>The tracked <see cref="AbstractType"/> and <see cref="YDoc"/> entries.</summary>
     public IReadOnlyList<object> Scope => _scope;
 
+    /// <summary>The undo stack, oldest first; the last item is undone next.</summary>
+    public IReadOnlyList<StackItem> UndoStack => _undoStack;
+
+    /// <summary>The redo stack, oldest first; the last item is redone next.</summary>
+    public IReadOnlyList<StackItem> RedoStack => _redoStack;
+
     /// <summary>
-    /// Extend the scope with one more tracked type (or the whole document). Mirrors Yjs'
-    /// <c>addToScope(ytype)</c>.
+    /// The stack item being undone or redone, from the moment it changed the document until its
+    /// <see cref="StackItemPopped"/> handlers returned; null otherwise. The handlers of
+    /// <see cref="StackItemAdded"/> for the opposite stack can carry its <see cref="StackItem.Meta"/> over.
     /// </summary>
+    public StackItem CurrentStackItem { get; private set; }
+
+    /// <summary>See <see cref="UndoManagerOptions.IgnoreRemoteMapChanges"/>.</summary>
+    public bool IgnoreRemoteMapChanges { get; set; }
+
     public void AddToScope(object scopeEntry)
     {
         AddToScope(new[] { scopeEntry });
     }
 
     /// <summary>
-    /// Extend the scope with more tracked types (and/or the whole document). Each entry must be
-    /// an <see cref="AbstractType"/> or a <see cref="YDoc"/>. Mirrors Yjs' <c>addToScope(ytypes)</c>.
+    /// Extends the scope. Each entry must be an <see cref="AbstractType"/> or a <see cref="YDoc"/>; one already
+    /// in the scope is skipped.
     /// </summary>
     public void AddToScope(IEnumerable<object> scopeEntries)
     {
@@ -235,32 +227,18 @@ public class UndoManager
         }
     }
 
-    /// <summary>
-    /// Track an additional transaction origin. Mirrors Yjs' <c>addTrackedOrigin(origin)</c>.
-    /// </summary>
     public void AddTrackedOrigin(object origin) => _trackedOrigins.Add(origin);
 
-    /// <summary>
-    /// Stop tracking a transaction origin. Mirrors Yjs' <c>removeTrackedOrigin(origin)</c>.
-    /// </summary>
     public void RemoveTrackedOrigin(object origin) => _trackedOrigins.Remove(origin);
 
-    /// <summary>
-    /// Are undo steps available? Mirrors Yjs' <c>canUndo()</c>.
-    /// </summary>
     public bool CanUndo() => _undoStack.Count > 0;
 
-    /// <summary>
-    /// Are redo steps available? Mirrors Yjs' <c>canRedo()</c>.
-    /// </summary>
     public bool CanRedo() => _redoStack.Count > 0;
 
     public void Clear() => Clear(true, true);
 
     /// <summary>
-    /// Clears the undo and/or redo stack, releasing the items they were keeping alive for
-    /// potential redo. Fires <see cref="StackCleared"/> if either stack was actually emptied.
-    /// Mirrors Yjs' <c>clear(clearUndoStack, clearRedoStack)</c>.
+    /// Empties the undo and/or the redo stack and lets the deleted items they kept be garbage collected.
     /// </summary>
     public void Clear(bool clearUndoStack, bool clearRedoStack)
     {
@@ -271,102 +249,84 @@ public class UndoManager
 
         _doc.Transact(tr =>
         {
-            void clearItem(StackItem stackItem)
-            {
-                stackItem.DeleteSet.IterateDeletedStructs(tr, i =>
-                {
-                    if (i is Item item && InScope(item))
-                    {
-                        item.KeepItemAndParents(false);
-                    }
-
-                    return true;
-                });
-            }
-
             if (clearUndoStack)
             {
                 foreach (var item in _undoStack)
                 {
-                    clearItem(item);
+                    ClearStackItem(tr, item);
                 }
 
-                _undoStack.Clear();
+                _undoStack = new List<StackItem>();
             }
 
             if (clearRedoStack)
             {
                 foreach (var item in _redoStack)
                 {
-                    clearItem(item);
+                    ClearStackItem(tr, item);
                 }
 
-                _redoStack.Clear();
+                _redoStack = new List<StackItem>();
             }
-        });
 
-        StackCleared?.Invoke(this, new StackClearedEventArgs(clearUndoStack, clearRedoStack));
+            StackCleared?.Invoke(this, new StackClearedEventArgs(clearUndoStack, clearRedoStack));
+        });
+    }
+
+    private void ClearStackItem(Transaction tr, StackItem stackItem)
+    {
+        stackItem.Deletions.IterateDeletedStructs(tr, i =>
+        {
+            if (i is Item item && InScope(item))
+            {
+                item.KeepItemAndParents(false);
+            }
+
+            return true;
+        });
     }
 
     /// <summary>
-    /// UndoManager merges Undo-StackItem if they are created within time-gap
-    /// smaller than 'captureTimeout'. Call this method so that the next StackItem
-    /// won't be merged.
+    /// Changes are merged into one stack item while they come within the capture timeout of each other;
+    /// after this call the next change starts a new one.
     /// </summary>
     public void StopCapturing()
     {
         _lastChange = DateTime.MinValue;
     }
 
-    /// <summary>
-    /// Undo last changes on type.
-    /// </summary>
-    /// <returns>
-    /// Returns stack item if a change was applied.
-    /// </returns>
+    /// <summary>Undoes the last stack item that changes the document.</summary>
+    /// <returns>The stack item, or null when none changed anything.</returns>
     public StackItem Undo()
     {
         _undoing = true;
-        StackItem res;
-
         try
         {
-            res = PopStackItem(_undoStack, OperationType.Undo);
+            return PopStackItem(_undoStack, OperationType.Undo);
         }
         finally
         {
             _undoing = false;
         }
-
-        return res;
     }
 
-    /// <summary>
-    /// Redo last changes on type.
-    /// </summary>
-    /// <returns>
-    /// Returns stack item if a change was applied.
-    /// </returns>
+    /// <summary>Redoes the last undone stack item that changes the document.</summary>
+    /// <returns>The stack item, or null when none changed anything.</returns>
     public StackItem Redo()
     {
         _redoing = true;
-        StackItem res;
-
         try
         {
-            res = PopStackItem(_redoStack, OperationType.Redo);
+            return PopStackItem(_redoStack, OperationType.Redo);
         }
         finally
         {
             _redoing = false;
         }
-
-        return res;
     }
 
     /// <summary>
-    /// Unhooks this UndoManager from its document and stops tracking. Mirrors Yjs' <c>destroy()</c>.
-    /// Safe to call more than once.
+    /// Unhooks this UndoManager from its document. Safe to call more than once.
     /// </summary>
     public void Destroy()
     {
@@ -390,8 +350,8 @@ public class UndoManager
             _poppedChangedParentTypes = CopyChangedParentTypes(transaction, StackItemPopped);
         }
 
-        // Only track certain transactions.
-        if (!ScopeChanged(transaction) ||
+        if (!_captureTransaction(transaction) ||
+            !ScopeChanged(transaction) ||
             (!_trackedOrigins.Contains(transaction.Origin) &&
                 (transaction.Origin == null || !_trackedOrigins.Contains(transaction.Origin.GetType()))))
         {
@@ -404,30 +364,37 @@ public class UndoManager
 
         if (undoing)
         {
-            // Next undo should not be appended to last stack item.
+            // The next undo must not be merged into the last stack item.
             StopCapturing();
         }
         else if (!redoing)
         {
-            // Neither undoing nor redoing: delete redoStack.
             Clear(false, true);
         }
 
-        // The stack item keeps the transaction's states and delete set, which the transaction then
-        // does not reuse.
+        var insertions = new DeleteSet();
+        foreach (var (client, endClock) in transaction.AfterState)
+        {
+            var startClock = transaction.BeforeState.TryGetValue(client, out var clock) ? clock : 0;
+            if (endClock > startClock)
+            {
+                insertions.Add(client, startClock, endClock - startClock);
+            }
+        }
+
         var now = DateTime.UtcNow;
+        var didAdd = false;
         if ((now - _lastChange).TotalMilliseconds < _captureTimeout && stack.Count > 0 && !undoing && !redoing)
         {
-            // Append change to last stack op.
-            var lastOp = stack.Peek();
-            lastOp.DeleteSet = new DeleteSet(new List<DeleteSet>() { lastOp.DeleteSet, transaction.DeleteSet });
-            lastOp.AfterState = transaction.TakeAfterState();
+            var lastOp = stack[^1];
+            lastOp.Deletions = new DeleteSet(new List<DeleteSet> { lastOp.Deletions, transaction.DeleteSet });
+            lastOp.Insertions = new DeleteSet(new List<DeleteSet> { lastOp.Insertions, insertions });
         }
         else
         {
-            // Create a new stack op.
-            var item = new StackItem(transaction.TakeDeleteSet(), transaction.TakeBeforeState(), transaction.TakeAfterState());
-            stack.Push(item);
+            // The stack item keeps the transaction's delete set, which the transaction then does not reuse.
+            stack.Add(new StackItem(transaction.TakeDeleteSet(), insertions));
+            didAdd = true;
         }
 
         if (!undoing && !redoing)
@@ -435,7 +402,7 @@ public class UndoManager
             _lastChange = now;
         }
 
-        // Make sure that deleted structs are not GC'd.
+        // Deleted structs must not be garbage collected while a stack item can restore them.
         transaction.DeleteSet.IterateDeletedStructs(transaction, i =>
         {
             if (i is Item item && InScope(item))
@@ -446,15 +413,15 @@ public class UndoManager
             return true;
         });
 
-        var added = StackItemAdded;
-        added?.Invoke(this, new StackEventArgs(stack.Peek(), undoing ? OperationType.Redo : OperationType.Undo, CopyChangedParentTypes(transaction, added), transaction.Origin));
+        var handler = didAdd ? StackItemAdded : StackItemUpdated;
+        handler?.Invoke(this, new StackEventArgs(stack[^1], undoing ? OperationType.Redo : OperationType.Undo, CopyChangedParentTypes(transaction, handler), transaction.Origin));
     }
 
     private bool ScopeChanged(Transaction transaction)
     {
         foreach (var entry in _scope)
         {
-            if (entry is YDoc || (entry is AbstractType at && transaction._changedParentTypes.ContainsKey(at)))
+            if (entry == _doc || (entry is AbstractType at && transaction._changedParentTypes.ContainsKey(at)))
             {
                 return true;
             }
@@ -467,7 +434,7 @@ public class UndoManager
     {
         foreach (var entry in _scope)
         {
-            if (IsParentOf(entry, item))
+            if (entry == _doc || (entry is AbstractType type && IsParentOf(type, item)))
             {
                 return true;
             }
@@ -480,170 +447,246 @@ public class UndoManager
     private static Dictionary<AbstractType, IList<YEvent>> CopyChangedParentTypes(Transaction transaction, Delegate handler) =>
         handler == null ? null : new Dictionary<AbstractType, IList<YEvent>>(transaction._changedParentTypes);
 
-    private StackItem PopStackItem(Stack<StackItem> stack, OperationType eventType)
+    private StackItem PopStackItem(List<StackItem> stack, OperationType eventType)
     {
-        StackItem result = null;
-
-        // Keep a reference to the transaction so we can fire the event with the 'changedParentTypes'.
         Transaction tr = null;
 
         // Reset here too: a Transact that threw left them set.
         _popTransaction = null;
         _poppedChangedParentTypes = null;
+        CurrentStackItem = null;
 
-        _doc.Transact(transaction =>
+        try
         {
-            tr = transaction;
-            _popTransaction = transaction;
-
-            while (stack.Count > 0 && result == null)
+            _doc.Transact(transaction =>
             {
-                var stackItem = stack.Pop();
-                var itemsToRedo = new HashSet<Item>();
-                var itemsToDelete = new List<Item>();
-                var performedChange = false;
+                tr = transaction;
+                _popTransaction = transaction;
+                var store = _doc.Store;
 
-                foreach (var kvp in stackItem.AfterState)
+                while (stack.Count > 0 && CurrentStackItem == null)
                 {
-                    var client = kvp.Key;
-                    var endClock = kvp.Value;
+                    var stackItem = stack[^1];
+                    stack.RemoveAt(stack.Count - 1);
+                    var itemsToRedo = new HashSet<Item>();
+                    var itemsToDelete = new List<Item>();
+                    var performedChange = false;
 
-                    if (!stackItem.BeforeState.TryGetValue(client, out var startClock))
+                    stackItem.Insertions.IterateDeletedStructs(transaction, str =>
                     {
-                        startClock = 0;
-                    }
-
-                    var len = endClock - startClock;
-                    var structs = _doc.Store.Clients[client];
-
-                    if (startClock != endClock)
-                    {
-                        // Make sure structs don't overlap with the range of created operations [stackItem.start, stackItem.start + stackItem.end).
-                        // This must be executed before deleted structs are iterated.
-                        _doc.Store.GetItemCleanStart(transaction, new ID(client, startClock));
-
-                        if (endClock < _doc.Store.GetState(client))
+                        if (str is Item item)
                         {
-                            _doc.Store.GetItemCleanStart(transaction, new ID(client, endClock));
-                        }
-
-                        _doc.Store.IterateStructs(transaction, structs, startClock, len, str =>
-                        {
-                            if (str is Item it)
+                            if (item.Redone != null)
                             {
-                                if (it.Redone != null)
+                                var (redone, diff) = store.FollowRedone(str.Id);
+                                if (diff > 0)
                                 {
-                                    var redoneResult = _doc.Store.FollowRedone(str.Id);
-                                    var diff = redoneResult.diff;
-                                    var item = redoneResult.item;
-
-                                    if (diff > 0)
-                                    {
-                                        item = _doc.Store.GetItemCleanStart(transaction, new ID(item.Id.Client, item.Id.Clock + diff)) as Item;
-                                    }
-
-                                    if (item.Length > len)
-                                    {
-                                        _doc.Store.GetItemCleanStart(transaction, new ID(item.Id.Client, endClock));
-                                    }
-
-                                    str = it = item as Item;
+                                    redone = store.GetItemCleanStart(transaction, new ID(redone.Id.Client, redone.Id.Clock + diff));
                                 }
 
-                                if (!it.Deleted && InScope(it))
-                                {
-                                    itemsToDelete.Add(it);
-                                }
+                                // A garbage-collected copy counts as deleted.
+                                item = redone as Item;
                             }
 
-                            return true;
-                        });
+                            if (item != null && !item.Deleted && InScope(item))
+                            {
+                                itemsToDelete.Add(item);
+                            }
+                        }
+
+                        return true;
+                    });
+
+                    stackItem.Deletions.IterateDeletedStructs(transaction, str =>
+                    {
+                        // Structs in the insertions were created and deleted in the same capture interval: never redo them.
+                        if (str is Item item && InScope(item) && !stackItem.Insertions.IsDeleted(item.Id))
+                        {
+                            itemsToRedo.Add(item);
+                        }
+
+                        return true;
+                    });
+
+                    foreach (var item in itemsToRedo)
+                    {
+                        performedChange = RedoItem(transaction, item, itemsToRedo, stackItem.Insertions) != null || performedChange;
                     }
+
+                    // Children are deleted before their parents, so the filter sees more of them.
+                    for (int i = itemsToDelete.Count - 1; i >= 0; i--)
+                    {
+                        var item = itemsToDelete[i];
+                        if (_deleteFilter(item))
+                        {
+                            item.Delete(transaction);
+                            performedChange = true;
+                        }
+                    }
+
+                    CurrentStackItem = performedChange ? stackItem : null;
                 }
 
-                stackItem.DeleteSet.IterateDeletedStructs(transaction, str =>
+                foreach (var (type, subProps) in transaction.Changed)
                 {
-                    var id = str.Id;
-                    var clock = id.Clock;
-                    var client = id.Client;
-
-                    if (!stackItem.BeforeState.TryGetValue(client, out var startClock))
+                    if (subProps.Contains(null) && type is YArrayBase arr)
                     {
-                        startClock = 0;
-                    }
-
-                    if (!stackItem.AfterState.TryGetValue(client, out var endClock))
-                    {
-                        endClock = 0;
-                    }
-
-                    if (str is Item item &&
-                        InScope(item) &&
-                        // Never redo structs in [stackItem.start, stackItem.start + stackItem.end), because they were created and deleted in the same capture interval.
-                        !(clock >= startClock && clock < endClock))
-                    {
-                        itemsToRedo.Add(item);
-                    }
-
-                    return true;
-                });
-
-                foreach (var str in itemsToRedo)
-                {
-                    performedChange |= transaction.RedoItem(str, itemsToRedo) != null;
-                }
-
-                // We want to delete in reverse order so that children are deleted before
-                // parents, so we have more information available when items are filtered.
-                for (int i = itemsToDelete.Count - 1; i >= 0; i--)
-                {
-                    var item = itemsToDelete[i];
-                    if (_deleteFilter(item))
-                    {
-                        item.Delete(transaction);
-                        performedChange = true;
+                        arr.ClearSearchMarkers();
                     }
                 }
+            }, origin: this);
 
-                result = stackItem;
-            }
-
-            foreach (var kvp in transaction.Changed)
+            var result = CurrentStackItem;
+            if (result != null)
             {
-                var type = kvp.Key;
-                var subProps = kvp.Value;
-
-                // Destroy search marker if necessary.
-                if (subProps.Contains(null) && type is YArrayBase arr)
-                {
-                    arr.ClearSearchMarkers();
-                }
+                // Within an outer transaction, this one is not cleaned up yet: its types are still being collected.
+                var changedParentTypes = _poppedChangedParentTypes ?? tr._changedParentTypes;
+                _popTransaction = null;
+                _poppedChangedParentTypes = null;
+                StackItemPopped?.Invoke(this, new StackEventArgs(result, eventType, changedParentTypes, this));
             }
-        }, origin: this);
 
-        // Within an outer transaction, this one is not cleaned up yet: its types are still being collected.
-        var changedParentTypes = _poppedChangedParentTypes ?? tr._changedParentTypes;
-        _popTransaction = null;
-        _poppedChangedParentTypes = null;
-
-        if (result != null)
-        {
-            StackItemPopped?.Invoke(this, new StackEventArgs(result, eventType, changedParentTypes, this));
+            return result;
         }
-
-        return result;
+        finally
+        {
+            _popTransaction = null;
+            _poppedChangedParentTypes = null;
+            CurrentStackItem = null;
+        }
     }
 
-    private static bool IsParentOf(object scopeEntry, Item child)
+    private static bool IsDeletedByStack(List<StackItem> stack, ID id)
     {
-        if (scopeEntry is YDoc)
+        foreach (var stackItem in stack)
         {
-            // Whole-document scope: every item in this document is "in scope".
-            return true;
+            if (stackItem.Deletions.IsDeleted(id))
+            {
+                return true;
+            }
         }
 
-        var parent = scopeEntry as AbstractType;
+        return false;
+    }
 
+    /// <summary>
+    /// Integrates a copy of the deleted <paramref name="item"/> at its old place, and its deleted parents
+    /// first when they are redone too; null when it cannot be redone. Yjs 13.6's <c>redoItem</c>.
+    /// </summary>
+    private AbstractStruct RedoItem(Transaction transaction, Item item, HashSet<Item> redoItems, DeleteSet itemsToDelete)
+    {
+        var store = transaction.Doc.Store;
+        var ownClientId = transaction.Doc.ClientId;
+        if (item.Redone != null)
+        {
+            return store.GetItemCleanStart(transaction, item.Redone.Value);
+        }
+
+        var parentItem = ((AbstractType)item.Parent)._item;
+        Item left = null;
+        Item right;
+
+        // The parent must be redone first.
+        if (parentItem != null && parentItem.Deleted)
+        {
+            // It is redone only if it is redone anyway.
+            if (parentItem.Redone == null && (!redoItems.Contains(parentItem) || RedoItem(transaction, parentItem, redoItems, itemsToDelete) == null))
+            {
+                return null;
+            }
+
+            while (parentItem.Redone != null)
+            {
+                parentItem = (Item)store.GetItemCleanStart(transaction, parentItem.Redone.Value);
+            }
+        }
+
+        var parentType = parentItem == null ? (AbstractType)item.Parent : ((ContentType)parentItem.Content).Type;
+
+        if (item.ParentSub == null)
+        {
+            // A list item goes back to its old position: between the nearest neighbours, or their redone copies, in the parent.
+            left = item.Left as Item;
+            right = item;
+            while (left != null)
+            {
+                var leftTrace = left;
+                while (leftTrace != null && ((AbstractType)leftTrace.Parent)._item != parentItem)
+                {
+                    leftTrace = leftTrace.Redone == null ? null : (Item)store.GetItemCleanStart(transaction, leftTrace.Redone.Value);
+                }
+
+                if (leftTrace != null)
+                {
+                    left = leftTrace;
+                    break;
+                }
+
+                left = left.Left as Item;
+            }
+
+            while (right != null)
+            {
+                var rightTrace = right;
+                while (rightTrace != null && ((AbstractType)rightTrace.Parent)._item != parentItem)
+                {
+                    rightTrace = rightTrace.Redone == null ? null : (Item)store.GetItemCleanStart(transaction, rightTrace.Redone.Value);
+                }
+
+                if (rightTrace != null)
+                {
+                    right = rightTrace;
+                    break;
+                }
+
+                right = right.Right as Item;
+            }
+        }
+        else
+        {
+            right = null;
+            if (item.Right != null && !IgnoreRemoteMapChanges)
+            {
+                // A later value of the key is replaced only when it was redone, or deleted by this undo or a stack
+                // item; any other one is a change this UndoManager did not make, and the item is not redone.
+                left = item;
+                while (left.Right is Item next &&
+                    (next.Redone != null || itemsToDelete.IsDeleted(next.Id) || IsDeletedByStack(_undoStack, next.Id) || IsDeletedByStack(_redoStack, next.Id)))
+                {
+                    left = next;
+                    while (left.Redone != null)
+                    {
+                        left = (Item)store.GetItemCleanStart(transaction, left.Redone.Value);
+                    }
+                }
+
+                if (left.Right != null)
+                {
+                    return null;
+                }
+            }
+            else
+            {
+                left = parentType._map.GetValueOrDefault(item.ParentSub);
+            }
+
+            // A left neighbour in another parent would give the copy an origin that misleads remote peers.
+            if (left != null && ((AbstractType)left.Parent)._item != parentItem)
+            {
+                left = parentType._map.GetValueOrDefault(item.ParentSub);
+            }
+        }
+
+        var nextId = new ID(ownClientId, store.GetState(ownClientId));
+        var redoneItem = new Item(nextId, left, left?.LastId, right, right?.Id, parentType, item.ParentSub, item.Content.Copy());
+        item.Redone = nextId;
+        redoneItem.KeepItemAndParents(true);
+        redoneItem.Integrate(transaction, 0);
+        return redoneItem;
+    }
+
+    private static bool IsParentOf(AbstractType parent, Item child)
+    {
         while (child != null)
         {
             if (child.Parent == parent)
@@ -651,7 +694,7 @@ public class UndoManager
                 return true;
             }
 
-            child = (child.Parent as AbstractType)._item;
+            child = ((AbstractType)child.Parent)._item;
         }
 
         return false;

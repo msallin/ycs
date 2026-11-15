@@ -104,18 +104,18 @@ public class UndoManagerParityTests
     {
         var doc = new YDoc();
         var text = doc.GetText("text");
-        var um = new UndoManager(new[] { text }, 500, it => true, new HashSet<object>());
+        var um = new UndoManager(text, new UndoManagerOptions { TrackedOrigins = new HashSet<object>() });
 
         doc.Transact(_ => text.Insert(0, "untracked"), origin: "some-origin");
-        Assert.AreEqual(0, um.Count);
+        Assert.AreEqual(0, um.UndoStack.Count);
 
         um.AddTrackedOrigin("some-origin");
         doc.Transact(_ => text.Insert(0, "tracked"), origin: "some-origin");
-        Assert.AreEqual(1, um.Count);
+        Assert.AreEqual(1, um.UndoStack.Count);
 
         um.RemoveTrackedOrigin("some-origin");
         doc.Transact(_ => text.Insert(0, "untracked-again"), origin: "some-origin");
-        Assert.AreEqual(1, um.Count, "After RemoveTrackedOrigin, further edits with that origin must not be tracked.");
+        Assert.AreEqual(1, um.UndoStack.Count, "After RemoveTrackedOrigin, further edits with that origin must not be tracked.");
     }
 
     [TestMethod]
@@ -127,13 +127,13 @@ public class UndoManagerParityTests
         var um = new UndoManager(map1);
 
         map2.Set("x", 1);
-        Assert.AreEqual(0, um.Count, "map2 isn't in scope yet.");
+        Assert.AreEqual(0, um.UndoStack.Count, "map2 isn't in scope yet.");
 
         um.AddToScope(map2);
         Assert.IsTrue(um.Scope.Contains(map2));
 
         map2.Set("y", 2);
-        Assert.AreEqual(1, um.Count);
+        Assert.AreEqual(1, um.UndoStack.Count);
 
         um.Undo();
         Assert.IsFalse(map2.ContainsKey("y"));
@@ -155,7 +155,7 @@ public class UndoManagerParityTests
         um.StopCapturing();
         text.Insert(0, "hi");
 
-        Assert.AreEqual(3, um.Count);
+        Assert.AreEqual(3, um.UndoStack.Count);
 
         um.Undo();
         Assert.AreEqual(string.Empty, text.ToString());
@@ -173,13 +173,13 @@ public class UndoManagerParityTests
         var um = new UndoManager(text);
 
         text.Insert(0, "a");
-        Assert.AreEqual(1, um.Count);
+        Assert.AreEqual(1, um.UndoStack.Count);
 
         um.Destroy();
         um.Destroy(); // Must be safe to call twice.
 
         text.Insert(1, "b");
-        Assert.AreEqual(1, um.Count, "No further transactions should be tracked after Destroy().");
+        Assert.AreEqual(1, um.UndoStack.Count, "No further transactions should be tracked after Destroy().");
     }
 
     [TestMethod]
@@ -194,6 +194,6 @@ public class UndoManagerParityTests
         // The manager must have unhooked itself from the (now-destroyed) doc's events: further
         // transactions must not grow its stack, and nothing should throw.
         doc.Transact(_ => text.Insert(0, "x"));
-        Assert.AreEqual(0, um.Count);
+        Assert.AreEqual(0, um.UndoStack.Count);
     }
 }
