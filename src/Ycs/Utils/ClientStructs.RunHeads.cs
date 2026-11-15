@@ -32,10 +32,11 @@ internal sealed partial class ClientStructs
     private const byte Format = 4;
 
     /// <summary>
-    /// The log2 of the block size of the lists made from now on: 64 positions; the property tests make blocks of 2,
-    /// so that their short lists cross block boundaries.
+    /// The log2 of the block size of the lists made from now on: 512 positions (a split or a merge updates the sums of
+    /// the blocks after it, a lookup scans at most a block on each side and the block sums between); the property
+    /// tests make blocks of 2, so that their short lists cross block boundaries.
     /// </summary>
-    internal static int BlockShiftForNewLists = 6;
+    internal static int BlockShiftForNewLists = 9;
 
     private readonly int _blockShift = BlockShiftForNewLists;
 
@@ -49,7 +50,7 @@ internal sealed partial class ClientStructs
     // Per position: Break, Visible, Format; kept with the structs (FlagsAt says what they are).
     private byte[] _flags;
 
-    // Per block of 64 positions, the sum of the visible lengths. long: a block of int lengths can exceed int.
+    // Per block of positions, the sum of the visible lengths. long: a block of int lengths can exceed int.
     private long[] _sums;
 
     private int BlockOf(int position) => position >> _blockShift;

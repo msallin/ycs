@@ -4,8 +4,8 @@ Status: proposed, 2026-11-15. Measured with a model (`bench/Ycs.Layout`, results
 section 7 are implemented on today's objects (`src/Ycs/Utils/ClientStructs.cs`, `ClientStructs.RunHeads.cs`), with
 these changes against section 3.3 (after the design review): the break flag is taken by reference (`structs[i]` is an
 item whose `Left` is `structs[i - 1]`), not from ids; a position's visible length is its clock length when its flag
-says visible (no array of lengths), summed per block of 64 positions, and the blocks are scanned, not kept in a
-Fenwick tree: a split or a merge moves every later block boundary, so it updates the later blocks' sums (O(n/64), as
+says visible (no array of lengths), summed per block of 512 positions, and the blocks are scanned, not kept in a
+Fenwick tree: a split or a merge moves every later block boundary, so it updates the later blocks' sums (O(n/512), as
 the flat order's shift is O(n)); the walk right jumps only over what Yjs' loop passes (the visible length stays short
 of the target) and the loop takes the last steps, which keeps Yjs' rule at a chain's end (when the length reaches the
 index exactly at an item's end, the loop steps on to its right neighbour, whichever it is); the callers' walks from
