@@ -1,5 +1,36 @@
 # Walkthrough C: undo, snapshots, positions, subdocuments, encoders, protocols
 
+## Status
+
+Where each finding stands on branch `integrate` (fix-core, fix-undo and fix-types merged). The
+walkthrough below describes the code at 40d7fdb.
+
+| Finding | Status |
+| --- | --- |
+| 1 undo of untracked content in merged captures | fixed in 3735809 |
+| 2 a stack item that changes nothing | fixed in 3735809 |
+| 3 `RedoItem` of 13.4 | fixed in 3735809 |
+| 4 undo of a deleted nested `YText` | fixed in 0faeec2 |
+| 5 relative position at the edge of a nested type | fixed in 576976d |
+| 6 subdocument options and lifecycle | fixed in 7547e92 |
+| 7 v2 struct limit | fixed in a0e0904 |
+| 8 client ids of 2^32 and above | fixed in e833da7; generated ids have 32 bits since 0432537 |
+| 9 `Destroy` with subdocuments | fixed in 7547e92 |
+| 10 `YText.ToDelta` | fixed in ad0baa4 (embedded types) and a66588c (`computeYChange`, no transaction, outside a document) |
+| 11 lone surrogate escape in v1 JSON | fixed in 1d11000 |
+| 12 PermanentUserData | fixed in f49d651; the filter still gets the transaction only, on purpose (the delete set is internal) |
+| 13 events of the UndoManager | fixed in 3735809 and 0ddbae0 |
+| 14 snapshot-aware reads | `GetAttributes(snapshot)` fixed in 0ecec64; the reads that split structs in a transaction are kept on purpose (right results for merged structs) |
+| 15 sync protocol errors | fixed in f48345c (optional error handler) |
+| 16 decoding leniency | invalid UTF-8 fixed in 1d11000; the rest is kept on purpose (hardening) |
+| 17 merging to the left stops after one struct | fixed in 0b1cbe6; the 20 scripts of a 20,000 x 60 undo fuzz run it broke are replayed since 05564bc (the run matches Yjs on every step) |
+| `YMap.Get` of a missing key | fixed in 3c95cc7 |
+| untrusted-input holes: snapshots | fixed in bced462 and a791a61 |
+| untrusted-input holes: JSON positions | fixed in d8d34ec |
+| untrusted-input holes: `users` map | fixed in f49d651 |
+| least verified 1: undo with XML, embeds, more clients | covered by the differential undo fuzz (3ec10ef) |
+| least verified 3: subdocument lifecycle | nested destroy tested in cca5965, undo and redo of a subdocument in bdc5f59; nothing differed |
+
 Side-by-side reading of Ycs (`modernize`, 40d7fdb) against Yjs 13.6.32 (`interop/corpus/node_modules/yjs/src`),
 lib0 0.2.120 and y-protocols 1.0.7. Nothing in the repository was changed; this file is the only addition.
 

@@ -1,5 +1,39 @@
 # Walkthrough of the core against Yjs 13.6.32 (area A)
 
+## Status
+
+Where each finding stands on branch `integrate` (fix-core, fix-undo and fix-types merged). The
+walkthrough below describes the code at 40d7fdb.
+
+| Finding | Status |
+| --- | --- |
+| F1 `GC.MergeWith` merges anything | fixed in 7f3487e |
+| F2 subdocument options | fixed in 7547e92 |
+| F3 `EncodeStateAsUpdate` without pending data | fixed in 9fb7ade |
+| F4 `redoItem` of an older Yjs | fixed in 3735809 |
+| F5 `getMissing` | fixed in 389bbe4 |
+| F6 v2 cap of 64 structs per byte | fixed in a0e0904 |
+| F7 `Destroy` with subdocuments | fixed in 7547e92 |
+| F8 structs of length 0 rejected | open |
+| F9 client ids of 2^32 and above | fixed in e833da7; generated ids have 32 bits as Yjs since 0432537 |
+| F10 `IterateDeletedStructs` without guards | fixed in a791a61; the snapshot split uses it since the merge 2ab12d4 |
+| F11 `meta` that is not an object | fixed in 7547e92 |
+| F12 `MaxPendingBytes` of 16 MiB | fixed in 928d947 (no limit by default) |
+| F13 nesting deeper than 256 | kept on purpose: bounds the recursion on untrusted input |
+| F14 deep observers' `CurrentTarget` and `Path` | fixed in 0701f70 |
+| F15 unstable sort of deep events | fixed in 5727865 |
+| F16 events of deleted targets | fixed in 0701f70 |
+| F17 subdocument's client id | fixed in 7547e92 |
+| F18 exception paths of the cleanup | partly: the handlers of one event run as `callAll` and the last exception propagates (0701f70); across the phases the first exception is rethrown, and (b) to (d) are open |
+| F19 unstable sort in `MergeUpdates` | fixed in 5727865 |
+| F20 `ContentJSON` loses `undefined` | fixed in 3d0c9c0 |
+| F21 root type of a pending struct | kept on purpose: no public API lists the root types, so it cannot be observed; the struct reader would need the document |
+| F22 `DeleteSet.Read` normalizes | kept on purpose: Yjs writes neither form, and the deletions applied are the same |
+| F23 `Get<T>` accepts a subclass | fixed in 7d3f3cf |
+| F24 inserting an integrated subdocument again | fixed in 7547e92 |
+| F25 `Destroy` of a deleted subdocument | fixed in 7547e92 |
+| F26 `ContentDeleted.GetContent()` | fixed in 7d3f3cf; the map snapshot reads and event keys read null for it since 2747d2a |
+
 Side-by-side reading of `src/Ycs` (branch `modernize`, 40d7fdb) against
 `interop/corpus/node_modules/yjs/src` (yjs 13.6.32, lib0 beside it). Scope: `structs/*`,
 `utils/{StructStore,Transaction,DeleteSet,encoding,updates,ID,isParentOf,Doc}.js` and their C#

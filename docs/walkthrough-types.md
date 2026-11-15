@@ -1,5 +1,37 @@
 # Walkthrough B: shared types and their events, against Yjs 13.6.32
 
+## Status
+
+Where each finding stands on branch `integrate` (fix-core, fix-undo and fix-types merged). The
+walkthrough below describes the code at 40d7fdb.
+
+| Finding | Status |
+| --- | --- |
+| 1 `YTextEvent.Delta` repeats inserts | fixed in 885716f |
+| 2 13.4 formatting logic in the event delta | fixed in 885716f |
+| 3 deep observers' `CurrentTarget` and `Path` | fixed in 0701f70 |
+| 4 order of deep events | fixed in 5727865 |
+| 5 observer order after a deleted type | fixed in 0701f70 |
+| 6 deep events of deleted targets | fixed in 0701f70 |
+| 7 `Push`/`Add` | fixed in 96cc99b |
+| 8 deleted structs merged less | fixed in 0b1cbe6 |
+| 9 `Insert` beyond the length | fixed in 96cc99b |
+| 10 shared types inside a text | fixed in ad0baa4 |
+| 11 `Keys`/`Changes` after the GC | fixed in bf89228; map snapshot reads of collected values since 2747d2a |
+| 12 a throwing observer stops the others | fixed in 0701f70 |
+| 13 `YTextEvent.Changes` | fixed in a66588c |
+| 14 `ToDelta` compares `State` | fixed in a66588c |
+| 15 `ToDelta()` opens a transaction | fixed in a66588c |
+| 16 events only when observed | partly: T10 fixed in 0701f70; `ChangedParentTypes` stays empty for a document with only `Update`, `UpdateV2` or `BeforeObserverCalls` listeners, kept on purpose (events are built only when observed) |
+| 17 exceptions where Yjs returns | fixed in 3c95cc7 and 96cc99b |
+| 18 XML string forms | fixed in 0ecec64 |
+| 19 `FindMarker` integer division | fixed in ff8efee |
+| 20a, 20b, 20e attribute comparison, format order, copied bytes | fixed in e4c2b53 |
+| 20c double unobserve | fixed in fd75ff5 (an unknown handler is ignored; Yjs logs an error) |
+| 20d `sanitize: false` of a pending `applyDelta` | kept on purpose: the port keeps the option, Yjs loses it |
+| 20f `ContentString.GetContent()` | fixed in a3b3ea5 |
+| traces pinned on 3, 4, 5, 8 (522) | all pass since the merge 0149a2a; the pins are gone |
+
 Scope: `types/AbstractType.js`, `YArray.js`, `YMap.js`, `YText.js`, `YXml*.js`, `utils/YEvent.js`,
 `utils/EventHandler.js` and the observer part of `utils/Transaction.js`, against `src/Ycs/Types/**`,
 `Utils/YEvent.cs`, the observer part of `Utils/Transaction.cs`, and the content classes as the types
