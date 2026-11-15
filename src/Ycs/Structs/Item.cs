@@ -233,8 +233,12 @@ public partial class Item : AbstractStruct
         }
 
         var rightItem = (Item)right;
-        var merged = Content.MergeWith(rightItem.Content);
-        Debug.Assert(merged);
+        if (!Content.MergeWith(rightItem.Content))
+        {
+            throw new InvalidOperationException(
+                $"The content of {right.Id.Client}:{right.Id.Clock} did not merge into its left neighbour's although its kind merges (a bug of " +
+                "Ycs). Nothing was changed.");
+        }
 
         (Parent as YArrayBase)?.OnMerge(this, rightItem);
 

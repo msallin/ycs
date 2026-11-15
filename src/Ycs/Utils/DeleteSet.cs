@@ -346,8 +346,14 @@ internal class DeleteSet
         for (var k = first + 1; k <= pos; k++)
         {
             var right = structs[k];
-            var done = left.MergeWith(right);
-            Debug.Assert(done);
+            if (!left.MergeWith(right))
+            {
+                throw new InvalidOperationException(
+                    $"The struct {right.Id.Client}:{right.Id.Clock} did not merge into its left neighbour although it can (a bug of Ycs). The " +
+                    "structs before it in the run were merged into the run's first struct and are still in the client's struct list: the " +
+                    "document is inconsistent and must not be used further.");
+            }
+
             RetargetMapEntry(left, right);
         }
 
