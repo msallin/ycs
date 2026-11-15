@@ -90,8 +90,8 @@ internal sealed class Lib0Reader
 
     /// <summary>
     /// Unsigned variable-length integer (lib0 <c>readVarUint</c>). Values that do not fit
-    /// into 32 bits are rejected instead of being silently truncated: Ycs keeps client ids,
-    /// clocks and lengths in 32 bits, as Yjs does in practice.
+    /// into 32 bits are rejected instead of being silently truncated: Ycs keeps clocks, lengths
+    /// and counts in 32 bits; client ids are read with <see cref="ReadVarUint53"/>.
     /// </summary>
     public uint ReadVarUint()
     {
