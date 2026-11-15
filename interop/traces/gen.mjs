@@ -450,8 +450,8 @@ const xmlTrace = (n) => {
 
 // -------------------------------------------------------------------------------------- snapshots
 
-// The other clients have ids above 2^31, as half of all Yjs client ids do: computeYChange reports them.
-const snapshotClients = [1, 3000000001, 4294967295]
+// Every client id is above 2^31, as half of all Yjs client ids are: computeYChange reports them.
+const snapshotClients = [2147483648, 3000000001, 4294967295]
 const computeYChange = (type, id) => ({ type, user: id.client })
 
 const snapshotTrace = (n) => {
