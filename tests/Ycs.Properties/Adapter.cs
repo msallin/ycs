@@ -689,15 +689,7 @@ namespace Ycs.Properties
                         return "skip";
                     }
 
-                    text.ApplyDelta(
-                        s.List("delta").Cast<Dictionary<string, object>>().Select(d => new Delta
-                        {
-                            Insert = d.Has("insert") ? Val(d.Get("insert")) : null,
-                            Retain = d.Has("retain") ? (int)d.Int("retain") : null,
-                            Delete = d.Has("delete") ? (int)d.Int("delete") : null,
-                            Attributes = d.Has("attrs") ? AttrsOf(d.Get("attrs")) : null,
-                        }).ToList(),
-                        s.Get("sanitize") is not false);
+                    text.ApplyDelta(DeltaOf(s.List("delta")), s.Get("sanitize") is not false);
                     return Missing.Value;
                 case "ains":
                     if (!isSeq)
@@ -902,6 +894,26 @@ namespace Ycs.Properties
 
         private static IDictionary<string, object> AttrsOf(object a) => a == null ? null : (IDictionary<string, object>)Val(a);
 
+        /// <summary>A script delta (docs/testing.md) as a Ycs delta.</summary>
+        private static List<Delta> DeltaOf(List<object> delta) => delta.Cast<Dictionary<string, object>>().Select(d => new Delta
+        {
+            Insert = d.Has("insert") ? Val(d.Get("insert")) : null,
+            Retain = d.Has("retain") ? (int)d.Int("retain") : null,
+            Delete = d.Has("delete") ? (int)d.Int("delete") : null,
+            Attributes = d.Has("attrs") ? AttrsOf(d.Get("attrs")) : null,
+        }).ToList();
+
+        /// <summary>A new text with its prelim content: "s" inserted, then the delta "dl" applied (both wait for the integration).</summary>
+        private static YText PrelimText(YText text, Dictionary<string, object> s)
+        {
+            if (s.List("dl") is { } delta)
+            {
+                text.ApplyDelta(DeltaOf(delta), s.Get("dls") is not false);
+            }
+
+            return text;
+        }
+
         /// <summary>A script value as the Ycs value it stands for (oracle.mjs' val); shared types are new.</summary>
         internal static object Val(object s)
         {
@@ -973,8 +985,8 @@ namespace Ycs.Properties
         {
             switch (s.Str("$t"))
             {
-                case "text": return s.Has("s") ? new YText(s.Str("s")) : new YText();
-                case "xmlt": return s.Has("s") ? new YXmlText(s.Str("s")) : new YXmlText();
+                case "text": return PrelimText(s.Has("s") ? new YText(s.Str("s")) : new YText(), s);
+                case "xmlt": return PrelimText(s.Has("s") ? new YXmlText(s.Str("s")) : new YXmlText(), s);
                 case "array": return new YArray((s.List("v") ?? []).Select(Val).ToList());
                 case "map":
                     {

@@ -727,6 +727,13 @@ internal sealed class Generator
                     {
                         switch (_rng.Int(3))
                         {
+                            case 0 when _rng.Chance(0.15):
+                                {
+                                    // Formats beyond the end: Yjs appends a newline per missing character.
+                                    delta.Add(Obj(("retain", (long)(remaining + _rng.Range(1, 3))), ("attrs", Attrs())));
+                                    remaining = 0;
+                                    break;
+                                }
                             case 0 when remaining > 0:
                                 {
                                     var n = _rng.Range(1, remaining);
@@ -749,7 +756,12 @@ internal sealed class Generator
                                 }
                             default:
                                 {
-                                    var ins = Obj(("insert", _rng.Chance(0.85) ? Text() : Obj(("image", "c.png"))));
+                                    var ins = Obj(("insert", _rng.Int(20) switch
+                                    {
+                                        < 15 => Text(),
+                                        < 17 => Obj(("image", "c.png")),
+                                        _ => NestedType(1),
+                                    }));
                                     if (_rng.Chance(0.4))
                                     {
                                         ins["attrs"] = Attrs();
@@ -791,6 +803,42 @@ internal sealed class Generator
         }
 
         return s;
+    }
+
+    /// <summary>A new text, sometimes with a delta applied before it is in a document (Yjs keeps it as pending).</summary>
+    private Dictionary<string, object> PrelimText(Dictionary<string, object> text)
+    {
+        if (!_rng.Chance(0.3))
+        {
+            return text;
+        }
+
+        var length = text.Str("s")?.Length ?? 0;
+        var delta = new List<object>();
+        if (length > 0 && _rng.Chance(0.5))
+        {
+            delta.Add(Obj(("retain", (long)_rng.Range(1, length + 1)), ("attrs", Attrs())));
+        }
+
+        var ins = Obj(("insert", _rng.Chance(0.8) ? Text() : Obj(("image", "c.png"))));
+        if (_rng.Chance(0.5))
+        {
+            ins["attrs"] = Attrs();
+        }
+
+        delta.Add(ins);
+        if (length > 1 && _rng.Chance(0.3))
+        {
+            delta.Add(Obj(("delete", 1L)));
+        }
+
+        text["dl"] = delta;
+        if (_rng.Chance(0.2))
+        {
+            text["dls"] = false;
+        }
+
+        return text;
     }
 
     private Dictionary<string, object> Attrs()
@@ -858,7 +906,7 @@ internal sealed class Generator
     {
         switch (_rng.Int(depth > 0 ? 4 : 2))
         {
-            case 0: return _rng.Chance(0.5) ? Obj(("$t", "text"), ("s", Text())) : Obj(("$t", "text"));
+            case 0: return PrelimText(_rng.Chance(0.5) ? Obj(("$t", "text"), ("s", Text())) : Obj(("$t", "text")));
             case 1: return Obj(("$t", "map"), ("v", Enumerable.Range(0, _rng.Int(3)).Select(_ => (object)new List<object> { Key(), PlainValue(1) }).ToList()));
             case 2: return Obj(("$t", "array"), ("v", Enumerable.Range(0, _rng.Int(3)).Select(_ => _rng.Chance(0.3) ? NestedType(depth - 1) : PlainValue(1, bigint: false)).ToList()));
             default: return _rng.Chance(0.5) ? XmlElement(1) : Obj(("$t", "xmlf"), ("v", new List<object> { XmlElement(0) }));

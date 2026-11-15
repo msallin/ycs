@@ -91,10 +91,28 @@ function val (s) {
   return o
 }
 
+/** A script delta (docs/testing.md) as a Yjs delta. */
+function deltaOf (delta) {
+  return delta.map(d => {
+    const o = {}
+    if ('insert' in d) o.insert = typeof d.insert === 'string' ? d.insert : val(d.insert)
+    if ('retain' in d) o.retain = d.retain
+    if ('delete' in d) o.delete = d.delete
+    if ('attrs' in d) o.attributes = attrsOf(d.attrs)
+    return o
+  })
+}
+
+/** A new text with its prelim content: "s" inserted, then the delta "dl" applied (both wait for the integration). */
+function prelimText (t, s) {
+  if (s.dl) t.applyDelta(deltaOf(s.dl), { sanitize: s.dls !== false })
+  return t
+}
+
 function newType (s) {
   switch (s.$t) {
-    case 'text': return new Y.Text(s.s)
-    case 'xmlt': return new Y.XmlText(s.s)
+    case 'text': return prelimText(new Y.Text(s.s), s)
+    case 'xmlt': return prelimText(new Y.XmlText(s.s), s)
     case 'array': return Y.Array.from((s.v ?? []).map(val))
     case 'map': return new Y.Map((s.v ?? []).map(([k, v]) => [k, val(v)]))
     case 'xmlf': {
@@ -488,14 +506,7 @@ export class Run {
         return
       case 'delta':
         if (!isText) return 'skip'
-        t.applyDelta(s.delta.map(d => {
-          const o = {}
-          if ('insert' in d) o.insert = typeof d.insert === 'string' ? d.insert : val(d.insert)
-          if ('retain' in d) o.retain = d.retain
-          if ('delete' in d) o.delete = d.delete
-          if ('attrs' in d) o.attributes = attrsOf(d.attrs)
-          return o
-        }), { sanitize: s.sanitize !== false })
+        t.applyDelta(deltaOf(s.delta), { sanitize: s.sanitize !== false })
         return
       case 'ains':
         if (!isSeq) return 'skip'

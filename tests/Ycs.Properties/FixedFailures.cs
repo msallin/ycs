@@ -57,5 +57,10 @@ internal static class FixedFailures
         {
             Property = "rejects-cleanly",
         },
+        new("pending-apply-delta-keeps-sanitize",
+            "A text's ApplyDelta before it is in a document is applied with the default sanitize once it is, as Yjs' pending " +
+            "applyDelta ('this._pending.push(() => this.applyDelta(delta))' drops the option); with sanitize: false Ycs " +
+            "dropped the trailing newline that Yjs keeps.",
+            """{"clients":[{"gc":false,"id":16}],"roots":[{"kind":"text","name":"t2"}],"steps":[{"c":0,"delta":[{"insert":{"$t":"text","dl":[{"insert":"x\u000a"}],"dls":false}}],"op":"delta","path":["t2"]}]}"""),
     ];
 }

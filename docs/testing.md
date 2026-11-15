@@ -175,8 +175,9 @@ Network steps: `deliver` (`from`, `k`: the k-th update `from` made, `to`, `via`:
 
 Values: JSON null, booleans, strings (lone surrogates included), integers, decimals; and tagged
 `{"$i": "4294967296"}` (an integer), `{"$f": "NaN" | "Infinity" | "-Infinity" | "-0" | 16 hex digits}`
-(a double by its bits), `{"$n": "123"}` (BigInt), `{"$b": base64}` (bytes), `{"$t": "text"|"array"|"map"|"xmlf"|"xmle"|"xmlt", "s"?, "v"?, "n"?, "a"?}`
-(a new shared type with prelim content), `{"$doc": {"g", "autoLoad"}}` (a subdocument). Object keys
+(a double by its bits), `{"$n": "123"}` (BigInt), `{"$b": base64}` (bytes), `{"$t": "text"|"array"|"map"|"xmlf"|"xmle"|"xmlt", "s"?, "v"?, "n"?, "a"?, "dl"?, "dls"?}`
+(a new shared type with prelim content; for a text, `dl` is a delta applied before it is in a document, with
+`sanitize` false when `dls` is false), `{"$doc": {"g", "autoLoad"}}` (a subdocument). Object keys
 never look like integers (JavaScript would reorder them).
 
 The observation of a step: `r` (the result), `err`, `ev` (every event, in order: each observer's
@@ -192,7 +193,7 @@ Coverage (which observations an operation kind is compared on; ● always, ○ w
 
 | Operation kind | content | sv / ds | v1 / v2 state bytes | update bytes | events | result |
 | --- | --- | --- | --- | --- | --- | --- |
-| text insert/delete/format/embed/delta, text attributes | ● | ● | ● | ● | ● (delta, keys) | |
+| text insert/delete/format/embed/delta (`ApplyDelta`: retains with attributes within and beyond the end, deletes, inserts of strings, embeds and shared types, `sanitize`; on a text before it is in a document), text attributes | ● | ● | ● | ● | ● (delta, keys) | |
 | array insert/push/unshift/delete, every value kind | ● | ● | ● | ● | ● (delta) | |
 | map set/delete/clear, concurrent keys | ● | ● | ● | ● | ● (keys, old values) | |
 | XML insert/insertAfter/delete/attributes, XML text | ● | ● | ● | ● | ● (delta, attributes, child list) | |
