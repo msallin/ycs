@@ -487,6 +487,7 @@ public class UndoManager
                 {
                     var stackItem = stack[^1];
                     stack.RemoveAt(stack.Count - 1);
+                    // Enumerated in the order of adding, as Yjs' Set: a HashSet keeps it while nothing is removed, and nothing is.
                     var itemsToRedo = new HashSet<Item>();
                     var itemsToDelete = new List<Item>();
                     var performedChange = false;

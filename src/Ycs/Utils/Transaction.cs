@@ -62,9 +62,11 @@ public partial class Transaction
     private bool _beforeStateTaken;
     private bool _afterStateTaken;
 
-    // Insertion-ordered, as a JavaScript Map: a type removed when deleted must not hand its slot to
-    // the next changed type, which would then be observed out of the order of change.
-    internal readonly OrderedDictionary<AbstractType, ISet<string>> _changed = new();
+    internal readonly ChangedTypes _changed = new();
+
+    // Enumerated in the order the types were added, as Yjs' Map (it orders the deep observer calls):
+    // a Dictionary keeps that order while nothing is removed, and entries are only added, or all
+    // cleared (SortEventsByOrderOfChange re-adds them).
     internal readonly Dictionary<AbstractType, IList<YEvent>> _changedParentTypes = new();
     internal readonly List<AbstractStruct> _mergeStructs = new();
 
@@ -313,22 +315,6 @@ public partial class Transaction
         }
 
         SortEventsByOrderOfChange(transaction);
-
-        static bool HasOwnEvent(Transaction transaction, AbstractType type)
-        {
-            if (transaction._changedParentTypes.TryGetValue(type, out var events))
-            {
-                for (var i = 0; i < events.Count; i++)
-                {
-                    if (events[i].Target == type)
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
-        }
     }
 
     // Separate from BuildSkippedEvents, whose common path must not allocate the closure.
@@ -340,13 +326,63 @@ public partial class Transaction
             order[kvp.Key] = order.Count;
         }
 
-        foreach (var events in transaction._changedParentTypes.Values)
+        var changedParentTypes = transaction._changedParentTypes;
+        foreach (var events in changedParentTypes.Values)
         {
             if (events is List<YEvent> list && list.Count > 1)
             {
                 StableSort.Sort(list, (a, b) => order.GetValueOrDefault(a.Target, int.MaxValue).CompareTo(order.GetValueOrDefault(b.Target, int.MaxValue)));
             }
         }
+
+        // The keys as Yjs adds them: each changed type that has an event, then its ancestors.
+        var ordered = new List<KeyValuePair<AbstractType, IList<YEvent>>>(changedParentTypes.Count);
+        var seen = new HashSet<AbstractType>();
+        foreach (var kvp in transaction._changed)
+        {
+            if (!HasOwnEvent(transaction, kvp.Key))
+            {
+                continue;
+            }
+
+            for (var type = kvp.Key; type != null; type = type._item?.Parent as AbstractType)
+            {
+                if (seen.Add(type) && changedParentTypes.TryGetValue(type, out var events))
+                {
+                    ordered.Add(new(type, events));
+                }
+            }
+        }
+
+        foreach (var kvp in changedParentTypes)
+        {
+            if (seen.Add(kvp.Key))
+            {
+                ordered.Add(kvp);
+            }
+        }
+
+        changedParentTypes.Clear();
+        foreach (var kvp in ordered)
+        {
+            changedParentTypes.Add(kvp.Key, kvp.Value);
+        }
+    }
+
+    private static bool HasOwnEvent(Transaction transaction, AbstractType type)
+    {
+        if (transaction._changedParentTypes.TryGetValue(type, out var events))
+        {
+            for (var i = 0; i < events.Count; i++)
+            {
+                if (events[i].Target == type)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>
