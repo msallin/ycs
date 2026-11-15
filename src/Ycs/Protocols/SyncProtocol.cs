@@ -123,7 +123,7 @@ public static class SyncProtocol
     /// exception of the read or the apply (a <see cref="YUpdateException"/> for a malformed update, or one an
     /// observer threw) goes to the handler and the call returns; without one it propagates (y-protocols logs it).
     /// </summary>
-    public static void ReadSyncStep2(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception> errorHandler = null)
+    public static void ReadSyncStep2(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception>? errorHandler = null)
     {
         try
         {
@@ -150,7 +150,7 @@ public static class SyncProtocol
     }
 
     /// <inheritdoc cref="ReadSyncStep2"/>
-    public static void ReadUpdate(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception> errorHandler = null)
+    public static void ReadUpdate(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception>? errorHandler = null)
     {
         ReadSyncStep2(stream, doc, transactionOrigin, v2, errorHandler);
     }
@@ -160,7 +160,7 @@ public static class SyncProtocol
     /// reading and applying an update threw (see <see cref="ReadSyncStep2"/>); an unknown message type or a
     /// malformed step 1 throws <see cref="YUpdateException"/>, as in y-protocols.
     /// </summary>
-    public static uint ReadSyncMessage(Stream reader, Stream writer, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception> errorHandler = null)
+    public static uint ReadSyncMessage(Stream reader, Stream writer, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception>? errorHandler = null)
     {
         var messageType = ReadVarUint(reader);
 
