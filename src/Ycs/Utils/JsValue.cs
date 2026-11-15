@@ -17,6 +17,12 @@ internal static class JsValue
     public const long MaxSafeInteger = (1L << 53) - 1;
 
     /// <summary>
+    /// JavaScript's <c>undefined</c> where Yjs tells it from null (a legacy JSON value, a member of a
+    /// subdocument's options); C# has none, so this marker stands for it until it is read.
+    /// </summary>
+    public static readonly object Undefined = new();
+
+    /// <summary>
     /// Whether <paramref name="value"/>, read from JSON or the 'any' encoding, is an integer: an
     /// <see cref="int"/>, a <see cref="long"/>, or a <see cref="double"/> without a fraction within
     /// the safe integers (JavaScript has one number type).

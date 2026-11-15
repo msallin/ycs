@@ -14,10 +14,8 @@ public class ContentJson : IContentEx
 {
     internal const int _ref = 2;
 
-    // Yjs reads the string 'undefined' as undefined and writes it back; C# has no undefined, so it is
-    // kept as this marker and read as null (GetContent).
-    private static readonly object Undefined = new();
-
+    // Yjs reads the string 'undefined' as undefined and writes it back: it is kept as JsValue.Undefined
+    // and read as null (GetContent).
     private readonly List<object> _content;
 
     internal ContentJson(IEnumerable<object> data)
@@ -36,7 +34,7 @@ public class ContentJson : IContentEx
     public int Length => _content?.Count ?? 0;
 
     public IReadOnlyList<object> GetContent() =>
-        _content.Contains(Undefined) ? _content.Select(c => c == Undefined ? null : c).ToList() : _content.AsReadOnly();
+        _content.Contains(JsValue.Undefined) ? _content.Select(c => c == JsValue.Undefined ? null : c).ToList() : _content.AsReadOnly();
 
     public IContent Copy() => new ContentJson(_content.ToList());
 
@@ -76,7 +74,7 @@ public class ContentJson : IContentEx
         for (int i = offset; i < len; i++)
         {
             var value = _content[i];
-            encoder.WriteString(value == Undefined ? "undefined" : YJson.Stringify(value));
+            encoder.WriteString(value == JsValue.Undefined ? "undefined" : YJson.Stringify(value));
         }
     }
 
@@ -91,7 +89,7 @@ public class ContentJson : IContentEx
         {
             var jsonStr = decoder.ReadString();
             var jsonObj = string.Equals(jsonStr, "undefined", StringComparison.Ordinal)
-                ? Undefined
+                ? JsValue.Undefined
                 : YJson.Parse(jsonStr);
             content.Add(jsonObj);
         }

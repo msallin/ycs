@@ -141,10 +141,36 @@ internal static class AnyEncoding
 
     public static object? ReadAny(this Lib0Reader reader) => ReadAny(reader, 0);
 
-    private static object? ReadAny(Lib0Reader reader, int depth)
+    /// <summary>
+    /// Reads a value as <see cref="ReadAny(Lib0Reader)"/> does, but a member of an object that is
+    /// <c>undefined</c> (not null) is read as <see cref="JsValue.Undefined"/>: where Yjs destructures
+    /// the object, such a member counts as absent.
+    /// </summary>
+    public static object? ReadAnyMarkingUndefined(this Lib0Reader reader)
+    {
+        var type = reader.ReadByte();
+        if (type != 118)
+        {
+            return ReadAny(reader, type, 0);
+        }
+
+        var len = reader.ReadVarUint();
+        var obj = new Dictionary<string, object?>(Limits.Capacity(len, reader.Remaining / 2));
+        for (long i = 0; i < len; i++)
+        {
+            var key = reader.ReadVarString();
+            var memberType = reader.ReadByte();
+            obj[key] = memberType == 127 ? JsValue.Undefined : ReadAny(reader, memberType, 1);
+        }
+
+        return obj;
+    }
+
+    private static object? ReadAny(Lib0Reader reader, int depth) => ReadAny(reader, reader.ReadByte(), depth);
+
+    private static object? ReadAny(Lib0Reader reader, byte type, int depth)
     {
         Limits.CheckDepth(depth);
-        var type = reader.ReadByte();
         switch (type)
         {
             case 119: // String

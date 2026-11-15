@@ -106,7 +106,7 @@ internal class ContentDoc : IContentEx
 
         // Yjs spreads the options into an object: any value but null (a TypeError) is accepted, and
         // only an object's keys can name an option.
-        var opts = decoder.ReadAny() switch
+        var opts = decoder.Reader.ReadAnyMarkingUndefined() switch
         {
             null => throw new YUpdateException("A subdocument's options are null."),
             IDictionary<string, object> dict => dict,
@@ -151,25 +151,26 @@ internal class ContentDoc : IContentEx
     private readonly record struct Options(string Guid, bool Gc, bool AutoLoad, object? Meta, string? CollectionId, bool ShouldLoad)
     {
         /// <summary>
-        /// A key present in <paramref name="opts"/> overrides, a 'guid' included. <paramref name="shouldLoad"/>
-        /// null means Yjs' <c>createDocFromOpts</c>: <c>opts.shouldLoad || opts.autoLoad</c>.
+        /// A key present in <paramref name="opts"/> overrides, a 'guid' included; one whose value is
+        /// <see cref="JsValue.Undefined"/> counts as absent (Yjs' defaults of the destructured options),
+        /// except a 'guid', for which Yjs draws a random one, so that its peers would differ: that and a
+        /// guid that is not a string are rejected. A 'collectionid' that is not a string is ignored (it is
+        /// never encoded). <paramref name="shouldLoad"/> null means Yjs' <c>createDocFromOpts</c>:
+        /// <c>opts.shouldLoad || opts.autoLoad</c>.
         /// </summary>
         public static Options Parse(string guid, IDictionary<string, object> opts, bool? shouldLoad)
         {
-            var autoLoad = opts.TryGetValue("autoLoad", out var al) && JsValue.Truthy(al);
-            string? collectionId = null;
-            if (opts.TryGetValue("collectionid", out var cid) && cid != null)
-            {
-                collectionId = cid as string ?? throw new YUpdateException("A subdocument's 'collectionid' is not a string.");
-            }
-
+            var autoLoad = Has(opts, "autoLoad", out var al) && JsValue.Truthy(al);
             return new Options(
                 opts.TryGetValue("guid", out var g) ? g as string ?? throw new YUpdateException("A subdocument's 'guid' is not a string.") : guid,
-                !opts.TryGetValue("gc", out var gc) || JsValue.Truthy(gc),
+                !Has(opts, "gc", out var gc) || JsValue.Truthy(gc),
                 autoLoad,
-                opts.TryGetValue("meta", out var meta) ? meta : null,
-                collectionId,
-                shouldLoad ?? ((opts.TryGetValue("shouldLoad", out var sl) && JsValue.Truthy(sl)) || autoLoad));
+                Has(opts, "meta", out var meta) ? meta : null,
+                Has(opts, "collectionid", out var cid) ? cid as string : null,
+                shouldLoad ?? ((Has(opts, "shouldLoad", out var sl) && JsValue.Truthy(sl)) || autoLoad));
+
+            static bool Has(IDictionary<string, object> opts, string key, out object? value) =>
+                opts.TryGetValue(key, out value) && value != JsValue.Undefined;
         }
 
         public YDoc Create(UpdateLimits? limits) => new(new YDocOptions
