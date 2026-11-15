@@ -224,4 +224,47 @@ public class YjsTypeParityTests
 
         Assert.AreEqual("[0,1]", Json(array.ToArray()));
     }
+
+    [TestMethod]
+    public void ArraySlice_EmptyNegativeAndLongRanges_ReturnWhatYjsReturns()
+    {
+        var doc = new YDoc();
+        var array = doc.GetArray("a");
+        array.Insert(0, new object[] { 1, 2, 3 });
+
+        Assert.AreEqual("[] [null,null,1,2,3] [2,3]", $"{Json(array.Slice(2, 1))} {Json(array.Slice(-5))} {Json(array.Slice(1, 10))}");
+    }
+
+    [TestMethod]
+    public void MapGet_MissingKey_ReturnsNullAndTryGetTellsItApart()
+    {
+        var doc = new YDoc();
+        var map = doc.GetMap("m");
+        map.Set("n", null);
+
+        var result = $"{map.Get("missing") ?? "null"} {map.TryGet("missing", out _)} {map.TryGet("n", out var n)} {n ?? "null"}";
+
+        Assert.AreEqual("null False True null", result);
+    }
+
+    [TestMethod]
+    public void TextDelete_EmptyText_Throws()
+    {
+        var text = new YDoc().GetText("t");
+
+        Assert.ThrowsExactly<System.InvalidOperationException>(() => text.Delete(0, 1));
+    }
+
+    [TestMethod]
+    public void TextNotInADocument_ChangeThatFailsOnReplay_DropsItAndTheRest()
+    {
+        var doc = new YDoc();
+        var text = new YText();
+        text.Delete(0, 1);
+        text.Insert(0, "a");
+
+        doc.GetMap("m").Set("t", text);
+
+        Assert.AreEqual(string.Empty, text.ToString());
+    }
 }

@@ -344,6 +344,10 @@ public class YTextEvent : YEvent
 /// <summary>
 /// Type that represents text with formatting information.
 /// </summary>
+/// <remarks>
+/// Changes made before the text is in a document are replayed when it is added to one; as in Yjs, a
+/// change that fails then ends the replay, and the changes after it are dropped.
+/// </remarks>
 public partial class YText : YArrayBase
 {
     /// <summary>
@@ -1001,6 +1005,19 @@ public partial class YText : YArrayBase
             return;
         }
 
+        // As Yjs: an operation that throws ends the replay, and the operations after it are dropped.
+        try
+        {
+            ReplayPending(pending);
+        }
+        catch (Exception)
+        {
+            // Yjs logs it to the console; the integration of the text goes on.
+        }
+    }
+
+    private void ReplayPending(List<PendingOperation> pending)
+    {
         foreach (var op in pending)
         {
             switch (op.Kind)
@@ -1473,7 +1490,8 @@ public partial class YText : YArrayBase
             CleanupFormattingGap(transaction, start, curPos.Right, startAttrs, ref curPos.CurrentAttributes);
         }
 
-        var parent = (curPos.Left ?? curPos.Right)?.Parent as YText;
+        // Yjs reads the parent from the position's items and fails with a TypeError when the text has none.
+        var parent = (curPos.Left ?? curPos.Right ?? throw new InvalidOperationException("The text has no content to delete. Nothing was changed.")).Parent as YText;
         if (parent?._searchMarkers?.Count > 0)
         {
             parent._searchMarkers.UpdateMarkerChanges(curPos.Index, -startLength + length);

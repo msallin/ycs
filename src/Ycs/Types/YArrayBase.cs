@@ -426,6 +426,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         }
     }
 
+    /// <summary>
+    /// Yjs' <c>typeListSlice</c>: never throws. A negative index counts from the end; an empty range
+    /// gives an empty list; a start that is still negative then yields null for each index before 0,
+    /// as JavaScript reads them.
+    /// </summary>
     protected IReadOnlyList<object> InternalSlice(int start, int end)
     {
         if (start < 0)
@@ -438,15 +443,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             end += Length;
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(start);
-
-        ArgumentOutOfRangeException.ThrowIfNegative(end);
-
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(start, end);
-
         int length = end - start;
-        Debug.Assert(length >= 0);
-
         var cs = new List<object>();
         var n = _start;
 
@@ -463,7 +460,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 {
                     for (int i = start; i < c.Count && length > 0; i++)
                     {
-                        cs.Add(c[i]);
+                        cs.Add(i < 0 ? null : c[i]);
                         length--;
                     }
 

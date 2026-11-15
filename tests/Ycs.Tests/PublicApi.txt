@@ -380,6 +380,7 @@ class Ycs.YMap : AbstractType, System.Collections.Generic.IEnumerable<System.Col
     YMap(System.Collections.Generic.IDictionary<string, object> entries)
     bool ContainsKey(string key)
     bool Has(string key)
+    bool TryGet(string key, out object value)
     int Count { get; }
     int Size { get; }
     object Get(string key)
