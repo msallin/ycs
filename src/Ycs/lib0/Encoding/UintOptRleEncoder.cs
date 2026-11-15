@@ -13,9 +13,9 @@ namespace Ycs;
 /// then understands that it needs to read a count.
 /// </summary>
 /// <seealso cref="UintOptRleDecoder"/>
-internal class UintOptRleEncoder : AbstractStreamEncoder<uint>
+internal class UintOptRleEncoder : AbstractStreamEncoder<ulong>
 {
-    private uint _state;
+    private ulong _state;
     private uint _count;
 
     public UintOptRleEncoder(bool pooled = false)
@@ -24,7 +24,7 @@ internal class UintOptRleEncoder : AbstractStreamEncoder<uint>
     }
 
     /// <inheritdoc/>
-    protected override void WriteValue(uint value)
+    protected override void WriteValue(ulong value)
     {
 
         if (_state == value)
@@ -61,12 +61,12 @@ internal class UintOptRleEncoder : AbstractStreamEncoder<uint>
             // Case 2: Write several values. Set sign to negative to indicate that there is a length coming.
             if (_count == 1)
             {
-                Writer.WriteVarInt(_state);
+                Writer.WriteVarInt((long)_state);
             }
             else
             {
                 // Specify 'treatZeroAsNegative' in case we pass the '-0'.
-                Writer.WriteVarInt(-_state, negativeZero: _state == 0);
+                Writer.WriteVarInt(-(long)_state, negativeZero: _state == 0);
 
                 // Since count is always >1, we can decrement by one. Non-standard encoding.
                 Writer.WriteVarUint(_count - 2);

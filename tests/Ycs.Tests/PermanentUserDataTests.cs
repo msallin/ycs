@@ -25,7 +25,7 @@ public class PermanentUserDataTests
         doc.ClientId = 1;
 
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, doc.ClientId, "user1");
+        pud.SetUserMapping(doc, (int)doc.ClientId, "user1");
 
         Assert.AreEqual("user1", pud.GetUserByClientId(1));
         Assert.IsNull(pud.GetUserByClientId(9999));
@@ -38,7 +38,7 @@ public class PermanentUserDataTests
         doc.ClientId = 1;
 
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, doc.ClientId, "user1");
+        pud.SetUserMapping(doc, (int)doc.ClientId, "user1");
 
         var array = doc.GetArray("array");
 
@@ -77,7 +77,7 @@ public class PermanentUserDataTests
         doc.ClientId = 1;
 
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, doc.ClientId, "user1", filter: _ => false);
+        pud.SetUserMapping(doc, (int)doc.ClientId, "user1", filter: _ => false);
 
         var array = doc.GetArray("array");
         var clockBeforeInsert = doc.Store.GetState(doc.ClientId);
@@ -99,8 +99,8 @@ public class PermanentUserDataTests
 
         var pud1 = new PermanentUserData(doc1);
         var pud2 = new PermanentUserData(doc2);
-        pud1.SetUserMapping(doc1, doc1.ClientId, "user1");
-        pud2.SetUserMapping(doc2, doc2.ClientId, "user2");
+        pud1.SetUserMapping(doc1, (int)doc1.ClientId, "user1");
+        pud2.SetUserMapping(doc2, (int)doc2.ClientId, "user2");
 
         var clockBeforeInsert = doc1.Store.GetState(doc1.ClientId);
         doc1.GetArray("array").Insert(0, new object[] { "a", "b" });
@@ -128,7 +128,7 @@ public class PermanentUserDataTests
         var doc1 = new YDoc();
         doc1.ClientId = 1;
         var pud1 = new PermanentUserData(doc1);
-        pud1.SetUserMapping(doc1, doc1.ClientId, "user1");
+        pud1.SetUserMapping(doc1, (int)doc1.ClientId, "user1");
 
         var doc2 = new YDoc();
         doc2.ApplyUpdateV2(doc1.EncodeStateAsUpdateV2());
@@ -145,7 +145,7 @@ public class PermanentUserDataTests
         var customUsers = doc.GetMap("customUsers");
 
         var pud = new PermanentUserData(doc, customUsers);
-        pud.SetUserMapping(doc, doc.ClientId, "user1");
+        pud.SetUserMapping(doc, (int)doc.ClientId, "user1");
 
         Assert.AreSame(customUsers, pud.YUsers);
         Assert.AreEqual("user1", pud.GetUserByClientId(1));

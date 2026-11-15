@@ -493,7 +493,7 @@ internal static class EncodingUtils
         clients.Sort(clocks);
         for (var i = clients.Length - 1; i >= 0; i--)
         {
-            encoder.RestWriter.WriteVarUint((uint)clients[i]);
+            encoder.RestWriter.WriteVarUint((ulong)clients[i]);
             encoder.RestWriter.WriteVarUint((uint)clocks[i]);
         }
     }
@@ -512,7 +512,7 @@ internal static class EncodingUtils
     {
         for (long i = 0; i < count; i++)
         {
-            var client = reader.ReadVarUint();
+            var client = reader.ReadVarUint53();
             var clock = Limits.CheckClock(reader.ReadVarUint());
             ss[client] = clock;
         }

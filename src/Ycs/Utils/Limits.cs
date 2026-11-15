@@ -13,8 +13,11 @@ internal static class Limits
     /// </summary>
     public const long MaxClock = int.MaxValue;
 
-    /// <summary>Client ids: Yjs' are random 32-bit unsigned integers.</summary>
-    public const long MaxClient = uint.MaxValue;
+    /// <summary>
+    /// Client ids: Yjs generates random 32-bit unsigned integers, but reads any var-uint up to
+    /// JavaScript's safe integers, and applications and other implementations (u64 in yrs) set wider ones.
+    /// </summary>
+    public const long MaxClient = (1L << 53) - 1;
 
     /// <summary>
     /// Nesting depth of 'any' and JSON values, and of shared types inside each other, so that the

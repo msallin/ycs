@@ -333,7 +333,7 @@ class Ycs.YDoc
     event System.EventHandler<Transaction> AfterTransactionCleanup
     event System.EventHandler<Transaction> BeforeObserverCalls
     event System.EventHandler<Transaction> BeforeTransaction
-    int ClientId { get; }
+    long ClientId { get; }
     object Meta { get; }
     string CollectionId { get; }
     string Guid { get; }
@@ -357,9 +357,9 @@ class Ycs.YDocOptions
     bool AutoLoad { get; set; }
     bool Gc { get; set; }
     bool ShouldLoad { get; set; }
-    int? ClientId { get; set; }
     long MaxPendingBytes { get; set; }
     long MaxStructsPerUpdate { get; set; }
+    long? ClientId { get; set; }
     object Meta { get; set; }
     string CollectionId { get; set; }
     string Guid { get; set; }

@@ -122,6 +122,38 @@ internal sealed class Lib0Reader
     }
 
     /// <summary>
+    /// Unsigned variable-length integer up to 2^53 - 1, the range of lib0's <c>readVarUint</c> (a
+    /// JavaScript number): client ids, which applications and other implementations set freely.
+    /// </summary>
+    public long ReadVarUint53()
+    {
+        ulong num = 0;
+        var shift = 0;
+
+        while (true)
+        {
+            var r = ReadByte();
+            num |= (ulong)(r & 0x7F) << shift;
+            shift += 7;
+
+            if (num > Limits.MaxClient)
+            {
+                throw new YUpdateException("A variable-length integer is out of range.");
+            }
+
+            if (r < 0x80)
+            {
+                return (long)num;
+            }
+
+            if (shift > 49)
+            {
+                throw new YUpdateException("A variable-length integer is out of range.");
+            }
+        }
+    }
+
+    /// <summary>
     /// Signed variable-length integer (lib0 <c>readVarInt</c>), up to 53 bits of magnitude like
     /// a JavaScript number. <c>Sign</c> is -1 when the sign bit is set, which distinguishes
     /// a negative zero.

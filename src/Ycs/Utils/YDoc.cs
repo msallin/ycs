@@ -65,15 +65,18 @@ public class YDocOptions
 
     /// <summary>
     /// The client id to start with instead of a random one; for tests and reproducible benchmarks.
-    /// Two documents that edit concurrently must never share a client id.
+    /// Two documents that edit concurrently must never share a client id. 0 to 2^53 - 1, as Yjs'
+    /// <c>doc.clientID</c> (which it generates as a random 32-bit unsigned integer).
     /// </summary>
-    public int? ClientId
+    public long? ClientId
     {
         get => _clientId;
-        set => _clientId = value is null or >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "A client id cannot be negative.");
+        set => _clientId = value is null or >= 0 and <= Limits.MaxClient
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), "A client id is 0 to 2^53 - 1.");
     }
 
-    private int? _clientId;
+    private long? _clientId;
 
     internal YDocOptions Clone()
     {
@@ -129,9 +132,9 @@ public partial class YDoc
     /// .NET Framework targets, so two documents created in the same tick - or two server
     /// processes started together - would share a client id and silently corrupt the merge.
     /// </summary>
-    internal static int GenerateNewClientId()
+    internal static long GenerateNewClientId()
     {
-        // Non-negative, to stay within the int-typed ClientId; the wire format writes it as a uint.
+        // 31 bits while PermanentUserData maps int client ids (Yjs draws 32).
         return System.Security.Cryptography.RandomNumberGenerator.GetInt32(int.MaxValue);
     }
 
@@ -226,7 +229,7 @@ public partial class YDoc
     public event EventHandler Destroyed;
     public event EventHandler<(ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed)> SubdocsChanged;
 
-    public int ClientId { get; internal set; }
+    public long ClientId { get; internal set; }
     internal StructStore Store { get; private set; }
 
     /// <summary>

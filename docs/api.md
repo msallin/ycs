@@ -31,7 +31,7 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | `EncodeStateAsUpdateV2(byte[] stateVector = null)` | `EncodeStateAsUpdate(ReadOnlySpan<byte> stateVector = default)` (v1), `EncodeStateAsUpdateV1`/`V2(...)`, and overloads `EncodeStateAsUpdate…(IBufferWriter<byte> destination, ReadOnlySpan<byte> stateVector = default)` | Yjs' `encodeStateAsUpdate`; writing into an `IBufferWriter<byte>` (a pipe, a pooled buffer) saves the result array: v1 is written straight into the destination, v2 (whose columns come before the rest) is assembled in pooled buffers and copied into it once; once warm, neither allocates. A malformed state vector throws `YUpdateException` before anything is written. A `byte[]` or `null` still works |
 | `EncodeStateVectorV2()` | `EncodeStateVector()` (plus `…V1`, `…V2`, and `EncodeStateVector(IBufferWriter<byte>)`, which allocates nothing) | Yjs' `encodeStateVector`; the bytes are the same in both formats |
 | event `UpdateV2`; PR #12 added `UpdateV1` | event `Update` (v1) and `UpdateV2` | Yjs' `doc.on('update')` and `doc.on('updateV2')` |
-| `ClientId { get; internal set; }`, random only | `YDocOptions.ClientId` (`int?`) | reproducible tests and benchmarks without reflection (YDotNet has `DocOptions.Id`) |
+| `ClientId { get; internal set; }`, random only, `int` | `YDocOptions.ClientId` (`long?`, 0 to 2^53 - 1); `YDoc.ClientId` is a `long`. Client ids up to 2^53 - 1 are read and written everywhere (structs, ids, delete sets, state vectors, the v2 client column) | reproducible tests and benchmarks without reflection (YDotNet has `DocOptions.Id`); Yjs reads var-uints up to 2^53 - 1 and lets applications set `doc.clientID`, yrs uses u64 ids. Generated ids are still 31 bits while `PermanentUserData` maps `int` ids |
 | `void Observe(handler)`, `void ObserveDeep(handler)` (PR #13) | return `IDisposable`; disposing unsubscribes | the YDotNet idiom; makes lambdas easy to unsubscribe. `Unobserve` and `+=`/`-=` still work |
 | map/array values: anything, failing at encode time; `Newtonsoft.Json` tokens and reflection for JSON | the closed set of values above, checked when a value is inserted; numbers encoded with JavaScript's rules | Native AOT, byte-identical output, errors at the call that caused them |
 | `UndoManager` tracked origin `Type` matched subclasses | matches that exact type | Yjs compares `origin.constructor` |
@@ -65,8 +65,6 @@ for a discussion with the maintainers:
   would cost nothing per position, but `Assoc` is a settable field, `CompareRelativePositions` and
   `AbsolutePosition.TryCreateFromRelativePosition` accept `null`, and callers keep positions in
   collections by reference, so it is a breaking change.
-- `YDoc.ClientId` is an `int`, so a document cannot use the upper half of Yjs' 32-bit client id
-  range itself (it reads such ids from other clients fine). `uint` would match Yjs.
 - `Item`, `AbstractStruct`, `GC`, `Skip` and the content classes are public but are
   implementation details of the CRDT; YDotNet exposes none of that.
 - `YMap.Get` returns `object`. Typed accessors (`TryGet<T>(key, out T value)`) would remove casts
@@ -89,7 +87,7 @@ either step leaves the document exactly as it was: same text, state vector and e
 (an empty transaction may be observed when the failure is found in the planning step). What is
 checked before anything changes:
 
-* every value is in range: client ids up to 2^32 - 1, and **clocks**: every struct, delete range and
+* every value is in range: client ids up to 2^53 - 1 (as lib0 reads them), and **clocks**: every struct, delete range and
   state-vector entry ends at clock 2^31 - 1 or before (about two billion operations per client id),
   so no clock arithmetic overflows;
 * no struct of length 0, no client listed twice, no reference to a later struct of the item's own

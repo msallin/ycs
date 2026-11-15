@@ -7,18 +7,20 @@
 namespace Ycs;
 
 /// <seealso cref="UintOptRleEncoder"/>
-internal class UintOptRleDecoder : AbstractStreamDecoder<uint>
+internal class UintOptRleDecoder : AbstractStreamDecoder<ulong>
 {
-    private uint _state;
+    private readonly ulong _max;
+    private ulong _state;
     private ulong _count;
 
-    public UintOptRleDecoder(Lib0Reader input)
+    /// <param name="max">The largest value the column may hold: 2^32 - 1 for lengths and type refs, 2^53 - 1 for client ids.</param>
+    public UintOptRleDecoder(Lib0Reader input, ulong max = uint.MaxValue)
         : base(input)
     {
-        // Do nothing.
+        _max = max;
     }
 
-    public override uint Read()
+    public override ulong Read()
     {
 
         if (_count == 0)
@@ -28,12 +30,12 @@ internal class UintOptRleDecoder : AbstractStreamDecoder<uint>
             // If the sign is negative, we read the count too; otherwise, count is 1.
             bool isNegative = sign < 0;
             var magnitude = isNegative ? -value : value;
-            if (magnitude > uint.MaxValue)
+            if ((ulong)magnitude > _max)
             {
                 throw new YUpdateException("A value in a v2 column is out of range.");
             }
 
-            _state = (uint)magnitude;
+            _state = (ulong)magnitude;
             _count = isNegative ? Reader.ReadVarUint() + 2UL : 1;
         }
 

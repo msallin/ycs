@@ -207,17 +207,17 @@ internal sealed class UpdateEncoderV2 : DSEncoderV2, IUpdateEncoder
 
     public void WriteLeftId(ID id)
     {
-        _clientEncoder.Write((uint)id.Client);
+        _clientEncoder.Write((ulong)id.Client);
         _leftClockEncoder.Write(id.Clock);
     }
 
     public void WriteRightId(ID id)
     {
-        _clientEncoder.Write((uint)id.Client);
+        _clientEncoder.Write((ulong)id.Client);
         _rightClockEncoder.Write(id.Clock);
     }
 
-    public void WriteClient(long client) => _clientEncoder.Write((uint)client);
+    public void WriteClient(long client) => _clientEncoder.Write((ulong)client);
 
     public void WriteInfo(byte info) => _infoEncoder.Write(info);
 

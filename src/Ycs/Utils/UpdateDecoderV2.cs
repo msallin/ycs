@@ -66,7 +66,7 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         : base(input)
     {
         _keyClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
-        _clientDecoder = new UintOptRleDecoder(new Lib0Reader());
+        _clientDecoder = new UintOptRleDecoder(new Lib0Reader(), Limits.MaxClient);
         _leftClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
         _rightClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
         _infoDecoder = new RleDecoder(new Lib0Reader());
@@ -141,14 +141,14 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     }
 
 
-    public ID ReadLeftId() => new ID(_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
+    public ID ReadLeftId() => new ID((long)_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
 
-    public ID ReadRightId() => new ID(_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
+    public ID ReadRightId() => new ID((long)_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
 
     /// <summary>
     /// Read the next client Id.
     /// </summary>
-    public long ReadClient() => _clientDecoder.Read();
+    public long ReadClient() => (long)_clientDecoder.Read();
 
     public byte ReadInfo() => _infoDecoder.Read();
 
@@ -156,7 +156,7 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
 
     public bool ReadParentInfo() => _parentInfoDecoder.Read() == 1;
 
-    public uint ReadTypeRef() => _typeRefDecoder.Read();
+    public uint ReadTypeRef() => (uint)_typeRefDecoder.Read();
 
     public int ReadLength()
     {

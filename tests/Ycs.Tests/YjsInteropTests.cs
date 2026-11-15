@@ -125,7 +125,7 @@ public class YjsInteropTests
         // stopped being clock-seeded in .NET 6, so this test cannot reproduce the original failure
         // on the TFM it runs under - the hazard is real for the netstandard2.0 consumers (.NET
         // Framework, Unity). It stands as a guard on the invariant itself: ids must not repeat.
-        var ids = new HashSet<int>();
+        var ids = new HashSet<long>();
         for (int i = 0; i < 512; i++)
         {
             ids.Add(new YDoc().ClientId);

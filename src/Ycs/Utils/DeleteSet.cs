@@ -365,7 +365,7 @@ internal class DeleteSet
                 var len = dsItems.Count;
 
                 encoder.ResetDsCurVal();
-                encoder.RestWriter.WriteVarUint((uint)client);
+                encoder.RestWriter.WriteVarUint((ulong)client);
                 encoder.RestWriter.WriteVarUint((uint)len);
 
                 for (int i = 0; i < len; i++)
@@ -427,7 +427,7 @@ internal class DeleteSet
                 var structs = clientStructs[client];
 
                 encoder.ResetDsCurVal();
-                encoder.RestWriter.WriteVarUint((uint)client);
+                encoder.RestWriter.WriteVarUint((ulong)client);
                 encoder.RestWriter.WriteVarUint((uint)rangeCounts[c]);
 
                 for (var i = 0; NextDeletedRange(structs, ref i, out var clock, out var length);)
@@ -471,7 +471,7 @@ internal class DeleteSet
         {
             decoder.ResetDsCurVal();
 
-            var client = decoder.Reader.ReadVarUint();
+            var client = decoder.Reader.ReadVarUint53();
             var numberOfDeletes = decoder.Reader.ReadVarUint();
 
             if (numberOfDeletes > 0)

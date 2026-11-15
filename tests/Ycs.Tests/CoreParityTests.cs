@@ -215,4 +215,63 @@ public class CoreParityTests
 
         Assert.AreEqual(S(update), S(UpdateOperations.ConvertUpdateFormatV1ToV2(v1)));
     }
+
+    // Client 2^53 - 1: t.insert(0, 'max'), t.delete(0, 1), m.set('a', 1), m.set('a', 2).
+    private const string MaxClientV1 = "AQT/////////DwABAQF0AYT/////////DwACYXghAQFtAWEBqP////////8PAwF9AgH/////////DwIAAQMB";
+    private const string MaxClientV2 = "AAAJ/////////x8BAgAGAAcBAIQAIQCoCgV0YXhtYQECQQABAQACQQEBBAB9AgH/////////DwIAAAIA";
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyUpdate_ClientIdOf53Bits_AppliesAndReEncodes(bool v2)
+    {
+        var doc = new YDoc();
+
+        if (v2)
+        {
+            doc.ApplyUpdateV2(B(MaxClientV2));
+        }
+        else
+        {
+            doc.ApplyUpdate(B(MaxClientV1));
+        }
+
+        Assert.AreEqual(
+            ("ax", "Af////////8PBQ==", MaxClientV1, MaxClientV2),
+            (doc.GetText("t").ToString(), S(doc.EncodeStateVector()), S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())));
+    }
+
+    [TestMethod]
+    public void ClientId_Of53Bits_WritesYjsBytes()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = (1L << 53) - 1 });
+
+        doc.GetText("t").Insert(0, "max");
+        doc.GetText("t").Delete(0, 1);
+        doc.GetMap("m").Set("a", 1);
+        doc.GetMap("m").Set("a", 2);
+
+        Assert.AreEqual((MaxClientV1, MaxClientV2), (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())));
+    }
+
+    [TestMethod]
+    public void UpdateOperations_ClientIdOf40Bits_MergesAndConverts()
+    {
+        var update = B("AQGFgICAgCAABAEBdANiaWcA");
+
+        var v2 = UpdateOperations.ConvertUpdateFormatV1ToV2(update);
+
+        Assert.AreEqual(
+            (S(update), "AYWAgICAIAM="),
+            (S(UpdateOperations.MergeUpdates([update, UpdateOperations.ConvertUpdateFormatV2ToV1(v2)])), S(UpdateOperations.EncodeStateVectorFromUpdateV2(v2))));
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_ClientIdBeyond53Bits_IsRejected()
+    {
+        // Client 2^53: one struct.
+        var doc = new YDoc();
+
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(B("AQGAgICAgICAEAAEAQF0A2JpZwA=")));
+    }
 }
