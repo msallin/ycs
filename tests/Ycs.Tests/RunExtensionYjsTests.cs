@@ -77,6 +77,58 @@ public class RunExtensionYjsTests
         Assert.AreEqual(("4,2,3", "01040300010101740141030001c803010300027d027d03480301017d040103010002"), (string.Join(",", a.ToArray()), Hex(doc.EncodeStateAsUpdateV1())));
     }
 
+    [TestMethod]
+    public void GcFilter_RunTypedAndDeletedInOneTransaction_SeesEachYjsItem()
+    {
+        var (calls, updates, v1) = Filtered(item => item.Id.Clock != 1, doc =>
+        {
+            var t = doc.GetText("t");
+            doc.Transact(_ =>
+            {
+                t.Insert(0, "a");
+                t.Insert(1, "b");
+                t.Delete(0, 2);
+            });
+        });
+
+        Assert.AreEqual(("0+1,1+1", "01020100010101740184010001620101010002", "01020100010101740184010001620101010002"), (calls, updates, v1));
+    }
+
+    [TestMethod]
+    public void GcFilter_RunContinuedAndDeletedInALaterTransaction_SeesEachYjsItem()
+    {
+        var (calls, updates, v1) = Filtered(item => item.Id.Clock != 1, doc =>
+        {
+            var t = doc.GetText("t");
+            t.Insert(0, "a");
+            doc.Transact(_ =>
+            {
+                t.Insert(1, "b");
+                t.Delete(0, 2);
+            });
+        });
+
+        Assert.AreEqual(("0+1,1+1", "0101010004010174016100,0101010184010001620101010002", "01020100010101740184010001620101010002"), (calls, updates, v1));
+    }
+
+    [TestMethod]
+    public void GcFilter_ArrayPushesDeletedInOneTransaction_SeesEachYjsItem()
+    {
+        var (calls, updates, v1) = Filtered(item => item.Id.Clock % 2 == 0, doc =>
+        {
+            var a = doc.GetArray("a");
+            doc.Transact(_ =>
+            {
+                a.Push(new object[] { 1 });
+                a.Push(new object[] { 2 });
+                a.Push(new object[] { 3 });
+                a.Delete(0, 3);
+            });
+        });
+
+        Assert.AreEqual(("0+1,1+1,2+1", "010301000101016101880100017d02810101010101010003", "010301000101016101880100017d02810101010101010003"), (calls, updates, v1));
+    }
+
     private static (string Content, string V1) AppliedInsideTransaction(bool observed)
     {
         var doc = Doc(3);

@@ -511,9 +511,11 @@ public partial class Transaction
 
         if (transaction.HasRunExtensions)
         {
-            // Whoever is called from here on with the transaction or its events sees Yjs' items; when nobody is, the
-            // runs stay as they are, which is what the merge below would make of them.
-            if (doc.HasTransactionListeners || doc.HasBeforeObserverCallsListeners || AnyObserved(transaction))
+            // Whoever is called from here on with the transaction or its events sees Yjs' items, and so does a garbage
+            // collection filter (once per item); when nobody is, the runs stay as they are, which is what the merge
+            // below would make of them.
+            if (doc.HasTransactionListeners || doc.HasBeforeObserverCallsListeners || AnyObserved(transaction)
+                || (doc.Gc && doc.GcFilter != YDocOptions.DefaultGcFilter && ds.Clients.Count > 0))
             {
                 transaction.MaterializeRunExtensions();
             }

@@ -13,10 +13,11 @@ namespace Ycs;
 
 public class YDocOptions
 {
-    private static Predicate<Item> DefaultPredicate = (item) => true;
+    // Collects everything; another filter is called once per item (see Transaction.CleanupTransaction).
+    internal static readonly Predicate<Item> DefaultGcFilter = static item => true;
 
     public bool Gc { get; set; } = true;
-    public Predicate<Item> GcFilter { get; set; } = DefaultPredicate;
+    public Predicate<Item> GcFilter { get; set; } = DefaultGcFilter;
     /// <summary>A random one unless set (only when first read, so that one that is set costs nothing).</summary>
     public string Guid
     {
