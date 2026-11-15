@@ -334,4 +334,56 @@ public class YjsTypeParityTests
             .GetValue(array);
         Assert.AreEqual(1, markers.Count);
     }
+
+    [TestMethod]
+    public void XmlToString_ValuesFormatsEmbedsAndHooks_WrittenAsYjsWritesThem()
+    {
+        var doc = new YDoc();
+        var fragment = doc.GetXmlFragment("x");
+        var element = new YXmlElement("P");
+        fragment.Insert(0, new object[] { element });
+        var values = new Dictionary<string, object>
+        {
+            ["a"] = true, ["b"] = 1.5, ["c"] = null, ["d"] = new Dictionary<string, object> { ["x"] = 1 },
+            ["e"] = new List<object> { 1, null, new List<object> { 2, 3 } }, ["g"] = 1e21, ["h"] = 1e-7,
+            ["i"] = 123456789012345680000d, ["j"] = 0.000001, ["k"] = -1.5, ["l"] = "v",
+        };
+        foreach (var (key, value) in values)
+        {
+            element.SetAttribute(key, value);
+        }
+
+        var text = new YXmlText();
+        fragment.Insert(1, new object[] { text, new YXmlHook("h") });
+        text.Insert(0, "ab", new Dictionary<string, object>
+        {
+            ["color"] = "red", ["bold"] = true, ["link"] = new Dictionary<string, object> { ["href"] = "u", ["a"] = 1 }, ["l"] = new List<object> { 1, 2 },
+        });
+        text.InsertEmbed(2, new Dictionary<string, object> { ["img"] = 1 });
+
+        var culture = System.Globalization.CultureInfo.CurrentCulture;
+        System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+        try
+        {
+            Assert.AreEqual(
+                """<p a="true" b="1.5" c="null" d="[object Object]" e="1,,2,3" g="1e+21" h="1e-7" i="123456789012345680000" j="0.000001" k="-1.5" l="v"></p><bold><color 0="r" 1="e" 2="d"><l 0="1" 1="2"><link a="1" href="u">ab</link></l></color></bold>[object Object][object Object]""",
+                fragment.ToString());
+        }
+        finally
+        {
+            System.Globalization.CultureInfo.CurrentCulture = culture;
+        }
+    }
+
+    [TestMethod]
+    public void XmlGetAttributes_Snapshot_KeepsNullValues()
+    {
+        var doc = new YDoc();
+        var element = new YXmlElement("p");
+        doc.GetXmlFragment("x").Insert(0, new object[] { element });
+        element.SetAttribute("n", null);
+        element.SetAttribute("s", "v");
+
+        Assert.AreEqual("""{"n":null,"s":"v"}""", Json(element.GetAttributes(doc.CreateSnapshot())));
+    }
 }

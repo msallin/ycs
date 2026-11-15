@@ -6,15 +6,16 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Globalization;
 using System.Text;
 
 namespace Ycs;
 
 /// <summary>
-/// Represents text in a Dom Element. Formatting attributes (see <see cref="YText"/>) whose value
-/// is an object are rendered as a nested tag with that object's keys as XML attributes (e.g. a
-/// 'link' formatting attribute with value '{ href: "..." }' renders as '&lt;link href="..."&gt;').
-/// A formatting attribute with a non-object value (e.g. 'bold: true') renders as an empty tag.
+/// Represents text in a Dom Element. In <see cref="ToString"/>, a formatting attribute (see
+/// <see cref="YText"/>) whose value is an object is rendered as a nested tag with that object's keys
+/// as XML attributes (a 'link' with value '{ href: "..." }' renders as '&lt;link href="..."&gt;'); one
+/// with a boolean or number value (e.g. 'bold: true') renders as a tag without attributes.
 /// </summary>
 public class YXmlText : YText
 {
@@ -72,6 +73,12 @@ public class YXmlText : YText
 
     public new YXmlText Clone() => InternalClone() as YXmlText;
 
+    /// <summary>
+    /// Yjs' <c>toString</c>: each attribute of a run as a tag around it, whose XML attributes are the
+    /// value's own properties as JavaScript's <c>for..in</c> lists them (a map's keys, a list's or a
+    /// string's indexes, nothing for a number or a boolean), sorted; values and embeds are written
+    /// as JavaScript's <c>String(value)</c> writes them.
+    /// </summary>
     public override string ToString()
     {
         var sb = new StringBuilder();
@@ -85,35 +92,51 @@ public class YXmlText : YText
                 foreach (var kvp in delta.Attributes)
                 {
                     var attrs = new List<(string Key, object Value)>();
-                    if (kvp.Value is IDictionary<string, object> valueMap)
+                    switch (kvp.Value)
                     {
-                        foreach (var akv in valueMap)
-                        {
-                            attrs.Add((akv.Key, akv.Value));
-                        }
+                        case IDictionary<string, object> valueMap:
+                            foreach (var akv in valueMap)
+                            {
+                                attrs.Add((akv.Key, akv.Value));
+                            }
 
-                        attrs.Sort((a, b) => System.String.CompareOrdinal(a.Key, b.Key));
+                            break;
+                        case string str:
+                            for (var i = 0; i < str.Length; i++)
+                            {
+                                attrs.Add((i.ToString(CultureInfo.InvariantCulture), str[i].ToString()));
+                            }
+
+                            break;
+                        case System.Collections.IList list:
+                            for (var i = 0; i < list.Count; i++)
+                            {
+                                attrs.Add((i.ToString(CultureInfo.InvariantCulture), list[i]));
+                            }
+
+                            break;
                     }
 
+                    attrs.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
                     nestedNodes.Add((kvp.Key, attrs));
                 }
             }
 
             // Sort node order to get a unique order.
-            nestedNodes.Sort((a, b) => System.String.CompareOrdinal(a.NodeName, b.NodeName));
+            nestedNodes.Sort((a, b) => string.CompareOrdinal(a.NodeName, b.NodeName));
 
             foreach (var node in nestedNodes)
             {
                 sb.Append('<').Append(node.NodeName);
                 foreach (var attr in node.Attrs)
                 {
-                    sb.Append(' ').Append(attr.Key).Append("=\"").Append(attr.Value).Append('"');
+                    sb.Append(' ').Append(attr.Key).Append("=\"").Append(YXmlNodeHelpers.JsString(attr.Value)).Append('"');
                 }
 
                 sb.Append('>');
             }
 
-            sb.Append(delta.Insert);
+            sb.Append(YXmlNodeHelpers.JsString(delta.Insert));
 
             for (int i = nestedNodes.Count - 1; i >= 0; i--)
             {
