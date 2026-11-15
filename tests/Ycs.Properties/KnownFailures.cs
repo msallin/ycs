@@ -51,8 +51,9 @@ internal static class KnownFailures
             "one): Yjs integrates it and then throws in the cleanup ('Unexpected case' in Item.gc), so its document is left " +
             "changed, and wedged: the throw skips the end of cleanupTransactions, which leaves the transaction in " +
             "doc._transactionCleanups, so no later transaction of that document is cleaned up (no observer, afterTransaction " +
-            "or update event, also for a local change; the former pin pending-integration-events was this). Ycs rejects it " +
-            "with YUpdateException before integrating (docs/api.md, Untrusted input). Both reject; the states differ.",
+            "or update event, also for a local change; the former pins pending-integration-events and empty-remote-transaction " +
+            "were this). Ycs rejects it with YUpdateException before integrating (docs/api.md, Untrusted input). Both reject; " +
+            "the states differ.",
             """{"clients":[{"gc":true,"id":1}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AwKsAgAIAQFhA353AXN9AQQBAXQD5LitAvj6//8HAIesAgIBhKwCAwJiYwPwogQAh6wCAAEoAPCiBAABbQF9RygA+Pr//wcAAWwDfUd4eAA=","via":"v1"},{"op":"raw","to":0,"u":"AQUKACgA+Pr//wcAAWsCeH0BxPj6//8HAfj6//8HAQJiYygA8KIEAAFsAnh9R4fwogQAAQoCA/CiBAEDAfj6//8HAQADCgIBAwQC","via":"v1"}]}""")
         {
             Documented = true,
@@ -75,13 +76,6 @@ internal static class KnownFailures
             """{"clients":[{"gc":false,"id":2}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI=","via":"v1"},{"op":"raw","to":0,"u":"AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC","via":"v1"},{"op":"raw","to":0,"u":"AQSsAgAIAQFhA30BdwFzfoisAgEDdQJ9AXcBeH0BdQJ9AXcBeAQBAXQD5LitBwEBeAYA","via":"v1"}]}""")
         {
             Matches = (m, _) => m.Op == "raw" && m.Primary is "ev:update" or "v1" or "v2" && !m.Differences.Any(d => d.Contains(".roots.", StringComparison.Ordinal)),
-        },
-        new("empty-remote-transaction", "low",
-            "Applying a fuzzed update that, at that point, changes nothing (its structs are known or still wait): Ycs runs " +
-            "an empty transaction (afterTransaction fires, origin \"net\"); Yjs runs none.",
-            """{"clients":[{"gc":true,"id":1}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AwT4+v//BwAnAQFtAWsBhKwCAgN4w6kIAQFhA30BeH1HBwEBeAMDZGl2BPCiBAAhAQFtAWsCIgD4+v//BwABawIBMQMiaiLI+Pr//wcE+Pr//wcEAnh7P/gAAAAAAACErAICAWECDAAoAPj6//8HAAFsAnh7P/gAAAAAAACH+Pr//wcEAAIMAQID8KIEAQEH","via":"v1"},{"op":"raw","to":0,"u":"AQULACcA+Pr//wcGAW0Gh/j6//8HBgYnAPj6//8HBgFsAwNkaXYHAPj6//8HBgMBcCMA+Pr//wcAAWsDAQIDAvj6//8HAQIIDAEBAw==","via":"v1"},{"op":"raw","to":0,"u":"AgQKAIfwogQJBiEBAW0BbAIHAAsDAwNkaXaHCgAGBPj6//8HBygACwYBbQJ+dQJ9AXcBeMELCQsHAoSsAgED5LitCgEC+Pr//wcBAALwogQCAQIJAw==","via":"v1"},{"op":"raw","to":0,"u":"AwQKBYjwogQEAXgHAAsAAMf4+v//BwT4+v//BwQCKAEBbQFrAXUCfQF3AXgErAIDKAEBbQFsAn1HfUcnAAsFAWsGBwEBeAMDZGl2xAsICwgCYmMEDAOH+Pr//wcGBojwogQFAXUCfQF3AXjI+Pr//wcEDAQDfQF7P/gAAAAAAAB4BwD4+v//BwYGAA==","via":"v1"}]}""")
-        {
-            Matches = (m, _) => m.Op == "raw" && m.Primary == "ev:atx" && m.Differences.All(d => d.Contains("yjs \"(missing)\"", StringComparison.Ordinal)),
         },
         new("pending-deletes-split-surrogate-pair", "low",
             "Two deletions that arrive before the insertion they delete (one character each, the two halves of a surrogate " +

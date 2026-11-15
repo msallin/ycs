@@ -66,6 +66,24 @@ public class IntegrationPlanReuseTests
         Assert.AreEqual((1, 1, "abcd"), (transactions, events, doc.GetText("text").ToString()));
     }
 
+    [TestMethod]
+    public void ApplyUpdate_UpdateThatChangesNothing_RunsATransaction()
+    {
+        // As Yjs' applyUpdate, which always transacts: three no-op updates raise three afterTransaction events.
+        var source = new YDoc(new YDocOptions { ClientId = 1 });
+        source.GetText("text").Insert(0, "x");
+        var update = source.EncodeStateAsUpdateV1();
+        var doc = new YDoc();
+        doc.ApplyUpdateV1(update);
+        var transactions = 0;
+        doc.AfterTransaction += (_, _) => transactions++;
+
+        doc.ApplyUpdateV1(update);
+        doc.ApplyUpdateV1([0, 0]);
+
+        Assert.AreEqual(2, transactions);
+    }
+
     /// <summary>A v1 update of client 5: <paramref name="depth"/> arrays, each nested in the one before, the first in root 'a'.</summary>
     private static byte[] NestedArrays(int depth)
     {
