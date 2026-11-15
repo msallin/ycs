@@ -108,6 +108,22 @@ public class UndoManagerYjsTests
     }
 
     [TestMethod]
+    public void Undo_DeletedNestedText_RestoresIt()
+    {
+        var doc = Doc(1);
+        var array = doc.GetArray("a");
+        var um = new UndoManager(array, new UndoManagerOptions { CaptureTimeout = 0 });
+        var nested = new YText();
+        array.Insert(0, new object[] { nested });
+        nested.Insert(0, "pq");
+        array.Delete(0, 1);
+
+        um.Undo();
+
+        Assert.AreEqual("pq", (array.Get(0) as YText)?.ToString());
+    }
+
+    [TestMethod]
     public void CaptureTransaction_ReturnsFalse_TransactionIsNotCaptured()
     {
         var doc = Doc(1);

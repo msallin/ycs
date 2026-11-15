@@ -981,6 +981,8 @@ public partial class YText : YArrayBase
         }
     }
 
+    internal override AbstractType InternalCopy() => new YText();
+
     internal override AbstractType InternalClone()
     {
         var text = new YText();
