@@ -123,6 +123,20 @@ public class IntegrationPlanReuseTests
             Convert.ToBase64String(doc.EncodeStateAsUpdateV1()));
     }
 
+    [TestMethod]
+    public void EncodeStateAsUpdateV2_ClocksAbove2To30_RoundTrips()
+    {
+        // Clocks up to 2^31 - 1 are valid (docs/api.md); the v2 clock columns write diff * 2 + flag, as lib0, without a
+        // 30-bit limit (a Debug.Assert of one failed here in Debug builds).
+        var doc = new YDoc(new YDocOptions { Gc = false });
+        doc.ApplyUpdateV1(Convert.FromBase64String("AgOsAgACAAy/////BwIBMQMiaiIKAUOsAgADAQIDAwwAAL////8HBwEBYQAKAwA="));
+        var copy = new YDoc(new YDocOptions { Gc = false });
+
+        copy.ApplyUpdateV2(doc.EncodeStateAsUpdateV2());
+
+        Assert.AreEqual(Convert.ToBase64String(doc.EncodeStateAsUpdateV1()), Convert.ToBase64String(copy.EncodeStateAsUpdateV1()));
+    }
+
     /// <summary>A v1 update of client 5: <paramref name="depth"/> arrays, each nested in the one before, the first in root 'a'.</summary>
     private static byte[] NestedArrays(int depth)
     {
