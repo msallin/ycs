@@ -118,16 +118,28 @@ public static class SyncProtocol
         WriteSyncStep2(writer, doc, encodedStateVector, v2);
     }
 
-    public static void ReadSyncStep2(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false)
+    /// <summary>
+    /// Reads an update and applies it. As in y-protocols, with an <paramref name="errorHandler"/> an
+    /// exception of the read or the apply (a <see cref="YUpdateException"/> for a malformed update, or one an
+    /// observer threw) goes to the handler and the call returns; without one it propagates (y-protocols logs it).
+    /// </summary>
+    public static void ReadSyncStep2(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception> errorHandler = null)
     {
-        var update = ReadVarUint8Array(stream);
-        if (v2)
+        try
         {
-            doc.ApplyUpdateV2(update, transactionOrigin);
+            var update = ReadVarUint8Array(stream);
+            if (v2)
+            {
+                doc.ApplyUpdateV2(update, transactionOrigin);
+            }
+            else
+            {
+                doc.ApplyUpdateV1(update, transactionOrigin);
+            }
         }
-        else
+        catch (Exception e) when (errorHandler != null)
         {
-            doc.ApplyUpdateV1(update, transactionOrigin);
+            errorHandler(e);
         }
     }
 
@@ -137,12 +149,18 @@ public static class SyncProtocol
         WriteVarUint8Array(stream, update);
     }
 
-    public static void ReadUpdate(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false)
+    /// <inheritdoc cref="ReadSyncStep2"/>
+    public static void ReadUpdate(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception> errorHandler = null)
     {
-        ReadSyncStep2(stream, doc, transactionOrigin, v2);
+        ReadSyncStep2(stream, doc, transactionOrigin, v2, errorHandler);
     }
 
-    public static uint ReadSyncMessage(Stream reader, Stream writer, YDoc doc, object transactionOrigin, bool v2 = false)
+    /// <summary>
+    /// Reads one sync message and handles it; returns its type. <paramref name="errorHandler"/> receives what
+    /// reading and applying an update threw (see <see cref="ReadSyncStep2"/>); an unknown message type or a
+    /// malformed step 1 throws <see cref="YUpdateException"/>, as in y-protocols.
+    /// </summary>
+    public static uint ReadSyncMessage(Stream reader, Stream writer, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception> errorHandler = null)
     {
         var messageType = ReadVarUint(reader);
 
@@ -152,10 +170,10 @@ public static class SyncProtocol
                 ReadSyncStep1(reader, writer, doc, v2);
                 break;
             case MessageYjsSyncStep2:
-                ReadSyncStep2(reader, doc, transactionOrigin, v2);
+                ReadSyncStep2(reader, doc, transactionOrigin, v2, errorHandler);
                 break;
             case MessageYjsUpdate:
-                ReadUpdate(reader, doc, transactionOrigin, v2);
+                ReadUpdate(reader, doc, transactionOrigin, v2, errorHandler);
                 break;
             default:
                 throw new YUpdateException($"Unknown sync message type: {messageType}.");

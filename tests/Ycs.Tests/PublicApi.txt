@@ -185,10 +185,10 @@ static class Ycs.SyncProtocol
     const uint MessageYjsSyncStep1 = 0
     const uint MessageYjsSyncStep2 = 1
     const uint MessageYjsUpdate = 2
-    static uint ReadSyncMessage(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, object transactionOrigin, bool v2 = false)
+    static uint ReadSyncMessage(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception> errorHandler = null)
     static void ReadSyncStep1(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, bool v2 = false)
-    static void ReadSyncStep2(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false)
-    static void ReadUpdate(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false)
+    static void ReadSyncStep2(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception> errorHandler = null)
+    static void ReadUpdate(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception> errorHandler = null)
     static void WriteSyncStep1(System.IO.Stream stream, YDoc doc, bool v2 = false)
     static void WriteSyncStep2(System.IO.Stream stream, YDoc doc, byte[] encodedStateVector, bool v2 = false)
     static void WriteUpdate(System.IO.Stream stream, byte[] update)
