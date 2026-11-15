@@ -133,8 +133,8 @@ long traces) stays theirs: add an operation here when it needs the cross-area or
 | --- | --- | --- |
 | Recorded fixtures (`RecordedTests`, `interop/properties/fixtures/*.jsonl`) | On 190 pairwise scripts (every unordered pair of the 19 operation kinds, and each with itself, made concurrently by two or three clients, then exchanged in random order with duplicates and mixed formats), 150 random scripts, 80 fuzzed ones and the scripts of the fixed known failures (`FixedFailures.cs`), every step's observation equals Yjs'. Needs no Node. | Anything outside these scripts. Intermediate steps are stored as hashes (`he`, `hs`), so a failure says which step differs; `YCS_PROP_EXPLAIN` (with Node) says how. |
 | Live soak (`SoakTests.LiveSoak_ScriptsAgreeWithYjs`, `interop/properties/soak.sh`) | The same on any number of fresh scripts (seeded, deterministic); each distinct mismatch is shrunk to a minimal script. | Behaviour the generator does not produce (see the coverage table); timing-dependent behaviour (an UndoManager's capture timeout is 0 or effectively infinite). |
-| Properties (`PropertyTests`, `Properties.cs`) | Laws that need no oracle, on generated scripts: convergence, encode round trip, merge of any partition, diff, v1/v2 conversion, undo/redo, snapshot stability, relative positions, GC invisibility, naive recomputation, the Lean item-list invariants, idempotence, commutativity, event replay, clean rejection of fuzzed updates. | That the laws match Yjs: where Yjs itself breaks one (a split surrogate pair, a lone surrogate, a format without attributes, a snapshot read of an array or a map, which shows an item merged across the snapshot whole) the property's generator leaves that out, and says so. `EventReplay_HoldsForYjs` checks the event-replay property on Yjs. |
-| Structure-aware fuzzer (`UpdateFuzz.cs`, `UpdateFuzzTests`) | Updates encoded by the tests' own v1 encoder from a model (several synthetic clients in any order, runs split where Yjs merges, origins inside other runs and inside map values, parents that arrive later, Skip and GC structs, overlapping/repeated/unsorted delete sets, a map value's tail deleted with its map, clocks near 2^31 - 1, nesting near 256, clients with no structs) are applied, or rejected with `YUpdateException` and the document unchanged; with Node, as Yjs applies them. | Byte-level damage (that is `tests/Ycs.Fuzz`); v2 input other than Ycs' and Yjs' own conversions of the model's v1. |
+| Properties (`PropertyTests`, `Properties.cs`) | Laws that need no oracle, on generated scripts: convergence, encode round trip, merge of any partition, diff, v1/v2 conversion, undo/redo, snapshot stability, relative positions, GC invisibility, naive recomputation, the Lean item-list invariants, idempotence, commutativity, event replay, clean rejection of fuzzed updates. | That the laws match Yjs: where Yjs itself breaks one the property's generator leaves that out, or the property is stated as Yjs satisfies it (see [laws Yjs breaks](#laws-yjs-breaks)). `EventReplay_HoldsForYjs` checks the event-replay property on Yjs. |
+| Structure-aware fuzzer (`UpdateFuzz.cs`, `UpdateFuzzTests`) | Updates encoded by the tests' own v1 encoder from a model (several synthetic clients in any order, runs split where Yjs merges, origins inside other runs and inside map values, parents that arrive later, Skip and GC structs, overlapping/repeated/unsorted delete sets, a map value's tail deleted with its map, clocks near 2^31 - 1, nesting at the limit (`UpdateLimits.MaxDepth`), clients with no structs) are applied, or rejected with `YUpdateException` and the document unchanged; with Node, as Yjs applies them. | Byte-level damage (that is `tests/Ycs.Fuzz`); v2 input other than Ycs' and Yjs' own conversions of the model's v1. |
 
 A divergence that is a bug in Ycs is pinned in `KnownFailures.cs` (see [pinning](#from-a-minimal-script-to-a-pinned-test)).
 
@@ -208,10 +208,10 @@ subdocument's guid is given); Yjs' warnings on the console; `PermanentUserData`,
 ### Running
 
 ```bash
-dotnet test tests/Ycs.Properties -c Release                       # recorded, properties, fuzz rejection: about 8 s
+dotnet test tests/Ycs.Properties -c Release                       # recorded, properties (2,000 scripts each), fuzz rejection: about 45 s
 (cd interop/properties && npm ci)                                 # once, for everything below
 interop/properties/soak.sh 200000 1 8                             # live soak: scripts, first seed, Node workers
-YCS_PROP_SEEDS=3000 dotnet test tests/Ycs.Properties -c Release --filter "FullyQualifiedName~PropertyTests"
+YCS_PROP_SEEDS=30000 dotnet test tests/Ycs.Properties -c Release --filter "FullyQualifiedName~PropertyTests"
 YCS_PROP_FUZZ=5000 dotnet test tests/Ycs.Properties -c Release --filter Name=StructuredUpdates_AgreeWithYjs
 YCS_PROP_EXPLAIN=interop/properties/failures/x.json dotnet test tests/Ycs.Properties -c Release \
   --filter Name=Explain_PrintsBothObservations --logger "console;verbosity=detailed"   # one script, both sides, every difference
@@ -224,6 +224,26 @@ the most severe difference, which side threw) with its minimal script, written t
 It fails if a mismatch is not known. Debug builds make the library's `Debug.Assert`s live (they turn
 up as failures of their own); the soak and the fixtures use Release. Set `YCS_PROP_DEBUG=1` to print
 the exceptions the operations threw.
+
+### Laws Yjs breaks
+
+A property violation is decided against Yjs before anything changes: the script-level properties
+(diff, undo/redo, relative positions, GC invisibility, commutativity, event replay) are scripts the
+oracle runs as they are (`YCS_PROP_EXPLAIN`); `interop/properties/laws.mjs` runs merge-partition and
+idempotence, which do more than a script, against Yjs with the same random choices
+(`node laws.mjs <property> < script.json`). Where Yjs breaks the law the same way, the property
+leaves the case out or is stated as Yjs satisfies it, and `YjsLaws.cs` holds a script that shows
+the break, recorded with Yjs' observations (`fixtures/laws.jsonl`) and replayed by
+`Recorded_ObservationsEqualYjs`, so that Ycs keeps breaking it exactly as Yjs does. Where Ycs alone
+breaks it, it is a bug of Ycs (see below). Yjs 13.6.32 breaks:
+
+| Law | Why (Yjs and Ycs alike) | The property |
+| --- | --- | --- |
+| idempotence, undo/redo, diff, event replay, snapshot reads, encode round trip, conversion | Splitting an item after a lone surrogate or between the halves of a surrogate pair replaces them with U+FFFD in place, without an update or an event. Splits happen where no change asks for one: applying an update the document already has splits items at its structs' origins (`integrateStructs` calls `getMissing` before it finds the struct known), an undo or a retain splits at its ends. A lone surrogate is also written as U+FFFD. | generated without lone surrogates (the round trips and conversion) or without characters outside the BMP too (the others) |
+| merge-partition | A text cleans up its formatting after a remote transaction (`cleanupYTextAfterTransaction`, a local transaction of the receiver), deleting the formats that are redundant at that moment, which depends on what the transaction brought: the same updates applied one by one or merged into one end with different attributes. | when a receiver cleaned up, the content is compared without attributes |
+| gc-invisible | Observers of different types are called in the order in which the transaction first changed each type, and a deleted item collected into a GC struct changes none. A GC struct waits for no parent, so a document that lacks the parent integrates it, and what its client did after it, at once. A relative position in a collected type does not resolve. | each observer's calls are compared in order, not the order between observers; resolutions into deleted types are left out; from the first step at which something waits in either variant, only the end content of the clients with nothing waiting is compared; the stacks of an UndoManager scoped to the document are left out (it captures every transaction, and how many empty cleanup transactions an update opens depends on gc) |
+| relpos-stable | A relative position on an item that an undo or a redo re-creates follows it only on the replica that made it (`Item.redone` is local). (The first violation was no break: the property assumed the full sync its scripts end with, which shrinking removed.) | only after a full sync (every client at the same state vector, nothing pending), and without an undo or a redo after the position was taken |
+| undo-all-restores | Redoing every change re-creates a nested type that was created and then edited, and not every edit made inside it is redone. | the redos are checked only in scripts that edit no nested type |
 
 ### Normalizations and known failures
 

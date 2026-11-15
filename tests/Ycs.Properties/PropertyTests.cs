@@ -6,7 +6,7 @@ namespace Ycs.Properties;
 
 /// <summary>
 /// Checks every property of <see cref="Properties"/> on generated scripts (no Node). Deterministic by
-/// default (YCS_PROP_SEEDS scripts per property, default 40, from YCS_PROP_SEED, default 1); a
+/// default (YCS_PROP_SEEDS scripts per property, default 2,000 (about 45 s for all of them), from YCS_PROP_SEED, default 1); a
 /// violation is shrunk to a minimal script and fails the test unless a known failure explains it.
 /// </summary>
 [TestClass]
@@ -22,7 +22,7 @@ public sealed class PropertyTests
     public void Property_HoldsOnGeneratedScripts(string name)
     {
         var spec = Properties.Named(name);
-        var count = int.Parse(Environment.GetEnvironmentVariable("YCS_PROP_SEEDS") is { Length: > 0 } n ? n : "40", CultureInfo.InvariantCulture);
+        var count = int.Parse(Environment.GetEnvironmentVariable("YCS_PROP_SEEDS") is { Length: > 0 } n ? n : "2000", CultureInfo.InvariantCulture);
         var first = ulong.Parse(Environment.GetEnvironmentVariable("YCS_PROP_SEED") is { Length: > 0 } s ? s : "1", CultureInfo.InvariantCulture);
         var found = new Dictionary<string, (ulong Seed, Violation Violation, Dictionary<string, object> Minimal, int Count)>(StringComparer.Ordinal);
         for (var seed = first; seed < first + (ulong)count; seed++)

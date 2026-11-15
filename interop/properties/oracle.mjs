@@ -188,7 +188,7 @@ function lengthOf (t) {
 
 // ---------------------------------------------------------------- one client
 
-class Client {
+export class Client {
   constructor (run, index, spec) {
     this.run = run
     this.index = index
@@ -356,7 +356,7 @@ const attrsOf = a => (a === undefined || a === null) ? undefined : val(a)
 
 // ---------------------------------------------------------------- a run of one script
 
-class Run {
+export class Run {
   constructor (script) {
     this.script = script
     this.events = []

@@ -14,7 +14,7 @@ internal sealed record Fixture(string Kind, string Name, Dictionary<string, obje
 /// <summary>interop/properties/fixtures/*.jsonl, one fixture per line, recorded by <see cref="RecordedTests.RecordFixtures"/>.</summary>
 internal static class Fixtures
 {
-    public static readonly string[] Files = ["pairs", "random", "fuzz", "pinned", "fixed"];
+    public static readonly string[] Files = ["pairs", "random", "fuzz", "pinned", "fixed", "laws"];
 
     private static readonly Lazy<Dictionary<string, Fixture>> LazyAll = new(() =>
     {
@@ -53,7 +53,7 @@ public sealed class RecordedTests
 {
     public TestContext TestContext { get; set; }
 
-    public static IEnumerable<object[]> Recorded => Fixtures.Of("pair", "random", "fuzz", "fixed");
+    public static IEnumerable<object[]> Recorded => Fixtures.Of("pair", "random", "fuzz", "fixed", "law");
 
     [TestMethod]
     [DynamicData(nameof(Recorded))]
@@ -185,13 +185,15 @@ public sealed class RecordedTests
 
         var pinned = KnownFailures.All.Where(k => k.Property == null).Select(k => Line("pinned", k.Name, (Dictionary<string, object>)Json.Parse(k.Script))).ToList();
         var fixedScripts = FixedFailures.All.Where(f => f.Property == null).Select(f => Line("fixed", f.Name, (Dictionary<string, object>)Json.Parse(f.Script))).ToList();
+        var laws = YjsLaws.All.Select(l => Line("law", l.Name, (Dictionary<string, object>)Json.Parse(l.Script))).ToList();
 
         File.WriteAllLines(Path.Combine(dir, "pairs.jsonl"), pairs);
         File.WriteAllLines(Path.Combine(dir, "random.jsonl"), random);
         File.WriteAllLines(Path.Combine(dir, "fuzz.jsonl"), fuzz);
         File.WriteAllLines(Path.Combine(dir, "pinned.jsonl"), pinned);
         File.WriteAllLines(Path.Combine(dir, "fixed.jsonl"), fixedScripts);
-        TestContext.WriteLine($"{pairs.Count} pairs, {random.Count} random, {fuzz.Count} fuzz, {pinned.Count} pinned, {fixedScripts.Count} fixed fixtures in {dir}");
+        File.WriteAllLines(Path.Combine(dir, "laws.jsonl"), laws);
+        TestContext.WriteLine($"{pairs.Count} pairs, {random.Count} random, {fuzz.Count} fuzz, {pinned.Count} pinned, {fixedScripts.Count} fixed, {laws.Count} law fixtures in {dir}");
         Assert.IsEmpty(unexplained, "mismatches no known failure explains; pin them (KnownFailures) and record again:" + Environment.NewLine + string.Join(Environment.NewLine, unexplained));
     }
 }

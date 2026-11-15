@@ -60,15 +60,6 @@ internal static class KnownFailures
             Documented = true,
             Matches = (m, script) => m.Op == "raw" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal) && RejectedByGcCheck(script, m.Step),
         },
-        new("yjs-redo-recreated-type", "documented",
-            "Not a Ycs bug: undoing everything and redoing everything does not restore a nested type that was created and " +
-            "then edited (redo re-creates the type, and the edits inside it are not all redone); Yjs ends with the same " +
-            "content as Ycs on this script (the differential agrees), so the property is stronger than Yjs' UndoManager.",
-            """{"clients":[{"gc":false,"id":4294966611}],"roots":[{"kind":"map","name":"m"}],"steps":[{"c":0,"id":"all","op":"um","scope":[["m"]],"timeout":"0"},{"c":0,"key":"a","op":"set","path":["m"],"value":{"$t":"xmle","n":"div","v":[{"$t":"xmlt","s":"\u4e2d\u6587 b"}]}},{"at":0,"attrs":{"italic":null},"c":0,"len":5,"op":"format","path":["m","a",0]},{"at":0,"c":0,"op":"insert","path":["m","a",0],"text":"a"},{"at":4,"c":0,"len":1,"op":"delete","path":["m","a",0]},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"redo"},{"c":0,"id":"all","op":"redo"},{"c":0,"id":"all","op":"redo"},{"c":0,"id":"all","op":"redo"}]}""")
-        {
-            Documented = true,
-            Property = "undo-all-restores: after redoing everything",
-        },
         new("yjs-throws", "documented",
             "Not a Ycs bug: Yjs 13.6.32 throws where Ycs does not: an UndoManager whose scope is a list holding the Y.Doc " +
             "(it takes typeScope[0].doc, undefined for a Doc: 'Cannot read properties of undefined'); XmlFragment.toString " +

@@ -45,7 +45,7 @@ internal static class Properties
         new("item-list-invariants", "after every step, every sequence satisfies the Lean-derived list invariants (tests/Ycs.Corpus/ItemListInvariants.cs)",
             seed => Generator.Generate(seed), ItemListInvariantsHold),
         new("idempotence", "applying an update a document already has changes nothing",
-            seed => Generator.Generate(seed), Idempotence),
+            seed => Generator.Generate(seed, BmpOnly), Idempotence),
         new("commutativity", "applying two updates in either order gives the same state",
             CommutativityScript, Commutativity),
         new("rejects-cleanly", "a structured (fuzzed) update is applied, or rejected with YUpdateException leaving the document as it was; nothing else is thrown",
@@ -61,7 +61,10 @@ internal static class Properties
     private static readonly GenOptions NoLoneSurrogates = new() { LoneSurrogates = false };
 
     // A split surrogate pair is replaced by U+FFFD in place, in Yjs as in Ycs, without an event and
-    // also in what a snapshot shows: properties about events and snapshots leave out such characters.
+    // also in what a snapshot shows; so is a lone surrogate where an item is split after it. Any split
+    // does that, also one no change asks for: applying an update a document already has splits items at
+    // its structs' origins (Yjs' getMissing runs before the struct is found to be known). Properties
+    // about events, snapshots, undo and re-applied updates leave out such characters (docs/testing.md).
     private static readonly GenOptions BmpOnly = new() { LoneSurrogates = false, Astral = false };
 
     // ---------------------------------------------------------------- helpers
@@ -301,7 +304,15 @@ internal static class Properties
                 .Concat(run.Clients.Select(c => v2 ? c.Replica.EncodeV2() : c.Replica.EncodeV1()))
                 .ToList();
             rng.Shuffle(updates);
-            var reference = Fresh(run);
+            var cleanedUp = false;
+            Replica Watched()
+            {
+                var r = Fresh(run);
+                r.UpdateV1 += (_, local) => cleanedUp |= local;
+                return r;
+            }
+
+            var reference = Watched();
             foreach (var u in updates)
             {
                 Apply(reference, u, v2);
@@ -310,17 +321,21 @@ internal static class Properties
             var groups = updates.GroupBy(_ => rng.Int(4)).Select(g => g.ToList()).ToList();
             var merged = groups.Select(g => Ycs.Properties.Updates.Merge(g, v2)).ToList();
             var all = Ycs.Properties.Updates.Merge(merged, v2);
-            var fromAll = Fresh(run);
+            var fromAll = Watched();
             Apply(fromAll, all, v2);
-            var fromParts = Fresh(run);
+            var fromParts = Watched();
             foreach (var m in merged)
             {
                 Apply(fromParts, m, v2);
             }
 
+            // A text's formatting cleanup after a remote transaction (a local transaction of the receiver) deletes the
+            // formats that are redundant at that moment: which they are depends on what the transaction brought, so
+            // the attributes depend on how the updates were grouped, in Yjs as in Ycs. Then only the rest is compared.
+            string Seen(Replica r) => cleanedUp ? Canonical(WithoutAttributes(r.Content())) : Content(r);
             var format = v2 ? "v2" : "v1";
-            var v = Differs("merge-partition", "merged all " + format, Content(reference), Content(fromAll))
-                ?? Differs("merge-partition", "merged parts " + format, Content(reference), Content(fromParts))
+            var v = Differs("merge-partition", "merged all " + format, Seen(reference), Seen(fromAll))
+                ?? Differs("merge-partition", "merged parts " + format, Seen(reference), Seen(fromParts))
                 ?? Differs("merge-partition", "sv " + format, Sv(reference), Sv(fromAll));
             if (v != null)
             {
@@ -330,6 +345,37 @@ internal static class Properties
 
         return null;
     });
+
+    /// <summary>
+    /// A content view without formatting: no attributes in deltas (and the texts of a delta's inserts that differed in
+    /// them joined), and no toJSON (an XML text renders its formats as tags).
+    /// </summary>
+    private static object WithoutAttributes(object view)
+    {
+        switch (view)
+        {
+            case Dictionary<string, object> d:
+                return d.Where(kv => kv.Key is not ("attributes" or "j")).ToDictionary(kv => kv.Key, kv => WithoutAttributes(kv.Value));
+            case List<object> l:
+                var joined = new List<object>();
+                foreach (var e in l.Select(WithoutAttributes))
+                {
+                    if (e is Dictionary<string, object> { Count: 1 } op && op.Get("insert") is string s
+                        && joined.Count > 0 && joined[^1] is Dictionary<string, object> { Count: 1 } last && last.Get("insert") is string before)
+                    {
+                        last["insert"] = before + s;
+                    }
+                    else
+                    {
+                        joined.Add(e);
+                    }
+                }
+
+                return joined;
+            default:
+                return view;
+        }
+    }
 
     private static void Apply(Replica to, byte[] update, bool v2)
     {
@@ -350,7 +396,8 @@ internal static class Properties
     /// </summary>
     private static Dictionary<string, object> DiffUpdateScript(ulong seed)
     {
-        var script = Generator.Generate(seed, NoLoneSurrogates);
+        // BMP only: a part B already holds keeps a surrogate pair that A split afterwards (A's U+FFFD is no update).
+        var script = Generator.Generate(seed, BmpOnly);
         var run = new ScriptRun(script);
         foreach (Dictionary<string, object> step in script.List("steps"))
         {
@@ -454,7 +501,9 @@ internal static class Properties
     /// <summary>One client, local changes only, an UndoManager over every root (no capture), then undos and redos.</summary>
     private static Dictionary<string, object> UndoScript(ulong seed, bool pairs)
     {
-        var script = Generator.Generate(seed, new GenOptions { SingleClientLocal = true, Kinds = LocalKinds, MinSteps = 2, MaxSteps = 20 });
+        // BMP only: an undo or redo that splits an item at a lone surrogate or between the halves of a pair
+        // replaces them with U+FFFD, in Yjs as in Ycs, so the content before the undo does not come back.
+        var script = Generator.Generate(seed, new GenOptions { SingleClientLocal = true, Kinds = LocalKinds, MinSteps = 2, MaxSteps = 20, LoneSurrogates = false, Astral = false });
         var roots = script.List("roots").Cast<Dictionary<string, object>>().Select(r => (object)new List<object> { r["name"] }).ToList();
         var steps = new List<object> { Normalized(Obj(("op", "um"), ("c", 0L), ("id", "all"), ("scope", roots), ("timeout", "0"))) };
         var changes = script.List("steps");
@@ -507,10 +556,15 @@ internal static class Properties
         return (Emptied(lastUndo, "u") && lastUndo > lastChange && (lastRedo < 0 || lastRedo > lastUndo)
                 ? Differs("undo-all-restores", "after undoing everything", initial, RootsAfter(observations[lastUndo]))
                 : null)
-            ?? (Emptied(lastRedo, "d") && lastRedo > lastUndo && lastUndo > lastChange && lastChange >= 0 && Emptied(lastUndo, "u")
+            ?? (Emptied(lastRedo, "d") && lastRedo > lastUndo && lastUndo > lastChange && lastChange >= 0 && Emptied(lastUndo, "u") && !EditsInsideNestedTypes(steps)
                 ? Differs("undo-all-restores", "after redoing everything", RootsAfter(observations[lastChange]), RootsAfter(observations[lastRedo]))
                 : null);
     });
+
+    // Whether a change edits inside a nested type (which this single-client script created): redoing everything
+    // re-creates such a type, and Yjs (as Ycs) does not redo every edit made inside it (YjsLaws: redo-recreated-type).
+    private static bool EditsInsideNestedTypes(List<Dictionary<string, object>> steps) =>
+        steps.SelectMany(s => s.List("ops")?.Cast<Dictionary<string, object>>().Prepend(s) ?? [s]).Any(s => s.List("path") is { Count: > 1 });
 
     private static Violation UndoRedoPairs(Dictionary<string, object> script) => Guard("undo-redo-pair", () =>
     {
@@ -698,7 +752,10 @@ internal static class Properties
         var marker = rpos > 0 && steps[rpos - 1].Str("op") == "insert" && steps[rpos - 1].Str("text") == Marker && MarkerItem(script, observations, rpos);
         const int before = 0;
         var resolutions = Enumerable.Range(0, steps.Count).Where(i => i > rpos && steps[i].Str("op") == "rres" && steps[i].Str("id") == "m").ToList();
-        if (rpos < 0 || resolutions.Count == 0 || observations[rpos].Get("r") is not Dictionary<string, object>)
+        // An undo or a redo after the position was taken may re-create its item; only the replica that did links the
+        // two (Item.Redone is local), so the others resolve to where the deleted item was, in Yjs as in Ycs.
+        if (rpos < 0 || resolutions.Count == 0 || observations[rpos].Get("r") is not Dictionary<string, object> || !Synced(observations[^1])
+            || steps.Skip(rpos).Any(s => s.Str("op") is "undo" or "redo"))
         {
             return null;
         }
@@ -743,6 +800,13 @@ internal static class Properties
         return null;
     });
 
+    // Whether every client ends with the same state vector and nothing pending (shrinking can remove the full sync).
+    private static bool Synced(Dictionary<string, object> end)
+    {
+        var states = ((Dictionary<string, object>)end["st"]).Values.Cast<Dictionary<string, object>>().ToList();
+        return states.All(s => s.Get("pend") is not true) && states.Select(s => Canonical(s["sv"])).Distinct(StringComparer.Ordinal).Count() == 1;
+    }
+
     private static bool MarkerItem(Dictionary<string, object> script, List<Dictionary<string, object>> observations, int rpos)
     {
         var steps = script.List("steps").Cast<Dictionary<string, object>>().ToList();
@@ -760,49 +824,110 @@ internal static class Properties
         return item.Int("client") == id && item.Int("clock") == clock - 1;
     }
 
-    /// <summary>Observations without what garbage collection may change: the encodings, and results and update bytes that carry them.</summary>
-    private static string WithoutEncodings(List<Dictionary<string, object>> observations, Dictionary<string, object> script)
+    /// <summary>
+    /// The observations of the two variants (gc on, gc off) without what garbage collection changes, in Yjs as in
+    /// Ycs (docs/testing.md, "Laws Yjs breaks"): the encodings, and results and update bytes that carry them; the
+    /// order of calls between different observers (it follows the order in which a transaction first changed each
+    /// type, and a struct collected into a GC struct changes none); a relative position in a deleted type (gone
+    /// with gc); and everything from the first step at which structs wait in either variant (a GC struct waits for
+    /// no parent, so it, and what comes after it, is integrated earlier) up to the end, where only the content of
+    /// the clients with nothing waiting in either variant is compared; and the stacks of an UndoManager whose scope is
+    /// the document, which captures every transaction, also the empty cleanup transactions, whose number depends on gc.
+    /// </summary>
+    private static (string On, string Off) WithoutGcDifferences(IReadOnlyList<Dictionary<string, object>> gcOn, IReadOnlyList<Dictionary<string, object>> gcOff, Dictionary<string, object> script)
     {
-        var copy = (List<object>)Clone(observations.Cast<object>().ToList());
         var steps = script.List("steps").Cast<Dictionary<string, object>>().ToList();
-        for (var i = 0; i < copy.Count; i++)
+        var documentScoped = steps.Where(s => s.Str("op") == "um" && s.List("scope") is { } scope && scope.Contains("$doc"))
+            .Select(s => $"{s.Int("c")}.{s.Str("id")}").ToHashSet(StringComparer.Ordinal);
+        var on = (List<object>)Clone(gcOn.Cast<object>().ToList());
+        var off = (List<object>)Clone(gcOff.Cast<object>().ToList());
+        static IEnumerable<Dictionary<string, object>> States(object obs) =>
+            ((obs as Dictionary<string, object>)?.Get("st") as Dictionary<string, object>)?.Values.Cast<Dictionary<string, object>>() ?? [];
+        var count = Math.Min(on.Count, off.Count) - 1;
+        var cut = Enumerable.Range(0, count).FirstOrDefault(i => States(on[i]).Concat(States(off[i])).Any(st => st.Get("pend") is true), count);
+        for (var i = 0; i < cut; i++)
         {
-            var obs = (Dictionary<string, object>)copy[i];
+            var (a, b) = ((Dictionary<string, object>)on[i], (Dictionary<string, object>)off[i]);
+            if (steps[i].Str("op") == "rres" && (Hidden(a.Get("r")) || Hidden(b.Get("r"))))
+            {
+                a.Remove("r");
+                b.Remove("r");
+            }
+
+            if (steps[i].Str("op") is "undo" or "redo" or "stop" or "umclear" && documentScoped.Contains($"{steps[i].Int("c")}.{steps[i].Str("id")}"))
+            {
+                a.Remove("r");
+                b.Remove("r");
+            }
+
+            Normalize(a, steps[i], documentScoped);
+            Normalize(b, steps[i], documentScoped);
+        }
+
+        // The end: the content of the clients with nothing waiting in either variant.
+        var (endOn, endOff) = ((Dictionary<string, object>)on[^1], (Dictionary<string, object>)off[^1]);
+        var settled = ((Dictionary<string, object>)endOn["st"]).Keys
+            .Where(c => endOn.Get("st") is Dictionary<string, object> x && endOff.Get("st") is Dictionary<string, object> y
+                && (x.Get(c) as Dictionary<string, object>)?.Get("pend") is false && (y.Get(c) as Dictionary<string, object>)?.Get("pend") is false)
+            .ToList();
+        string Render(List<object> all, Dictionary<string, object> end) => Canonical(all.Take(cut)
+            .Append(settled.ToDictionary(c => c, c => ((Dictionary<string, object>)((Dictionary<string, object>)end["st"])[c])["roots"]))
+            .ToList());
+        return (Render(on, endOn), Render(off, endOff));
+
+        // Not resolved, or into a type that is not visible (deleted).
+        static bool Hidden(object r) => r is not Dictionary<string, object> d || (d.List("p") is { Count: > 0 } p && p[0] is "~");
+
+        static void Normalize(Dictionary<string, object> obs, Dictionary<string, object> step, HashSet<string> documentScoped)
+        {
             KnownFailures.Normalize(obs);
             // Results that carry encodings (sync messages, merged and converted updates, snapshots).
-            if (i < steps.Count && steps[i].Str("op") is "sync" or "merged" or "deliver" or "docFromSnap" or "snap")
+            if (step.Str("op") is "sync" or "merged" or "deliver" or "docFromSnap" or "snap")
             {
                 obs.Remove("r");
             }
 
             // A transaction's update is encoded after its garbage collection, so its bytes differ too.
             // How many empty (cleanup) transactions Yjs opens depends on gc too.
-            obs.List("ev")?.RemoveAll(e => e is Dictionary<string, object> r && (r.Str("w") is "u1" or "u2" || (r.Str("w") == "atx" && r.List("changed") is { Count: 0 })));
-            foreach (var state in (obs.Get("st") as Dictionary<string, object>)?.Values.OfType<Dictionary<string, object>>() ?? [])
+            if (obs.List("ev") is { } events)
+            {
+                events.RemoveAll(e => e is Dictionary<string, object> r && (r.Str("w") is "u1" or "u2" || (r.Str("w") == "atx" && r.List("changed") is { Count: 0 })
+                    || (r.Str("w") is "um+" or "um~" or "um-" or "umclear" && documentScoped.Contains(r.Str("id")))));
+                var ordered = events.Select((e, k) => (e, k)).OrderBy(x => Canonical(Observer(x.e)), StringComparer.Ordinal).ThenBy(x => x.k).Select(x => x.e).ToList();
+                events.Clear();
+                events.AddRange(ordered);
+            }
+
+            foreach (var state in States(obs))
             {
                 state.Remove("v1");
                 state.Remove("v2");
             }
         }
 
-        return Canonical(copy);
+        // The observer an event went to: its client and kind (an observer of a type, a document listener).
+        static object Observer(object e) => e is Dictionary<string, object> d ? Obj(("c", d.Get("c") ?? Json.Missing.Value), ("w", d.Get("w") ?? Json.Missing.Value)) : e;
     }
 
     private static Violation GcInvisible(Dictionary<string, object> script) => Guard("gc-invisible", () =>
-    {
-        string Variant(bool gc)
-        {
-            var copy = (Dictionary<string, object>)Clone(script);
-            foreach (Dictionary<string, object> client in copy.List("clients"))
-            {
-                client["gc"] = gc;
-            }
+        GcInvisibleOn(script, Execute(Variant(script, true)).Observations, Execute(Variant(script, false)).Observations));
 
-            return WithoutEncodings(Execute(copy).Observations, copy);
+    /// <summary>The script with every client's garbage collection on or off.</summary>
+    public static Dictionary<string, object> Variant(Dictionary<string, object> script, bool gc)
+    {
+        var copy = (Dictionary<string, object>)Clone(script);
+        foreach (Dictionary<string, object> client in copy.List("clients"))
+        {
+            client["gc"] = gc;
         }
 
-        var on = Variant(true);
-        var off = Variant(false);
+        return copy;
+    }
+
+    /// <summary>The gc-invisible check on any observations of the two variants (Ycs' or Yjs').</summary>
+    public static Violation GcInvisibleOn(Dictionary<string, object> script, IReadOnlyList<Dictionary<string, object>> gcOn, IReadOnlyList<Dictionary<string, object>> gcOff)
+    {
+        var (on, off) = WithoutGcDifferences(gcOn, gcOff, script);
         if (on == off)
         {
             return null;
@@ -811,9 +936,9 @@ internal static class Properties
         var a = (List<object>)Parse(on);
         var b = (List<object>)Parse(off);
         var i = Enumerable.Range(0, a.Count).First(k => Canonical(a[k]) != Canonical(b[k]));
-        var kind = Canonical(((Dictionary<string, object>)a[i]).Get("st")) != Canonical(((Dictionary<string, object>)b[i]).Get("st")) ? "state" : "events or results";
+        var kind = i == a.Count - 1 || Canonical(((Dictionary<string, object>)a[i]).Get("st")) != Canonical(((Dictionary<string, object>)b[i]).Get("st")) ? "state" : "events or results";
         return new Violation("gc-invisible", kind, $"step {i}: gc on {Short(Canonical(a[i]))}{Environment.NewLine}  gc off {Short(Canonical(b[i]))}");
-    });
+    }
 
     private static Violation StepWise(Dictionary<string, object> script, Func<ScriptRun, int, Violation> afterStep) =>
         Guard("stepwise", () =>
