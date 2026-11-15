@@ -16,6 +16,12 @@ internal static class Report
         sb.AppendLine(Invariant($"Machine: {m["cpu"]}, {m["logicalCores"]} logical cores, {m["memory"]} RAM, {m["os"]}, {m["runtime"]}, YDotNet {m["ydotnet"]}. Load average at start: {m["loadAtStart"]}."));
         sb.AppendLine();
 
+        if (results["yrsCarriedFrom"] is { } carriedFrom)
+        {
+            sb.AppendLine(Invariant($"YDotNet was not run again except for {string.Join(", ", results["yrsControls"]!.AsArray().Select(x => $"`{x}`"))}: its other measurements, marked (carried), and the content and states the checks read are those of {carriedFrom}."));
+            sb.AppendLine();
+        }
+
         var all = results["measurements"]!.AsArray().Select(x => x!.AsObject()).ToList();
         var checks = results["checks"]!.AsObject();
         var groups = Catalog.All.Where(c => all.Any(x => (string)x["case"] == c.Name)).GroupBy(c => c.Group);
@@ -33,7 +39,8 @@ internal static class Report
                 var verdict = checks[c.Name]!.AsArray().Select(x => (string)x).ToList();
                 var ok = verdict.All(v => v.StartsWith("ok", StringComparison.Ordinal));
                 var cell = ok ? "equal" + (verdict.All(v => v.EndsWith("v1 identical", StringComparison.Ordinal)) ? ", v1 bytes identical" : verdict.Any(v => v.EndsWith("v1 differs", StringComparison.Ordinal)) ? ", v1 bytes differ" : string.Empty) : string.Join("; ", verdict.Where(v => !v.StartsWith("ok", StringComparison.Ordinal)).Distinct());
-                sb.AppendLine(Invariant($"| `{c.Name}` | {ycs?.TimeCell ?? ycs?.Failure} | {yrs?.TimeCell ?? yrs?.Failure} | {(ok && ycs?.Failure == null && yrs?.Failure == null ? Faster(ycs, yrs) : "not counted")} | {ycs?.ColdCell} / {yrs?.ColdCell} | {cell} |"));
+                var mark = all.Any(x => (string)x["case"] == c.Name && (string)x["lib"] == "yrs" && x["carried"] is not null) ? " (carried)" : string.Empty;
+                sb.AppendLine(Invariant($"| `{c.Name}` | {ycs?.TimeCell ?? ycs?.Failure} | {yrs?.TimeCell ?? yrs?.Failure}{mark} | {(ok && ycs?.Failure == null && yrs?.Failure == null ? Faster(ycs, yrs) : "not counted")} | {ycs?.ColdCell} / {yrs?.ColdCell} | {cell} |"));
             }
         }
 

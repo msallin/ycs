@@ -4,6 +4,7 @@ using Ycs.Compare;
 const string Usage = """
     usage:
       Ycs.Compare suite --trace <automerge-paper.json.gz> --out <dir> [--work <dir>] [--passes 3] [--runs 5] [--only <name part>] [--no-hostile]
+                        [--carry-yrs <results dir> --carry-yrs-work <work dir> [--yrs-controls <case,case>]]
       Ycs.Compare report <dir>                      re-render <dir>/tables.md from <dir>/results.json
       Ycs.Compare child <ycs|yrs> <case> <fixtures dir> <out dir> <runs>
       Ycs.Compare hostile <ycs|yrs> <case>
@@ -32,7 +33,10 @@ switch (args[0])
             int.Parse(Option("--passes", "3")),
             int.Parse(Option("--runs", "5")),
             Option("--only", null),
-            args.Contains("--no-hostile"));
+            args.Contains("--no-hostile"),
+            Option("--carry-yrs", null),
+            Option("--carry-yrs-work", null),
+            Option("--yrs-controls", null));
     case "report":
         var results = JsonNode.Parse(File.ReadAllText(Path.Combine(args[1], "results.json")))!.AsObject();
         File.WriteAllText(Path.Combine(args[1], "tables.md"), Report.Render(results));

@@ -18,7 +18,13 @@ internal static class Suite
     private const long WorkloadRssLimit = 8L << 30;
     private const long HostileRssLimit = 4L << 30;
 
-    public static int Run(string tracePath, string outDir, string workDir, int passes, int runs, string only, bool skipHostile)
+    /// <param name="carryYrs">
+    /// When set, YDotNet runs only the workloads in <paramref name="yrsControls"/> (to see how far the machine drifted):
+    /// for the others its measurements are taken from <c>carryYrs/results.json</c> (marked carried) and the content
+    /// and state it wrote then from <paramref name="carryYrsWork"/>'s pass directories, for the checks.
+    /// </param>
+    public static int Run(string tracePath, string outDir, string workDir, int passes, int runs, string only, bool skipHostile,
+        string carryYrs = null, string carryYrsWork = null, string yrsControls = null)
     {
         Directory.CreateDirectory(outDir);
         var fixtures = Path.Combine(workDir, "fixtures");
@@ -39,6 +45,15 @@ internal static class Suite
         results["measurements"] = measurements;
         results["checks"] = checks;
         var expected = cases.ToDictionary(c => c.Name, c => c.Expected?.Invoke(f));
+        var controls = yrsControls?.Split(',').ToHashSet(StringComparer.Ordinal) ?? [];
+        var carried = carryYrs == null ? null : JsonNode.Parse(File.ReadAllText(Path.Combine(carryYrs, "results.json")))!["measurements"]!.AsArray()
+            .Select(x => x!.AsObject()).Where(x => (string)x["lib"] == "yrs").ToList();
+        bool Carried(Case c) => carried != null && !controls.Contains(c.Name);
+        if (carried != null)
+        {
+            results["yrsCarriedFrom"] = carryYrs;
+            results["yrsControls"] = new JsonArray(controls.Select(x => (JsonNode)x).ToArray());
+        }
 
         for (var pass = 1; pass <= passes; pass++)
         {
@@ -47,6 +62,27 @@ internal static class Suite
             foreach (var c in cases)
             {
                 var libs = pass % 2 == 1 ? new[] { "ycs", "yrs" } : ["yrs", "ycs"];
+                if (Carried(c))
+                {
+                    libs = ["ycs"];
+                    foreach (var old in carried.Where(x => (string)x["case"] == c.Name && (int)x["pass"] == pass))
+                    {
+                        var copy = old.DeepClone().AsObject();
+                        copy["carried"] = true;
+                        measurements.Add(copy);
+                    }
+
+                    var stem = c.Name.Replace('/', '_') + ".yrs.";
+                    foreach (var ext in new[] { "content", "v1" })
+                    {
+                        var from = Path.Combine(carryYrsWork, $"pass-{pass}", stem + ext);
+                        if (File.Exists(from))
+                        {
+                            File.Copy(from, Path.Combine(passDir, stem + ext), overwrite: true);
+                        }
+                    }
+                }
+
                 foreach (var lib in libs)
                 {
                     var (json, failure) = Spawn(["child", lib, c.Name, fixtures, passDir, runs.ToString(CultureInfo.InvariantCulture)], TimeSpan.FromMinutes(20), WorkloadRssLimit);
