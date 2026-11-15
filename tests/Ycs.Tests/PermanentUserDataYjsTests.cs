@@ -44,6 +44,25 @@ public class PermanentUserDataYjsTests
     }
 
     [TestMethod]
+    public void UsersEntryWithNullValues_IsIgnored()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var pud = new PermanentUserData(doc);
+        var peer = new YDoc(new YDocOptions { ClientId = 2 });
+        var users = peer.GetMap("users");
+        var nulls = new YMap();
+        users.Set("mallory", null);
+        users.Set("trudy", nulls);
+        nulls.Set("ids", null);
+        nulls.Set("ds", null);
+
+        Sync(peer, doc);
+        var second = new PermanentUserData(doc);
+
+        Assert.AreEqual((null, null), (pud.GetUserByClientId(2), second.GetUserByClientId(2)));
+    }
+
+    [TestMethod]
     public void LocalDeletion_RecordedAfterTheDeletingTransactionsUpdate()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
