@@ -62,4 +62,20 @@ public class ScalingTests
 
         Assert.IsLessThan(3_000, stopwatch.ElapsedMilliseconds);
     }
+
+    [TestMethod]
+    public void DeepObserver_ManyChangedMaps_SortsWithoutWalkingTheSiblings()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var array = doc.GetArray("a");
+        var maps = Enumerable.Range(0, 16_000).Select(_ => new YMap()).ToList();
+        array.Insert(0, maps.Cast<object>().ToList());
+        var events = 0;
+        array.DeepEventHandler += (_, e) => events += e.Events.Count;
+
+        var stopwatch = Stopwatch.StartNew();
+        doc.Transact(_ => maps.ForEach(map => map.Set("k", 1)));
+
+        Assert.IsLessThan(500, stopwatch.ElapsedMilliseconds);
+    }
 }

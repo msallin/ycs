@@ -333,6 +333,21 @@ public partial class YEvent
     /// <summary>
     /// Compute the path from this type to the specified target.
     /// </summary>
+    /// <summary>The number of elements of <see cref="Path"/>, without walking the siblings to compute them.</summary>
+    internal int PathLength
+    {
+        get
+        {
+            var length = 0;
+            for (var child = Target; child._item != null && child != CurrentTarget; child = child._item.Parent as AbstractType)
+            {
+                length++;
+            }
+
+            return length;
+        }
+    }
+
     private IReadOnlyCollection<object> GetPathTo(AbstractType parent, AbstractType child)
     {
         var path = new Stack<object>();

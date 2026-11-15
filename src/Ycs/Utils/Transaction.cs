@@ -39,7 +39,7 @@ public partial class Transaction
     // instead of reading the transaction that reuses the object.
     private static readonly Transaction Ended = new Transaction(null);
 
-    private static readonly Comparison<YEvent> ByPathLength = static (a, b) => a.Path.Count - b.Path.Count;
+    private static readonly Comparison<(int PathLength, YEvent Event)> ByPathLength = static (a, b) => a.PathLength - b.PathLength;
 
     private readonly YDoc _doc;
     private object _origin;
@@ -532,9 +532,21 @@ public partial class Transaction
                         events = delivered;
                         if (events.Count > 1)
                         {
-                            // Sort events by path length so that top-level events are fired first.
-                            var sortedEvents = new List<YEvent>(events);
-                            StableSort.Sort(sortedEvents, ByPathLength);
+                            // Sort events by path length so that top-level events are fired first. The
+                            // length is computed once per event (Yjs caches the path).
+                            var keyed = new List<(int PathLength, YEvent Event)>(events.Count);
+                            for (var i = 0; i < events.Count; i++)
+                            {
+                                keyed.Add((events[i].PathLength, events[i]));
+                            }
+
+                            StableSort.Sort(keyed, ByPathLength);
+                            var sortedEvents = new List<YEvent>(events.Count);
+                            foreach (var (_, e) in keyed)
+                            {
+                                sortedEvents.Add(e);
+                            }
+
                             events = sortedEvents;
                         }
 
