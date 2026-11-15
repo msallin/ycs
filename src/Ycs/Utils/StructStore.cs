@@ -71,6 +71,10 @@ internal sealed partial class StructStore
     // TODO: [alekseyk] To private?
     public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
 
+    /// <summary>The struct lists by client, as the property tests read them (they reach no internal type).</summary>
+    internal IEnumerable<KeyValuePair<long, IReadOnlyList<AbstractStruct>>> StructListsForTests() =>
+        Clients.Select(kv => new KeyValuePair<long, IReadOnlyList<AbstractStruct>>(kv.Key, kv.Value));
+
     // The plan of the last update, kept for the next one (null while one is in use).
     private IntegrationPlan _spare;
 
@@ -181,6 +185,46 @@ internal sealed partial class StructStore
 
         structs.Add(str);
         Version++;
+    }
+
+    /// <summary>
+    /// <paramref name="item"/> changed what the run-head index holds of it (<see cref="ClientStructs.Refresh"/>): it
+    /// was deleted, or an item was integrated between it and its left neighbour.
+    /// </summary>
+    internal void Refresh(Item item)
+    {
+        var structs = Clients[item.Id.Client];
+        var index = structs.FindIndex(item.Id.Clock);
+        Debug.Assert(ReferenceEquals(structs[index], item), "Only a struct of the store changes the run-head index.");
+
+        // Recounted from the struct at the position, which is the item.
+        structs.Refresh(index);
+    }
+
+    /// <summary>Recounts the struct lists after every transaction and throws on a difference (the tests switch it on).</summary>
+    internal static bool CheckAfterTransactionsForTests;
+
+    private long _checks;
+
+    /// <summary>
+    /// What <see cref="CheckAfterTransactionsForTests"/> checks: every list (<see cref="ClientStructs.Violations"/>); a
+    /// list of more than 1,024 structs only every count/256th time, so that a test stays linear in its edits.
+    /// </summary>
+    internal void CheckForTests()
+    {
+        _checks++;
+        foreach (var (client, structs) in Clients)
+        {
+            if (structs.Count > 1024 && _checks % (structs.Count / 256) != 0)
+            {
+                continue;
+            }
+
+            if (structs.Violations() is { } violation)
+            {
+                throw new InvalidOperationException($"The structs of client {client} differ from a recount: {violation}.");
+            }
+        }
     }
 
     /// <summary>Makes room for <paramref name="count"/> more structs of <paramref name="client"/> (none are added).</summary>

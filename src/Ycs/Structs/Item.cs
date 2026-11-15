@@ -343,6 +343,7 @@ public partial class Item : AbstractStruct
         }
 
         MarkDeleted();
+        transaction.Doc.Store.Refresh(this);
         transaction.DeleteSet.Add(Id.Client, Id.Clock, Length);
         transaction.AddChangedTypeToTransaction(parent, ParentSub);
         return true;
@@ -457,7 +458,13 @@ public partial class Item : AbstractStruct
             {
                 if (Right is Item rightItem)
                 {
+                    // Linked to its old left (the run-head index): only when that one is its predecessor by clock.
+                    var relinked = rightItem.Left is Item oldLeft && oldLeft.Id.Client == rightItem.Id.Client && oldLeft.Id.Clock + oldLeft.Length == rightItem.Id.Clock;
                     rightItem.Left = this;
+                    if (relinked)
+                    {
+                        transaction.Doc.Store.Refresh(rightItem);
+                    }
                 }
             }
             else if (ParentSub != null)

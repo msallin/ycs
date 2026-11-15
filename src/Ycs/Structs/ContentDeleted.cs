@@ -46,6 +46,7 @@ internal class ContentDeleted : IContentEx
     {
         transaction.DeleteSet.Add(item.Id.Client, item.Id.Clock, Length);
         item.MarkDeleted();
+        transaction.Doc.Store.Refresh(item);
     }
 
     void IContentEx.Delete(Transaction transaction)

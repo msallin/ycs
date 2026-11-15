@@ -718,6 +718,11 @@ public partial class Transaction
             }
         }
 
+        if (StructStore.CheckAfterTransactionsForTests)
+        {
+            store.CheckForTests();
+        }
+
         if (!transaction._local)
         {
             if (!transaction._afterState.TryGetValue(doc.ClientId, out var afterClock))

@@ -17,9 +17,10 @@ namespace Ycs;
 /// </summary>
 /// <remarks>
 /// The structs are contiguous by clock: the end of position i is the start of i + 1, and <see cref="End"/> is the end
-/// of the last one. Every change of the list goes through this class, which keeps the starts in step.
+/// of the last one. Every change of the list goes through this class, which keeps the starts and the run-head index
+/// (ClientStructs.RunHeads.cs) in step.
 /// </remarks>
-internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
+internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
 {
     private AbstractStruct[] _structs;
     private long[] _starts;
@@ -31,6 +32,8 @@ internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
         capacity = Math.Max(capacity, 1);
         _structs = new AbstractStruct[capacity];
         _starts = new long[capacity];
+        _flags = new byte[capacity];
+        _sums = new long[BlockOf(capacity - 1) + 1];
     }
 
     /// <summary>A copy of <paramref name="count"/> structs of <paramref name="source"/> from <paramref name="start"/>.</summary>
@@ -97,6 +100,7 @@ internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
         _starts[_count] = str.Id.Clock;
         _count++;
         _end = str.Id.Clock + str.Length;
+        IndexAdded();
     }
 
     /// <summary>Inserts the right part of a split at <paramref name="index"/>, right after its left part.</summary>
@@ -110,9 +114,11 @@ internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
 
         Array.Copy(_structs, index, _structs, index + 1, _count - index);
         Array.Copy(_starts, index, _starts, index + 1, _count - index);
+        Array.Copy(_flags, index, _flags, index + 1, _count - index);
         _structs[index] = right;
         _starts[index] = right.Id.Clock;
         _count++;
+        IndexSplit(index);
     }
 
     /// <summary>Removes the <paramref name="count"/> structs from <paramref name="index"/>, which merged into the one before.</summary>
@@ -120,17 +126,25 @@ internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
     {
         Debug.Assert(index > 0 && count > 0 && index + count <= _count);
         var tail = _count - index - count;
+        var rebuild = IndexMerging(index, count);
         Array.Copy(_structs, index + count, _structs, index, tail);
         Array.Copy(_starts, index + count, _starts, index, tail);
+        Array.Copy(_flags, index + count, _flags, index, tail);
         Array.Clear(_structs, _count - count, count);
         _count -= count;
+        IndexMerged(index, rebuild);
     }
 
     /// <summary>Puts <paramref name="str"/> (a GC struct of the same clocks) in place of the struct at <paramref name="index"/>.</summary>
     public void Replace(int index, AbstractStruct str)
     {
-        Debug.Assert(_structs[index].Id.Equals(str.Id) && _structs[index].Length == str.Length);
+        Debug.Assert(_structs[index].Id.Equals(str.Id) && _structs[index].Length == str.Length && Value(index) == 0);
         _structs[index] = str;
+        _flags[index] = FlagsAt(index);
+        if (index + 1 < _count)
+        {
+            _flags[index + 1] = FlagsAt(index + 1);
+        }
     }
 
     /// <summary>The last struct grew in place by <paramref name="length"/> (<see cref="Item.ExtendRun"/>).</summary>
@@ -138,6 +152,10 @@ internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
     {
         _end += length;
         Debug.Assert(_end == _structs[_count - 1].Id.Clock + _structs[_count - 1].Length);
+        if ((_flags[_count - 1] & Visible) != 0)
+        {
+            _sums[BlockOf(_count - 1)] += length;
+        }
     }
 
     /// <summary>
@@ -278,7 +296,7 @@ internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
         return hint = low;
     }
 
-    /// <summary>What is wrong with the starts, or null (for tests and Debug checks).</summary>
+    /// <summary>What is wrong with the starts or the run-head index (against a recount), or null (for tests and Debug checks).</summary>
     internal string Violations()
     {
         for (var i = 0; i < _count; i++)
@@ -296,7 +314,7 @@ internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
             }
         }
 
-        return null;
+        return IndexViolations();
     }
 
     /// <summary>A list of structs in clock order, contiguous by clock, as the searches read it.</summary>
@@ -337,5 +355,7 @@ internal sealed class ClientStructs : IReadOnlyList<AbstractStruct>
         var capacity = Math.Max(min, _structs.Length * 2);
         Array.Resize(ref _structs, capacity);
         Array.Resize(ref _starts, capacity);
+        Array.Resize(ref _flags, capacity);
+        Array.Resize(ref _sums, BlockOf(capacity - 1) + 1);
     }
 }
