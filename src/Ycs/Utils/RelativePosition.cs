@@ -90,7 +90,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             // Associated with the left character or the beginning of a type, decrement index if possible.
             if (index == 0)
             {
-                return new RelativePosition(type, type._item?.Id, assoc);
+                return new RelativePosition(type, null, assoc);
             }
 
             index--;
@@ -119,7 +119,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             t = t.Right as Item;
         }
 
-        return new RelativePosition(type, type._item?.Id, assoc);
+        return new RelativePosition(type, null, assoc);
     }
 
     /// <summary>
