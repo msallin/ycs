@@ -46,9 +46,16 @@ public class ContentType : IContentEx
         public readonly AbstractType Type = type;
         public readonly Item Owner = owner;
         public Item Next = type._start;
-        public IEnumerator<Item> Values;
-        public IEnumerator<KeyValuePair<string, Item>> Keys;
+        public bool InMap;
+        public Dictionary<string, Item>.Enumerator Keys;
         public Item Value;
+
+        /// <summary>Starts on the keys' values, once the list is done.</summary>
+        public void EnterMap()
+        {
+            InMap = true;
+            Keys = Type._map.GetEnumerator();
+        }
     }
 
     void IContentEx.Delete(Transaction transaction)
@@ -58,22 +65,26 @@ public class ContentType : IContentEx
         {
             var frame = open[^1];
             Item item;
-            if (frame.Values == null && frame.Next != null)
+            if (!frame.InMap && frame.Next != null)
             {
                 item = frame.Next;
                 frame.Next = item.Right as Item;
             }
             else
             {
-                frame.Values ??= frame.Type._map.Values.GetEnumerator();
-                if (!frame.Values.MoveNext())
+                if (!frame.InMap)
+                {
+                    frame.EnterMap();
+                }
+
+                if (!frame.Keys.MoveNext())
                 {
                     transaction.Changed.Remove(frame.Type);
                     open.RemoveAt(open.Count - 1);
                     continue;
                 }
 
-                item = frame.Values.Current;
+                item = frame.Keys.Current.Value;
             }
 
             if (item.MarkDeleted(transaction))
@@ -106,7 +117,7 @@ public class ContentType : IContentEx
         {
             var frame = open[^1];
             Item item;
-            if (frame.Keys == null && frame.Next != null)
+            if (!frame.InMap && frame.Next != null)
             {
                 item = frame.Next;
                 frame.Next = item.Right as Item;
@@ -118,7 +129,11 @@ public class ContentType : IContentEx
             }
             else
             {
-                frame.Keys ??= frame.Type._map.GetEnumerator();
+                if (!frame.InMap)
+                {
+                    frame.EnterMap();
+                }
+
                 if (frame.Keys.MoveNext())
                 {
                     frame.Value = frame.Keys.Current.Value;

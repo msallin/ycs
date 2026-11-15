@@ -82,7 +82,7 @@ internal static class AnyEncoding
 
             if (frames.Count > CycleDepth)
             {
-                throw TooDeep(CycleDepth);
+                throw TooDeep(CycleDepth, "value");
             }
 
             var value = Entry(frame, out var key);
@@ -359,7 +359,7 @@ internal static class AnyEncoding
 
             if (frames.Count > maxDepth)
             {
-                throw TooDeep(maxDepth);
+                throw TooDeep(maxDepth, nameof(value));
             }
 
             ValidateValue(Entry(frame, out _), ref frames);
@@ -434,8 +434,8 @@ internal static class AnyEncoding
     private static ArgumentException NotAStringKey(object? key) =>
         new($"Object keys must be strings, not '{key?.GetType().Name ?? "null"}'.", "value");
 
-    internal static ArgumentException TooDeep(int maxDepth) =>
-        new($"Values nested deeper than {maxDepth} levels (or a value that contains itself) cannot be stored in a Yjs document.", "value");
+    internal static ArgumentException TooDeep(int maxDepth, string paramName) =>
+        new($"Values nested deeper than {maxDepth} levels (or a value that contains itself) cannot be stored in a Yjs document.", paramName);
 
     internal static NotSupportedException Unsupported(object value) =>
         new($"Values of type '{value.GetType().Name}' cannot be stored in a Yjs document. Use null, bool, a number, " +

@@ -247,7 +247,7 @@ internal static class YJson
 
             if (open.Count > CycleDepth)
             {
-                throw AnyEncoding.TooDeep(CycleDepth);
+                throw AnyEncoding.TooDeep(CycleDepth, nameof(value));
             }
 
             open[^1] = (entries, isObject, true);
