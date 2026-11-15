@@ -358,6 +358,7 @@ public partial class AbstractType
     internal static object ValueAt(IContent content, int index) => content switch
     {
         ContentAny any => any.ValueAt(index),
+        ContentJson json => json.ValueAt(index),
         ContentDeleted => null,
         _ => content.GetContent()[index],
     };

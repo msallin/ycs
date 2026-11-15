@@ -15,17 +15,16 @@ public class ContentJson : IContentEx
     internal const int _ref = 2;
 
     // Yjs reads the string 'undefined' as undefined and writes it back: it is kept as JsValue.Undefined
-    // and read as null (GetContent).
+    // and read as null (GetContent, ValueAt).
     private readonly List<object> _content;
 
-    internal ContentJson(IEnumerable<object> data)
-    {
-        _content = new List<object>(data);
-    }
+    // Whether _content may hold JsValue.Undefined (set when one is read, kept by Splice, Copy and MergeWith).
+    private bool _mayHoldUndefined;
 
-    private ContentJson(List<object> other)
+    private ContentJson(List<object> content, bool mayHoldUndefined)
     {
-        _content = other;
+        _content = content;
+        _mayHoldUndefined = mayHoldUndefined;
     }
 
     int IContentEx.Ref => _ref;
@@ -34,13 +33,15 @@ public class ContentJson : IContentEx
     public int Length => _content?.Count ?? 0;
 
     public IReadOnlyList<object> GetContent() =>
-        _content.Contains(JsValue.Undefined) ? _content.Select(c => c == JsValue.Undefined ? null : c).ToList() : _content.AsReadOnly();
+        _mayHoldUndefined ? _content.Select(c => c == JsValue.Undefined ? null : c).ToList() : _content.AsReadOnly();
 
-    public IContent Copy() => new ContentJson(_content.ToList());
+    internal object ValueAt(int index) => _content[index] == JsValue.Undefined ? null : _content[index];
+
+    public IContent Copy() => new ContentJson(_content.ToList(), _mayHoldUndefined);
 
     public IContent Splice(int offset)
     {
-        var right = new ContentJson(_content.GetRange(offset, _content.Count - offset));
+        var right = new ContentJson(_content.GetRange(offset, _content.Count - offset), _mayHoldUndefined);
         _content.RemoveRange(offset, _content.Count - offset);
         return right;
     }
@@ -48,7 +49,9 @@ public class ContentJson : IContentEx
     public bool MergeWith(IContent right)
     {
         Debug.Assert(right is ContentJson);
-        _content.AddRange((right as ContentJson)._content);
+        var other = (ContentJson)right;
+        _content.AddRange(other._content);
+        _mayHoldUndefined |= other._mayHoldUndefined;
         return true;
     }
 
@@ -85,15 +88,21 @@ public class ContentJson : IContentEx
         // Each value takes at least one byte (in v1; in v2 the strings are in their own column).
         var content = new List<object>(Limits.Capacity(len, decoder.Reader.Remaining));
 
+        var undefined = false;
         for (int i = 0; i < len; i++)
         {
             var jsonStr = decoder.ReadString();
-            var jsonObj = string.Equals(jsonStr, "undefined", StringComparison.Ordinal)
-                ? JsValue.Undefined
-                : YJson.Parse(jsonStr);
-            content.Add(jsonObj);
+            if (string.Equals(jsonStr, "undefined", StringComparison.Ordinal))
+            {
+                undefined = true;
+                content.Add(JsValue.Undefined);
+            }
+            else
+            {
+                content.Add(YJson.Parse(jsonStr));
+            }
         }
 
-        return new ContentJson(content);
+        return new ContentJson(content, undefined);
     }
 }

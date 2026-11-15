@@ -78,4 +78,40 @@ public class ScalingTests
 
         Assert.IsLessThan(500, stopwatch.ElapsedMilliseconds);
     }
+
+    [TestMethod]
+    public void Get_EveryIndexOfALegacyJsonItem_IsConstantPerIndex()
+    {
+        // One ContentJSON item (content 2) of 40,000 values "1" in the root array "a".
+        var update = new List<byte> { 1, 1, 9, 0, 2, 1, 1, (byte)'a', 0xC0, 0xB8, 0x02 };
+        for (var i = 0; i < 40_000; i++)
+        {
+            update.Add(1);
+            update.Add((byte)'1');
+        }
+
+        update.Add(0);
+        var doc = new YDoc();
+        doc.ApplyUpdate(update.ToArray());
+        var array = doc.GetArray("a");
+
+        var stopwatch = Stopwatch.StartNew();
+        for (var i = 0; i < array.Length; i++)
+        {
+            _ = array.Get(i);
+        }
+
+        Assert.IsLessThan(500, stopwatch.ElapsedMilliseconds);
+    }
+
+    [TestMethod]
+    public void Get_UndefinedInALegacyJsonItem_IsNull()
+    {
+        // ["undefined", "1"]
+        byte[] update = [1, 1, 9, 0, 2, 1, 1, (byte)'a', 2, 9, .. "undefined"u8.ToArray(), 1, (byte)'1', 0];
+        var doc = new YDoc();
+        doc.ApplyUpdate(update);
+
+        Assert.AreEqual((null, 1), (doc.GetArray("a").Get(0), doc.GetArray("a").Get(1)));
+    }
 }
