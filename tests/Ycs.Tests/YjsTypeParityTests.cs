@@ -317,4 +317,21 @@ public class YjsTypeParityTests
 
         Assert.AreEqual("[1,2]", Json(((byte[])array.Get(0)).Select(b => (object)(int)b)));
     }
+
+    [TestMethod]
+    public void FindMarker_SecondLookupInAShortArray_AdjustsTheMarkerAsYjs()
+    {
+        // 50 values in one item: both lookups end at that item, index 0. Yjs reuses the marker when
+        // the distance is below length / 80 = 0.625 (a float division), so it keeps one marker.
+        var array = new YDoc().GetArray("a");
+        array.Insert(0, Enumerable.Range(0, 50).Cast<object>().ToList());
+
+        array.Get(10);
+        array.Get(20);
+
+        var markers = (YArrayBase.ArraySearchMarkerCollection)typeof(YArrayBase)
+            .GetField("_searchMarkers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
+            .GetValue(array);
+        Assert.AreEqual(1, markers.Count);
+    }
 }

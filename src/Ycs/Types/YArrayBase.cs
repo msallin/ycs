@@ -628,7 +628,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
-        if (marker != null && Math.Abs(marker.Index - pIndex) < ((p.Parent as AbstractType).Length / MaxSearchMarkers))
+        if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as AbstractType).Length / (double)MaxSearchMarkers)
         {
             // Adjust existing marker.
             marker.Update(p, pIndex, _searchMarkers.NextTimestamp());
