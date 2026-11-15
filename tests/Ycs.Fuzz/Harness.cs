@@ -26,6 +26,12 @@ internal enum Verdict
 
     /// <summary>Threw, and the document's text, state vector or encoding changed.</summary>
     NonAtomic,
+
+    /// <summary>
+    /// Afterwards (applied, rejected or applied in part) the document is not a complete, encodable Yjs document:
+    /// its state does not round-trip into a fresh document, or an item list breaks <c>ItemListInvariants</c>.
+    /// </summary>
+    Inconsistent,
 }
 
 /// <summary>The outcome of applying one input.</summary>
@@ -164,7 +170,9 @@ internal sealed class Harness : IDisposable
 
         if (failure is null)
         {
-            return new Outcome(Verdict.Applied, null, null, allocated, stopwatch.Elapsed, null);
+            return Consistency.Failure(doc) is { } applied
+                ? new Outcome(Verdict.Inconsistent, null, null, allocated, stopwatch.Elapsed, applied)
+                : new Outcome(Verdict.Applied, null, null, allocated, stopwatch.Elapsed, null);
         }
 
         if (!AllowedExceptionTypes.Contains(type!))
@@ -176,9 +184,14 @@ internal sealed class Harness : IDisposable
         var difference = failure is YUpdateException { PartlyApplied: true }
             ? Snapshot.ReadFailure(doc, input.TextRoots)
             : before.DifferenceTo(doc, input.TextRoots);
-        return difference is null
-            ? new Outcome(Verdict.Rejected, type, site, allocated, stopwatch.Elapsed, null)
-            : new Outcome(Verdict.NonAtomic, type, site, allocated, stopwatch.Elapsed, difference);
+        if (difference is not null)
+        {
+            return new Outcome(Verdict.NonAtomic, type, site, allocated, stopwatch.Elapsed, difference);
+        }
+
+        return Consistency.Failure(doc) is { } inconsistency
+            ? new Outcome(Verdict.Inconsistent, type, site, allocated, stopwatch.Elapsed, inconsistency)
+            : new Outcome(Verdict.Rejected, type, site, allocated, stopwatch.Elapsed, null);
     }
 
     private static YDoc Load(FuzzInput input)

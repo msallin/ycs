@@ -28,8 +28,10 @@ public sealed class YUpdateException : FormatException
     /// True when <see cref="UpdateLimits.MaxIntegrationSteps"/> ran out while the update was integrated
     /// (the only limit that is not checked before the document changes): the structs integrated before
     /// stay in the document, observers and <see cref="YDoc.Update"/> see them, and the rest of the update
-    /// and its deletions are dropped. What stays is a causally complete part of the update, as if the
-    /// peer had sent less, so the document stays valid and converges with any peer that has the same.
+    /// and its deletions are dropped. Also true when the update let pending structs integrate whose plan
+    /// failed a check, and structs of the update waited for them: those are dropped with them, the rest of
+    /// the update stands. What stays is a causally complete part of the update, as if the peer had sent
+    /// less, so the document stays valid and converges with any peer that has the same.
     /// </summary>
     public bool PartlyApplied { get; init; }
 

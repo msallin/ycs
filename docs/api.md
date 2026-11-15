@@ -106,8 +106,10 @@ input's content). The snapshot reads (`ToArraySnapshot`, `GetSnapshot`, `GetAllS
 the document, then plans the integration against the document without changing it (which structs
 integrate in which order, which wait for others), and only then carries it out. A failure in
 either step leaves the document exactly as it was: same text, state vector and encoding, no events
-(an empty transaction may be observed when the failure is found in the planning step); the one
-exception is the conflict-resolution budget below. What is checked before anything changes:
+(an empty transaction may be observed when the failure is found in the planning step); the
+exceptions are the conflict-resolution budget below and structs of the update that waited for
+pending structs that are dropped (see [pending structs](#pending-structs-retried)). What is checked
+before anything changes:
 
 * every value is in range: client ids up to 2^53 - 1 (as lib0 reads them), and **clocks**: every struct, delete range and
   state-vector entry ends at clock 2^31 - 1 or before (about two billion operations per client id),
@@ -167,6 +169,21 @@ So a small update makes a document allocate at most about 340 MiB and keep about
 default of 2,097,152 structs before allowed 2.3 GiB and 1.2 GiB), and
 `EncodeStateAsUpdate` with 131,072 shared types pending allocates about 120 MiB per call (every
 joining peer). Halving the limits halves these.
+
+<a id="pending-structs-retried"></a>**Pending structs, retried.** An update that brings what pending structs (from earlier updates)
+waited for retries them in its own transaction, after it was carried out, as Yjs does: they are read
+again and planned and checked as an update of their own (nesting, garbage collection). When that
+plan fails, which happens before anything of them changes the document, they are dropped, and the
+update stands: the document is as if they had never arrived (deletions that waited with them keep
+waiting), and `ApplyUpdate` returns normally, unless structs of the update itself were among them
+(structs that waited for the dropped ones), which makes it throw `YUpdateException` with
+`PartlyApplied` set. They are not kept: kept, every later update that satisfies them would retry and
+fail again, and a fresh document could not apply the document's state, which includes what is
+pending. The conflict budget counts the retry's steps too; running out there is `PartlyApplied` (below):
+what the retry integrated stays, the rest of what waited is dropped. So whatever `ApplyUpdate` throws,
+the document holds a causally complete part of what it was given, whose `EncodeStateAsUpdate` (v1 or
+v2) applies to a fresh document, with the same state vector when nothing is pending
+(`tests/Ycs.Fuzz` checks this after every input, with the structural invariants of its item lists).
 
 **Trusted input.** A document's own state can hold far more structs than the defaults allow (a
 million characters typed one at a time and never merged are a million structs, about 7 MB of v1).

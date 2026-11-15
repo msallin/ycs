@@ -415,7 +415,9 @@ public partial class YDoc
     /// <br/>
     /// A malformed update, or one beyond a limit, throws <see cref="YUpdateException"/> and leaves the
     /// document as it was, except beyond <see cref="UpdateLimits.MaxIntegrationSteps"/>
-    /// (<see cref="YUpdateException.PartlyApplied"/>).
+    /// (<see cref="YUpdateException.PartlyApplied"/>). Pending structs of earlier updates that this one
+    /// lets integrate, and that then fail a check, are dropped and the update stands (docs/api.md,
+    /// "Pending structs, retried").
     /// </summary>
     /// <param name="update">The update.</param>
     /// <param name="transactionOrigin">Stored on the transaction; observers and the undo manager see it.</param>

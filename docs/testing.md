@@ -53,7 +53,12 @@ update, 2^20 conflict steps), so that no valid input can exceed the ceilings bel
   fails at once with `OutOfMemoryException`, and the throw site names the allocation;
 * it throws nothing but `YUpdateException` (`Harness.AllowedExceptionTypes`);
 * when it throws, the document's text, state vector and v1 encoding are unchanged (when the conflict
-  budget ran out, `PartlyApplied`, the document must still be readable).
+  budget ran out, `PartlyApplied`, the document must still be readable);
+* afterwards, applied, rejected or applied in part, the document is complete (`Consistency.cs`): its
+  v1 and v2 state applies to a fresh document, which has the same state vector when nothing is
+  pending, and every item list of both, of the roots and of every type nested in them, keeps the
+  structural invariants of `ItemListInvariants` (links, parents, lengths, unique ids; its order
+  invariants hold for what Yjs writes, and a crafted update Yjs applies breaks them in Yjs too).
 
 A violation is identified by its signature: the verdict, the exception type and the innermost Ycs
 method it was thrown from (tiered compilation is off in this project, so inlining, and with it

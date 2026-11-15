@@ -374,6 +374,10 @@ internal sealed partial class StructStore
     /// <paramref name="limits"/> would be exceeded (a <see cref="YUpdateException"/>, and the document is
     /// unchanged). Then the plan is carried out, the delete set applied, and pending structs that can
     /// now integrate are retried, as in Yjs.
+    /// <br/>
+    /// When pending structs are retried and their plan fails a check (nesting, garbage collection), they are
+    /// dropped and the update stands; it is applied in part (<see cref="YUpdateException.PartlyApplied"/>) only
+    /// when structs of its own were among them. See docs/api.md, "Atomicity".
     /// </summary>
     /// <param name="retrying">For the pending structs themselves, which were admitted to pending when they arrived.</param>
     internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, UpdateLimits limits, bool retrying = false)
@@ -450,9 +454,28 @@ internal sealed partial class StructStore
             var update = Pending.Merge();
             var count = Pending.Structs;
             Pending = null;
-            // Their values were read under the limits of the updates that brought them.
-            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, count, maxDepth: int.MaxValue);
-            ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, limits, retrying: true);
+            try
+            {
+                // Their values were read under the limits of the updates that brought them.
+                using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, count, maxDepth: int.MaxValue);
+                ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, limits, retrying: true);
+            }
+            catch (YUpdateException e) when (!e.PartlyApplied)
+            {
+                // Their plan failed a check before it changed anything (a nested retry that failed was dropped by
+                // the nested call): this update has been carried out, and what waited is dropped, which leaves the
+                // document causally complete. Kept, it would fail every later update's retry again, and a fresh
+                // document could not apply this one's state, of which pending structs are part.
+                if (restUpdate != null)
+                {
+                    throw new YUpdateException(
+                        "Structs that waited for this update, with structs of this update that waited for them, cannot be " +
+                        $"integrated ({e.Message}). They were dropped; the rest of the update was applied.", e)
+                    {
+                        PartlyApplied = true,
+                    };
+                }
+            }
         }
     }
 
