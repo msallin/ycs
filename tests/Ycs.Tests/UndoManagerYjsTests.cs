@@ -173,4 +173,19 @@ public class UndoManagerYjsTests
 
         Assert.AreEqual((1, true, true, false), (um.UndoStack.Count, um.UndoStack[0] == first, um.RedoStack.Count == 1 && undone != first, um.CurrentStackItem != null));
     }
+
+    [TestMethod]
+    public void Popped_UndoInsideAnOuterTransaction_ChangedParentTypesFilledWhenItEnds()
+    {
+        var doc = Doc(1);
+        var text = doc.GetText("t");
+        var um = new UndoManager(text);
+        text.Insert(0, "abc");
+        IDictionary<AbstractType, IList<YEvent>> changed = null;
+        um.StackItemPopped += (_, e) => changed = e.ChangedParentTypes;
+
+        doc.Transact(_ => um.Undo());
+
+        Assert.IsTrue(changed.ContainsKey(text));
+    }
 }

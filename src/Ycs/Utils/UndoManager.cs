@@ -119,10 +119,16 @@ public class UndoManager
     private DateTime _lastChange;
     private bool _destroyed;
 
-    // The transaction of the running Undo or Redo, and its changed parent types as they were at its
-    // 'AfterTransaction' (the transaction object is reused once it has ended).
+    // The transaction of the running Undo or Redo, whether it was cleaned up, and its changed parent types
+    // as they were at its 'AfterTransaction' (the transaction object is reused once it has ended).
     private Transaction _popTransaction;
+    private bool _popCleanedUp;
     private IDictionary<AbstractType, IList<YEvent>> _poppedChangedParentTypes;
+
+    // An Undo or Redo inside an outer transaction: the popped events got this dictionary, which is filled at
+    // that transaction's 'AfterTransaction', as Yjs hands out the transaction's live map.
+    private Transaction _outerTransaction;
+    private Dictionary<AbstractType, IList<YEvent>> _outerChangedParentTypes;
 
     public UndoManager(AbstractType typeScope, UndoManagerOptions options = null)
         : this(new object[] { typeScope ?? throw new ArgumentNullException(nameof(typeScope)) }, options)
@@ -347,7 +353,19 @@ public class UndoManager
     {
         if (transaction == _popTransaction)
         {
+            _popCleanedUp = true;
             _poppedChangedParentTypes = CopyChangedParentTypes(transaction, StackItemPopped);
+        }
+
+        if (transaction == _outerTransaction)
+        {
+            foreach (var (type, events) in transaction._changedParentTypes)
+            {
+                _outerChangedParentTypes[type] = events;
+            }
+
+            _outerTransaction = null;
+            _outerChangedParentTypes = null;
         }
 
         if (!_captureTransaction(transaction) ||
@@ -453,6 +471,7 @@ public class UndoManager
 
         // Reset here too: a Transact that threw left them set.
         _popTransaction = null;
+        _popCleanedUp = false;
         _poppedChangedParentTypes = null;
         CurrentStackItem = null;
 
@@ -537,13 +556,23 @@ public class UndoManager
             }, origin: this);
 
             var result = CurrentStackItem;
-            if (result != null)
+            var handler = StackItemPopped;
+            if (result != null && handler != null)
             {
-                // Within an outer transaction, this one is not cleaned up yet: its types are still being collected.
-                var changedParentTypes = _poppedChangedParentTypes ?? tr._changedParentTypes;
+                var changedParentTypes = _poppedChangedParentTypes;
+                if (!_popCleanedUp)
+                {
+                    if (_outerTransaction != tr)
+                    {
+                        _outerTransaction = tr;
+                        _outerChangedParentTypes = new Dictionary<AbstractType, IList<YEvent>>();
+                    }
+
+                    changedParentTypes = _outerChangedParentTypes;
+                }
+
                 _popTransaction = null;
-                _poppedChangedParentTypes = null;
-                StackItemPopped?.Invoke(this, new StackEventArgs(result, eventType, changedParentTypes, this));
+                handler(this, new StackEventArgs(result, eventType, changedParentTypes, this));
             }
 
             return result;
@@ -551,6 +580,7 @@ public class UndoManager
         finally
         {
             _popTransaction = null;
+            _popCleanedUp = false;
             _poppedChangedParentTypes = null;
             CurrentStackItem = null;
         }
