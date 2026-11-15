@@ -95,6 +95,9 @@ internal sealed partial class StructStore
     /// </summary>
     internal long Version { get; private set; }
 
+    /// <summary>A struct of the store grew in place (<see cref="Item.ExtendRun"/>).</summary>
+    internal void NoteRunExtended() => Version++;
+
     /// <summary>
     /// Return the states as a Map<int,int>.
     /// Note that clock refers to the next expected clock id.
@@ -484,6 +487,9 @@ internal sealed partial class StructStore
     /// <param name="retrying">For the pending structs themselves, which were admitted to pending when they arrived.</param>
     internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, UpdateLimits limits, bool retrying = false)
     {
+        // The conflict resolution walks items: it must find the ones Yjs has.
+        transaction.MaterializeRunExtensions();
+
         var plan = _spare ?? new IntegrationPlan(this);
         _spare = null;
         plan.Plan(structs, limits.MaxDepth);

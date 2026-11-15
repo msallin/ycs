@@ -453,22 +453,34 @@ namespace Ycs.Properties
             Index = index;
             Replica = new Replica(spec.Int("id"), spec.Get("gc") is not false, run.Roots);
             var doc = Replica.Doc;
-            Replica.UseReferences(markers: run.Script.Get("markers") is not false, pairwiseMerge: run.Script.Get("merge") is "pairwise");
+            Replica.UseReferences(markers: run.Script.Get("markers") is not false, pairwiseMerge: run.Script.Get("merge") is "pairwise", extendRuns: run.Script.Get("extend") is not false);
+            // "quiet": no observers and no transaction handlers (only the update handlers the log needs), so that
+            // nothing makes the document split runs it extended in place (run-extension property).
+            var quiet = run.Script.Get("quiet") is true;
             foreach (var (name, _) in run.Roots)
             {
+                if (quiet)
+                {
+                    break;
+                }
+
                 var t = Replica.Root(name);
                 t.Observe((_, e) => Event("obs:" + name, [e.Event], e.Transaction));
                 t.ObserveDeep((_, e) => Event("deep:" + name, e.Events, e.Transaction));
             }
 
-            doc.AfterTransaction += (_, tr) => Push(Obj(
-                ("w", "atx"),
-                ("origin", run.OriginLabel(tr.Origin)),
-                ("local", tr.Local),
-                ("changed", tr.Changed
-                    .Select(kv => (object)new List<object> { Replica.PathOf(kv.Key), kv.Value.Select(k => (object)(k ?? "")).OrderBy(k => (string)k, StringComparer.Ordinal).ToList() })
-                    .OrderBy(Canonical, StringComparer.Ordinal)
-                    .ToList())));
+            if (!quiet)
+            {
+                doc.AfterTransaction += (_, tr) => Push(Obj(
+                    ("w", "atx"),
+                    ("origin", run.OriginLabel(tr.Origin)),
+                    ("local", tr.Local),
+                    ("changed", tr.Changed
+                        .Select(kv => (object)new List<object> { Replica.PathOf(kv.Key), kv.Value.Select(k => (object)(k ?? "")).OrderBy(k => (string)k, StringComparer.Ordinal).ToList() })
+                        .OrderBy(Canonical, StringComparer.Ordinal)
+                        .ToList())));
+            }
+
             doc.Update += (_, e) =>
             {
                 Push(Obj(("w", "u1"), ("u", ScriptRun.B64(e.Item1)), ("origin", run.OriginLabel(e.Item2)), ("local", e.Item3.Local)));
@@ -1534,10 +1546,14 @@ namespace Ycs.Properties
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "SearchMarkerViolations")]
         private static extern string SearchMarkerViolations(YArrayBase type);
 
-        internal void UseReferences(bool markers, bool pairwiseMerge)
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "RunExtensionsDisabledForTests")]
+        private static extern ref bool RunExtensionsDisabled(YDoc doc);
+
+        internal void UseReferences(bool markers, bool pairwiseMerge, bool extendRuns)
         {
             SearchMarkersDisabled(Doc) = !markers;
             PairwiseMerge(StoreOf(Doc)) = pairwiseMerge;
+            RunExtensionsDisabled(Doc) = !extendRuns;
         }
 
         private static string IdOf(AbstractStruct s) => s == null ? "-" : $"{s.Id.Client}:{s.Id.Clock}";
@@ -1562,7 +1578,7 @@ namespace Ycs.Properties
         /// (left, right, origins, parent, key), keep, redone, marker flag; then every type's map entries and search
         /// markers. Two documents that went through the same steps give the same text when their structs are the same.
         /// </summary>
-        public string StoreDump()
+        public string StoreDump(bool markers = true)
         {
             var sb = new StringBuilder();
             var types = new List<AbstractType>();
@@ -1584,7 +1600,11 @@ namespace Ycs.Properties
                         sb.Append(" left ").Append(IdOf(item.Left)).Append(" right ").Append(IdOf(item.Right));
                         sb.Append(" origin ").Append(IdOf(item.LeftOrigin)).Append(" rightOrigin ").Append(IdOf(item.RightOrigin));
                         sb.Append(" parent ").Append(item.Parent is AbstractType pt ? TypeName(pt) : item.Parent?.ToString() ?? "-");
-                        sb.Append(" sub ").Append(item.ParentSub ?? "-").Append(" keep ").Append(item.Keep).Append(" redone ").Append(IdOf(item.Redone)).Append(" marker ").Append(item.Marker);
+                        sb.Append(" sub ").Append(item.ParentSub ?? "-").Append(" keep ").Append(item.Keep).Append(" redone ").Append(IdOf(item.Redone));
+                        if (markers)
+                        {
+                            sb.Append(" marker ").Append(item.Marker);
+                        }
                     }
 
                     sb.Append('\n');
@@ -1599,7 +1619,7 @@ namespace Ycs.Properties
                     sb.Append(' ').Append(key).Append('=').Append(IdOf(item));
                 }
 
-                if (t is YArrayBase list)
+                if (markers && t is YArrayBase list)
                 {
                     sb.Append(" markers ").Append(DescribeSearchMarkers(list));
                 }

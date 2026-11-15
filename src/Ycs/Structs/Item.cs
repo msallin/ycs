@@ -220,6 +220,52 @@ public partial class Item : AbstractStruct
     }
 
     /// <summary>
+    /// Whether an insert of <paramref name="kind"/> content into <paramref name="parent"/> between this item and
+    /// <paramref name="right"/>, as the next struct of <paramref name="client"/>, can continue this item in place: the
+    /// new item would merge into this one at the end of the transaction (<see cref="CanMergeWith"/>: it would be this
+    /// item's continuation by clock and origin, with this right origin, undeleted, not redone), this item is not kept,
+    /// does not end with the first half of a surrogate pair (splitting there later would replace it), the parent
+    /// is not deleted (the new item would be deleted at once), and nobody observes the parent.
+    /// </summary>
+    internal bool CanExtendRun(Transaction transaction, AbstractType parent, Item right, Type kind, long client)
+    {
+        // Not when the run would be split again at the end of the transaction (someone observes it), which costs
+        // more than the item: a split copies a long run's text out of its builder.
+        return transaction.Local
+            && !transaction.Doc.RunExtensionsDisabledForTests
+            && !parent.IsObserved(transaction)
+            && !transaction.Doc.HasBeforeObserverCallsListeners
+            && Content.GetType() == kind
+            && Id.Client == client
+            && Id.Clock + Length == transaction.Doc.Store.GetState(client)
+            && Parent == parent
+            && ParentSub == null
+            && Right == right
+            && ID.Equals(RightOrigin, right?.Id)
+            && !Deleted
+            && !Keep
+            && Redone == null
+            && (parent._item == null || !parent._item.Deleted)
+            && !(Content is ContentString str && str.EndsWithHighSurrogate);
+    }
+
+    /// <summary>
+    /// Continues this item in place by <paramref name="length"/> new elements its content took in already (see
+    /// <see cref="CanExtendRun"/>): what integrating them as an item of their own after it would do (the parent's
+    /// length, the client's clock, the transaction's changed types), and the transaction records where that item
+    /// would have started.
+    /// </summary>
+    internal void ExtendRun(Transaction transaction, int length)
+    {
+        var start = new ID(Id.Client, Id.Clock + Length);
+        Length += length;
+        ((AbstractType)Parent).Length += length;
+        transaction.Doc.Store.NoteRunExtended();
+        transaction.AddChangedTypeToTransaction((AbstractType)Parent, null);
+        transaction.RecordRunExtension(start);
+    }
+
+    /// <summary>
     /// Mark this item as Deleted.
     /// </summary>
     internal override void Delete(Transaction transaction)

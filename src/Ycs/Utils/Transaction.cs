@@ -70,6 +70,52 @@ public partial class Transaction
     internal readonly Dictionary<AbstractType, IList<YEvent>> _changedParentTypes = new();
     internal readonly List<AbstractStruct> _mergeStructs = new();
 
+    // Where an insert continued the run of the item before it in place (Item.ExtendRun) instead of integrating an
+    // item of its own, in clock order: the clock at which that item would have started, as runs of equal steps
+    // (typing one character at a time is one entry). Yjs merges such an item into its left neighbour at the end of
+    // the transaction, so the store ends up the same; until then, everything that could tell the two apart
+    // (observers and their events, encoding the store, applying an update, undo) first splits the runs at these
+    // clocks (MaterializeRunExtensions), which makes exactly the items Yjs has.
+    private List<(long Client, long Start, long Step, int Count)> _runExtensions;
+
+    internal bool HasRunExtensions => _runExtensions is { Count: > 0 };
+
+    internal void RecordRunExtension(ID start)
+    {
+        var extensions = _runExtensions ??= new List<(long, long, long, int)>();
+        if (extensions.Count > 0)
+        {
+            var (client, first, step, count) = extensions[^1];
+            if (client == start.Client && (count == 1 ? start.Clock > first : start.Clock == first + (step * count)))
+            {
+                extensions[^1] = (client, first, count == 1 ? start.Clock - first : step, count + 1);
+                return;
+            }
+        }
+
+        extensions.Add((start.Client, start.Clock, 0, 1));
+    }
+
+    /// <summary>Splits the runs extended in place back into the items Yjs has (see <see cref="_runExtensions"/>).</summary>
+    internal void MaterializeRunExtensions()
+    {
+        if (_runExtensions is not { Count: > 0 } extensions)
+        {
+            return;
+        }
+
+        var store = _doc.Store;
+        foreach (var (client, first, step, count) in extensions)
+        {
+            for (var k = 0; k < count; k++)
+            {
+                store.GetItemCleanStart(this, new ID(client, first + (step * k)));
+            }
+        }
+
+        extensions.Clear();
+    }
+
     // The deep observers to call in the cleanup, collected first, as Yjs does.
     private readonly List<(AbstractType Type, IList<YEvent> Events)> _deepCalls = new();
 
@@ -216,6 +262,7 @@ public partial class Transaction
         }
 
         Clear(_changedParentTypes);
+        _runExtensions?.Clear();
         _mergeStructs.Clear();
         if (_mergeStructs.Capacity > KeepCapacity)
         {
@@ -433,6 +480,19 @@ public partial class Transaction
         error?.Throw();
     }
 
+    private static bool AnyObserved(Transaction transaction)
+    {
+        foreach (var (type, _) in transaction._changed)
+        {
+            if (type.IsObserved(transaction))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Yjs' 'cleanupTransactions' for one transaction: the observer calls (Yjs' <c>try</c> part), then the structs are
     /// merged and the document's handlers called (Yjs' <c>finally</c> part); every handler step runs even if one
@@ -447,6 +507,20 @@ public partial class Transaction
         ExceptionDispatchInfo error = null;
 
         doc._transaction = null;
+
+        if (transaction.HasRunExtensions)
+        {
+            // Whoever is called from here on with the transaction or its events sees Yjs' items; when nobody is, the
+            // runs stay as they are, which is what the merge below would make of them.
+            if (doc.HasTransactionListeners || doc.HasBeforeObserverCallsListeners || AnyObserved(transaction))
+            {
+                transaction.MaterializeRunExtensions();
+            }
+            else
+            {
+                transaction._runExtensions.Clear();
+            }
+        }
 
         try
         {

@@ -1158,6 +1158,22 @@ public partial class YText : YArrayBase
         currPos.MinimizeAttributeChanges(attributes);
         var negatedAttributes = InsertAttributes(transaction, ref currPos, attributes);
 
+        if (text is string run && run.Length > 0 && negatedAttributes == null && currPos.Left is { } left
+            && left.CanExtendRun(transaction, this, currPos.Right, typeof(ContentString), ownClientId))
+        {
+            // Typing on at the end of this client's run: the run takes the text in place of a new item.
+            if (_searchMarkers?.Count > 0)
+            {
+                _searchMarkers.UpdateMarkerChanges(currPos.Index, run.Length);
+            }
+
+            ((ContentString)left.Content).Append(run);
+            left.ExtendRun(transaction, run.Length);
+            currPos.Index += run.Length;
+            currPos.InsertNegatedAttributes(transaction, this, null);
+            return;
+        }
+
         // Insert content.
         var content = text switch
         {

@@ -89,6 +89,8 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
 
     private static byte[] EncodeRestoreUpdateV2(UpdateEncoderV2 encoder, YDoc originDoc, DeleteSet ds, IDictionary<long, long> stateVector)
     {
+        originDoc.MaterializeRunExtensions();
+
         // The snapshot may come from another peer or another document; Yjs fails on it in findIndexSS.
         foreach (var (client, clock) in stateVector)
         {

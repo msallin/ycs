@@ -70,6 +70,9 @@ public class ContentAny : IContentEx
         return true;
     }
 
+    /// <summary>Appends <paramref name="values"/>, as <see cref="MergeWith"/> appends a content of them.</summary>
+    internal void Append(List<object> values) => _content.AddRange(values);
+
     void IContentEx.Integrate(Transaction transaction, Item item)
     {
         // Do nothing.

@@ -54,6 +54,8 @@ internal static class Properties
             ListsOrGeneral, MarkersInvisible),
         new("merge-order", "merging a run at the end of a transaction in one pass leaves the same structs (ids, lengths, content, links, origins, parents, map entries, search markers) as Yjs' pair-by-pair order, after every step",
             ListsOrGeneral, MergeOrder),
+        new("run-extension", "inserts that continue a run in place (with the one-pass merge) leave the same structs (as merge-order, without the search markers) and observations as Yjs' items, one per insert, merged pair by pair, after every step",
+            ListsOrGeneral, RunExtension),
         new("event-replay", "replaying the deltas and key changes the root observers saw onto a shadow copy reproduces each root (text, array, xml, map) after every step",
             seed => Generator.Generate(seed, BmpOnly), EventReplay),
     ];
@@ -1016,20 +1018,30 @@ internal static class Properties
         });
 
     private static Violation MergeOrder(Dictionary<string, object> script) =>
-        Lockstep("merge-order", script, With(script, "merge", "pairwise"), (onePass, obsA, pairwise, obsB) =>
+        SameStores("merge-order", With(script, "extend", false), With(With(script, "extend", false), "merge", "pairwise"), markers: true);
+
+    // Search markers are left out: where a marker lands depends on the items a lookup walks, not on the document.
+    // Observed (every root and the transactions, as the adapter does: the runs are split before the observers) and
+    // quiet (nothing observes: the runs stay extended).
+    private static Violation RunExtension(Dictionary<string, object> script) =>
+        SameStores("run-extension", script, With(With(script, "extend", false), "merge", "pairwise"), markers: false)
+        ?? SameStores("run-extension", With(script, "quiet", true), With(With(With(script, "quiet", true), "extend", false), "merge", "pairwise"), markers: false);
+
+    private static Violation SameStores(string property, Dictionary<string, object> candidate, Dictionary<string, object> reference, bool markers) =>
+        Lockstep(property, candidate, reference, (a, obsA, b, obsB) =>
         {
-            for (var k = 0; k < onePass.Clients.Count; k++)
+            for (var k = 0; k < a.Clients.Count; k++)
             {
-                var (a, b) = (onePass.Clients[k].Replica.StoreDump(), pairwise.Clients[k].Replica.StoreDump());
-                if (a != b)
+                var (x, y) = (a.Clients[k].Replica.StoreDump(markers), b.Clients[k].Replica.StoreDump(markers));
+                if (x != y)
                 {
-                    var line = a.Split('\n').Zip(b.Split('\n')).First(p => p.First != p.Second);
-                    return $"store differs: client {k}: one pass {line.First}{Environment.NewLine}  pairwise {line.Second}";
+                    var line = x.Split('\n').Zip(y.Split('\n')).First(p => p.First != p.Second);
+                    return $"store differs: client {k}: {line.First}{Environment.NewLine}  reference {line.Second}";
                 }
             }
 
-            var (x, y) = (Canonical(obsA), Canonical(obsB));
-            return x == y ? null : $"observation differs: one pass {Short(x)}{Environment.NewLine}  pairwise {Short(y)}";
+            var (u, v) = (Canonical(obsA), Canonical(obsB));
+            return u == v ? null : $"observation differs: {Short(u)}{Environment.NewLine}  reference {Short(v)}";
         });
 
     private static Violation NaiveRecompute(Dictionary<string, object> script) =>

@@ -394,7 +394,14 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         void packJsonContent()
         {
-            if (jsonContent.Count > 0)
+            if (jsonContent.Count > 0 && left != null && left.CanExtendRun(transaction, this, right, typeof(ContentAny), ownClientId))
+            {
+                // Appending to this client's run: the run takes the values in place of a new item.
+                ((ContentAny)left.Content).Append(jsonContent);
+                left.ExtendRun(transaction, jsonContent.Count);
+                jsonContent.Clear();
+            }
+            else if (jsonContent.Count > 0)
             {
                 left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, ContentAny.Own(jsonContent));
                 left.Integrate(transaction, 0);

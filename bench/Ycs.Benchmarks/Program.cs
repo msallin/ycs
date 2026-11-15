@@ -27,7 +27,7 @@ namespace Ycs.Benchmarks;
 /// encode and decode loop 10 times per run.
 /// <br/>
 /// <c>limits</c> instead of a trace measures updates at the default limits (<see cref="Limits"/>),
-/// <c>perf</c> the operations of <see cref="Perf"/>.
+/// <c>perf</c> the operations of <see cref="Perf"/>, <c>sizes</c> what an item holds by kind (<see cref="Sizes"/>).
 /// <br/>
 /// <c>loop &lt;trace.json.gz&gt; &lt;phase&gt; &lt;iterations&gt;</c> repeats one operation on one document (encode-v1, encode-v2,
 /// encode-diff: against the state vector halfway; decode-v1, decode-v2: into a fresh document) and prints its time and
@@ -39,7 +39,7 @@ internal static class Program
     {
         if (args.Length < 1)
         {
-            Console.Error.WriteLine("usage: Ycs.Benchmarks <trace.json.gz> [runs] | limits | perf");
+            Console.Error.WriteLine("usage: Ycs.Benchmarks <trace.json.gz> [runs] | limits | perf | sizes [n] | loop <trace.json.gz> <phase> <iterations>");
             return 2;
         }
 
@@ -52,6 +52,12 @@ internal static class Program
         if (args[0] == "perf")
         {
             Perf.Run();
+            return 0;
+        }
+
+        if (args[0] == "sizes")
+        {
+            Sizes.Run(args.Length > 1 ? int.Parse(args[1]) : 200_000);
             return 0;
         }
 

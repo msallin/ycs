@@ -494,26 +494,38 @@ public partial class YDoc
         EncodeStateAsUpdateV1(destination, encodedTargetStateVector);
 
     /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public byte[] EncodeStateAsUpdateV1(ReadOnlySpan<byte> encodedTargetStateVector = default) =>
-        EncodingUtils.EncodeStateAsUpdate(Store, encodedTargetStateVector, v2: false);
+    public byte[] EncodeStateAsUpdateV1(ReadOnlySpan<byte> encodedTargetStateVector = default)
+    {
+        MaterializeRunExtensions();
+        return EncodingUtils.EncodeStateAsUpdate(Store, encodedTargetStateVector, v2: false);
+    }
 
     /// <inheritdoc cref="EncodeStateAsUpdate(IBufferWriter{byte}, ReadOnlySpan{byte})"/>
-    public void EncodeStateAsUpdateV1(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default) =>
+    public void EncodeStateAsUpdateV1(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default)
+    {
+        MaterializeRunExtensions();
         EncodingUtils.EncodeStateAsUpdate(Store, destination, encodedTargetStateVector, v2: false);
+    }
 
     /// <summary>
     /// Encodes the document as one update in the v2 format (Yjs' <c>Y.encodeStateAsUpdateV2</c>).
     /// </summary>
     /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public byte[] EncodeStateAsUpdateV2(ReadOnlySpan<byte> encodedTargetStateVector = default) =>
-        EncodingUtils.EncodeStateAsUpdate(Store, encodedTargetStateVector, v2: true);
+    public byte[] EncodeStateAsUpdateV2(ReadOnlySpan<byte> encodedTargetStateVector = default)
+    {
+        MaterializeRunExtensions();
+        return EncodingUtils.EncodeStateAsUpdate(Store, encodedTargetStateVector, v2: true);
+    }
 
     /// <summary>
     /// Writes the document as one update in the v2 format into <paramref name="destination"/>.
     /// </summary>
     /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public void EncodeStateAsUpdateV2(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default) =>
+    public void EncodeStateAsUpdateV2(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default)
+    {
+        MaterializeRunExtensions();
         EncodingUtils.EncodeStateAsUpdate(Store, destination, encodedTargetStateVector, v2: true);
+    }
 
     /// <summary>
     /// Encodes the document's state vector (Yjs' <c>Y.encodeStateVector</c>). The state vector has the
@@ -599,12 +611,20 @@ public partial class YDoc
     /// <summary>No search markers are made or used in this document (the tests' reference: markers must not change any output).</summary>
     internal bool SearchMarkersDisabledForTests;
 
+    /// <summary>Every insert integrates an item of its own, as in Yjs (the tests' reference for <see cref="Item.ExtendRun"/>).</summary>
+    internal bool RunExtensionsDisabledForTests;
+
     internal bool TryGetRoot(string name, out AbstractType type) => _share.TryGetValue(name, out type);
 
     internal void InvokeSubdocsChanged(ISet<YDoc> loaded, ISet<YDoc> added, ISet<YDoc> removed)
     {
         SubdocsChanged?.Invoke(this, (loaded, added, removed));
     }
+
+    internal bool HasBeforeObserverCallsListeners => BeforeObserverCalls != null;
+
+    /// <summary>Before the store is read as structs (encoded) in a transaction: the runs it extended in place are split (<see cref="Transaction.MaterializeRunExtensions"/>).</summary>
+    internal void MaterializeRunExtensions() => _transaction?.MaterializeRunExtensions();
 
     internal void InvokeOnBeforeObserverCalls(Transaction transaction)
     {

@@ -183,6 +183,29 @@ public class ContentString : IContentEx
         return true;
     }
 
+    internal bool EndsWithHighSurrogate => Length > 0 && char.IsHighSurrogate(_builder != null ? _builder[_builder.Length - 1] : _string![_start + _length - 1]);
+
+    /// <summary>Appends <paramref name="text"/>, as <see cref="MergeWith"/> appends a content of it.</summary>
+    internal void Append(string text)
+    {
+        if (_builder == null)
+        {
+            var length = _length + text.Length;
+            if (length <= BuilderThreshold)
+            {
+                _string = string.Concat(Slice, text);
+                _start = 0;
+                _length = _string.Length;
+                return;
+            }
+
+            _builder = new StringBuilder(Math.Max(2 * length, 2 * BuilderThreshold)).Append(Slice);
+            _string = null;
+        }
+
+        _builder.Append(text);
+    }
+
     void IContentEx.Integrate(Transaction transaction, Item item)
     {
         // Do nothing.

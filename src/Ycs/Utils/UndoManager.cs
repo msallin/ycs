@@ -485,6 +485,7 @@ public class UndoManager
                 tr = transaction;
                 _popTransaction = transaction;
                 var store = _doc.Store;
+                transaction.MaterializeRunExtensions();
 
                 while (stack.Count > 0 && CurrentStackItem == null)
                 {
