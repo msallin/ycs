@@ -47,12 +47,9 @@ public class ContentType : IContentEx
             {
                 item.Delete(transaction);
             }
-            else
+            else if (IsOlderThan(item, transaction))
             {
-                // This will be gc'd later and we want to merge it if possible.
-                // We try to merge all deleted items each transaction,
-                // but we have no knowledge about that this needs to merged
-                // since it is not in transaction. Hence we add it to transaction._mergeStructs.
+                // Collected with the type later, but not in the transaction's delete set: merge it then.
                 transaction._mergeStructs.Add(item);
             }
 
@@ -65,14 +62,16 @@ public class ContentType : IContentEx
             {
                 valueItem.Delete(transaction);
             }
-            else
+            else if (IsOlderThan(valueItem, transaction))
             {
-                // Same as above.
                 transaction._mergeStructs.Add(valueItem);
             }
         }
 
         transaction.Changed.Remove(Type);
+
+        static bool IsOlderThan(Item item, Transaction transaction) =>
+            item.Id.Clock < (transaction.BeforeState.TryGetValue(item.Id.Client, out var clock) ? clock : 0);
     }
 
     void IContentEx.Gc(StructStore store)

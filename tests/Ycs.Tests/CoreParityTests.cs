@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -61,5 +62,51 @@ public class CoreParityTests
         Assert.AreEqual(
             ("hello", "AQMHACEBAW0BYQEAAwQBAXQFaGVsbG8BBwEABA=="),
             (doc.GetText("t").ToString(), S(doc.EncodeStateAsUpdate())));
+    }
+
+    [TestMethod]
+    public void Cleanup_DeletedStructsAcrossTransactions_MergeToTheLeftAsFarAsPossible()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var m = doc.GetMap("m");
+        var a = doc.GetArray("a");
+
+        doc.Transact(_ =>
+        {
+            a.Insert(0, new object[] { "a", new YMap(new Dictionary<string, object> { ["k2"] = "a" }), "b" });
+            ((YMap)a.Get(1)).Set("k2", new YMap(new Dictionary<string, object> { ["k3"] = new Dictionary<string, object> { ["x"] = 1 } }));
+            ((YMap)a.Get(1)).Set("k2", new List<object> { 1, 2 });
+            m.Delete("k2");
+        });
+        doc.Transact(_ =>
+        {
+            m.Set("k1", "b");
+            ((YMap)a.Get(1)).Delete("k2");
+        });
+        doc.Transact(_ =>
+        {
+            a.Delete(1, 2);
+            a.Insert(0, new object[] { new Dictionary<string, object> { ["x"] = 1 }, 1 });
+            a.Delete(0, 2);
+        });
+
+        Assert.AreEqual("AQcBAAgBAWEBdwFhgQEAAQABgQEBAQADKAEBbQJrMQF3AWJBAQACAQECAQYIAg==", S(doc.EncodeStateAsUpdate()));
+    }
+
+    [TestMethod]
+    public void Cleanup_NestedMapWithOverwrittenKeyDeleted_BecomesOneGc()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 2 });
+        var r = doc.GetMap("r");
+        var n = new YMap();
+        r.Set("n", n);
+        n.Set("k", 1);
+        n.Set("k", 2);
+        n.Set("k", 3);
+        n.Set("k", 4);
+
+        r.Delete("n");
+
+        Assert.AreEqual("AQICACEBAXIBbgEABAECAQAF", S(doc.EncodeStateAsUpdate()));
     }
 }

@@ -470,9 +470,9 @@ public partial class Transaction
                 {
                     var structs = store.Clients[client];
                     var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
-                    for (int j = structs.Count - 1; j >= firstChangePos; j--)
+                    for (int j = structs.Count - 1; j >= firstChangePos;)
                     {
-                        DeleteSet.TryToMergeWithLeft(structs, j);
+                        j -= 1 + DeleteSet.TryToMergeWithLefts(structs, j);
                     }
                 }
             }
@@ -480,21 +480,22 @@ public partial class Transaction
             // Try to merge mergeStructs.
             // TODO: It makes more sense to transform mergeStructs to a DS, sort it, and merge from right to left
             //       but at the moment DS does not handle duplicates.
-            for (int j = 0; j < mergeStructs.Count; j++)
+            for (int j = mergeStructs.Count - 1; j >= 0; j--)
             {
                 var client = mergeStructs[j].Id.Client;
                 var clock = mergeStructs[j].Id.Clock;
                 var structs = store.Clients[client];
                 var replacedStructPos = StructStore.FindIndexSS(structs, clock);
 
-                if (replacedStructPos + 1 < structs.Count)
+                // Both neighbours merged already when more than one struct went.
+                if (replacedStructPos + 1 < structs.Count && DeleteSet.TryToMergeWithLefts(structs, replacedStructPos + 1) > 1)
                 {
-                    DeleteSet.TryToMergeWithLeft(structs, replacedStructPos + 1);
+                    continue;
                 }
 
                 if (replacedStructPos > 0)
                 {
-                    DeleteSet.TryToMergeWithLeft(structs, replacedStructPos);
+                    DeleteSet.TryToMergeWithLefts(structs, replacedStructPos);
                 }
             }
 
