@@ -39,6 +39,13 @@ internal static class FixedFailures
             "The same change as pending-deletes-split-surrogate-pair: the waiting ranges are merged when Yjs merges them, so they " +
             "split the items where Yjs' do (Yjs wrote 6 structs, Ycs 5). Nothing about the clocks near 2^31.",
             """{"clients":[{"gc":false,"id":2}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI=","via":"v1"},{"op":"raw","to":0,"u":"AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC","via":"v1"},{"op":"raw","to":0,"u":"AQSsAgAIAQFhA30BdwFzfoisAgEDdQJ9AXcBeH0BdQJ9AXcBeAQBAXQD5LitBwEBeAYA","via":"v1"}]}"""),
+        new("pending-deletes-client-order",
+            "Deletions that waited are applied client by client from the highest client id down, as Yjs reads its pendingDs back " +
+            "(writeDeleteSet writes the clients in that order); Ycs took them in the order the clients first waited. The order " +
+            "decides whether a waiting range splits a key's value of several items (only a fuzzed update holds one) before or after " +
+            "the waiting deletion of its type deletes the item the key holds, and so which of its items stay. Also the order of the " +
+            "transaction's delete set and of the garbage collection filter's calls. Nothing about the clocks near 2^31.",
+            """{"clients":[{"gc":false,"id":2}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AQMLAQgBAWEDeHcBc30BRwsCAQoCAQsBBAE=","via":"v1to2"},{"op":"raw","to":0,"u":"AwMKAAAEKAALBAFrAXiG+Pr//wcCBml0YWxpYwExBKwCAAC/////BycACwABbAaH+Pr//wcDBigACwQBbAN3AXN9R34C+Pr//wcGAQEBdAGD+Pr//wcAAwECAwOsAgIDA8L///8HAvj6//8HAQIDCwEEAQ==","via":"v1"},{"op":"raw","to":0,"u":"AQX4+v//BwAoAQFtAW0BeAQBAXQD5LitxPj6//8HAfj6//8HAQFhBwDwogQABsILAwsEAgExAyJqIgELAQIC","via":"v1to2"},{"op":"raw","to":0,"u":"AgELAAcBAXgDA2RpdgHwogQAxwsACwADA2RpdgLwogQBAAMLAQAD","via":"v1"}]}"""),
         new("debug-assert-clock-over-2^30",
             "IntDiffOptRleEncoder asserted values of at most 2^30 (Debug builds), a leftover of lib0's 31-bit shift; it writes " +
             "diff * 2 + flag as lib0 does, so clocks up to 2^31 - 1 (docs/api.md's limit) are fine and the assertion is gone.",

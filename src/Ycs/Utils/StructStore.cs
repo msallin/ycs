@@ -1755,23 +1755,29 @@ internal sealed partial class StructStore
         /// <summary>Removes and returns the ranges of the clients whose state reached one of them, or null.</summary>
         public DeleteSet TakeApplicable(StructStore store)
         {
-            DeleteSet ds = null;
+            List<long> applicable = null;
             foreach (var (client, entry) in _clients)
             {
                 if (entry.MinClock < store.GetState(client))
                 {
-                    ds ??= new DeleteSet();
-                    ds.Clients[client] = entry.Ranges;
+                    (applicable ??= new List<long>()).Add(client);
                 }
             }
 
-            if (ds != null)
+            if (applicable == null)
             {
-                foreach (var client in ds.Clients.Keys)
-                {
-                    Bytes -= _clients[client].Bytes;
-                    _clients.Remove(client);
-                }
+                return null;
+            }
+
+            // In the order Yjs reads its pending deletions back (writeDeleteSet writes the clients from the highest id
+            // down): it decides the order of the transaction's delete set, and so of the garbage collection filter's calls.
+            applicable.Sort(static (a, b) => b.CompareTo(a));
+            var ds = new DeleteSet();
+            foreach (var client in applicable)
+            {
+                ds.Clients[client] = _clients[client].Ranges;
+                Bytes -= _clients[client].Bytes;
+                _clients.Remove(client);
             }
 
             return ds;
