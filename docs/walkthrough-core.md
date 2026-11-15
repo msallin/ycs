@@ -127,7 +127,7 @@ subdocument gets a random guid on the wire).
 | `tryGcDeleteSet` | `DeleteSet.TryGcDeleteSet` | identical |
 | `tryMergeDeleteSet` | `DeleteSet.TryMergeDeleteSet` | equivalent |
 | `tryGc` | `DeleteSet.TryGc` | identical |
-| `cleanupTransactions` | `Transaction.CleanupTransactions` / `CleanupTransaction` | **DIFFERS** - F14, F15, F16, F17, F18 (phase order itself equals Yjs) |
+| `cleanupTransactions` | `Transaction.CleanupTransactions` / `CleanupTransaction` | **DIFFERS** - F14, F15, F16, F17 (phase order and, since F18, exception paths equal Yjs) |
 | `transact` | `YDoc.Transact` | equivalent |
 
 ### utils/DeleteSet.js
