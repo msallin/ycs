@@ -49,8 +49,10 @@ internal static class KnownFailures
             "Not a Ycs bug: an update that deletes a type in which a key holds two live items (a value of several items, " +
             "which Yjs never writes undeleted, split by a deleted range or a reference inside it, by this update or an earlier " +
             "one): Yjs integrates it and then throws in the cleanup ('Unexpected case' in Item.gc), so its document is left " +
-            "changed; Ycs rejects it with YUpdateException before integrating (docs/api.md, Untrusted input). Both reject; " +
-            "the states differ.",
+            "changed, and wedged: the throw skips the end of cleanupTransactions, which leaves the transaction in " +
+            "doc._transactionCleanups, so no later transaction of that document is cleaned up (no observer, afterTransaction " +
+            "or update event, also for a local change; the former pin pending-integration-events was this). Ycs rejects it " +
+            "with YUpdateException before integrating (docs/api.md, Untrusted input). Both reject; the states differ.",
             """{"clients":[{"gc":true,"id":1}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AwKsAgAIAQFhA353AXN9AQQBAXQD5LitAvj6//8HAIesAgIBhKwCAwJiYwPwogQAh6wCAAEoAPCiBAABbQF9RygA+Pr//wcAAWwDfUd4eAA=","via":"v1"},{"op":"raw","to":0,"u":"AQUKACgA+Pr//wcAAWsCeH0BxPj6//8HAfj6//8HAQJiYygA8KIEAAFsAnh9R4fwogQAAQoCA/CiBAEDAfj6//8HAQADCgIBAwQC","via":"v1"}]}""")
         {
             Documented = true,
@@ -65,14 +67,6 @@ internal static class KnownFailures
         {
             Documented = true,
             Matches = (m, script) => m.Op == "raw" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal) && RejectedByGcCheck(script, m.Step),
-        },
-        new("pending-integration-events", "medium",
-            "Fuzzed updates applied out of order: when a later update lets waiting structs integrate (an XmlText into a " +
-            "fragment, a map entry under a type that arrived later), Ycs raises observer events, afterTransaction and an " +
-            "update for them; Yjs, on the same step, raises none (both documents end equal).",
-            """{"clients":[{"gc":true,"id":1}],"roots":[{"kind":"xml","name":"x"}],"steps":[{"op":"raw","to":0,"u":"AgMKAAIBAWECATEDImoiBwEBYQEKAQKsAgAEAQF0A+S4rQMBAWEDAQIDAQoBAAI=","via":"v1"},{"op":"raw","to":0,"u":"AwH4+v//BwAjAAoCAWsDAQIDBAwAIQAKAgFtAicBAW0BbQEnAAwCAWsABwAMAwECrAICiAwEAnUCfQF3AXh7P/gAAAAAAADDrAICrAIDAwECAwA=","via":"v1"},{"op":"raw","to":0,"u":"AQILACcACgIBbAQiAAwEAW0CATEDImoiAwsBAgEKAQEHDAECAg==","via":"v1"},{"op":"raw","to":0,"u":"AQIMBSgBAW0BawJ3AXN1An0BdwF4BwEBeAYA","via":"v1"}]}""")
-        {
-            Matches = (m, _) => m.Op == "raw" && m.Primary is "ev:obs" or "ev:deep" && m.Differences.All(d => d.Contains("yjs \"(missing)\"", StringComparison.Ordinal)),
         },
         new("huge-clock-gc-encoding", "low",
             "A client whose history starts with a GC struct reaching close to the clock limit (clock 2^31 - 65), followed " +

@@ -43,6 +43,29 @@ public class IntegrationPlanReuseTests
         Assert.AreEqual("abcd", doc.GetText("text").ToString());
     }
 
+    [TestMethod]
+    public void ApplyUpdate_LateUpdateLetsPendingStructsIntegrate_OneTransactionWithAllOfThem()
+    {
+        // As Yjs' readUpdateV2: the pending structs are read again inside the late update's transaction.
+        var source = new YDoc(new YDocOptions { ClientId = 1 });
+        var text = source.GetText("text");
+        text.Insert(0, "ab");
+        var first = source.EncodeStateAsUpdateV1();
+        var vector = source.EncodeStateVector();
+        text.Insert(2, "cd");
+        var second = source.EncodeStateAsUpdateV1(vector);
+        var doc = new YDoc();
+        doc.ApplyUpdateV1(second);
+        var events = 0;
+        var transactions = 0;
+        doc.GetText("text").Observe((_, _) => events++);
+        doc.AfterTransaction += (_, _) => transactions++;
+
+        doc.ApplyUpdateV1(first);
+
+        Assert.AreEqual((1, 1, "abcd"), (transactions, events, doc.GetText("text").ToString()));
+    }
+
     /// <summary>A v1 update of client 5: <paramref name="depth"/> arrays, each nested in the one before, the first in root 'a'.</summary>
     private static byte[] NestedArrays(int depth)
     {
