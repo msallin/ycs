@@ -45,7 +45,9 @@ Node at test time.
       node undo-gen.mjs 20000 60 /tmp/undo.json
       YCS_UNDO_FUZZ=/tmp/undo.json dotnet test tests/Ycs.Corpus --filter Name~Scripts_EveryStep --logger "console;verbosity=detailed"
 
-  (`FULL=1` records whole states instead of hashes, so a divergence shows both.)
+  (`FULL=1` records whole states instead of hashes, so a divergence shows both.) That run
+  (20,000 scripts of 60 steps) matches Yjs on every step. `undo/undo-gc-merge.json.gz` keeps its
+  20 scripts that diverged while deleted structs merged less far to the left than in Yjs 13.6.
 - Divergences that are bugs in Ycs are listed in `tests/Ycs.Corpus/KnownFailures.cs`: those
   checks report Inconclusive (skipped) with the reason, and fail if they start passing.
 

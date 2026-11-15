@@ -45,6 +45,20 @@ public class UndoDifferentialTests
         Assert.IsEmpty(unexpected, string.Join(Environment.NewLine + Environment.NewLine, unexpected.Take(int.TryParse(Environment.GetEnvironmentVariable("YCS_UNDO_SHOW"), out var show) ? show : 3)));
         Assert.IsEmpty(fixedKnown, $"listed in KnownDivergences but no longer diverging: {string.Join(", ", fixedKnown)}");
     }
+
+    /// <summary>
+    /// The 20 scripts of <c>node undo-gen.mjs 20000 60</c> that diverged while deleted structs merged to
+    /// the left less far than in Yjs 13.6 (undo/undo-gc-merge.json.gz, taken from that run).
+    /// </summary>
+    [TestMethod]
+    public void GcMergeScripts_EveryStep_MatchesYjs()
+    {
+        using var json = JsonDocument.Parse(new GZipStream(File.OpenRead(Path.Combine(AppContext.BaseDirectory, "undo", "undo-gc-merge.json.gz")), CompressionMode.Decompress));
+
+        var divergences = json.RootElement.GetProperty("scripts").EnumerateArray().Select(UndoReplay.Run).Where(d => d != null).ToList();
+
+        Assert.IsEmpty(divergences, string.Join(Environment.NewLine + Environment.NewLine, divergences.Take(3)));
+    }
 }
 
 internal sealed record UndoDivergence(int Seed, string Config, int Step, string Kind, string Message, IReadOnlyList<string> History)
