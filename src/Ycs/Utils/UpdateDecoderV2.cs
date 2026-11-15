@@ -58,8 +58,11 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     private readonly UintOptRleDecoder _lengthDecoder;
 
     /// <param name="input">The update.</param>
-    /// <param name="trusted">Written by this library (pending structs): no limit on the number of structs.</param>
-    public UpdateDecoderV2(Lib0Reader input, bool trusted = false)
+    /// <param name="maxStructs">
+    /// The most structs the update may hold (<see cref="Limits.MaxStructsV2"/>); <see cref="long.MaxValue"/>
+    /// for an update this library wrote (pending structs).
+    /// </param>
+    public UpdateDecoderV2(Lib0Reader input, long maxStructs = Limits.DefaultMaxStructsPerUpdate)
         : base(input)
     {
         _keyClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
@@ -70,7 +73,7 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         _parentInfoDecoder = new RleDecoder(new Lib0Reader());
         _typeRefDecoder = new UintOptRleDecoder(new Lib0Reader());
         _lengthDecoder = new UintOptRleDecoder(new Lib0Reader());
-        ReadColumns(trusted, createStringDecoder: true);
+        ReadColumns(maxStructs, createStringDecoder: true);
     }
 
     public long MaxStructs { get; private set; }
@@ -79,11 +82,11 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     /// Starts over on a new update: <see cref="DSDecoderV2.Reader"/> must have been pointed at it
     /// (<see cref="Lib0Reader.Reset"/>). The column decoders and their readers are reused.
     /// </summary>
-    public void Reset(bool trusted = false)
+    public void Reset(long maxStructs = Limits.DefaultMaxStructsPerUpdate)
     {
         ResetDsCurVal();
         _keys.Clear();
-        ReadColumns(trusted, createStringDecoder: false);
+        ReadColumns(maxStructs, createStringDecoder: false);
     }
 
     /// <summary>Drops the references to the input and to the decoded strings.</summary>
@@ -102,9 +105,9 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         _lengthDecoder.Input.Clear();
     }
 
-    private void ReadColumns(bool trusted, bool createStringDecoder)
+    private void ReadColumns(long maxStructs, bool createStringDecoder)
     {
-        MaxStructs = trusted ? long.MaxValue : (long)Reader.Remaining * Limits.MaxStructsPerByteV2 + Limits.MinStructs;
+        MaxStructs = Limits.MaxStructsV2(maxStructs, Reader.Remaining);
 
         // Read feature flag - currently unused.
         Reader.ReadByte();

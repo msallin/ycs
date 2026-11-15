@@ -258,6 +258,7 @@ static class Ycs.UpdateOperations
     static byte[] EncodeStateVectorFromUpdateV2(byte[] update)
     static byte[] MergeUpdates(System.Collections.Generic.IList<byte[]> updates)
     static byte[] MergeUpdatesV2(System.Collections.Generic.IList<byte[]> updates)
+    static long MaxStructsPerUpdate { get; set; }
     static string DescribeUpdate(byte[] update)
     static string DescribeUpdateV2(byte[] update)
     static void LogUpdate(byte[] update)
@@ -358,6 +359,7 @@ class Ycs.YDocOptions
     bool ShouldLoad { get; set; }
     int? ClientId { get; set; }
     long MaxPendingBytes { get; set; }
+    long MaxStructsPerUpdate { get; set; }
     object Meta { get; set; }
     string CollectionId { get; set; }
     string Guid { get; set; }

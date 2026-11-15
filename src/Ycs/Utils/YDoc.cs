@@ -48,6 +48,22 @@ public class YDocOptions
     private long _maxPendingBytes = 16 * 1024 * 1024;
 
     /// <summary>
+    /// The most structs an applied v2 update may hold (never fewer than one per byte of the update),
+    /// which bounds the memory a small update can make the decoder allocate: the v2 format can
+    /// describe any number of structs in a few bytes. A v1 update needs at least two bytes per struct
+    /// and is not limited. A struct costs about 110 bytes while it is decoded, so the default bounds a
+    /// small update to about 230 MiB. An update beyond it is rejected with a <see cref="YUpdateException"/>
+    /// and the document is unchanged. Default 2,097,152; Yjs has no limit.
+    /// </summary>
+    public long MaxStructsPerUpdate
+    {
+        get => _maxStructsPerUpdate;
+        set => _maxStructsPerUpdate = Limits.CheckMaxStructs(value);
+    }
+
+    private long _maxStructsPerUpdate = Limits.DefaultMaxStructsPerUpdate;
+
+    /// <summary>
     /// The client id to start with instead of a random one; for tests and reproducible benchmarks.
     /// Two documents that edit concurrently must never share a client id.
     /// </summary>
@@ -71,6 +87,7 @@ public class YDocOptions
             AutoLoad = AutoLoad,
             ShouldLoad = ShouldLoad,
             MaxPendingBytes = MaxPendingBytes,
+            MaxStructsPerUpdate = MaxStructsPerUpdate,
         };
     }
 }
@@ -529,7 +546,7 @@ public partial class YDoc
         UpdateReader.Lease update;
         try
         {
-            update = UpdateReader.Read(buffer, 0, count, v2);
+            update = UpdateReader.Read(buffer, 0, count, v2, _opts.MaxStructsPerUpdate);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {

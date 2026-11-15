@@ -43,7 +43,8 @@ upstream ycs.
 
 Updates from peers can be malformed or hostile: applying, merging or diffing them throws only
 `YUpdateException`, leaves the document unchanged, and is bounded in time, memory and stack depth
-(clocks up to 2^31 - 1, nesting up to 256 levels, pending data up to `YDocOptions.MaxPendingBytes`).
+(clocks up to 2^31 - 1, nesting up to 256 levels, structs per v2 update up to
+`YDocOptions.MaxStructsPerUpdate`, pending data up to `YDocOptions.MaxPendingBytes`).
 `TryApplyUpdate` returns false instead. See [`docs/api.md`](docs/api.md#untrusted-input).
 
 #### Thread safety

@@ -424,7 +424,7 @@ internal sealed partial class StructStore
             // encoded form, as Yjs does.
             var update = Pending.Merge();
             Pending = null;
-            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, trusted: true);
+            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, maxStructs: long.MaxValue);
             ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, long.MaxValue);
         }
     }

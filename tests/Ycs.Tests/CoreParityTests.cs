@@ -193,4 +193,26 @@ public class CoreParityTests
             (2, 1, "AgECAMgBAAEBAXcBWgIBAAgBAXABdwFhCAEBcQF3AWIA"),
             (doc.GetArray("p").Length, doc.GetArray("q").Length, S(doc.EncodeStateAsUpdate())));
     }
+
+    [TestMethod]
+    [DataRow("AAAESZ6cAQAFAAOcnAEDAQBBAwFhAQEBAARBnpwBAaCcAQABCQEAn5wB", "AQmgnAE=")] // 20,000 items inserted at 0, all deleted: 42 bytes
+    [DataRow("AAAESp6cAQAFAAOcnAEHAQBBm5wBSAMBcQEBAQAEQZ6cAQGgnAEAfQF9AX0BAQoBAJycAQ==", "AQqgnAE=")] // a list used as a stack: 52 bytes
+    public void ApplyUpdateV2_ManyStructsInFewBytes_AppliesAndReEncodes(string update, string stateVector)
+    {
+        var doc = new YDoc();
+
+        doc.ApplyUpdateV2(B(update));
+
+        Assert.AreEqual((stateVector, update), (S(doc.EncodeStateVector()), S(doc.EncodeStateAsUpdateV2())));
+    }
+
+    [TestMethod]
+    public void UpdateOperations_ManyStructsInFewBytes_AreAccepted()
+    {
+        var update = B("AAAESZ6cAQAFAAOcnAEDAQBBAwFhAQEBAARBnpwBAaCcAQABCQEAn5wB");
+
+        var v1 = UpdateOperations.ConvertUpdateFormatV2ToV1(update);
+
+        Assert.AreEqual(S(update), S(UpdateOperations.ConvertUpdateFormatV1ToV2(v1)));
+    }
 }

@@ -98,8 +98,13 @@ checked before anything changes:
   insert beyond that throws `ArgumentException` / `InvalidOperationException`), so nothing recurses
   without bound;
 * size: a collection is never allocated larger than the remaining input can fill, and a v2 update
-  (whose run-length encoded columns can describe any number of structs in a few bytes) holds at most
-  64 structs per byte plus 4096;
+  (whose run-length encoded columns can describe any number of structs in a few bytes: Yjs writes
+  20,000 deleted items in 42 bytes) holds at most `YDocOptions.MaxStructsPerUpdate` structs
+  (2,097,152 by default, never fewer than one per byte of the update; about 110 bytes each while
+  decoded, so at most about 230 MiB for a small update). `UpdateOperations.MaxStructsPerUpdate`
+  (process-wide, same default) bounds the v2 updates given to `UpdateOperations`. Lower them on a
+  server that applies updates from untrusted peers and knows its documents' size; a v1 update needs at
+  least two bytes per struct and is bounded by its size;
 * pending data: what waits for structs the document does not have yet may grow to
   `YDocOptions.MaxPendingBytes` (16 MiB by default), counted as encoded bytes; an update that would
   grow it further is rejected (a duplicate is merged away first).
