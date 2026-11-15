@@ -36,15 +36,6 @@ internal static class KnownFailures
 {
     public static readonly IReadOnlyList<KnownFailure> All =
     [
-        new("convert-v1-to-v2-overlapping-delete-set", "low",
-            "UpdateOperations.ConvertUpdateFormatV1ToV2 of a valid v1 update whose delete set is not sorted, or has " +
-            "overlapping or repeated ranges (Yjs' v1 decoder takes them), writes a v2 delete set that Ycs' own v2 decoder rejects ('A " +
-            "variable-length integer is out of range', from the negative clock difference). Yjs' output applies but is " +
-            "corrupt in the same way (see yjs-unsorted-delete-set): neither converts such an update faithfully.",
-            """{"clients":[{"gc":false,"id":1}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AgGsAgIEAKwCAQN4w6kC8KIECoesAgEGx/CiBAqsAgEDA2RpdgILAgADAAKsAgEBAg==","via":"v1to2"}]}""")
-        {
-            Matches = (m, script) => m.Op is "raw" or "deliver" && Step(script, m).Str("via") == "v1to2" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal),
-        },
         new("yjs-gc-throws-after-integrating", "documented",
             "Not a Ycs bug: an update that deletes a type in which a key holds two live items (a value of several items, " +
             "which Yjs never writes undeleted, split by a deleted range or a reference inside it, by this update or an earlier " +
@@ -92,11 +83,14 @@ internal static class KnownFailures
             "Not a Ycs bug: a delete set whose ranges are not sorted or overlap (valid v1; Yjs never writes one, a fuzzer or another " +
             "implementation may) makes Yjs' v2 delete-set encoder write negative clock differences, so its pending delete " +
             "set holds a phantom range (here 11:[131,7], which would delete items that do not exist yet) and stays " +
-            "pending; Ycs applies the ranges as given.",
+            "pending; Ycs applies the ranges as given, and its ConvertUpdateFormatV1ToV2 sorts them (Yjs' conversion writes " +
+            "the negative differences).",
             """{"clients":[{"gc":false,"id":1}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AQILAAQBAXQCYmMnAQFtAWsCAQsEAggAAwABAgg=","via":"v1"},{"op":"raw","to":0,"u":"BAT4+v//BwAHAAsCAYUKARF7ImltYWdlIjoiaS5wbmcifSgA+Pr//wcAAW0CdQJ9AXcBeHUCfQF3AXiBCwEBAA0AAqwCACIA+Pr//wcAAWsCATEDImoiCAEBYQJ3AXN9AQEKAMQLAAsAAmJjAvj6//8HAgMBAQKsAgECBw==","via":"v1"},{"op":"raw","to":0,"u":"AwULAygBAW0BbQN4dwFzez/4AAAAAAAAIgD4+v//BwABbQIBMQMiaiIIAKwCCAN+ez/4AAAAAAAAfgcBAXgGgqwCAgIBMQMiaiIFDAAHAQF4BggBAWEBdwFzJwEBbQFsAAQBAXQDZGVmBAALCwJiYwOsAgQEAQF0A2RlZgcBAXgDAXAnAQFtAWwAAA==","via":"v1"}]}""")
         {
             Documented = true,
-            Matches = (m, _) => m.Op == "raw" && m.Primary == "pend",
+            // Also seen first in the converted bytes, when the step converts such an update from v1 to v2 (Ycs sorts it).
+            Matches = (m, script) => m.Op == "raw" && (m.Primary == "pend"
+                || (Step(script, m) is var step && step.Str("via") == "v1to2" && ScriptRun.HasUnorderedDeleteSet(step.Str("u")))),
         },
     ];
 

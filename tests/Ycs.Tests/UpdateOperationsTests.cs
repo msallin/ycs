@@ -492,4 +492,20 @@ public class UpdateOperationsTests
     }
 
     #endregion
+
+    [TestMethod]
+    public void ConvertUpdateFormatV1ToV2_OverlappingDeleteRanges_AppliesAsTheV1Update()
+    {
+        // The property engine's convert-v1-to-v2-overlapping-delete-set: client 11's ranges [0, 3] and [0, 2] overlap, which
+        // is valid v1; v2 needs each range at or after the end of the one before, so the conversion merges them.
+        var v1 = Convert.FromBase64String("AgGsAgIEAKwCAQN4w6kC8KIECoesAgEGx/CiBAqsAgEDA2RpdgILAgADAAKsAgEBAg==");
+        var fromV1 = new YDoc(new YDocOptions { Gc = false });
+        fromV1.ApplyUpdateV1(v1);
+        var fromV2 = new YDoc(new YDocOptions { Gc = false });
+
+        fromV2.ApplyUpdateV2(UpdateOperations.ConvertUpdateFormatV1ToV2(v1));
+
+        Assert.AreEqual(Convert.ToBase64String(fromV1.EncodeStateAsUpdateV1()), Convert.ToBase64String(fromV2.EncodeStateAsUpdateV1()));
+    }
+
 }

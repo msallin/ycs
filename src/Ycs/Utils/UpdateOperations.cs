@@ -643,7 +643,10 @@ public static class UpdateOperations
 
     /// <summary>
     /// Re-encodes a v1-format update in the v2 format. The two formats carry the exact same
-    /// information; this is a pure re-encoding.
+    /// information; this is a pure re-encoding, but for a delete set whose ranges of a client are not
+    /// in order or overlap (valid v1, which the v2 format cannot hold): that client's ranges are sorted
+    /// and the overlapping ones merged, which deletes the same. (Yjs writes negative clock differences,
+    /// which its own decoder reads as other ranges.)
     /// </summary>
     public static byte[] ConvertUpdateFormatV1ToV2(byte[] update)
     {
@@ -697,7 +700,48 @@ public static class UpdateOperations
         LazyStructWriter.Finish(writer);
 
         var ds = DeleteSet.Read(decoder);
+        OrderRanges(ds);
         ds.Write(encoder);
+    }
+
+    /// <summary>
+    /// Sorts the ranges of every client whose ranges are out of order or overlap, and merges the overlapping ones;
+    /// adjacent ranges stay apart, as Yjs writes them. A v2 delete set (each range at or after the end of the one
+    /// before) is unchanged.
+    /// </summary>
+    private static void OrderRanges(DeleteSet ds)
+    {
+        foreach (var ranges in ds.Clients.Values)
+        {
+            var ordered = true;
+            for (var i = 1; i < ranges.Count && ordered; i++)
+            {
+                ordered = ranges[i].Clock >= ranges[i - 1].Clock + ranges[i - 1].Length;
+            }
+
+            if (ordered)
+            {
+                continue;
+            }
+
+            ranges.Sort((a, b) => a.Clock.CompareTo(b.Clock));
+            var merged = 0;
+            for (var i = 1; i < ranges.Count; i++)
+            {
+                var last = ranges[merged];
+                var end = last.Clock + last.Length;
+                if (ranges[i].Clock < end)
+                {
+                    ranges[merged] = new DeleteSet.DeleteItem(last.Clock, Math.Max(end, ranges[i].Clock + ranges[i].Length) - last.Clock);
+                }
+                else
+                {
+                    ranges[++merged] = ranges[i];
+                }
+            }
+
+            ranges.RemoveRange(merged + 1, ranges.Count - merged - 1);
+        }
     }
 
     #endregion

@@ -411,6 +411,20 @@ namespace Ycs.Properties
             return d;
         }
 
+        /// <summary>Whether the v1 update's delete set has a client whose ranges are out of order or overlap (valid v1, not v2).</summary>
+        internal static bool HasUnorderedDeleteSet(string base64V1)
+        {
+            try
+            {
+                return UpdateOperations.DecodeUpdate(Convert.FromBase64String(base64V1)).DeleteSet.Values
+                    .Any(ranges => ranges.Zip(ranges.Skip(1)).Any(p => p.Second.Clock < p.First.Clock + p.First.Length));
+            }
+            catch (YUpdateException)
+            {
+                return false;
+            }
+        }
+
         internal static string IdText(object id) => id switch
         {
             JsonNumber n => n.Text,
