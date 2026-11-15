@@ -183,7 +183,7 @@ public partial class YEvent
                             if (prev != null && Deletes(prev))
                             {
                                 action = ChangeAction.Delete;
-                                oldValue = (prev as Item).Content.GetContent().Last();
+                                oldValue = LastValue((Item)prev);
                             }
                             else
                             {
@@ -196,7 +196,7 @@ public partial class YEvent
                             if (prev != null && Deletes(prev))
                             {
                                 action = ChangeAction.Update;
-                                oldValue = (prev as Item).Content.GetContent().Last();
+                                oldValue = LastValue((Item)prev);
                             }
                             else
                             {
@@ -210,7 +210,7 @@ public partial class YEvent
                         if (Deletes(item))
                         {
                             action = ChangeAction.Delete;
-                            oldValue = item.Content.GetContent().Last();
+                            oldValue = LastValue(item);
                         }
                         else
                         {
@@ -228,6 +228,10 @@ public partial class YEvent
 
         return _keys;
     }
+
+    /// <summary>The value an item of a map held; null once its content was collected, as Yjs' <c>array.last([])</c>.</summary>
+    private static object LastValue(Item item) =>
+        item.Content is ContentDeleted ? null : AbstractType.ValueAt(item.Content, item.Length - 1);
 
     private ChangesCollection CollectChanges()
     {

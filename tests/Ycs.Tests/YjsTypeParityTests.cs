@@ -267,4 +267,20 @@ public class YjsTypeParityTests
 
         Assert.AreEqual(string.Empty, text.ToString());
     }
+
+    [TestMethod]
+    public void EventKeys_ReadAfterTheOldValueWasCollected_OldValueIsNull()
+    {
+        var doc = new YDoc();
+        var map = doc.GetMap("m");
+        YEvent kept = null;
+        map.Observe((_, e) => kept = e.Event);
+        string keys = null;
+        doc.AfterTransactionCleanup += (_, _) => keys = string.Join(",", kept.Keys.Select(kv => $"{kv.Key} {kv.Value.Action} {kv.Value.OldValue ?? "null"}"));
+        map.Set("k", 1);
+
+        map.Set("k", 2);
+
+        Assert.AreEqual("k Update null", keys);
+    }
 }
