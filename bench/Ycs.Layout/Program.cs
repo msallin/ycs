@@ -3,7 +3,7 @@ using Ycs;
 using Ycs.Compare;
 using Ycs.Layout;
 
-// dotnet run -c Release --project bench/Ycs.Layout -- <dir with trace.json.gz> [memory|sizes|ops|all] [workload]
+// dotnet run -c Release --project bench/Ycs.Layout -- <dir with trace.json.gz> [memory|sizes|small|ops|all] [workload]
 // run.sh runs each part in a process of its own (a process's earlier workloads move the heap figures of later ones).
 // The workloads are the comparison's (bench/Ycs.Compare/YcsCases.cs, the same inputs); each document is checked against
 // the one the comparison builds (its v1 state, byte for byte) and the prototype against the document (its content).
@@ -89,6 +89,11 @@ if (mode is "memory" or "all")
 if (mode is "sizes" or "all")
 {
     Sizes.Run(100_000, Check);
+}
+
+if (mode is "small" or "all")
+{
+    Small.Run(Check);
 }
 
 if (mode is "ops" or "all")

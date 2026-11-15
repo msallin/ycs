@@ -76,9 +76,10 @@ internal sealed record KeyedRef(string Key, object Content);
 
 /// <summary>
 /// Append-only pages of <typeparamref name="T"/>; an offset is (page &lt;&lt; 32) | index. A run never crosses a page:
-/// one that does not fit starts a new page (one longer than a page gets a page of its own).
+/// one that does not fit starts a new page (one longer than a page gets a page of its own). Page k holds
+/// min(<paramref name="firstPage"/> * 2^k, <paramref name="maxPage"/>) elements.
 /// </summary>
-internal sealed class Arena<T>(int pageSize)
+internal sealed class Arena<T>(int firstPage, int maxPage)
 {
     private readonly List<T[]> _pages = [];
     private int _used;
@@ -87,7 +88,8 @@ internal sealed class Arena<T>(int pageSize)
     {
         if (_pages.Count == 0 || _used + values.Length > _pages[^1].Length)
         {
-            _pages.Add(new T[Math.Max(pageSize, values.Length)]);
+            var size = (int)Math.Min(maxPage, (long)firstPage << Math.Min(_pages.Count, 30));
+            _pages.Add(new T[Math.Max(size, values.Length)]);
             _used = 0;
         }
 
@@ -101,6 +103,41 @@ internal sealed class Arena<T>(int pageSize)
 
     /// <summary>The offset <paramref name="by"/> elements on: the same page (a run never crosses one).</summary>
     public static long Advance(long offset, int by) => offset + by;
+}
+
+/// <summary>
+/// The page sizes of the slab and the arenas. <see cref="Trimmed"/> is what the workload tables measure (the slab cut to
+/// its count, the arenas in pages of 64 Ki characters and 16 Ki values); <see cref="Fixed"/> the pages of the design's
+/// first draft (1,024 slots from the first struct); <see cref="Geometric"/> the slab growing from 16 slots by doubling
+/// to pages of 1,024 and arena pages doubling from 256 characters and 64 values to 64 KB (below the large object heap).
+/// </summary>
+internal sealed record Paging(string Name, int FirstSlots, int SlotPage, int FirstChars, int CharPage, int FirstValues, int ValuePage)
+{
+    public static readonly Paging Trimmed = new("trimmed", 0, 0, 1 << 16, 1 << 16, 1 << 14, 1 << 14);
+    public static readonly Paging Fixed = new("fixed", 1024, 1024, 1 << 16, 1 << 16, 1 << 14, 1 << 14);
+    public static readonly Paging Geometric = new("geometric", 16, 1024, 256, 1 << 15, 64, 1 << 13);
+
+    /// <summary>The slab's capacity for <paramref name="count"/> structs (a paged slab holds whole pages).</summary>
+    public int SlabCapacity(int count)
+    {
+        if (SlotPage == 0 || count == 0)
+        {
+            return count;
+        }
+
+        if (count <= SlotPage)
+        {
+            var c = FirstSlots;
+            while (c < count)
+            {
+                c *= 2;
+            }
+
+            return Math.Min(c, SlotPage);
+        }
+
+        return (count + SlotPage - 1) / SlotPage * SlotPage;
+    }
 }
 
 /// <summary>A client's structs in clock order: their start clocks (searched) and their handles.</summary>
@@ -145,8 +182,16 @@ internal sealed class LayoutStore
     public readonly Dictionary<long, int> ClientIndex = [];
     public ClientOrder[] Orders = [];
     public readonly List<TypeEntry> Types = [];
-    public readonly Arena<char> Chars = new(1 << 16);
-    public readonly Arena<object> Values = new(1 << 14);
+    public readonly Arena<char> Chars;
+    public readonly Arena<object> Values;
+    public readonly Paging Paging;
+
+    public LayoutStore(Paging paging)
+    {
+        Paging = paging;
+        Chars = new(paging.FirstChars, paging.CharPage);
+        Values = new(paging.FirstValues, paging.ValuePage);
+    }
 
     // Rare: the redone ids (Yjs keeps one per item; most items have none).
     public readonly Dictionary<int, ID> Redone = [];
@@ -155,21 +200,22 @@ internal sealed class LayoutStore
     {
         if (Count == Slots.Length)
         {
-            Array.Resize(ref Slots, Count * 2);
-            Array.Resize(ref Refs, Count * 2);
+            Array.Resize(ref Slots, Math.Max(16, Count * 2));
+            Array.Resize(ref Refs, Math.Max(16, Count * 2));
         }
 
         return Count++;
     }
 
     /// <summary>
-    /// Drops the slab's spare capacity. The design's slab is paged (4,096 slots a page: at most one page of slack, no
-    /// copy on growth); trimming the one array models that. The clock orders keep their doubling slack, as a List does.
+    /// Sets the slab's spare capacity to what <see cref="Paging"/> gives (a paged slab holds whole pages; one array of
+    /// that capacity holds the same bytes). The clock orders keep their doubling slack, as a List does.
     /// </summary>
     public void Trim()
     {
-        Array.Resize(ref Slots, Count);
-        Array.Resize(ref Refs, Count);
+        var capacity = Paging.SlabCapacity(Count);
+        Array.Resize(ref Slots, capacity);
+        Array.Resize(ref Refs, capacity);
     }
 
     public long ClockOf(int handle) => Slots[handle].Clock;

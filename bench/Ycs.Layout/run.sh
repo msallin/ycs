@@ -20,5 +20,6 @@ DLL=bench/Ycs.Layout/bin/Release/net11.0/Ycs.Layout.dll
     dotnet "$DLL" "$FIX" memory "$w" | grep -v '^all checks passed$'
   done
   dotnet "$DLL" "$FIX" sizes | grep -v '^all checks passed$'
+  dotnet "$DLL" "$FIX" small | grep -v '^all checks passed$'
   dotnet "$DLL" "$FIX" ops
 } | tee "$OUT"

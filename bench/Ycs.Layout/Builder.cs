@@ -5,9 +5,11 @@ namespace Ycs.Layout;
 /// <summary>Builds a <see cref="LayoutStore"/> from a ycs document's struct store, and reads content back from it.</summary>
 internal static class Builder
 {
-    public static LayoutStore Build(YDoc doc)
+    public static LayoutStore Build(YDoc doc) => Build(doc, Paging.Trimmed);
+
+    public static LayoutStore Build(YDoc doc, Paging paging)
     {
-        var store = new LayoutStore();
+        var store = new LayoutStore(paging);
         var clients = doc.Store.Clients;
         var handles = new Dictionary<AbstractStruct, int>(ReferenceEqualityComparer.Instance);
         var types = new Dictionary<AbstractType, int>(ReferenceEqualityComparer.Instance);

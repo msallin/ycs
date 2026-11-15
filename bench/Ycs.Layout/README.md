@@ -5,10 +5,11 @@ A standalone model of the layout that [`docs/design-item-layout.md`](../../docs/
 clocks and handles), the types in a table, the characters and values in append-only arenas. It does not replace the
 library: it walks the struct store of a document ycs built (through `InternalsVisibleTo`) and builds its own store from
 it, checks that it holds the same content, and measures what it holds and what three operations cost against today's
-`YDoc`. Run on 2026-11-15; results in [`results/2026-11-15.md`](results/2026-11-15.md).
+`YDoc`. Run on 2026-11-15; results in [`results/2026-11-15.md`](results/2026-11-15.md) and, for small documents,
+[`results/2026-11-15-small.md`](results/2026-11-15-small.md).
 
 ```bash
-bench/Ycs.Layout/run.sh                  # about 4 minutes; fetches the automerge-paper trace (see below)
+bench/Ycs.Layout/run.sh                  # about 6 minutes; fetches the automerge-paper trace (see below)
 FIXTURES=/dir/with/trace.json.gz bench/Ycs.Layout/run.sh
 ```
 
@@ -93,6 +94,35 @@ What the numbers say:
   contiguous, the items are not), and constant time with the run-head index, with the same end and index on all 2,000
   walks.
 
+## Small documents and many clients (2026-11-15)
+
+`small` (in `run.sh`; results in [`results/2026-11-15-small.md`](results/2026-11-15-small.md), load 2.2-2.5): many
+documents of one shape alive at once, the managed heap divided by their number. The prototype replaces only the struct
+storage, so a designed document is today's document of the same root type without structs (the "empty" row) plus what
+its store holds beyond the store of that empty document. Two page policies (`Paging` in `LayoutStore.cs`): *fixed*,
+the design's first draft (1,024 slots and arena pages of 64 Ki characters or 16 Ki values from the first struct), and
+*geometric* (the slab from 16 slots doubling to pages of 1,024; arena pages doubling from 256 characters and 64 values
+to 32 Ki and 8 Ki, below the large object heap). The workload tables above keep the slab trimmed to its count.
+
+| document | structs | today | fixed pages | geometric pages | geometric / today |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| a root text, empty | 0 | 1,232 B | 1,232 B | 1,232 B | 1.00 |
+| text "hello" (one insert) | 1 | 2,961 B | 194,216 B | 3,176 B | 1.07 |
+| 20 characters typed at random positions, 2 deleted | 20 | 8,392 B | 194,440 B | 4,360 B | 0.52 |
+| 200 typed, 20 deleted | 198 | 49,288 B | 196,232 B | 19,592 B | 0.40 |
+| 1,000 typed, 100 deleted | 999 | 220,848 B | 202,377 B | 74,937 B | 0.34 |
+| 5,000 typed, 500 deleted | 5,000 | 1,127,017 B | 505,482 B | 390,410 B | 0.35 |
+| 20,000 typed, 2,000 deleted | 19,999 | 4,484,938 B | 1,623,693 B | 1,557,821 B | 0.35 |
+| map, 20 keys (an integer each) | 20 | 10,030 B | 196,232 B | 6,144 B | 0.61 |
+| map, 1,000 keys | 1,000 | 354,336 B | 289,289 B | 174,208 B | 0.49 |
+
+A document of 20,000 clients with one map entry each (the updates of 20,000 documents applied to one): 574 bytes per
+client today, 351 (fixed) and 348 (geometric) designed.
+
+* **Fixed pages stop paying below about 1,000 structs** ("hello" holds 66 times today's bytes); geometric pages pay
+  from about 10 structs and cost at most 215 bytes more below that.
+* **Many clients** are cheaper than today: a client's order is two arrays of 4, as today's list.
+
 ## What was not modelled
 
 * Editing: the prototype is built from a finished document. Integration, conflict resolution, deletion, merging, the
@@ -100,8 +130,8 @@ What the numbers say:
   design are estimates (`docs/design-item-layout.md`, sections 3 and 5).
 * Decoding straight into the slab and the arenas (the allocation of a load), and the arenas' garbage: a deleted
   item's characters stay in the arena until a compaction, which an edited document would carry.
-* The slab is trimmed to its count (the design's pages of 1,024 slots have at most one page of slack); the clock
-  orders keep their doubling slack, as a `List` does.
+* In the workload tables the slab is trimmed to its count (pages of 1,024 slots have at most one page of slack; the
+  small documents are measured with the page policies); the clock orders keep their doubling slack, as a `List` does.
 * The design's sparse reference pages (8 bytes per item less for text and arrays), the 32-bit clock escape table, the
   hot/cold split of the origins, the B-tree clock order and the maintenance of the run-head index under edits.
 * The marker walk's right part (Yjs' walk right from the marker): the same index serves it inside a chain; only the
