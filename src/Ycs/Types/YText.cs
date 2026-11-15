@@ -76,45 +76,56 @@ public class YTextEvent : YEvent
                     {
                         if (action != null)
                         {
-                            Delta op;
+                            Delta op = null;
 
                             switch (action)
                             {
                                 case ChangeType.Delete:
-                                    op = new Delta { Delete = deleteLen };
+                                    if (deleteLen > 0)
+                                    {
+                                        op = new Delta { Delete = deleteLen };
+                                    }
+
                                     deleteLen = 0;
                                     break;
                                 case ChangeType.Insert:
-                                    op = new Delta { Insert = insert };
-                                    if (currentAttributes?.Count > 0)
+                                    if (insert is not string pending || pending.Length > 0)
                                     {
-                                        op.Attributes = new Dictionary<string, object>();
-                                        foreach (var kvp in currentAttributes)
+                                        op = new Delta { Insert = insert };
+                                        if (currentAttributes.Count > 0)
                                         {
-                                            if (kvp.Value != null)
+                                            op.Attributes = new Dictionary<string, object>();
+                                            foreach (var kvp in currentAttributes)
                                             {
-                                                op.Attributes[kvp.Key] = kvp.Value;
+                                                if (kvp.Value != null)
+                                                {
+                                                    op.Attributes[kvp.Key] = kvp.Value;
+                                                }
                                             }
                                         }
                                     }
+
+                                    insert = string.Empty;
                                     break;
                                 case ChangeType.Retain:
-                                    op = new Delta { Retain = retain };
-                                    if (attributes.Count > 0)
+                                    if (retain > 0)
                                     {
-                                        op.Attributes = new Dictionary<string, object>();
-                                        foreach (var kvp in attributes)
+                                        op = new Delta { Retain = retain };
+                                        if (attributes.Count > 0)
                                         {
-                                            op.Attributes[kvp.Key] = attributes[kvp.Key];
+                                            op.Attributes = new Dictionary<string, object>(attributes);
                                         }
                                     }
+
                                     retain = 0;
                                     break;
-                                default:
-                                    throw new InvalidOperationException($"Unexpected action: {action}");
                             }
 
-                            delta.Add(op);
+                            if (op != null)
+                            {
+                                delta.Add(op);
+                            }
+
                             action = null;
                         }
                     }
@@ -123,14 +134,14 @@ public class YTextEvent : YEvent
                     {
                         switch (item.Content)
                         {
-                            case ContentEmbed _:
+                            case ContentEmbed embed:
                                 if (Adds(item))
                                 {
                                     if (!Deletes(item))
                                     {
                                         addOp();
                                         action = ChangeType.Insert;
-                                        insert = (item.Content as ContentEmbed).Embed;
+                                        insert = embed.Embed;
                                         addOp();
                                     }
                                 }
@@ -221,9 +232,10 @@ public class YTextEvent : YEvent
                                                 attributes[cf.Key] = cf.Value;
                                             }
                                         }
-                                        else
+                                        else if (cf.Value != null)
                                         {
-                                            item.Delete(Transaction);
+                                            // In the delta's own transaction, not the event's: its observers are running.
+                                            item.Delete(transaction);
                                         }
                                     }
                                 }
@@ -261,16 +273,17 @@ public class YTextEvent : YEvent
 
                                             if (cf.Value == null)
                                             {
-                                                attributes[cf.Key] = null;
+                                                attributes.Remove(cf.Key);
                                             }
                                             else
                                             {
-                                                attributes.Remove(cf.Key);
+                                                attributes[cf.Key] = cf.Value;
                                             }
                                         }
-                                        else
+                                        else if (attr != null)
                                         {
-                                            item.Delete(Transaction);
+                                            // A repeated null is left to the contextless cleanup, as in Yjs.
+                                            item.Delete(transaction);
                                         }
                                     }
                                 }
