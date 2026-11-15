@@ -4,8 +4,6 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.Diagnostics;
-
 namespace Ycs;
 
 public partial class GC : AbstractStruct
@@ -22,7 +20,12 @@ public partial class GC : AbstractStruct
 
     internal override bool MergeWith(AbstractStruct right)
     {
-        Debug.Assert(right is GC);
+        // MergeUpdates offers any neighbour, as Yjs does; only a GC extends a GC.
+        if (right is not GC)
+        {
+            return false;
+        }
+
         Length += right.Length;
         return true;
     }
