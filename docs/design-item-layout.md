@@ -1,404 +1,402 @@
 # Design: items as structs in a slab, linked by handles
 
-Status: proposed, 2026-11-15. Measured with a model (`bench/Ycs.Layout`, results in its README). Steps 1 and 2 of
-section 7 are implemented on today's objects (`src/Ycs/Utils/ClientStructs.cs`, `ClientStructs.RunHeads.cs`), with
-these changes against section 3.3 (after the design review): the break flag is taken by reference (`structs[i]` is an
-item whose `Left` is `structs[i - 1]`), not from ids; a position's visible length is its clock length when its flag
-says visible (no array of lengths), summed per block of 512 positions, and the blocks are scanned, not kept in a
-Fenwick tree: a split or a merge moves every later block boundary, so it updates the later blocks' sums (O(n/512), as
-the flat order's shift is O(n)); the walk right jumps only over what Yjs' loop passes (the visible length stays short
-of the target) and the loop takes the last steps, which keeps Yjs' rule at a chain's end (when the length reaches the
-index exactly at an item's end, the loop steps on to its right neighbour, whichever it is); the callers' walks from
-the marker and the middle loop jump the same way. Measured in `bench/Ycs.Compare/README.md` ("After layout steps 1
-and 2").
-Parity target unchanged: Yjs 13.6.32, the same content, events and update bytes. No unsafe code: arrays of structs
-and `ref` to their elements only.
+Status: steps 1 and 2 built (section 1); the rest is the design for the remaining work (sections 2 to 5), revised
+after the design review and the review of steps 1 and 2 (2026-11-15). Parity target unchanged: Yjs 13.6.32, the same
+content, events and update bytes. No unsafe code: arrays of structs and `ref` to their elements only. Numbers come
+from `bench/Ycs.Layout` (the model; README and `results/`), `bench/Ycs.Compare` (README, "After layout steps 1 and 2")
+and the two reviews (findings H, M, L: the design review's; N: the review of steps 1 and 2, also "review" alone).
 
 ## Summary
 
-Today an item is a 128-byte object plus a content object (40 bytes for a string, 88 for a single array value), plus
-a reference in its client's `List<AbstractStruct>`. The design puts each struct in a 52-byte slot of a slab, links
-slots by 32-bit handles, keeps per client the structs in clock order as two dense arrays (start clocks and handles),
-keeps characters and values in append-only arenas, and moves the rare fields (redone ids, cold content objects) to
-side tables. Measured on the comparison's documents, the model holds **35-45% of today's memory** (the estimate of "a
-third less" was too modest: it is about 60% less), finds a struct by id 1.6-1.9× faster, splits 2.5× faster without
-allocating, walks Yjs' marker loop 8× faster as the literal loop, and in about 100 ns (instead of 0.5 ms) with a
-run-head index that ends exactly where Yjs' loop ends. Recommendation (section 8): **go with changes**: first the
-two separable parts (the start-clock array and the run-head index, on today's objects), then the public API break,
-then the slab.
-
-## 1. The representation
-
-### 1.1 Where structs live
-
-* **A slab per document**: `Slot[]` in pages of 1,024 slots (53 KB: below the large object heap, at most one page of
-  slack, no copy when it grows). A handle is the slot's index (page = handle >> 10). A slot never moves; its handle is
-  its identity for as long as the struct exists.
-* **A client table**: `long[] ClientIds` plus `Dictionary<long, int>`; a slot names its client by index.
-* **Per client, the clock order**: the client's structs sorted by clock, as `StructStore.Clients` orders them today,
-  held as `uint[] Starts` (start clocks, searched) and `int[] Handles`. First as two flat arrays (what the model
-  measures: 8 bytes per struct, as a `List` reference today), then as a B+tree of leaves of 128 positions (section
-  3.3) so that a split shifts at most a leaf.
-
-Rejected: one array per client whose position is the handle (a split shifts 52-byte slots, 6.5× the bytes `List.Insert`
-shifts today, and changes every later handle); a per-client chunked array with (chunk, index) handles (a chunk split
-changes handles). The slab plus a separate order index gives stable handles and cheap order changes.
-
-### 1.2 What a slot holds
-
-Sequential layout, 4-byte fields, no reference: the slab is not scanned by the garbage collector.
-
-| field | bytes | today (in `Item`) |
-| --- | ---: | --- |
-| `Clock` (uint; see 1.4) | 4 | `Id.Clock` 8 |
-| `Length` | 4 | 4 |
-| `Client` (index into the client table) | 4 | `Id.Client` 8 |
-| `Left`, `Right` (handles, -1 none) | 8 | 16 (references) |
-| `OriginClient`, `OriginClock` (left origin: -1 none) | 8 | 16 + a flag |
-| `ROriginClient`, `ROriginClock` | 8 | 16 + a flag |
-| `Parent` (index into the type table; -1: a GC struct) | 4 | 8 (`object`: a type, an id or a root name) |
-| `Info` (keep, countable, deleted, marker, has-redone; the content kind in bits 8..15) | 4 | 4 |
-| `Payload` (by kind, below) | 8 | `Content` 8 + the content object |
-| **total** | **52** | 128 + content + 16 of object header (included in 128) |
-
-Beside the slab, by handle:
-
-* `Refs` (`object[]`, same pages): the key (`parentSub`) of a map item, or a cold content object, or a small
-  `KeyedRef(key, content)` for an item that has both. Allocated per page on first use, so a document without maps or
-  cold content has none (8 bytes per item less than the model, which keeps a full array).
-* `Redone` (`Dictionary<int, ID>`): the few items an undo redid (flag `HasRedone`).
-* The clock escape table (1.4).
-
-Origins stay ids (client index, clock), not handles: Yjs compares and encodes them as ids, the item that holds an
-origin id changes when it is split, and an origin may point at a GC struct. Parent is a type, never an id or a name,
-once a struct is integrated (pending structs, 1.6, carry the other forms).
-
-### 1.3 Content kinds
-
-| kind | where the content is | `Payload` |
-| --- | --- | --- |
-| `String` | the document's char arena: append-only pages of 65,536 chars; a run never crosses a page | arena offset |
-| `Any` | the document's value arena: pages of 16,384 `object` (the boxes the caller gave, shared) | arena offset |
-| `Deleted` | nothing (the length is the slot's) | - |
-| `Type` | the type table (`TypeEntry`: start handle, map `Dictionary<string, int>`, item handle, root name, the `AbstractType` object) | type index |
-| `GC` | nothing | - |
-| `Format`, `Embed`, `Binary`, `Json`, `Doc` (cold) | their `IContent` object in `Refs` | - |
-
-A string run's characters: a slice of the arena. A split gives the right part `offset + diff` (no copy). Typing at a
-run's end appends to the arena; if the run's characters end at the arena's end the merge only lengthens the slot (the
-common case), otherwise the merged run is copied to the end (as `ContentString`'s builder threshold does today). A
-deleted item's characters are garbage in the arena; a page whose live characters drop below half is compacted (its
-live runs copied to the end, their payloads updated by one walk of the slab; the page is freed). The value arena works
-the same way. Rejected: a rope or gap buffer per text type (every item would need an offset into it that shifts with
-every insert), and inlining scalars into `Payload` (24 bytes of box less per number, but every read would allocate a
-box; possible later for small integers with a cache of boxes).
-
-### 1.4 Clocks above 2^32
-
-Yjs clocks go to 2^53. A slot's clock and the origin clocks are 32-bit; the value `uint.MaxValue` means "in the escape
-table" (`Dictionary<(int Handle, byte Field), long>`), and `Starts` becomes `long[]` for a client that has such a
-clock. No document measured here (nor any plausible one: 4 billion characters from one client) uses it; it costs one
-compare on read. A test with clocks near 2^53 (the corpus has a case) keeps it honest.
-
-### 1.5 Handles across splits, merges, GC and destruction
-
-* **Split**: the left part keeps its handle; the right part gets a new slot (copied, clock and length and payload
-  adjusted, left origin = (client, clock - 1)), linked in, inserted into the client's order.
-* **Merge** (the transaction cleanup, the delete set's merge pass): the right part's slot is freed onto a free list
-  (`Left` links the free slots, kind `Free`). Freed slots are reused only after the transaction that freed them ended.
-* **GC** (an item whose parent was collected): the slot is rewritten in place to kind `GC` (parent -1, no payload, refs
-  cleared); its handle stays. Adjacent GC structs then merge like items.
-* **Invariant**: a handle is held across a transaction boundary only by the structures that merge and split update
-  (type starts, map entries, search markers, the push hint, the run-head index, the clock order). Everything that
-  outlives a transaction holds ids (delete sets, stack items, snapshots, relative positions, the public views, 2.2).
-  A Debug check (as `SearchMarkerViolations` today) walks the slab after each test transaction: no live structure
-  points at a free slot.
-
-### 1.6 Pending structs and the integration plan
-
-Pending updates are kept as bytes already (`PendingStructs.Updates`), so no struct outlives an integration unresolved.
-The decoder writes the structs of an update into a staging table of the same slots (plus, per staged struct, the
-parent as root name or parent id, which a slot cannot hold), and the plan orders the staged structs as today; a staged
-struct gets its slab slot when it is integrated. Strings are decoded from UTF-8 straight into the char arena: a load
-allocates no string and no item.
-
-## 2. The reference holders, and the public API
-
-### 2.1 Inside the library
-
-| holder | today | designed |
-| --- | --- | --- |
-| `StructStore.Clients` | `Dictionary<long, List<AbstractStruct>>` | client table + clock orders |
-| `AbstractType._start`, `_item`, `_map` | `Item`, `Item`, `Dictionary<string, Item>` | handle, handle, `Dictionary<string, int>` (same entry size: 24 bytes) |
-| search markers (`ArraySearchMarker.P`), `_pushHint`, `YXmlFragment._currentNode` | `Item` | handle (markers move on merge as today, `OnMerge`) |
-| `Item.Left/Right/Parent/ParentSub` | references, `object`, `string` | slot fields, `Refs` |
-| `Transaction._mergeStructs` | `List<AbstractStruct>` | `List<int>` |
-| conflict resolution sets (`StructStore.Conflicts`) | `HashSet<AbstractStruct>` | `HashSet<int>` (or a bitmap over the slab span touched) |
-| integration plan (`_stack`, `_chain`, `_keyChain`, `_parentDepths`, `_keys`) | items | staged handles |
-| delete set merge pass (`TryToMergeWithLefts`) | `List<AbstractStruct>` positions | clock-order positions; a merge frees the right slot |
-| `UndoManager` stack items | delete sets (ids) | unchanged; `DeleteFilter` gets a view (2.2) |
-| events: `ChangesCollection.Added/Deleted`, `YEvent.Adds/Deletes`, the delta computation | `ISet<Item>`, items | ids internally (`Adds` is a clock compare against the before-state, as in Yjs); views outward |
-| `Redone`, `FollowRedone` | `ID?` field | side table |
-| snapshots, relative positions | ids | unchanged (they resolve ids through the store) |
-| encoders (`WriteStructs`, `Item.Write`) | virtual `Write` on objects | a switch on the slot's kind over the clock order |
-
-### 2.2 The public API: every member that exposes a struct
-
-From `tests/Ycs.Tests/PublicApi.txt`:
-
-* `AbstractStruct` (public abstract class, protected constructor; `Id`, `Length`, `Deleted`), `GC`, `Skip`, `Item`
-  (`Left`, `Right`, `Next`, `Prev`, `LastId`, `LeftOrigin`, `RightOrigin`, `Redone`, `Countable`, `Keep`, `Marker`,
-  `Parent`, `ParentSub`, `Deleted`, and the mutating `SplitItem(Transaction, int)`).
-* `ChangesCollection.Added`, `ChangesCollection.Deleted` (`ISet<Item>`); `YEvent.Adds(AbstractStruct)`,
-  `YEvent.Deletes(AbstractStruct)`.
-* `YDoc.GcFilter`, `YDocOptions.GcFilter` (`Predicate<Item>`); `UndoManagerOptions.DeleteFilter` (`Func<Item, bool>`).
-* `AbstractType.TypeMapEnumerate()` (protected, `KeyValuePair<string, Item>`); `YArrayBase.InsertGenericsAfter(
-  Transaction, Item, ...)` (protected).
-* `DecodedUpdate.Structs` (`IReadOnlyList<AbstractStruct>`: the structs of an update decoded without a document).
-* `IContent` and the public `Content*` classes (reachable only through the above).
-
-The smallest deliberate break (`feat!:`), one commit before the storage changes:
-
-* **`Item` becomes `readonly struct ItemView`**: (document, id). Read-only members as today's (`Id`, `Length`,
-  `Deleted`, `Countable`, `Keep`, `Parent` as `AbstractType`, `ParentSub`, `LeftOrigin`, `RightOrigin`, `Redone`,
-  `LastId`, `Left`, `Right`, `Next`, `Prev` as `ItemView?`, and `Content` as `IReadOnlyList<object>`); each resolves
-  the id through the store (one lookup), so it is valid as long as the document lives, whatever split or merge
-  happened since. Equality by id. `Marker` and `SplitItem` are dropped (internal state and a mutation that bypasses
-  the transaction's merge rules).
-* `ChangesCollection.Added/Deleted` become `ISet<ItemView>`; `YEvent.Adds/Deletes` take an `ItemView`; the filters take
-  an `ItemView`; `TypeMapEnumerate` yields `ItemView`s; `InsertGenericsAfter` becomes `private protected` (it takes a
-  handle; nobody outside derives from `YArrayBase` usefully, its other constructors being internal state).
-* `AbstractStruct`, `GC`, `Skip` and the `Content*` classes become internal; `DecodedUpdate.Structs` becomes
-  `IReadOnlyList<DecodedStruct>`: a record (`Id`, `Length`, `Kind`, `LeftOrigin`, `RightOrigin`, `Parent` as a root
-  name or an id, `ParentSub`, `Content` as `IReadOnlyList<object>`), which is what that API is used for (inspecting an
-  update), detached from any store.
-
-Migration for a user: `item.Left as Item` becomes `item.Left` (an `ItemView?`); `e.Changes.Added.Contains(item)`
-works as before with views; a `GcFilter` lambda keeps its body. Code that called `SplitItem` or read `Marker` has no
-replacement (neither is meaningful outside the library).
-
-## 3. Algorithms
-
-### 3.1 Find by (client, clock): `findIndexSS`
-
-Today a binary search with Yjs' pivot over a `List<AbstractStruct>`: each probe loads an item object (a cache miss) for
-its clock and length. Designed: the same search over `uint[] Starts` (contiguous; the end of position i is the start of
-i + 1, so the length is not read). Measured 1.6-1.9× (99 → 59 ns on the trace document, 72 → 38 ns on 100,000 structs).
-It is 27% of loading a state today, so about 12% of a load from this alone. Separable: today's store can keep the start
-array beside its list (section 7, step 1).
-
-### 3.2 Split and merge
-
-A split is a slot copy, two link updates and an insert into the client's order; no allocation (today: an `Item` and a
-spliced content object, 168-260 bytes). Measured 2.5× including the lookup, but still O(n) with the flat order: the
-insert shifts 8 bytes per later struct, as `List.Insert` does today (`array-delete-random`: 5.7 → 2.3 µs per split on
-a 50,118-struct client). With the B+tree order (leaves of 128 positions, internal nodes with the leaves' first clocks)
-a split shifts at most 127 positions: O(log n). A merge frees the right slot and removes its position (the same cost in
-reverse). The delete set's merge pass removes positions in one compaction pass per client, as today.
-
-### 3.3 The marker walk: Yjs' walk-left exactly, in O(log n)
-
-Yjs' `findMarker` ends with
-
-```js
-while (p.left !== null && p.left.id.client === p.id.client && p.left.id.clock + p.left.length === p.id.clock) {
-  p = p.left; if (!p.deleted && p.countable) pindex -= p.length
-}
-```
-
-**Invariant.** The struct of a client whose clock range ends at `p.id.clock` is unique: it is the struct before `p` in
-the client's clock order. So the loop's condition is exactly "`p`'s list-left neighbour is the struct before `p` in its
-client's order". Call a position i of a client's order *linked* when that holds for the struct at i, and a *break*
-otherwise (position 0 is always a break; a GC struct is never a list neighbour, so a struct after one is a break). From
-position i, the loop moves left over linked positions and stops at the first break at or before i: it ends at the
-*run head* `h = max { j <= i : j is a break }`, having subtracted the visible countable length of positions [h, i).
-Both are functions of the order, the links and the visibility only, so any structure that computes them gives Yjs'
-result: the same item and the same index, not an approximation.
-
-**The run-head index** (per client, over the clock order): a break bit per position, a summary bit per 64 bit-words,
-and the visible countable length per position summed per 64 positions under a Fenwick tree. `Head(i)` is one masked
-word, else a scan of summary words (one per 4,096 positions) and one word; the subtraction is two prefix sums. In the
-B+tree order the leaf carries its break bits and its visible sum and the inner nodes carry sums and a has-break flag,
-so all of it is O(log n). Maintenance: a split inserts a linked position (bit 0) after the left part, a merge removes
-one, an integration sets or clears the bits of the new struct and of its right neighbour (its `Left` changed), a
-delete changes one visible length, a run extended in place (`ExtendRun`) adds to one. Each is O(1) plus a Fenwick or
-tree update.
-
-Measured on `array-delete-random` (one item of 100,000 values, split by 50,000 single deletes into a chain of 50,118
-structs, which is the case that takes 60 s today): 2,000 walks from random items, 24,767 steps on average: today 511 µs
-per walk (21 ns a step: pointer chasing over items allocated over time), Yjs' loop over the slab 63.5 µs (2.6 ns a
-step), the run-head index 97 ns, with the same end item and index for all 2,000 walks. The walk right from the marker
-(Yjs' first loop) crosses the same chain in this document; the same index answers it inside a chain (a Fenwick search
-for the position where the remaining index is reached, checked against the chain's end), so `findMarker` as a whole
-becomes O(log n) in a chain and stays Yjs' loop across chains. Expected: `array-delete-random` from about 60 s to well
-under a second. **Separable**: the invariant needs only the clock order and the list links, which today's store also
-has (section 7, step 2).
-
-The reference properties (`markers-invisible`, `merge-order`, `run-extension`) keep comparing against the literal
-loop: an internal switch (`RunHeadIndexDisabledForTests`) runs Yjs' loop instead of the index, and the property engine
-runs every scenario both ways and compares the markers (`DescribeSearchMarkers`) after every transaction.
-
-### 3.4 Integration and conflict resolution
-
-`Item.Integrate` and `ResolveConflict` become functions over handles: the same steps, the same order (Yjs' loop over
-`o = o.right` with the two sets of conflicting items and items before the origin). The sets hold ints. The origins'
-lookups are 3.1's. No change of behaviour is possible by construction as long as the steps are ported one to one; the
-property engine and the corpus check it.
-
-### 3.5 GC, reads, encoding
-
-GC: a collected item's content becomes kind `Deleted` in place (today a new `ContentDeleted` object, 24 bytes); a
-collected type's items become `GC` slots in place. Reads (`ToString`, enumerations) walk `Right` handles over the slab
-and copy arena slices: sequential where the list follows the clock order, no virtual calls. Encoding walks each
-client's order and switches on the kind; the bytes are those of today's encoder (same structs, same order, same
-fields).
-
-## 4. Memory
-
-### 4.1 Bytes per item by kind
-
-Today from `bench/Ycs.Benchmarks sizes`; model measured by `bench/Ycs.Layout` on the same documents; "designed" adds
-what the model leaves out (sparse `Refs`: -8 for an item without key or cold content).
-
-| kind | today | model (measured) | designed |
-| --- | ---: | ---: | ---: |
-| character, one item each | 186 | 73 | 65 |
-| array element (an integer) | 258 | 80 | 72 |
-| map entry (distinct key, an integer) | 278 | 110 | 110 |
-| array element and a deleted one (collected), per pair | 429 | 150 | 134 |
-
-Where the bytes go (model): slot 52, `Refs` 8, clock order 8 (+ up to 8 of doubling slack, 2.5 measured), plus a
-character's 2 bytes, an array value's arena reference 8. Not shrunk by the layout: the characters themselves (2 bytes
-each in both), map keys and the type's dictionary entry and bucket (about 32 bytes per key, the same `Dictionary` in
-both), boxed values (24 bytes per number, shared with the caller in both), and the GC structs (a slot of 68 bytes
-where a `GC` object and its list entry are 48: the only kind that grows; collected types are rare and their GC structs
-merge).
-
-### 4.2 The four workloads (and two more)
-
-Measured by `bench/Ycs.Layout` (managed heap after a full GC; the documents only), then the expected end state on the
-comparison's scale: `bench/Ycs.Compare` counts what the workload's setup keeps alive as well (the inputs, the same for
-both libraries), so the end state is its ycs figure minus the saving measured here.
-
-| workload | today, model run | model | saving | ycs today (Compare) | **ycs designed** | YDotNet (Compare) |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `text-random-100k` | 17.8 | 7.0 | 10.8 | 28.4 | **17.6** (16.8 with sparse refs) | 22.5 |
-| `concurrent-20` (20 documents) | 26.5 | 11.7 | 14.8 | 26.9 | **12.1** (11.1) | 25.4 |
-| `map-set-distinct` | 28.8 | 12.8 | 16.0 | 38.2 | **22.2** | 30.9 |
-| `array-insert-random` | 13.5 | 5.0 | 8.5 | 19.5 | **11.0** (10.6) | 18.1 |
-| `array-delete-random` | 14.4 | 5.0 | 9.4 | 22.8 | **13.4** | 14.9 |
-| `trace-replay` | 2.2 | 1.0 | 1.2 | 2.8 | **1.6** | -13.4 (noise) |
-
-(MiB. The Compare figures are managed + native; ycs' native part, up to 3.3 MiB, is noise around zero.) The designed
-ycs holds less than YDotNet on every workload; `text-random-100k` moves from 26% above it to 22-25% below.
-
-A text document loaded from its state holds more than the same document edited, today (`text-random-100k` 22.4 against
-17.8 MiB: decoded strings outlive their slices); the designed decoder copies characters into the arena, so a loaded
-document holds what an edited one holds.
-
-## 5. Allocation
-
-* **Per edit**: today an insert allocates an `Item` (128) and its content (40-88) unless the run is extended in place
-  (`ExtendRun`, unobserved types only), a split another pair, a GC a `ContentDeleted`. Designed: nothing per edit; a
-  page of slots (53 KB) per 1,024 new structs, an arena page per 65,536 characters or 16,384 values, the transaction's
-  reusable lists as today. The observed-type path (an editor binding, an undo manager) gets the same zero allocations
-  as the unobserved one, which today it does not.
-* **Per load**: today every struct allocates its item and content and every string its object (items are 40% of a
-  load's allocations, `bench/Ycs.Compare` README). Designed: the pages and arenas only, about the memory the document
-  holds (the trace: about 1 MiB a load instead of 3.2). Expected effect on `apply-state` (59 ms today against YDotNet's
-  39): the allocation share and the 27% of the lookup shrink; 1.5-2× is plausible, not measured (decoding into the slab
-  was not modelled).
-* **GC pauses**: the slab is free of references, so a full collection scans `Refs` pages and the arenas' value pages
-  only, not one object per item.
-
-## 6. Parity: by construction, and what the tests must add
-
-By construction: the encoder writes the same structs in the same order with the same fields (the struct boundaries
-are unchanged: splits and merges happen where they happen today); events are computed from the same before-state and
-delete set; the integration steps are ported one to one. What can go wrong is bookkeeping, so the tests add:
-
-* **A store consistency check** after every transaction in the unit, property and corpus tests (Debug or a test
-  switch): `Left`/`Right` mirror each other; each client's order is contiguous by clock and matches the slots' clocks;
-  no live structure (start, map entry, marker, push hint) points at a free slot; the run-head index equals a recount;
-  arena offsets are within their pages; a type's length equals its visible countable sum.
-* **Handle reuse**: tests that keep `ItemView`s and events across merges, GCs and slot reuse, and read them afterwards.
-* **The walk** both ways (`RunHeadIndexDisabledForTests`), as part of `markers-invisible`; `merge-order` and
-  `run-extension` unchanged; a property that runs every scenario with run extension off and on and with the index off
-  and on and compares states and events byte for byte.
-* **Clocks above 2^32** (the escape table) in the corpus and the fuzzer; arena compaction under a fuzzed mix of
-  typing and deleting (content and encoded bytes before and after a forced compaction).
-* The existing gates unchanged: 100% line and branch coverage of `src`, the Yjs corpus, the differential and property
-  tests against Yjs, the budgets (which then tighten: allocation per edit and per load drops).
-
-## 7. Migration, in steps that each keep every gate green
-
-1. **Start clocks beside the list** (a `ClientStructs` class: today's `List<AbstractStruct>` plus a `long[]` of starts,
-   kept by every insert, split, merge and replacement; `FindIndexSS` searches it). Independent of everything else.
-   About 300 lines. Buys: 1.6-1.9× on lookups, about 10% on `apply-state`.
-2. **The run-head index** over `ClientStructs` (break bits, visible sums), kept with splits, merges, integrations,
-   deletes and run extensions; `FindMarker`'s walks use it; the internal switch and the property compare it with Yjs'
-   loop. About 500 lines plus tests. Buys: `array-delete-random` from about 60 s to under a second (the two walks of
-   `findMarker` over the chain are nearly all of its time; the walk right needs the index's chain search too), and
-   quadratic typing into an observed type in one transaction becomes linear (expected, not measured). Independent of the
-   slab: the invariant holds for objects too.
-3. **The public API break** (`ItemView`, `DecodedStruct`, internal `AbstractStruct`/`GC`/`Skip`/`Content*`), with
-   today's storage underneath (a view resolves its id through today's store). `feat!:`. About 600 lines.
-4. **Handles behind an internal façade**: every internal use of `Item`/`AbstractStruct` goes through an `ItemRef`
-   struct (wrapping today's object), so that the next step swaps one implementation. Mechanical, about 2,000 lines
-   touched (`StructStore` 62 sites, `YArrayBase` 35, `Item` 32, `YText` 29, `UndoManager` 23, the rest under 15 each).
-5. **The slab**: `ItemRef` becomes a handle; slots, client table, type table, `Refs`, the free list; content still as
-   objects in `Refs`. About 1,500 lines. Memory: about half of the saving.
-6. **Inline content**: the char and value arenas with compaction, `Deleted` and `Type` inline, the decoder writing
-   into the arenas. About 800 lines. The rest of the saving and the load allocations.
-7. **The B+tree clock order** (leaves of 128, carrying the run-head bits and sums): splits O(log n). About 500 lines.
-8. **Sparse `Refs` pages, the 32-bit clocks with the escape table**: about 300 lines, 8 + 8 bytes per item.
-
-Steps 1 and 2 are worth doing alone and first; 3 can ship with them; 4 to 6 are the rewrite and only pay together;
-7 and 8 are independent refinements after 5.
-
-## 8. Recommendation
-
-**Go, with changes.** The numbers decide for the layout: it holds 35-45% of today's memory on every workload measured,
-which puts ycs below YDotNet everywhere (section 4.2), and removes the per-edit and per-load allocations. The changes
-to the plan as estimated:
-
-* Do steps 1 and 2 first, on today's objects: they are small, separable, and fix the two open performance problems
-  (the lookup share of loading, and the 60 s marker walk) without waiting for the rewrite, and the rewrite then
-  inherits their tests.
-* Do not inline scalars or use a rope per text: the arenas are simpler and the measured gain is already larger than
-  estimated.
-* Keep origins as ids, not handles, and make the public surface id-based (`ItemView`), so that handle reuse can never
-  be observed outside the library.
-
-If only part is done: steps 1 and 2 alone buy the lookup speed-up (1.6-1.9× on finding, about 10% of a load) and the
-marker walk (about 60 s to under a second on `array-delete-random`), and nothing on memory. The memory saving needs
-steps 4 to 6 together (5 alone gives about half of it).
-
-## 9. Risks, and the alternatives rejected
-
-Risks:
-
-* **Stale handles** (a handle kept past a merge that freed its slot, then reused): mitigated by the invariant of 1.5,
-  the delayed reuse, the consistency check in every test transaction, and an id-based public surface.
-* **Distance from Yjs' code**: today's port reads like Yjs line by line, which makes porting Yjs fixes easy; slot code
-  over handles reads differently. Mitigated by porting function by function with Yjs' names and keeping the literal
-  loops behind the test switches.
-* **Arena garbage** in documents with heavy deletion between compactions (bounded by the half-page rule: at most twice
-  the live characters).
-* **GC structs grow** (68 against 48 bytes); documents that collect many types hold a little more.
-* **The size of the change**: steps 4 to 6 touch most of `src`; each step is green on its own, but the review load is
-  large (about 4,300 lines).
-
-Alternatives rejected:
-
-* **Keep objects, shrink them** (redone to a side table, 12-byte origins, the content inline for strings): `Item`
-  about 96 bytes plus the header and the list reference; about 186 → 130 per character (30% instead of 60%), and every
-  edit still allocates.
-* **Pooled, pointer-free `Item` objects**: pooling saves allocation, not size (the headers and references stay), and
-  pooled objects make stale references worse, not better.
-* **Struct of arrays** (one array per field): a walk reads `Left`/`Right`, `Info`, `Length`, `Client` and `Clock`, five
-  cache lines a step instead of one. A hot/cold split is the useful middle: the origins (16 bytes) are read only by
-  integration and encoding and could move to a parallel array, leaving a 36-byte hot slot; worth measuring after step 5,
-  not before (the memory is the same).
-* **Flat per-client slot arrays with positions as handles**: see 1.1.
-* **A rope or gap buffer per text, inline scalars**: see 1.3.
+Today an item is a 128-byte object plus a content object (40 bytes for a string, 88 for a single array value), held by
+its client's list. The design puts each struct in a slot of a slab, links slots by 32-bit handles, keeps characters and
+values in append-only arenas and the rare fields in side tables. The model holds 35-45% of today's memory on the six
+workloads measured, and at most about 400 bytes more than today on the smallest document (section 2.2). Built so far, on today's objects: start clocks beside each client's structs, and the run-head index that makes Yjs'
+marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s). They cost 15-19% on the two split-heavy
+workloads; the next step (the leaf order, step 3) removes that, before anything else. The public API breaks once, in
+step 6, after the internal reference layer (steps 4 and 5) has enumerated every holder.
+
+## 1. What is built
+
+### 1.1 Step 1: start clocks beside the structs
+
+`ClientStructs` (`src/Ycs/Utils/ClientStructs.cs`) replaces the `List<AbstractStruct>` of a client in
+`StructStore.Clients`: an `AbstractStruct[]`, a `long[]` of start clocks and the end clock. `FindIndex` (Yjs'
+`findIndexSS`, with its pivot, after a look at the last struct) and the galloping `FindIndex(clock, ref hint)` for
+in-order lookups search the starts only.
+
+* **Invariant**: the structs are contiguous by clock: the end of position i is the start of i + 1; `End` is the end of
+  the last. Every change of the list goes through `ClientStructs` (`Add`, `InsertSplit`, `RemoveMerged`, `Replace`,
+  `LastExtended`); the public `Item.SplitItem` is the one path that bypasses it (as before; step 6 removes it).
+* **Measured**: `apply-state-v1` 56.7 to 50.2 ms (-11%), `apply-state-v2` -4% (Compare). The model's 1.6-1.9× per
+  lookup (`uint` starts beside slots) was not measured on the built `long[]` beside objects.
+
+### 1.2 Step 2: the run-head index
+
+`ClientStructs.RunHeads.cs`, beside the starts. What the design proposed and what was built differ; the code is right:
+
+| proposed | built |
+| --- | --- |
+| break bits, a Fenwick tree over sums of 64 positions | a flag byte per position (`Break`, `Visible`, `Format`); a `long` sum per block of 512 positions, scanned |
+| visible length per position in an `int[]` | the clock length (from the starts) when the flag says visible |
+| a split or a merge is O(1) plus a Fenwick update | a split or a merge shifts 17 bytes per later position and updates every later block's sum: O(n) and O(n/512) |
+| the walk-left only | the walk-left (`RunHead`), the middle loop (`SeekLeft`), the walk right and the callers' walks from the marker (`SeekRight`) |
+
+* **Invariant** (Yjs' walk-left `while (p.left.id.client === p.id.client && p.left.id.clock + p.left.length ===
+  p.id.clock)`): the struct that ends at a struct's clock is its predecessor in its client's order, so position i is
+  *linked* exactly when `structs[i] is Item it && it.Left == structs[i - 1]` by reference, and a *break* otherwise
+  (position 0, a GC struct, a struct after one). A walk from i ends at the last break at or before i, having subtracted
+  the visible countable length of the positions it stepped onto. The flag is taken from the final `Left` after
+  conflict resolution, never from origin ids. A live non-countable item (a format) is flagged so that a text's walks
+  stop at it.
+* **The right walk's rule** (H3): a jump passes only positions whose visible sum stays below the target and
+  never the run's last position; Yjs' loop takes the last steps, so when the sum reaches the index exactly at an item's
+  end the walk steps on to that item's right neighbour, whichever it is. The review's script (`cdeqpD`) is in
+  `RunHeadIndexTests`.
+* **Kept current at**: `Add`, the four split sites (`InsertSplit`), both merge passes (`RemoveMerged`: incremental up
+  to 32 structs, a rebuild beyond), `ReplaceStruct` (the position and its successor), `ExtendRun` (`LastExtended`),
+  and through `StructStore.Refresh` at `Item.MarkDeleted(Transaction)`, `ContentDeleted.Integrate` and the relink of a
+  right neighbour in `Item.Integrate`. The index is current at every lookup, mid-transaction included.
+* **Short walks stay literal** for 32 steps (`YDoc.LiteralWalkSteps`), so an ordinary edit pays no position lookup;
+  a collected type's items fall back to the literal walk (`StructStore.TryFindPosition`). An item continuing a
+  collected struct is rejected (`YUpdateException`, as Yjs throws; L1), so a GC struct is never an item's `Left`.
+* **Proof**: a recount of every list after every transaction in the unit, property and corpus suites
+  (`StructStore.CheckAfterTransactionsForTests`, blocks of 2 there); the `walk-index` property (each lookup through the
+  index against Yjs' loops item by item, with run extension on and off); the stale-marker scripts; `interop/markers` and
+  `interop/properties` soaks against Yjs (12,000 and 60,000 new scripts in the review, no difference). Sabotages caught:
+  a jump past an item that ends at the target, ignoring formats, one too few subtracted, a missed relink or split sum.
+* **Measured** (Compare, 53a35de against the branch):
+
+| workload | before | after | change |
+| --- | ---: | ---: | --- |
+| `array-delete-random` | 57,169 ms | 896 ms | 64× |
+| `text-append-1txn-observed` (100,000 characters, one transaction) | 48,888 ms | 790 ms | 62× |
+| `apply-updates/ycs` | 259.0 ms | 308.8 ms | +19% |
+| `trace-replay` | 247.1 ms | 284.2 ms | +15% |
+| `concurrent-20` | 64.6 ms | 66.5 ms | +3%, held 26.9 to 28.1 MiB |
+
+* **Where the regression comes from** (N2, interleaved medians): with no index maintenance at all and the starts
+  kept, `apply-updates` is still +11% and `trace-replay` +15%; with `uint` starts +9% and +16%. So the start-clock array
+  and the list class are most of it, the index at most 4 points. Each of these workloads makes about 385,000 splits and
+  0.4-1.2 million merges, each shifting about 2,400 later structs. Lazy block sums would gain nothing (21 additions a
+  split). The leaf order (step 3) removes the shift.
+
+### 1.3 Known gaps of what is built
+
+* **Quadratic within a run**: `RunHead`, `SeekLeft` and `SeekRight` find the next break by a byte scan over the run, so
+  typing at the end of an observed text in one transaction is still quadratic, 60 times smaller (review: 100,000
+  characters 0.78 s, 400,000 9.1 s). A has-break count per block is being added now (separate task); step 3 keeps it
+  per leaf.
+* Not covered by a test: a break that is a live format (a root text with formats before the document asked for it;
+  N1). The test switches `BlockShiftForNewLists` and `LiteralWalkSteps` lack the `ForTests` name (N4).
+  `ClientStructs.Grow` resizes four arrays one after the other, so an out-of-memory between them breaks the list (N5).
+  The obligation to call `StructStore.Refresh` is stated there, not at `Item.Left` and `Item.MarkDeleted` (N6). Step 3
+  rewrites `Grow` and the switches; the other two are small tasks of their own.
+
+## 2. The layout still to build
+
+### 2.1 A slot
+
+Sequential layout, no reference field (the garbage collector does not scan the slab). Clocks are 64-bit: Yjs clocks go
+to 2^53, and the 32-bit clocks with an escape table of the first draft cost three dictionary entries per struct for a
+client a hostile update pushes past 2^32 in three structs (M8); see open question 1.
+
+| field | bytes |
+| --- | ---: |
+| `Clock`, `OriginClock`, `ROriginClock` (the origins' clients below; -1: no origin) | 24 |
+| `Length`, `Client` (index into the client table), `OriginClient`, `ROriginClient` | 16 |
+| `Left`, `Right` (handles, -1 none) | 8 |
+| `Parent` (index into the type table; -1: a GC struct) | 4 |
+| `Info` (keep, countable, deleted, marker, has-redone; the kind in bits 8..15) | 4 |
+| `Payload` (by kind: an arena offset or a type index) | 8 |
+| **total** | **64** (the model measured 52 with 32-bit clocks) |
+
+Beside the slab, by handle: `Refs` (`object[]` pages allocated on first use: a map item's key, a cold content object,
+or a `KeyedRef(key, content)`), `Redone` (`Dictionary<int, ID>`, flag `HasRedone`). Origins stay ids: Yjs compares and
+encodes them as ids, a split changes which struct holds an origin, and an origin may name a GC struct.
+
+Content kinds: `String` (the char arena), `Any` (the value arena: the caller's objects, shared), `Deleted` and `GC`
+(nothing), `Type` (the type table), `Skip` (staging only, 2.5), and the cold kinds `Format`, `Embed`, `Binary`, `Json`,
+`Doc` (their object in `Refs`). A collected item keeps its `Countable` bit when it becomes `Deleted` in place, as in
+Yjs.
+
+### 2.2 Pages, and small documents
+
+The first draft allocated a page of 1,024 slots (53 KB) at the first struct and arena pages of 64 Ki characters (128
+KB, on the large object heap) at the first character: "hello" would hold 194 KB. The design takes geometric pages:
+
+* **Slab**: page 0 starts at 16 slots and doubles by copy up to 1,024; pages 1 and on hold 1,024 slots and never move.
+  A handle is `page << 10 | index`. While page 0 grows, no `ref Slot` may live across an allocation: slots are taken
+  by `ref` only after the last allocation of a method (tests run with page 0 starting at one slot, so every
+  allocation copies, and Debug builds poison the old array).
+* **Arenas**: page k holds min(256 · 2^k, 32 Ki) characters or min(64 · 2^k, 8 Ki) values, so every page stays below
+  85 KB; a run longer than a page gets a page of its own.
+
+Measured (`bench/Ycs.Layout small`, `results/2026-11-15-small.md`, the model's 52-byte slots): today's document
+against the designed one (today's document with its root type and no structs, 1.2 KB, plus what the model's store
+holds beyond its empty store).
+
+| document | today | first draft's pages | geometric pages | geometric / today |
+| --- | ---: | ---: | ---: | ---: |
+| text "hello" (1 struct) | 3.0 KB | 194 KB | 3.2 KB | 1.07 |
+| 20 characters typed at random positions, 2 deleted (20 structs) | 8.4 KB | 194 KB | 4.4 KB | 0.52 |
+| 200 typed, 20 deleted (198 structs) | 49 KB | 196 KB | 20 KB | 0.40 |
+| 1,000 typed, 100 deleted | 221 KB | 202 KB | 75 KB | 0.34 |
+| 20,000 typed, 2,000 deleted | 4.5 MB | 1.6 MB | 1.6 MB | 0.35 |
+| map, 20 keys | 10.0 KB | 196 KB | 6.1 KB | 0.61 |
+| map, 1,000 keys | 354 KB | 289 KB | 174 KB | 0.49 |
+
+The first draft stops paying below about 1,000 structs. With geometric pages the layout pays from about 10 structs;
+below that it costs at most 215 bytes more (one struct: 3,176 against 2,961 bytes), 407 with 64-byte slots (12 bytes
+more for each of page 0's 16 slots: 1.14 of today; 20 structs 0.57). So there is no separate representation for small
+documents.
+
+### 2.3 The arenas
+
+A split gives the right part `offset + diff` (no copy). Typing at a run's end appends in place when the run ends at
+the arena's end; otherwise the merged run is copied to the end with geometric slack (twice its length, capped at a
+page), so two runs growing alternately copy each other O(log n) times, not once per keystroke (M3). Garbage:
+deleted characters, and copied-away runs. Compaction is document-wide: when the dead elements exceed the live ones, one
+walk of the slab copies the live runs of every page below half full and frees those pages. A collected item's values
+are nulled in the value arena at GC, so it does not keep the caller's objects alive until a compaction.
+
+### 2.4 Handles: lifetime and slot reuse
+
+* **Split**: the left part keeps its handle; the right part gets a new slot. **Merge**: the right part's slot is
+  freed (kind `Free`, linked in its page's free list). **GC**: an item becomes `GC` or `Deleted` in place; its handle
+  stays.
+* **Reuse**: a freed slot is reused only when the cleanup queue (`_transactionCleanups`) is empty: after the outermost
+  batch, nested transactions from observers and `Update` handlers included (H4). A page whose slots are all free is
+  released (M4: 1,000,000 merged items would otherwise leave 64 MB of free slots).
+* **No generation counters.** A generation per slot (4 bytes, 6% of a slot) tells that a slot changed; what a holder
+  outside the store needs to know is whether the slot still holds *its* struct, and "the slot is live and its id is
+  the held id" answers that exactly, because an id names one struct start. So every holder that can outlive a free
+  point holds an id (and at most a handle as a hint, validated by that check): delete sets, stack items, snapshots,
+  relative positions, `Transaction._mergeStructs` (it holds ids from step 5: the failure it prevents is H4's, where a
+  nested transaction's merge pass reads a reused slot and merges at a position Yjs does not, so the update bytes
+  differ), the public enumerators, and `ItemView` (section 3). Handles without ids are held only by what split and merge
+  keep current: type starts, map entries, search markers, the push hint, the clock order. A Debug check after every
+  test transaction walks them: none points at a `Free` slot.
+* **Type table**: an entry is never reused; a collected type's `AbstractType` gets index -1, and its search markers
+  are cleared at collection (today only `_start` is: `ContentType.cs`), so a user-held collected `YArray` writes no
+  marker flag through a handle that now names another type's item (H5).
+
+### 2.5 Decoding, and the operations without a document
+
+The decoder writes an update's structs into a staging table of the same slots (plus, per struct, the parent as a root
+name or an id, and the `Skip` kind), with its own geometric arenas; a staged struct gets its slab slot when it is
+integrated. `UpdateOperations` (`MergeUpdates`, `DiffUpdate`, `DecodeUpdate`) works on staging tables, so there is one
+representation and one encoder (M6). Until step 9 the decoded form stays today's objects, copied into slots at
+integration.
+
+### 2.6 Clients
+
+The client table is a `long[]` and a `Dictionary<long, int>`; a slot names its client by index. Per client the clock
+order (step 3) is one flat leaf until it holds 128 structs, so a client with one struct costs what it costs today in
+the order. Measured (`bench/Ycs.Layout small`): a document of 20,000 clients with one map entry each holds 574 bytes per
+client today and 348 designed (52-byte slots; 360 with 64; M5).
+
+## 3. References: `ItemRef` inside, `ItemView` outside
+
+### 3.1 `ItemRef` (internal)
+
+`internal readonly struct ItemRef : IEquatable<ItemRef>`, with the members of today's `Item` and `AbstractStruct` that
+the library uses (`Id`, `Length`, `Left`, `Right`, `Content`, `Deleted`, `Countable`, origins, `Parent`, ...), so that
+ported code keeps reading like Yjs. In steps 4 and 5 it wraps today's object; in step 7 it becomes (slab, handle) and
+the long-lived holders inside the store keep plain `int` handles.
+
+* **Lifetime**: valid until its struct is merged away or its type collected. Code may hold one across a split (the left
+  part keeps its handle) but not across a cleanup's merge pass or a type's collection, except in the holders of 2.4
+  that those update.
+* **Equality**: by handle (by reference while it wraps an object), written out (no `ValueType.Equals`, which reflects).
+* **Threads**: as the document: one thread at a time.
+
+### 3.2 `ItemView` (public)
+
+`public readonly struct ItemView : IEquatable<ItemView>`: the document, the id, and an internal hint: until step 7 the
+object, valid unless a merge or a GC replacement took it out of the store (a flag those set on it); from step 7 the
+handle, valid when its slot is live and starts at the id.
+
+* **What it reads**: the struct that holds its id *now*, as if split at the id without splitting it. With S the struct
+  that holds the id and o = id.clock - S.clock: `Length` = S.Length - o; `Content` = S's content from o; `LeftOrigin` =
+  (client, clock - 1) when o > 0, else S's; `Left` = the view of (client, clock - 1) when o > 0, else S's left;
+  `RightOrigin`, `Right`, `Deleted`, `Countable`, `Keep`, `Parent`, `ParentSub` = S's; `Redone` = S's moved by o (as
+  Yjs' `splitItem` moves it); `LastId` = S's. `Kind` (`String`, `Any`, `Json`, `Binary`, `Embed`, `Format`, `Type`, `Doc`,
+  `Deleted`, `GC`) tells what Yjs' filters test with `instanceof`; a GC struct reads `Parent` null, empty content,
+  `Deleted` true. `Content` is what today's `GetContent()` gives for the kind.
+* **Cost**: a read checks the hint; when it is stale, one lookup by id (40-60 ns, the model's find-by-id).
+* **Lifetime**: valid as long as the document, across any split, merge, GC, slab growth or slot reuse: an id names
+  one position in its client's clocks forever, and the store never drops a clock it has (a collected item becomes a GC
+  struct of the same range). On `default(ItemView)` every member throws `InvalidOperationException`.
+* **Equality**: the same document (by reference) and the same id; the hash is the id's.
+* **Threads**: as the document; a view read inside a transaction sees the splits made so far.
+* **Difference from Yjs**: within a transaction and its observers a view reads what Yjs' item reads. After the
+  cleanup's merges it reads the current struct, where Yjs' orphaned item keeps its old fields: for three items a, b, c
+  merged into one, `Changes.Added` read afterwards gives "abc", "bc", "c" where Yjs gives "abc", "b", "c" (H7).
+  The public enumerators (`YArrayBase.EnumerateContent`, the XML tree walker) hold an id and a hint the same way: after
+  a merge they continue from the struct that now holds the id, which is where Yjs' orphan continues unless the list
+  changed right of it since.
+
+### 3.3 The public API break (step 6)
+
+From `tests/Ycs.Tests/PublicApi.txt`, every member that exposes a struct changes:
+
+* `Item` becomes `ItemView` (above); `Marker` and `SplitItem` are dropped (internal state, and a mutation that bypasses
+  the store and the merge rules).
+* `ChangesCollection.Added/Deleted` become `ISet<ItemView>`; `YEvent.Adds/Deletes` take an `ItemView`;
+  `YDoc.GcFilter`, `YDocOptions.GcFilter` and `UndoManagerOptions.DeleteFilter` take an `ItemView`;
+  `TypeMapEnumerate` yields `ItemView`s; `YArrayBase.InsertGenericsAfter` becomes `private protected`.
+* `AbstractStruct`, `GC`, `Skip`, `IContent` and the `Content*` classes become internal. `DecodedUpdate.Structs`
+  becomes `IReadOnlyList<DecodedStruct>`: a record (`Id`, `Length`, `Kind` including `Skip` and `GC`, `LeftOrigin`,
+  `RightOrigin`, `Parent` as a root name or an id, `ParentSub`, `Content`), detached from any store. It covers the one
+  consumer use known (Plenum's `SharedText.cs`: `is Skip`, `is Item`, `Id`, the origins, `Parent as ID?`; L3).
+
+Announced as `feat!:` (ycs is before 1.0); the commit body gives the migration (`item.Left as Item` becomes
+`item.Left`, an `ItemView?`; `e.Changes.Added.Contains(x)` and filter lambdas keep their bodies; `is Skip` becomes
+`Kind == ItemKind.Skip`; no replacement for `SplitItem` and `Marker`). `PublicApi.txt` (regenerated with
+`YCS_ACCEPT_API=1`) and `docs/api.md` change in the same commit. No other step changes the public API.
+
+## 4. The remaining steps
+
+Each step is one concern, leaves every suite green (unit, properties, corpus, fuzz, budgets, coverage) and can be
+reviewed alone. Effects: *measured* where a source is named, otherwise estimates.
+
+| step | concern | effect | risk |
+| --- | --- | --- | --- |
+| 3 | the leaf order of a client's structs | `apply-updates`, `trace-replay` back below 53a35de (est.) | medium |
+| 4a | `ItemRef` in the store core | none (est.) | low |
+| 4b | `ItemRef` in the types, undo, events | none (est.) | low |
+| 5 | ids wherever a struct is held across a free point | < 1% (est.) | low-medium |
+| 6 | the public API break | none inside; a view read costs a hint check | medium |
+| 7 | the slab, content still as objects | about half of the memory saving; no `Item` allocation per edit (est.) | high |
+| 8 | inline content and the arenas | the rest of the saving; no allocation per edit (est.) | medium-high |
+| 9 | the decoder and the update operations on staging tables | a load allocates about what it holds (est.) | medium |
+
+**Step 3, the leaf order. Do it next.** The regression is on `modernize` now, on the paths that sync documents
+(`apply-updates`, `trace-replay`); the change is local to `ClientStructs` and the slab inherits it. It was step 7.
+
+* *Design*: a client's structs in leaves of at most 128 positions (structs, starts, flags; per leaf its visible sum,
+  break count and live-format count), and a directory: the leaves, their first starts (searched), their first global
+  positions, and a bit per leaf "has a break" in 64-bit words. Positions stay global ints, so the callers do not
+  change. A split shifts within its leaf (at most 127 × 17 bytes) and adds 1 to the later leaves' first positions (4
+  bytes a leaf: about 1/500 of today's traffic); a full leaf splits in two; a leaf below a quarter merges with a neighbour
+  when they fit. One leaf, no directory, up to 128 structs. The blocks of 512 and their scans go; the run search reads
+  the leaf's flags, then the has-break words, then one leaf.
+* *Files*: `ClientStructs.cs`, `ClientStructs.RunHeads.cs` (a `ClientStructs.Leaves.cs` for the directory), the
+  stores' test switch (`LeafCapacityForTests` replaces `BlockShiftForNewLists`) in `tests/*/StoreChecks.cs`,
+  `RunHeadIndexTests`, `bench/Ycs.Compare/README.md`.
+* *Invariant*: the leaves in order hold the structs contiguous by clock; each directory entry's first start and first
+  position, each leaf's sums and counts, and the has-break bits equal a recount.
+* *Proof*: the recount after every transaction extended to the directory, with leaves of 2 and 4 in the property and
+  corpus suites; `walk-index`; the soaks against Yjs; the review's `blocks` probe moved to leaf boundaries (merges of
+  3 to 81 structs around them) and its `placeholder` probe as a test (a break that is a live format, N1). Sabotages
+  that must be caught: a later leaf's first position not moved by a split; a stale first start after a merge removed a
+  leaf's first struct; a break count not lowered by `Refresh`; a jump right that crosses a leaf boundary past the
+  target.
+* *Effect*: est. `apply-updates` and `trace-replay` 20-30% faster than now (the shift per split from about 40 KB to
+  under 2 KB); a lookup by clock one more binary search, +5-15 ns (est.; measure it, M7); held memory ±1% (leaf
+  slack against doubling slack); typing at the end of an observed text in one transaction O(n/8,192) words per lookup
+  plus the leaf sums of the run (est. 400,000 characters well under 1 s). *Risk*: medium: the order every lookup
+  reads, contained in two files behind an unchanged interface.
+
+**Step 4, `ItemRef`, in two halves.** Every internal use of `Item`/`AbstractStruct` (435 in `src/Ycs`: `StructStore`
+87, `Item` 41, `YArrayBase` 39, `YText` 30, `UndoManager` 23, the rest under 16) goes through `ItemRef` wrapping
+today's object, with implicit conversions both ways until the end of 4b.
+
+* *Files*: 4a `Utils/StructStore*.cs`, `ClientStructs*.cs`, `Transaction.cs`, `DeleteSet.cs`, `EncodingUtils.cs`,
+  `Lazy*.cs`, `Structs/*.cs`; 4b `Types/*.cs`, `UndoManager.cs`, `YEvent.cs`, `RelativePosition.cs`,
+  `AbsolutePosition.cs`, `Snapshot.cs`, `PermanentUserData.cs`.
+* *Invariant*: behaviour unchanged; after 4b no internal signature names `Item` or `AbstractStruct` outside `ItemRef`
+  and the public members of 3.3.
+* *Proof*: every suite, byte for byte; a test that walks the internal signatures for the rule above; the budgets
+  (`tests/Ycs.Budgets`) catch an `ItemRef` boxed through an interface. The holder table of 2.4 is checked against the
+  result.
+* *Effect*: none (est.: a one-field struct inlines). *Risk*: low per line, a large diff; review as a diff of renames.
+
+**Step 5, ids across free points.** `Transaction._mergeStructs` holds ids (looked up at the merge pass); the public
+enumerators hold an id and a hint; a collected type's search markers are cleared. On objects, before any slot exists.
+
+* *Files*: `Transaction.cs`, `YArrayBase.cs`, `YXmlFragment.cs` (the tree walker), `ContentType.cs`, tests.
+* *Invariant*: nothing that can outlive a cleanup's merge pass or a type's collection holds a struct without its id.
+* *Proof*: new properties against Yjs: nested transactions from observers, `AfterTransactionCleanup` and `Update`
+  handlers that split and merge (H4's shape); enumerators held across merges and GC (the rule of 3.2, pinned); a
+  collected `YArray`'s `Insert(0, ...)` changes no other type's markers. Sabotage: a test hook that rewrites the `Id`
+  of each merged-away object (what a reused slot would show) must change nothing; with `_mergeStructs` back to objects
+  the H4 property must fail.
+* *Effect*: est. under 1% on `apply-updates` (one lookup per merge entry). *Risk*: low-medium (enumerator semantics in
+  a rare case, documented).
+
+**Step 6, the public API break** (3.3), on today's storage.
+
+* *Files*: new `Utils/ItemView.cs`, `Utils/DecodedStruct.cs`; `YEvent.cs`, `YDoc.cs`, `UndoManager.cs`,
+  `AbstractType.cs`, `YArrayBase.cs`, `UpdateOperations.cs`, the visibility of `Structs/*`; `PublicApi.txt`;
+  `docs/api.md`; the tests that use `Item`.
+* *Proof*: `PublicApiTests`; a property that, in every observer call, compares each view's fields with the object's
+  (identical inside the transaction); tests for the post-merge rule (a, b, c above), views of GC structs, default
+  views, equality and hashing; Plenum's `Plenum.Blazor.Tests` against the new build.
+* *Effect*: none inside. *Risk*: medium: the consumers' migration.
+
+**Step 7, the slab.** `ItemRef` becomes (slab, handle); slots, geometric pages, the client and type tables, `Refs`
+pages on first use, per-page free lists with reuse at the batch end and page release; content stays as objects in
+`Refs`; the clock order holds handles.
+
+* *Files*: new `Utils/Slab.cs`, `Utils/TypeTable.cs`; `ItemRef`; `StructStore*.cs`, `ClientStructs*.cs`,
+  `Structs/Item.cs`, `GC.cs` (their state moves into slots), `AbstractType.cs` (`_start`, `_item`, `_map` as handles).
+* *Invariant*: 2.4; the store consistency check (links mirror, orders contiguous and equal to the slots' clocks, no
+  holder at a `Free` slot, free lists sound, type entries never reused).
+* *Proof*: the check after every test transaction; page 0 starting at one slot in the test runs; the step-5 properties
+  now with real reuse; corpus, differential, soaks. Sabotages: reuse at transaction end instead of batch end (the H4
+  property); a `ref Slot` kept across an allocation (the one-slot run); markers not cleared (the H5 test).
+* *Effect*: est. about half of the saving (a character from 186 to about 120 bytes: the `Item` object becomes a 64-byte
+  slot, the content object stays); split 2.5× faster with its lookup (model, measured on flat orders); literal walks
+  8× faster (model: 2.6 against 21 ns a step); no `Item` allocation per edit or split. *Risk*: high: stale handles;
+  the largest diff.
+
+**Step 8, inline content.** `String` and `Any` in the arenas (2.3), `Deleted` and `Type` inline; cold kinds stay in
+`Refs`.
+
+* *Files*: new `Utils/Arena.cs`; `Structs/Content*.cs` (string, any, deleted, type become kinds), `Item` accessors,
+  `YText.cs`, `YArrayBase.cs`, the GC paths.
+* *Proof*: forced compaction after every transaction and in the middle of a batch in a test mode; runs longer than a
+  page; two runs growing alternately; content and encoded bytes before and after a compaction; a weak reference shows
+  a collected item's value is collectible before any compaction. Sabotage: a compaction that misses one payload.
+* *Effect*: held memory the model's 0.35-0.45 of today with 52-byte slots, about 0.40-0.50 with 64-byte slots (est.:
+  +12 bytes a struct); no allocation per edit, observed types included. *Risk*: medium-high: an arena bug corrupts
+  content; the content checks are strong.
+
+**Step 9, decoding into staging tables** (2.5), and `UpdateOperations` on them.
+
+* *Files*: `UpdateDecoderV1/V2.cs`, `LazyStructReader.cs`, `UpdateReader.cs`, `UpdateOperations.cs`, the integration
+  plan in `StructStore.cs`; `DecodedStruct` read from a staging table.
+* *Proof*: the corpus byte for byte, the fuzzer, the update-operation differentials against Yjs; the load budgets
+  tighten. Sabotage: a `Skip` read as a GC struct in a merge.
+* *Effect*: est. a load allocates about what the document holds (the trace: about 1 MiB instead of 3.2); `apply-state`
+  1.5-2× is plausible, not measured. *Risk*: medium.
+
+Order: 3 now and alone; 4a, 4b and 5 pay nothing but are safe and enumerate the holders; 6 only once the slab is
+decided (open question 2), and then right before 7; 7 to 9 are the rewrite (7 alone gives about half the saving).
+
+## 5. Not done, and why
+
+* A Fenwick tree and an `int[]` of lengths: block (then leaf) sums from the starts are as fast and cost nothing per struct.
+* A full B+tree: two levels hold a client of a million structs in a directory of 8,000-16,000 leaves; revisit if measured.
+* Generation counters: the id check is exact (2.4).
+* A separate small-document representation: geometric pages cost at most about 400 bytes a document (2.2).
+* Inline scalars and a rope per text: every read would box, every offset would shift.
+* A struct of arrays or a hot/cold split of the slot: measure after step 8, not before.
+* Shrunken or pooled `Item` objects: 30% instead of 60%, and pooled objects make stale references worse.
+
+## 6. Open questions
+
+1. **32-bit clocks with an escape table** (12 bytes, 19% of a slot). Recommendation: not in steps 7-9;
+   measure afterwards whether the gain is worth an escape that hostile updates can force for a whole client.
+2. **When to commit to the slab** (steps 6 to 9: about 4,000 lines; the model measured memory, not editing).
+   Recommendation: decide after step 5, with one more model measurement first: Yjs' integrate loop and a delete over
+   slots in `bench/Ycs.Layout` against today's objects. Hold step 6 until then: the break alone buys only `Kind` and
+   the removal of `SplitItem`.
+3. **Enumerators after a merge** (3.2: continue from the struct that holds the id now). Recommendation: accept and pin
+   it; the alternative, throwing on a changed store as .NET collections do, breaks code that edits while iterating.
+4. **Leaf capacity** (128). Recommendation: keep 128 and measure 64 and 256 on `apply-updates` and `trace-replay` in
+   step 3; the capacity is a constant.
+5. **Plenum's client** (`SharedText.cs` reads `Structs` as `Item`/`Skip`). Recommendation: change it in the Plenum
+   commit that moves the ycs submodule past step 6, with `Plenum.Blazor.Tests` as the check.
