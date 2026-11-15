@@ -78,6 +78,117 @@ public class RunHeadIndexTests
         }
     }
 
+    /// <summary>
+    /// A root text that got formats before the document asked for it keeps its search markers (in Yjs the formats'
+    /// integration switches off the markers of the placeholder type, not of the YText made later), so its list holds
+    /// live formats: inside a client's run and at its head (a break that is a live format, where the walk left
+    /// stops), and formats that deletes make dead. After every step each walk gives the same content, markers and
+    /// lookups.
+    /// </summary>
+    [TestMethod]
+    public void PlaceholderTextWithFormats_EveryLookupEndsWhereYjsLoopsEnd()
+    {
+        var withMarkers = 0;
+        for (var seed = 0; seed < 100; seed++)
+        {
+            var outcomes = Walks.Select(walk => Placeholder(walk, seed, ref withMarkers)).ToList();
+            Assert.IsTrue(outcomes.All(o => o == outcomes[0]), $"seed {seed}:{Environment.NewLine}{string.Join(Environment.NewLine, outcomes)}");
+        }
+
+        // The case is reached: lookups in a list that holds formats, with its markers on.
+        Assert.IsTrue(withMarkers > 0);
+    }
+
+    private static string Placeholder(string walk, int seed, ref int withMarkers)
+    {
+        var log = new System.Text.StringBuilder();
+        var random = new Random(seed);
+        var a = Doc(1, walk);
+        var b = Doc(2, walk, gc: seed % 3 != 0);
+        var ta = a.GetText("t");
+        ta.Insert(0, new string('a', 60 + random.Next(60)));
+        for (var k = 0; k < 25; k++)
+        {
+            var length = ta.Length;
+            switch (random.Next(4))
+            {
+                case 0:
+                    ta.Insert(random.Next(length + 1), "F", new Dictionary<string, object> { [random.Next(2) == 0 ? "b" : "i"] = true });
+                    break;
+                case 1:
+                    var at = random.Next(length);
+                    ta.Format(at, Math.Min(1 + random.Next(6), length - at), new Dictionary<string, object> { ["b"] = random.Next(3) == 0 ? null : true });
+                    break;
+                case 2:
+                    ta.Delete(random.Next(length), 1);
+                    break;
+                default:
+                    ta.Insert(random.Next(length + 1), "p");
+                    break;
+            }
+        }
+
+        // b integrates the formats before it asks for the text.
+        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        var tb = b.GetText("t");
+        for (var k = 0; k < 60; k++)
+        {
+            try
+            {
+                PlaceholderStep(random, a, b, ta, tb);
+            }
+            catch (Exception e)
+            {
+                log.Append(" [").Append(e.GetType().Name).Append(": ").Append(e.Message).Append(']');
+            }
+
+            var lookups = Lookups(b);
+            var markers = tb.DescribeSearchMarkers();
+            if (lookups.Length > 0 && markers != "off")
+            {
+                withMarkers++;
+            }
+
+            log.Append(string.Join("|", tb.ToDelta().Select(d => d.Insert + (d.Attributes == null ? "" : "{" + string.Join(",", d.Attributes.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Key + "=" + x.Value)) + "}"))));
+            log.Append(" # ").Append(lookups).Append(" # ").Append(markers).Append('\n');
+        }
+
+        log.Append(Convert.ToHexString(b.EncodeStateAsUpdateV1()));
+        return log.ToString();
+    }
+
+    private static void PlaceholderStep(Random random, YDoc a, YDoc b, YText ta, YText tb)
+    {
+        var length = tb.Length;
+        switch (random.Next(6))
+        {
+            case 0:
+            case 1:
+                tb.Insert(random.Next(length + 1), "x");
+                break;
+            case 2:
+            case 3:
+            case 4:
+                if (length > 0)
+                {
+                    var at = random.Next(length);
+                    tb.Delete(at, Math.Min(1 + random.Next(4), length - at));
+                }
+
+                break;
+            default:
+                // A plain remote edit: no format is integrated, so the markers stay (emptied by the remote transaction).
+                Sync(b, a);
+                if (ta.Length > 0)
+                {
+                    ta.Delete(random.Next(ta.Length), 1);
+                }
+
+                Sync(a, b);
+                break;
+        }
+    }
+
     private sealed class Run
     {
         private readonly Random _random;
@@ -210,9 +321,9 @@ public class RunHeadIndexTests
         }
     }
 
-    private static YDoc Doc(long client, string walk)
+    private static YDoc Doc(long client, string walk, bool gc = true)
     {
-        var doc = new YDoc(new YDocOptions { ClientId = client });
+        var doc = new YDoc(new YDocOptions { ClientId = client, Gc = gc });
         doc.LiteralWalkSteps = walk == "eager" ? 1 : doc.LiteralWalkSteps;
         doc.RunHeadIndexDisabledForTests = walk == "plain";
         doc.MarkerLookupsForTests = [];
