@@ -326,11 +326,13 @@ transactions); `markers-invisible` without (where Yjs leaves markers stale, mark
 | `run-extension` | inserts that continue a run extend it in place | every insert an item of its own (`YDoc.RunExtensionsDisabledForTests`, option `extend: false`), merged pair by pair | the store as above, search markers included (between steps every marker sits where Yjs' would), and the observations; once as the script has it (quiet clients extend runs), once with every client quiet (script option `quiet`) |
 
 The test suites (`Ycs.Tests`, `Ycs.Corpus`, `Ycs.Fuzz`, `Ycs.Properties`) recount the struct lists after every
-transaction (`StructStore.CheckAfterTransactionsForTests`: the start clocks, the run-head index's flags, links and
-block sums; lists over 1,024 structs every count/256th time); `Ycs.Corpus` and `Ycs.Properties` use blocks of 2
-positions, so that short lists cross block boundaries (`YCS_NO_RECOUNT=1` leaves the recount out, to see what a
-property alone finds). `walk-index` fails when the index misses an update: the refresh of an item another one was
-integrated before, the block sums after a split, the block sums after a merge.
+transaction (`StructStore.CheckAfterTransactionsForTests`: the start clocks, the leaves and their directory (fill,
+first starts and positions, the has-break and has-format bits, the tree of the sums), the run-head index's flags,
+links and per-leaf sums and counts; lists over 1,024 structs every count/256th time); `Ycs.Corpus` uses leaves of 2
+positions and `Ycs.Properties` leaves of 4 (`ClientStructs.LeafCapacityForTests`; `YCS_LEAF_CAPACITY` sets it in
+`Ycs.Tests` and `Ycs.Properties`), so that short lists split and merge leaves (`YCS_NO_RECOUNT=1` leaves the recount
+out, to see what a property alone finds). `walk-index` fails when the index misses an update: the refresh of an item
+another one was integrated before, the leaf sums after a split, the leaf sums after a merge.
 
 Each fails on a sabotaged change (a marker index off by one in a merge, a map entry not moved to the struct a
 run merges into, the split before the observers left out, the surrogate condition of the run extension dropped);

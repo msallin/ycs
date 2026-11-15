@@ -172,6 +172,7 @@ public class RunHeadIndexTests
     [TestMethod]
     [DataRow(128)]
     [DataRow(4)]
+    [DataRow(2)]
     public void PlaceholderTextWithFormats_EveryLookupEndsWhereYjsLoopsEnd(int capacity)
     {
         var withMarkers = 0;
