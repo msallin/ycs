@@ -285,6 +285,23 @@ public class YjsTypeParityTests
     }
 
     [TestMethod]
+    public void MapSnapshot_ValueCollectedSinceTheSnapshot_IsNullAsYjsUndefined()
+    {
+        // Yjs 13.6.32 (gc on): ymap.set('k', 1); s = snapshot(doc); ymap.delete('k');
+        // typeMapGetSnapshot(ymap, 'k', s) and typeMapGetAllSnapshot(ymap, s) give undefined and { k: undefined }.
+        var doc = new YDoc();
+        var map = doc.GetMap("m");
+        map.Set("k", 1);
+        var snapshot = doc.CreateSnapshot();
+        map.Delete("k");
+
+        var value = map.GetSnapshot("k", snapshot);
+        var all = map.GetAllSnapshot(snapshot);
+
+        Assert.AreEqual("null k=null", $"{value ?? "null"} {string.Join(",", all.Select(kv => $"{kv.Key}={kv.Value ?? "null"}"))}");
+    }
+
+    [TestMethod]
     public void TextFormat_ListEqualToObjectWithIndexKeys_AddsNoFormat()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });

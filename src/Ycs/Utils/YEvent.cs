@@ -229,9 +229,7 @@ public partial class YEvent
         return _keys;
     }
 
-    /// <summary>The value an item of a map held; null once its content was collected, as Yjs' <c>array.last([])</c>.</summary>
-    private static object LastValue(Item item) =>
-        item.Content is ContentDeleted ? null : AbstractType.ValueAt(item.Content, item.Length - 1);
+    private static object LastValue(Item item) => AbstractType.ValueAt(item.Content, item.Length - 1);
 
     private ChangesCollection CollectChanges()
     {

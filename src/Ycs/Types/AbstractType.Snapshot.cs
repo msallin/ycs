@@ -69,7 +69,7 @@ public partial class AbstractType
 
                 if (v != null && v.IsVisible(snapshot))
                 {
-                    res[kvp.Key] = v.Content.GetContent()[v.Length - 1];
+                    res[kvp.Key] = ValueAt(v.Content, v.Length - 1);
                 }
             }
         });

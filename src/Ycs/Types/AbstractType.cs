@@ -331,9 +331,16 @@ public partial class AbstractType
 
     protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
 
-    /// <summary>The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.</summary>
-    internal static object ValueAt(IContent content, int index) =>
-        content is ContentAny any ? any.ValueAt(index) : content.GetContent()[index];
+    /// <summary>
+    /// The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.
+    /// Null for collected content, as Yjs' <c>getContent()[index]</c> of <c>[]</c> is <c>undefined</c>.
+    /// </summary>
+    internal static object ValueAt(IContent content, int index) => content switch
+    {
+        ContentAny any => any.ValueAt(index),
+        ContentDeleted => null,
+        _ => content.GetContent()[index],
+    };
 
     /// <summary>How many keys have a value that is not deleted, by walking the map (<see cref="_mapCount"/> is kept instead).</summary>
     internal int TypeMapCount()
