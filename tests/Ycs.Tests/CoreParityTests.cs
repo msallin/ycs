@@ -274,4 +274,17 @@ public class CoreParityTests
 
         Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(B("AQGAgICAgICAEAAEAQF0A2JpZwA=")));
     }
+
+    [TestMethod]
+    public void ToDelta_SnapshotNewerThanTheDocument_SkipsWhatTheDocumentDoesNotHave()
+    {
+        // The snapshot deletes "hello" and clocks of a client 6 this document has never seen.
+        var doc = new YDoc(new YDocOptions { Gc = false });
+        doc.ApplyUpdate(B("AQEFAAQBAXQLaGVsbG8gd29ybGQA"));
+        var snapshot = Snapshot.DecodeSnapshot(B("AgYBAAEFAQAFAgYDBQs="));
+
+        var delta = doc.GetText("t").ToDelta(snapshot);
+
+        Assert.AreEqual(" world", string.Concat(System.Linq.Enumerable.Select(delta, d => d.Insert)));
+    }
 }

@@ -68,11 +68,24 @@ internal class DeleteSet
     /// </summary>
     public void IterateDeletedStructs(Transaction transaction, Predicate<AbstractStruct> fun)
     {
+        // As Yjs: a client the store does not have is skipped, and a client's ranges end at the
+        // first one that starts beyond its state (a snapshot can be newer than the document).
         foreach (var kvp in Clients)
         {
-            var structs = transaction.Doc.Store.Clients[kvp.Key];
+            if (!transaction.Doc.Store.Clients.TryGetValue(kvp.Key, out var structs))
+            {
+                continue;
+            }
+
+            var lastStruct = structs[structs.Count - 1];
+            var clockState = lastStruct.Id.Clock + lastStruct.Length;
             foreach (var del in kvp.Value)
             {
+                if (del.Clock >= clockState)
+                {
+                    break;
+                }
+
                 transaction.Doc.Store.IterateStructs(transaction, structs, del.Clock, del.Length, fun);
             }
         }
