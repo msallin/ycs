@@ -14,6 +14,15 @@ namespace Ycs;
 public class YDocTests : YTestBase
 {
     [TestMethod]
+    public void GenerateNewClientId_ManyDraws_Uses32BitsAsYjs()
+    {
+        // 64 draws all below 2^31 happen with probability 2^-64.
+        var ids = Enumerable.Range(0, 64).Select(_ => YDoc.GenerateNewClientId()).ToList();
+
+        Assert.IsTrue(ids.All(id => id is >= 0 and <= uint.MaxValue) && ids.Any(id => id > int.MaxValue));
+    }
+
+    [TestMethod]
     public void TestClientIdDuplicateChange()
     {
         var doc1 = new YDoc();

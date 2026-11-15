@@ -133,10 +133,12 @@ public partial class YDoc
     /// .NET Framework targets, so two documents created in the same tick - or two server
     /// processes started together - would share a client id and silently corrupt the merge.
     /// </summary>
+    /// <summary>32 random bits, as Yjs' <c>random.uint32()</c>.</summary>
     internal static long GenerateNewClientId()
     {
-        // 31 bits while PermanentUserData maps int client ids (Yjs draws 32).
-        return System.Security.Cryptography.RandomNumberGenerator.GetInt32(int.MaxValue);
+        Span<byte> bytes = stackalloc byte[sizeof(uint)];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
+        return System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes);
     }
 
     /// <param name="gc">Disable garbage collection.</param>

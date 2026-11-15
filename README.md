@@ -95,8 +95,6 @@ snapshots are only meaningful on a document created with `Gc = false`.
 * `ObfuscateUpdate`, and the DOM bindings (`toDOM`) of the XML types.
 * `undefined` is read as `null` (and written back as `null`); JavaScript objects with integer-like
   keys are written in insertion order, not in JavaScript's key order.
-* A document's own client id is a non-negative `int` (31 bits); ids up to 2^32 from other clients
-  are read fine.
 * Integers beyond ±(2^53 - 1) are rejected (no exact JavaScript number); use `BigInteger`.
 
 Changes in this fork
