@@ -111,6 +111,62 @@ internal static class Scenarios
 
             return i => map.Set(keys[i % keys.Length], i);
         }),
+
+        new("text.insert-formatted-char-100k", 500, () =>
+        {
+            var (_, text) = LargeText();
+            var bold = new Dictionary<string, object> { ["bold"] = true };
+            var caret = TextLength / 2;
+            return _ => text.Insert(caret++, "x", bold);
+        }),
+
+        new("text.event-delta-read-100k", 500, () =>
+        {
+            // An editor binding: every keystroke's observer reads the delta.
+            var (_, text) = LargeText();
+            var ops = 0;
+            text.EventHandler += (_, e) => ops += e.Event.Delta.Count;
+            var caret = TextLength / 2;
+            return _ => text.Insert(caret++, "x");
+        }),
+
+        new("undo.undo-redo-typing-100k", 500, () =>
+        {
+            var (doc, text) = LargeText();
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            for (var i = 0; i < 1000; i++)
+            {
+                text.Insert(TextLength / 2 + i, "x");
+            }
+
+            return _ =>
+            {
+                undoManager.Undo();
+                undoManager.Redo();
+            };
+        }),
+
+        new("undo.delete-backwards-one-capture-100k", 500, () =>
+        {
+            // Backspace with an UndoManager whose capture never ends: the deleted characters are kept.
+            var (_, text) = LargeText();
+            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = int.MaxValue });
+            var caret = TextLength / 2;
+            return _ => text.Delete(--caret, 1);
+        }),
+
+        new("doc.encode-state-with-pending-100k", 100, () =>
+        {
+            var (doc, _) = LargeText();
+            var other = new YDoc(new YDocOptions { ClientId = 3 });
+            var otherText = other.GetText("text");
+            otherText.Insert(0, "a");
+            otherText.Insert(1, "b");
+
+            // "b" without the "a" before it (the state vector { 3: 1 }): it waits.
+            doc.ApplyUpdate(other.EncodeStateAsUpdate(new byte[] { 1, 3, 1 }));
+            return _ => doc.EncodeStateAsUpdate();
+        }),
     ];
 
     /// <summary>

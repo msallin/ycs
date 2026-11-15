@@ -119,6 +119,18 @@ public class ContentString : IContentEx
                 return true;
             }
 
+            if (other._builder != null)
+            {
+                // A short run merging into a long one in front of it (deleting backwards, or undoing
+                // typing): the long run's builder is taken over and this one inserted at its front,
+                // which costs the short run, not the long one. The right content is dropped with its item.
+                _builder = other._builder.Insert(0, _string);
+                _string = null;
+                other._builder = null;
+                other._string = string.Empty;
+                return true;
+            }
+
             _builder = new StringBuilder(Math.Max(2 * length, 2 * BuilderThreshold)).Append(_string);
             _string = null;
         }

@@ -23,6 +23,11 @@ internal static class Budgets
         ["position.relative-from-index-deep-100k"] = new(96, 5000),    // 80 B, 330 µs (walks the list from the start, as Yjs does)
         ["position.absolute-from-relative-deep-100k"] = new(40, 5000), // 32 B, 320 µs (walks the list to the start, as Yjs does)
         ["map.set-existing-key"] = new(680, 50),                       // 588 B, 1 µs
+        ["text.insert-formatted-char-100k"] = new(576, 2500),          // 500 B, 210 µs (finds the position without search markers, as Yjs does)
+        ["text.event-delta-read-100k"] = new(1072, 6000),              // 932 B, 550 µs (the delta walks the whole text, as Yjs' does)
+        ["undo.undo-redo-typing-100k"] = new(3416, 50),                // 2 968 B, 2 µs
+        ["undo.delete-backwards-one-capture-100k"] = new(864, 50),     // 746 B, 4 µs (was 3 100 B: the deleted run was copied on every merge)
+        ["doc.encode-state-with-pending-100k"] = new(7836896, 80000),  // 6.8 MB, 7.8 ms (the state merged with what is pending, as Yjs does)
     };
 }
 

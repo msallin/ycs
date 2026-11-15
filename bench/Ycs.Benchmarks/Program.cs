@@ -26,7 +26,8 @@ namespace Ycs.Benchmarks;
 /// Each phase runs once to warm up and then [runs] times; the median is reported.
 /// encode and decode loop 10 times per run.
 /// <br/>
-/// <c>limits</c> instead of a trace measures updates at the default limits (<see cref="Limits"/>).
+/// <c>limits</c> instead of a trace measures updates at the default limits (<see cref="Limits"/>),
+/// <c>perf</c> the operations of <see cref="Perf"/>.
 /// </summary>
 internal static class Program
 {
@@ -34,13 +35,19 @@ internal static class Program
     {
         if (args.Length < 1)
         {
-            Console.Error.WriteLine("usage: Ycs.Benchmarks <trace.json.gz> [runs] | limits");
+            Console.Error.WriteLine("usage: Ycs.Benchmarks <trace.json.gz> [runs] | limits | perf");
             return 2;
         }
 
         if (args[0] == "limits")
         {
             Limits.Run();
+            return 0;
+        }
+
+        if (args[0] == "perf")
+        {
+            Perf.Run();
             return 0;
         }
 
