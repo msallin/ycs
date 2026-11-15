@@ -89,6 +89,15 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
 
     private static byte[] EncodeRestoreUpdateV2(UpdateEncoderV2 encoder, YDoc originDoc, DeleteSet ds, IDictionary<long, long> stateVector)
     {
+        // The snapshot may come from another peer or another document; Yjs fails on it in findIndexSS.
+        foreach (var (client, clock) in stateVector)
+        {
+            if (clock > originDoc.Store.GetState(client))
+            {
+                throw new YUpdateException($"The snapshot holds client {client} up to clock {clock}, beyond what the document has of it.");
+            }
+        }
+
         originDoc.Transact(tr =>
         {
             int size = stateVector.Count(kvp => kvp.Value /* clock */ > 0);

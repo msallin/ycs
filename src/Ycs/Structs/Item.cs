@@ -478,19 +478,18 @@ public partial class Item : AbstractStruct
         {
             Parent = null;
         }
-
-        // Only set parent if this shouldn't be garbage collected.
-        if (Parent == null)
+        else if (Parent == null)
         {
-            if (Right is Item rightItem)
-            {
-                Parent = rightItem.Parent;
-                ParentSub = rightItem.ParentSub;
-            }
-            else if (Left is Item leftItem)
+            // Only set parent if this shouldn't be garbage collected; the left neighbour first, as Yjs.
+            if (Left is Item leftItem)
             {
                 Parent = leftItem.Parent;
                 ParentSub = leftItem.ParentSub;
+            }
+            else if (Right is Item rightItem)
+            {
+                Parent = rightItem.Parent;
+                ParentSub = rightItem.ParentSub;
             }
         }
         else if (Parent is ID pid)

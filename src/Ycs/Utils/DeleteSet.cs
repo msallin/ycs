@@ -68,11 +68,24 @@ internal class DeleteSet
     /// </summary>
     public void IterateDeletedStructs(Transaction transaction, Predicate<AbstractStruct> fun)
     {
+        // As Yjs: a client the store does not have is skipped, and a client's ranges end at the
+        // first one that starts beyond its state (a snapshot can be newer than the document).
         foreach (var kvp in Clients)
         {
-            var structs = transaction.Doc.Store.Clients[kvp.Key];
+            if (!transaction.Doc.Store.Clients.TryGetValue(kvp.Key, out var structs))
+            {
+                continue;
+            }
+
+            var lastStruct = structs[structs.Count - 1];
+            var clockState = lastStruct.Id.Clock + lastStruct.Length;
             foreach (var del in kvp.Value)
             {
+                if (del.Clock >= clockState)
+                {
+                    break;
+                }
+
                 transaction.Doc.Store.IterateStructs(transaction, structs, del.Clock, del.Length, fun);
             }
         }
@@ -209,34 +222,47 @@ internal class DeleteSet
 
                 // Start with merging the item next to the last deleted item.
                 var mostRightIndexToCheck = Math.Min(structs.Count - 1, 1 + StructStore.FindIndexSS(structs, deleteItem.Clock + deleteItem.Length - 1));
-                for (int si = mostRightIndexToCheck; si > 0 && structs[si].Id.Clock >= deleteItem.Clock; si--)
+                for (int si = mostRightIndexToCheck; si > 0 && structs[si].Id.Clock >= deleteItem.Clock;)
                 {
-                    TryToMergeWithLeft(structs, si);
+                    si -= 1 + TryToMergeWithLefts(structs, si);
                 }
             }
         }
     }
 
-    public static void TryToMergeWithLeft(IList<AbstractStruct> structs, int pos)
+    /// <summary>
+    /// Yjs' <c>tryToMergeWithLefts</c>: merges <c>structs[pos]</c> into its left neighbour, and that
+    /// into its left, as long as they merge. Returns how many structs were removed.
+    /// </summary>
+    public static int TryToMergeWithLefts(List<AbstractStruct> structs, int pos)
     {
-        var left = structs[pos - 1];
         var right = structs[pos];
-
-        if (left.Deleted == right.Deleted && left.GetType() == right.GetType())
+        var left = structs[pos - 1];
+        var i = pos;
+        for (; i > 0; right = left, left = --i > 0 ? structs[i - 1] : null)
         {
-            if (left.MergeWith(right))
+            if (left.Deleted != right.Deleted || left.GetType() != right.GetType() || !left.MergeWith(right))
             {
-                structs.RemoveAt(pos);
+                break;
+            }
 
-                if (right is Item rightItem && rightItem.ParentSub != null)
+            if (right is Item rightItem && rightItem.ParentSub != null)
+            {
+                var parent = (AbstractType)rightItem.Parent;
+                if (parent._map.TryGetValue(rightItem.ParentSub, out var value) && value == right)
                 {
-                    if ((rightItem.Parent as AbstractType)._map.TryGetValue(rightItem.ParentSub, out var value) && value == right)
-                    {
-                        (rightItem.Parent as AbstractType)._map[rightItem.ParentSub] = left as Item;
-                    }
+                    parent._map[rightItem.ParentSub] = (Item)left;
                 }
             }
         }
+
+        var merged = pos - i;
+        if (merged > 0)
+        {
+            structs.RemoveRange(pos + 1 - merged, merged);
+        }
+
+        return merged;
     }
 
     private void MergeDeleteSets(IList<DeleteSet> dss)
@@ -352,7 +378,7 @@ internal class DeleteSet
                 var len = dsItems.Count;
 
                 encoder.ResetDsCurVal();
-                encoder.RestWriter.WriteVarUint((uint)client);
+                encoder.RestWriter.WriteVarUint((ulong)client);
                 encoder.RestWriter.WriteVarUint((uint)len);
 
                 for (int i = 0; i < len; i++)
@@ -414,7 +440,7 @@ internal class DeleteSet
                 var structs = clientStructs[client];
 
                 encoder.ResetDsCurVal();
-                encoder.RestWriter.WriteVarUint((uint)client);
+                encoder.RestWriter.WriteVarUint((ulong)client);
                 encoder.RestWriter.WriteVarUint((uint)rangeCounts[c]);
 
                 for (var i = 0; NextDeletedRange(structs, ref i, out var clock, out var length);)
@@ -458,7 +484,7 @@ internal class DeleteSet
         {
             decoder.ResetDsCurVal();
 
-            var client = decoder.Reader.ReadVarUint();
+            var client = decoder.Reader.ReadVarUint53();
             var numberOfDeletes = decoder.Reader.ReadVarUint();
 
             if (numberOfDeletes > 0)

@@ -43,7 +43,8 @@ upstream ycs.
 
 Updates from peers can be malformed or hostile: applying, merging or diffing them throws only
 `YUpdateException`, leaves the document unchanged, and is bounded in time, memory and stack depth
-(clocks up to 2^31 - 1, nesting up to 256 levels, pending data up to `YDocOptions.MaxPendingBytes`).
+(clocks up to 2^31 - 1, nesting up to 256 levels, structs per v2 update up to
+`YDocOptions.MaxStructsPerUpdate`, pending data up to `YDocOptions.MaxPendingBytes`).
 `TryApplyUpdate` returns false instead. See [`docs/api.md`](docs/api.md#untrusted-input).
 
 #### Thread safety
@@ -94,8 +95,6 @@ snapshots are only meaningful on a document created with `Gc = false`.
 * `ObfuscateUpdate`, and the DOM bindings (`toDOM`) of the XML types.
 * `undefined` is read as `null` (and written back as `null`); JavaScript objects with integer-like
   keys are written in insertion order, not in JavaScript's key order.
-* A document's own client id is a non-negative `int` (31 bits); ids up to 2^32 from other clients
-  are read fine.
 * Integers beyond ±(2^53 - 1) are rejected (no exact JavaScript number); use `BigInteger`.
 
 Changes in this fork
@@ -116,6 +115,11 @@ does. In short:
   structs are now kept as an encoded update, as in Yjs 13.6.
 * The 'any' encoding now follows lib0's number rules (an integral `double` is a var-int, exact
   floats are float32, JavaScript's canonical NaN), so values written by Ycs have Yjs' bytes.
+* The shared types and their events, checked against 1,425 traces recorded from Yjs 13.6.32: a
+  text event's delta repeated earlier inserts and kept the 13.4 formatting logic, `Push` was an
+  insert at the end (different bytes), a shared type could not be a text embed, `ToDelta` opened a
+  transaction and misreported `computeYChange`, the XML string forms used .NET formatting, and
+  `Get`, `Insert`, `Slice` and `Delete` threw where Yjs does not, and the reverse.
 
 **Performance** (the automerge-paper editing trace, 260k edits, `bench/Ycs.Benchmarks`,
 median of 5 runs on the same machine, before = upstream PRs merged, after = this branch)

@@ -32,6 +32,22 @@ Node at test time.
   also give Yjs' item order. `CommutativityTests.cs` applies small three-client scenarios in
   every order (all 5040 permutations of 7 inserts, or all causal orders of 12) and requires the
   same text and item order each time.
+- `undo-gen.mjs` is a differential fuzz of the UndoManager: random sessions of a document with an
+  UndoManager (scope of some roots or the whole document, capture timeout 0 or merging, tracked
+  origins by value and by class, `deleteFilter`, `captureTransaction`, `ignoreRemoteMapChanges`,
+  0 to 3 remote clients with concurrent changes; text with formatting and embeds, maps, arrays,
+  nested maps and texts, XML elements, attributes and texts, several changes per transaction, undo,
+  redo, `stopCapturing`, `clear` with each pair of flags, `addToScope`), recorded per step: a hash of
+  the state, what undo/redo returned, both stack sizes and the UndoManager events.
+  `UndoDifferentialTests.cs` replays them in Ycs (its replay touches the Ycs API directly). The
+  pinned set is `undo/undo-differential.json.gz` (400 scripts of 50 steps); a larger run:
+
+      node undo-gen.mjs 20000 60 /tmp/undo.json
+      YCS_UNDO_FUZZ=/tmp/undo.json dotnet test tests/Ycs.Corpus --filter Name~Scripts_EveryStep --logger "console;verbosity=detailed"
+
+  (`FULL=1` records whole states instead of hashes, so a divergence shows both.) That run
+  (20,000 scripts of 60 steps) matches Yjs on every step. `undo/undo-gc-merge.json.gz` keeps its
+  20 scripts that diverged while deleted structs merged less far to the left than in Yjs 13.6.
 - Divergences that are bugs in Ycs are listed in `tests/Ycs.Corpus/KnownFailures.cs`: those
   checks report Inconclusive (skipped) with the reason, and fail if they start passing.
 

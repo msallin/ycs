@@ -13,8 +13,11 @@ internal static class Limits
     /// </summary>
     public const long MaxClock = int.MaxValue;
 
-    /// <summary>Client ids: Yjs' are random 32-bit unsigned integers.</summary>
-    public const long MaxClient = uint.MaxValue;
+    /// <summary>
+    /// Client ids: Yjs generates random 32-bit unsigned integers, but reads any var-uint up to
+    /// JavaScript's safe integers, and applications and other implementations (u64 in yrs) set wider ones.
+    /// </summary>
+    public const long MaxClient = (1L << 53) - 1;
 
     /// <summary>
     /// Nesting depth of 'any' and JSON values, and of shared types inside each other, so that the
@@ -24,13 +27,21 @@ internal static class Limits
     public const int MaxDepth = 256;
 
     /// <summary>
-    /// The v2 format run-length encodes its columns, so a few bytes can describe any number of
-    /// structs. A v2 update may hold at most this many structs per byte (plus <see cref="MinStructs"/>);
-    /// updates Yjs writes are far below it.
+    /// The default of <see cref="YDocOptions.MaxStructsPerUpdate"/> and
+    /// <see cref="UpdateOperations.MaxStructsPerUpdate"/>. The v2 format run-length encodes its
+    /// columns, so a few bytes can describe any number of structs (Yjs writes 20,000 deleted items
+    /// inserted at the front of a list in 42 bytes); no ratio to the input size bounds valid updates.
     /// </summary>
-    public const int MaxStructsPerByteV2 = 64;
+    public const long DefaultMaxStructsPerUpdate = 1 << 21;
 
-    public const int MinStructs = 4096;
+    /// <summary>
+    /// The structs a v2 update of <paramref name="remaining"/> bytes may hold: <paramref name="limit"/>,
+    /// but never fewer than one per byte, which a v1 update needs at least anyway.
+    /// </summary>
+    public static long MaxStructsV2(long limit, int remaining) => Math.Max(limit, remaining);
+
+    public static long CheckMaxStructs(long value) =>
+        value > 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "The limit must be positive.");
 
     /// <summary>A capacity for a collection of <paramref name="count"/> decoded elements, each taking at least one of the <paramref name="remaining"/> input bytes.</summary>
     public static int Capacity(long count, int remaining) => (int)Math.Clamp(Math.Min(count, remaining), 0, int.MaxValue);

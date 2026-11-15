@@ -47,7 +47,7 @@ public struct ID : IEquatable<ID>
 
     internal static ID Read(Lib0Reader reader)
     {
-        var client = reader.ReadVarUint();
+        var client = reader.ReadVarUint53();
         var clock = reader.ReadVarUint();
         Debug.Assert(client >= 0 && clock >= 0);
         return new ID(client, clock);

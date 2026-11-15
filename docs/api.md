@@ -16,7 +16,7 @@ cheap, and do not rename for taste.
 | Update format | v1 (`applyUpdate`) by default, v2 (`applyUpdateV2`) | `ApplyV1`/`ApplyV2`, `StateDiffV1`/`StateDiffV2` | v1 by default (`ApplyUpdate`), `…V1`/`…V2` explicitly |
 | Subscriptions | `observe(f)` / `unobserve(f)`, `doc.on('update', f)` | `IDisposable Observe(Action<T>)` | .NET events, plus `Observe`/`ObserveDeep` returning `IDisposable` |
 | Positions that survive edits | `RelativePosition` | `StickyIndex` | `RelativePosition` / `AbsolutePosition` (Yjs names) |
-| Undo | `UndoManager(scope, { trackedOrigins, captureTimeout })` | `UndoManager(doc, branch, options)` | `UndoManager(scope, captureTimeout, deleteFilter, trackedOrigins)` |
+| Undo | `UndoManager(scope, { trackedOrigins, captureTimeout })` | `UndoManager(doc, branch, options)` | `UndoManager(scope, new UndoManagerOptions { TrackedOrigins, CaptureTimeout })` |
 | Threading | single-threaded | the native document is locked per transaction | the caller's job, as in Yjs (see below) |
 
 YDotNet's explicit transactions and tagged values come from the Rust borrow model and the native
@@ -31,17 +31,21 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | `EncodeStateAsUpdateV2(byte[] stateVector = null)` | `EncodeStateAsUpdate(ReadOnlySpan<byte> stateVector = default)` (v1), `EncodeStateAsUpdateV1`/`V2(...)`, and overloads `EncodeStateAsUpdate…(IBufferWriter<byte> destination, ReadOnlySpan<byte> stateVector = default)` | Yjs' `encodeStateAsUpdate`; writing into an `IBufferWriter<byte>` (a pipe, a pooled buffer) saves the result array: v1 is written straight into the destination, v2 (whose columns come before the rest) is assembled in pooled buffers and copied into it once; once warm, neither allocates. A malformed state vector throws `YUpdateException` before anything is written. A `byte[]` or `null` still works |
 | `EncodeStateVectorV2()` | `EncodeStateVector()` (plus `…V1`, `…V2`, and `EncodeStateVector(IBufferWriter<byte>)`, which allocates nothing) | Yjs' `encodeStateVector`; the bytes are the same in both formats |
 | event `UpdateV2`; PR #12 added `UpdateV1` | event `Update` (v1) and `UpdateV2` | Yjs' `doc.on('update')` and `doc.on('updateV2')` |
-| `ClientId { get; internal set; }`, random only | `YDocOptions.ClientId` (`int?`) | reproducible tests and benchmarks without reflection (YDotNet has `DocOptions.Id`) |
+| `ClientId { get; internal set; }`, random only, `int` | `YDocOptions.ClientId` (`long?`, 0 to 2^53 - 1); `YDoc.ClientId` is a `long`. Client ids up to 2^53 - 1 are read and written everywhere (structs, ids, delete sets, state vectors, the v2 client column) | reproducible tests and benchmarks without reflection (YDotNet has `DocOptions.Id`); Yjs reads var-uints up to 2^53 - 1 and lets applications set `doc.clientID`, yrs uses u64 ids. Generated ids are 32 random bits, as Yjs' `random.uint32()` |
 | `void Observe(handler)`, `void ObserveDeep(handler)` (PR #13) | return `IDisposable`; disposing unsubscribes | the YDotNet idiom; makes lambdas easy to unsubscribe. `Unobserve` and `+=`/`-=` still work |
 | map/array values: anything, failing at encode time; `Newtonsoft.Json` tokens and reflection for JSON | the closed set of values above, checked when a value is inserted; numbers encoded with JavaScript's rules | Native AOT, byte-identical output, errors at the call that caused them |
+| `SyncProtocol.ReadSyncStep2`, `ReadUpdate`, `ReadSyncMessage` let every exception of the apply propagate | an optional `errorHandler` (`Action<Exception>`, last parameter): with one, what reading and applying the update threw goes to it and the call returns; without one it propagates | y-protocols' `errorHandler`; it also always catches and logs, which a library without a logger cannot do quietly |
+| `PermanentUserData`: client ids `int` (ids of 2^31 and above, half of Yjs', ignored); an entry of another shape in the users map threw `InvalidCastException` / `KeyNotFoundException` out of `ApplyUpdate` and every later local deletion; the deletions were written inside the deleting transaction's cleanup, before its `Update`; `Doc`, `YUsers` fields | `long` ids (`SetUserMapping(doc, long, …)`, `GetUserByClientId(long)`); such entries are ignored, and `SetUserMapping` replaces one for its own user; the two writes Yjs defers with `setTimeout` run after the batch that caused them, each in its own transaction; `Doc`, `YUsers` properties | Yjs' order of updates, and the users map is written by other peers |
 | `UndoManager` tracked origin `Type` matched subclasses | matches that exact type | Yjs compares `origin.constructor` |
+| `UndoManager` of Yjs 13.4: a stack item undid every struct between the first and the last state of its transactions (a remote or untracked change made meanwhile too); a stack item that changed nothing ended `Undo()` and was returned; `RedoItem` overwrote the map values of untracked changes and refused those of other clients; a merged change fired `StackItemAdded`; `StackCleared` after the clearing transaction; constructors with positional `captureTimeout`, `deleteFilter`, `trackedOrigins`; `StackItem.BeforeState`/`AfterState`; `Count` | Yjs 13.6's: a stack item holds what its transactions inserted and deleted; `Undo()`/`Redo()` go on to the next item until one changes the document; `redoItem` with `ignoreRemoteMapChanges`; `StackItemUpdated`; `StackCleared` inside that transaction; `UndoManagerOptions` (`CaptureTimeout`, `CaptureTransaction`, `DeleteFilter`, `TrackedOrigins`, `IgnoreRemoteMapChanges`, `Doc`); `UndoStack`, `RedoStack` (oldest first) and `CurrentStackItem` | undo deleted a remote user's text typed within the capture timeout, and documents differed from Yjs'; checked by a differential fuzz against Yjs (`tests/Ycs.Corpus/UndoDifferentialTests.cs`). Migrate: `new UndoManager(scope, 0, filter, origins)` becomes `new UndoManager(scope, new UndoManagerOptions { CaptureTimeout = 0, DeleteFilter = filter, TrackedOrigins = origins })`; `um.Count` becomes `um.UndoStack.Count` |
 | `ApplyUpdate…(update, origin, bool local = false)` | `ApplyUpdate…(update, origin)`; the transaction an update is applied in is not local, also the caller's | Yjs' `readUpdateV2` forces `transaction.local = false`; a local transaction kept stale search markers (an insert after a nested apply landed 5 characters early) |
 | malformed updates threw `EndOfStreamException`, `InvalidDataException`, `JsonReaderException`, `InvalidCastException`, `NullReferenceException`, `DivideByZeroException`, bare `Exception`, …, some after half the update was applied | `YUpdateException` (a `FormatException`), and the document is unchanged; `TryApplyUpdate` / `TryApplyUpdateV2` return false instead | see [Untrusted input](#untrusted-input) |
-| `YDocOptions.Meta`, `YDoc.Meta`: `IDictionary<string, string>` (always null when read from an update) | `IDictionary<string, object>` | Yjs' `meta` is any object; the old cast always failed |
-| pending structs and deletions: unbounded | `YDocOptions.MaxPendingBytes` (16 MiB) | a peer could send updates that never integrate and fill memory |
-| pending structs and deletions: not visible | `YDoc.HasPending` | Yjs exposes `doc.store.pendingStructs`/`pendingDs`; a peer that sends a snapshot of its document (`EncodeStateAsUpdate`) must know when that leaves out content waiting for a missing update |
+| `YDocOptions.Meta`, `YDoc.Meta`: `IDictionary<string, string>` (always null when read from an update) | `object` (any value of the 'any' encoding) | Yjs' `meta` is any value; the old cast always failed, and an update with a `meta` that was not an object was rejected |
+| a subdocument's options written as `{ gc, guid, autoLoad }` with a random guid of their own; `ShouldLoad` defaulted to `AutoLoad`; `Destroy` threw with subdocuments and left a deleted subdocument's content without a document; a subdocument kept its own client id | as Yjs 13.6: the options are `{}` plus `gc: false`, `autoLoad: true`, `meta` when they differ from the defaults; reading lets every key override (a `guid` too, as `createDocFromOpts`); `YDocOptions.ShouldLoad` (default true) and `YDoc.ShouldLoad`; a destroyed subdocument is replaced by a fresh document that does not load; an added subdocument takes the parent's client id and `CollectionId` (new, Yjs' `collectionid`) | a Yjs peer reading Ycs' options took the random guid as the subdocument's identity |
+| pending structs and deletions: unbounded | `YDocOptions.MaxPendingBytes` (no limit by default, as Yjs) | a peer could send updates that never integrate and fill memory; the default does not reject a valid large update that arrives before its base |
+| pending structs and deletions: not visible, and left out of `EncodeStateAsUpdate` | `YDoc.HasPending`; `EncodeStateAsUpdate…` includes them, as Yjs 13.6 does (the pending deletions whole, the pending structs beyond the target state vector, merged into the state) | Yjs exposes `doc.store.pendingStructs`/`pendingDs`; a server that persisted its state and restarted lost what was pending |
 | — (Yjs has none either) | `YText.RemoveNonText()`: deletes every embed, nested type, other non-string content and formatting in one transaction; returns whether it changed anything | a plain-text editor (a textarea) bound to a `YText` that other peers may fill with rich content: afterwards `Length` is the string's length and indexes agree. It deletes the items themselves, so nothing is added to the document |
-| every changed type built its event (`YTextEvent`, `YMapEvent`, …) and added itself and its ancestors to `Transaction.ChangedParentTypes`, observed or not | only when the type has an `EventHandler`, it or an ancestor a `DeepEventHandler`, or the document an `AfterTransaction`, `AfterTransactionCleanup` or `AfterAllTransactions` handler (an `UndoManager` is one); `Transaction.Changed` is filled as before. `YTextEvent.KeysChanged` and `YXmlEvent.AttributesChanged` are built when read (also after the transaction ended: they hold the event's own set of changed keys, not the transaction) | an unobserved document (a server that applies and relays updates) builds no events; Yjs always does. A handler of `Update` or of another type's events that reads `ChangedParentTypes` sees only the observed types |
+| every changed type built its event (`YTextEvent`, `YMapEvent`, …) and added itself and its ancestors to `Transaction.ChangedParentTypes`, observed or not | only when the type has an `EventHandler`, it or an ancestor a `DeepEventHandler`, or the document an `AfterTransaction`, `AfterTransactionCleanup` or `AfterAllTransactions` handler (an `UndoManager` is one); `Transaction.Changed` is filled as before. When an observer attaches a deep observer or such a handler during the cleanup, the types skipped before build their events then (without calling their own observers), so the late observer sees every event, as in Yjs. `YTextEvent.KeysChanged` and `YXmlEvent.AttributesChanged` are built when read (also after the transaction ended: they hold the event's own set of changed keys, not the transaction) | an unobserved document (a server that applies and relays updates) builds no events; Yjs always does. A handler of `Update` or of another type's events that reads `ChangedParentTypes` sees only the observed types |
 | `Transaction.Changed`: a new `HashSet<string>` per changed type; `YMap.Count` walked the map (O(n)) | the types whose children changed and none of their keys share one read-only set (`{ null }`), so treat the sets as read-only; `YMap.Count` is kept as entries are added and deleted (O(1)) | a keystroke changed one list type and allocated a set for it; counting a map is common in bindings |
 | `YArrayBase.FindMarker`, `YArrayBase._searchMarkers` and their nested marker types were `protected` | `private protected` | implementation details of the search markers; a subclass outside the assembly cannot use them meaningfully |
 | `YText.ToString()` built the string each time, through a `StringBuilder` (twice the text's size) | kept until the text changes (an unchanged text returns the same string; the text holds on to it meanwhile), built in one copy; new `YText.CopyTo(Span<char>)` (returns the characters written; `Length` is always enough room) and `YText.WriteTo(IBufferWriter<char>)` write the text without a string | an editor binding or a server that reads the text after every update |
@@ -49,7 +53,16 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | `ID.Write(Stream)`, `RelativePosition.Write(Stream)`/`Read(Stream)`, `Snapshot.DecodeSnapshot(Stream)` | internal; use `RelativePosition.ToArray()`/`Read(byte[])`, `Snapshot.DecodeSnapshot(byte[])` | these exposed the internal encoding layer |
 | a new `Transaction` for every transaction, readable forever, and so were an event's lazily computed `Changes`, `Keys`, `Delta`, `Adds`, `Deletes` | the document reuses its transaction objects: a `Transaction` (and its `BeforeState`, `AfterState`, `Changed`, `ChangedParentTypes`, `Meta`, the list `AfterAllTransactions` passes) is valid until the batch's `AfterAllTransactions` handlers return; reading an ended one, or computing an event's changes after its transaction ended, throws `InvalidOperationException`. Every event handed to a handler (a type's, a deep one's, an `UndoManager` stack event's) is in its transaction's `ChangedParentTypes`, and the transaction lets go of them all when it ends, so a kept event never reads the transaction that reuses the object. Compute what you need in the handler and keep that | a transaction allocated about 2 KB of bookkeeping per keystroke; Yjs also throws when an event's changes are computed after its handler. `UndoManager` stack items and its events keep their own data |
 | `Transact(Action<Transaction>, origin, local)` only | also `Transact<TState>(TState state, Action<TState, Transaction> action, object origin = null, bool local = true)` | with a `static` lambda nothing is captured, so no closure is allocated per call |
-| `AfterTransaction` before the deep observers; an observer that threw skipped the observers of the other changed types; two transactions an observer started one after the other were merged into one; `SubdocsChanged` after every transaction | as Yjs 13.6: observers, deep observers, then `AfterTransaction`, each called even if one before threw (the first exception is rethrown after the cleanup); a transaction started in an observer ends when its `Transact` returns; `SubdocsChanged` only when a subdocument was added, removed or loaded | Yjs' `cleanupTransactions` and `transact` |
+| `AfterTransaction` before the deep observers; an observer that threw skipped the observers of the other changed types; two transactions an observer started one after the other were merged into one; `SubdocsChanged` after every transaction | as Yjs 13.6: observers, deep observers, then `AfterTransaction`, each called even if one before threw (the first exception is rethrown after the cleanup), and every handler of one type's `EventHandler` or `DeepEventHandler` too (Yjs' `callAll`; of these the last exception propagates); observers in the order the types changed, also after a changed type was deleted; a deep observer's events in a stable order by path length, with `CurrentTarget` and `Path` relative to the observed type, and without events whose target was deleted meanwhile; a transaction started in an observer ends when its `Transact` returns; `SubdocsChanged` only when a subdocument was added, removed or loaded | Yjs' `cleanupTransactions` and `transact` |
+| `YMap.Get` of a missing key threw `KeyNotFoundException` | returns null (Yjs: `undefined`); `YMap.TryGet(key, out value)` tells a missing key from a null value | Yjs' `get` |
+| `YText.InsertEmbed` of a shared type threw `NotSupportedException`; a type a Yjs peer embedded was missing from `ToDelta` and the event delta | a shared type is an embed as in Yjs: `InsertEmbed`, `ApplyDelta`, `ToDelta`, `YTextEvent.Delta` | the indexes of a binding were off by one after such an embed |
+| `YTextEvent.Changes` was the list change set (inserts as characters, the inserted and deleted items) | Yjs' text form: `Keys` and `Delta` (the same list as `YTextEvent.Delta`), no items | Yjs' `YTextEvent#changes` |
+| `YTextChangeAttributes` had `State` and an `int` `User`; `ToDelta(snapshot, prevSnapshot, computeYChange)` compared `State` | no `State`; `User` is a `long?` (null when `computeYChange` does not set it), and `Type` is compared | text added after text removed by the same user was reported as removed; client ids above 2^31 never matched |
+| `YText.ToDelta()` opened a transaction and threw outside a document | reads only (a transaction, with origin `"cleanup"`, only with snapshots); `[]` for a text outside a document, so `Clone` and `YXmlText.ToString` work there too | Yjs' `toDelta` |
+| `YArray.Push`/`Add` inserted at `Length` | appends after the last item, deleted ones included, as Yjs' `push` | the bytes differed, and the place among concurrent appends could |
+| `Insert` beyond the length inserted at the front; on a type outside a document `Insert`/`Delete` out of range threw; `Slice(start, end)` with `start > end` threw | `Insert` beyond the length throws `ArgumentOutOfRangeException` (Yjs: "Length exceeded!"); outside a document they splice as JavaScript; `Slice` never throws | Yjs' `typeListInsertGenerics`, `splice`, `typeListSlice` |
+| `YXmlElement.ToString` wrote values with .NET formatting and the current culture (`True`, `1,5`); `GetAttributes(snapshot)` dropped null values | values as JavaScript's `String(value)` (`true`, `1.5`, `null`, `[object Object]`); null values kept | Yjs' `toString`, `typeMapGetAllSnapshot` |
+| `Unobserve`/`UnobserveDeep` of a handler registered twice removed one registration | every registration of it, as Yjs' `removeEventHandlerListener` (`-=` on the events still removes one; an unknown handler is ignored, where Yjs logs an error) | Yjs' `unobserve` |
 
 ## Proposed, not done
 
@@ -64,12 +77,10 @@ for a discussion with the maintainers:
   would cost nothing per position, but `Assoc` is a settable field, `CompareRelativePositions` and
   `AbsolutePosition.TryCreateFromRelativePosition` accept `null`, and callers keep positions in
   collections by reference, so it is a breaking change.
-- `YDoc.ClientId` is an `int`, so a document cannot use the upper half of Yjs' 32-bit client id
-  range itself (it reads such ids from other clients fine). `uint` would match Yjs.
 - `Item`, `AbstractStruct`, `GC`, `Skip` and the content classes are public but are
   implementation details of the CRDT; YDotNet exposes none of that.
-- `YMap.Get` returns `object`. Typed accessors (`TryGet<T>(key, out T value)`) would remove casts
-  without introducing YDotNet's `Output` wrapper.
+- `YMap.Get` and `TryGet` return `object`. Typed accessors (`TryGet<T>(key, out T value)`) would
+  remove casts without introducing YDotNet's `Output` wrapper.
 - Nullable annotations cover the encoding layer only; the public types are not annotated yet.
 
 ## Untrusted input
@@ -77,9 +88,11 @@ for a discussion with the maintainers:
 Ycs is meant to apply updates from peers it does not trust (a server relaying for browsers, a
 Blazor WebAssembly client). Every API that decodes bytes — `ApplyUpdate…`, `TryApplyUpdate…`,
 `EncodeStateAsUpdate…(stateVector)`, everything in `UpdateOperations`, `Snapshot.DecodeSnapshot…`,
-`SnapshotContainsUpdate…`, `RelativePosition.Read`, `SyncProtocol.Read…` — throws only
+`CreateDocFromSnapshot` and `Snapshot.RestoreDocument` (a snapshot that holds more than the document),
+`SnapshotContainsUpdate…`, `RelativePosition.Read`, `RelativePosition.CreateRelativePositionFromJSON`, `SyncProtocol.Read…` — throws only
 `YUpdateException` for malformed input, with a message that says what was wrong (never the
-input's content).
+input's content). The snapshot reads (`ToArraySnapshot`, `GetSnapshot`, `GetAllSnapshot`,
+`ToDelta(snapshot)`) ignore deletions of clients or clocks the document does not have, as Yjs does.
 
 **Atomicity.** `ApplyUpdate` decodes the whole update (structs and delete set) before it touches
 the document, then plans the integration against the document without changing it (which structs
@@ -88,7 +101,7 @@ either step leaves the document exactly as it was: same text, state vector and e
 (an empty transaction may be observed when the failure is found in the planning step). What is
 checked before anything changes:
 
-* every value is in range: client ids up to 2^32 - 1, and **clocks**: every struct, delete range and
+* every value is in range: client ids up to 2^53 - 1 (as lib0 reads them), and **clocks**: every struct, delete range and
   state-vector entry ends at clock 2^31 - 1 or before (about two billion operations per client id),
   so no clock arithmetic overflows;
 * no struct of length 0, no client listed twice, no reference to a later struct of the item's own
@@ -97,11 +110,18 @@ checked before anything changes:
   insert beyond that throws `ArgumentException` / `InvalidOperationException`), so nothing recurses
   without bound;
 * size: a collection is never allocated larger than the remaining input can fill, and a v2 update
-  (whose run-length encoded columns can describe any number of structs in a few bytes) holds at most
-  64 structs per byte plus 4096;
+  (whose run-length encoded columns can describe any number of structs in a few bytes: Yjs writes
+  20,000 deleted items in 42 bytes) holds at most `YDocOptions.MaxStructsPerUpdate` structs
+  (2,097,152 by default, never fewer than one per byte of the update; about 110 bytes each while
+  decoded, so at most about 230 MiB for a small update). `UpdateOperations.MaxStructsPerUpdate`
+  (process-wide, same default) bounds the v2 updates given to `UpdateOperations`. Lower them on a
+  server that applies updates from untrusted peers and knows its documents' size; a v1 update needs at
+  least two bytes per struct and is bounded by its size;
 * pending data: what waits for structs the document does not have yet may grow to
-  `YDocOptions.MaxPendingBytes` (16 MiB by default), counted as encoded bytes; an update that would
-  grow it further is rejected (a duplicate is merged away first).
+  `YDocOptions.MaxPendingBytes` (no limit by default, as in Yjs: a valid update of any size can
+  arrive before the one it builds on), counted as encoded bytes; an update that would grow it further
+  is rejected (a duplicate is merged away first). A server that applies updates from untrusted peers
+  sets it.
 
 After these checks the integration does not fail on input alone; an exception from it would be a
 bug in Ycs and cannot be rolled back. Structurally odd but well-formed updates (an item whose two

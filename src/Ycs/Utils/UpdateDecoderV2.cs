@@ -58,19 +58,22 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     private readonly UintOptRleDecoder _lengthDecoder;
 
     /// <param name="input">The update.</param>
-    /// <param name="trusted">Written by this library (pending structs): no limit on the number of structs.</param>
-    public UpdateDecoderV2(Lib0Reader input, bool trusted = false)
+    /// <param name="maxStructs">
+    /// The most structs the update may hold (<see cref="Limits.MaxStructsV2"/>); <see cref="long.MaxValue"/>
+    /// for an update this library wrote (pending structs).
+    /// </param>
+    public UpdateDecoderV2(Lib0Reader input, long maxStructs = Limits.DefaultMaxStructsPerUpdate)
         : base(input)
     {
         _keyClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
-        _clientDecoder = new UintOptRleDecoder(new Lib0Reader());
+        _clientDecoder = new UintOptRleDecoder(new Lib0Reader(), Limits.MaxClient);
         _leftClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
         _rightClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
         _infoDecoder = new RleDecoder(new Lib0Reader());
         _parentInfoDecoder = new RleDecoder(new Lib0Reader());
         _typeRefDecoder = new UintOptRleDecoder(new Lib0Reader());
         _lengthDecoder = new UintOptRleDecoder(new Lib0Reader());
-        ReadColumns(trusted, createStringDecoder: true);
+        ReadColumns(maxStructs, createStringDecoder: true);
     }
 
     public long MaxStructs { get; private set; }
@@ -79,11 +82,11 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     /// Starts over on a new update: <see cref="DSDecoderV2.Reader"/> must have been pointed at it
     /// (<see cref="Lib0Reader.Reset"/>). The column decoders and their readers are reused.
     /// </summary>
-    public void Reset(bool trusted = false)
+    public void Reset(long maxStructs = Limits.DefaultMaxStructsPerUpdate)
     {
         ResetDsCurVal();
         _keys.Clear();
-        ReadColumns(trusted, createStringDecoder: false);
+        ReadColumns(maxStructs, createStringDecoder: false);
     }
 
     /// <summary>Drops the references to the input and to the decoded strings.</summary>
@@ -102,9 +105,9 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         _lengthDecoder.Input.Clear();
     }
 
-    private void ReadColumns(bool trusted, bool createStringDecoder)
+    private void ReadColumns(long maxStructs, bool createStringDecoder)
     {
-        MaxStructs = trusted ? long.MaxValue : (long)Reader.Remaining * Limits.MaxStructsPerByteV2 + Limits.MinStructs;
+        MaxStructs = Limits.MaxStructsV2(maxStructs, Reader.Remaining);
 
         // Read feature flag - currently unused.
         Reader.ReadByte();
@@ -138,14 +141,14 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     }
 
 
-    public ID ReadLeftId() => new ID(_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
+    public ID ReadLeftId() => new ID((long)_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
 
-    public ID ReadRightId() => new ID(_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
+    public ID ReadRightId() => new ID((long)_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
 
     /// <summary>
     /// Read the next client Id.
     /// </summary>
-    public long ReadClient() => _clientDecoder.Read();
+    public long ReadClient() => (long)_clientDecoder.Read();
 
     public byte ReadInfo() => _infoDecoder.Read();
 
@@ -153,7 +156,7 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
 
     public bool ReadParentInfo() => _parentInfoDecoder.Read() == 1;
 
-    public uint ReadTypeRef() => _typeRefDecoder.Read();
+    public uint ReadTypeRef() => (uint)_typeRefDecoder.Read();
 
     public int ReadLength()
     {

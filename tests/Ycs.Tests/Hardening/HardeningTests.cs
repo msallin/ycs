@@ -471,11 +471,10 @@ public class HardeningTests
     private static byte[] Subdocument(string optionsHex) =>
         Concat(Hex("01 01 05 00 29 01 01 6D 01 6B 01 67"), Hex(optionsHex), Hex("00"));
 
+    // Yjs spreads the options into an object: only null throws there, and options are only tested.
     [TestMethod]
     [DataRow("7E")] // null
-    [DataRow("77 01 78")] // a string
-    [DataRow("76 01 02 67 63 77 01 78")] // gc: "x"
-    [DataRow("76 01 04 6D 65 74 61 7D 01")] // meta: 1
+    [DataRow("76 01 04 67 75 69 64 7D 01")] // guid: 1
     public void ApplyUpdate_SubdocumentOptionsOfWrongType_AreRejected(string options)
     {
         var doc = new YDoc();
@@ -490,7 +489,7 @@ public class HardeningTests
         var subdoc = (YDoc)doc.GetMap("m").Get("k");
 
         Assert.IsFalse(subdoc.Gc);
-        Assert.AreEqual(1, subdoc.Meta["a"]);
+        Assert.AreEqual(1, ((IDictionary<string, object>)subdoc.Meta)["a"]);
     }
 
     [TestMethod]
@@ -594,5 +593,71 @@ public class HardeningTests
         Assert.ThrowsExactly<YUpdateException>(() => new YDoc().ApplyUpdateV2(update));
         Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdatesV2(new[] { update, update }));
         Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds);
+    }
+
+    /// <summary>A v2 update whose columns describe <paramref name="count"/> GC structs of length 1 of client 1 in a few bytes.</summary>
+    private static byte[] RunOfGcStructsV2(uint count)
+    {
+        var lengths = new Lib0Writer();
+        lengths.WriteVarInt(-1);
+        lengths.WriteVarUint(count - 2);
+        var info = new Lib0Writer();
+        info.WriteByte(0);
+        var client = new Lib0Writer();
+        client.WriteVarInt(1);
+        var writer = new Lib0Writer();
+        writer.WriteByte(0);
+        writer.WriteVarUint8Array(ReadOnlySpan<byte>.Empty); // key clocks
+        writer.WriteVarUint8Array(client.ToArray());
+        writer.WriteVarUint8Array(ReadOnlySpan<byte>.Empty); // left clocks
+        writer.WriteVarUint8Array(ReadOnlySpan<byte>.Empty); // right clocks
+        writer.WriteVarUint8Array(info.ToArray());
+        writer.WriteVarUint8Array(new byte[] { 0 }); // strings: an empty string column
+        writer.WriteVarUint8Array(ReadOnlySpan<byte>.Empty); // parent info
+        writer.WriteVarUint8Array(ReadOnlySpan<byte>.Empty); // type refs
+        writer.WriteVarUint8Array(lengths.ToArray());
+        writer.WriteVarUint(1); // one client
+        writer.WriteVarUint(count); // structs
+        writer.WriteVarUint(0); // clock
+        writer.WriteVarUint(0); // empty delete set
+        return writer.ToArray();
+    }
+
+    [TestMethod]
+    public void ApplyUpdateV2_MoreStructsThanTheLimitWithinClockRange_IsRejectedQuickly()
+    {
+        var update = RunOfGcStructsV2(5_000_000);
+        var doc = new YDoc();
+
+        var stopwatch = Stopwatch.StartNew();
+        AssertRejected(doc, () => doc.ApplyUpdateV2(update), "");
+        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdatesV2(new[] { update, update }));
+        Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds);
+    }
+
+    [TestMethod]
+    public void ApplyUpdateV2_StructsWithinALoweredLimit_Apply()
+    {
+        var update = RunOfGcStructsV2(10_000);
+        var doc = new YDoc(new YDocOptions { MaxStructsPerUpdate = 10_000 });
+
+        doc.ApplyUpdateV2(update);
+
+        Assert.AreEqual(Convert.ToHexString(Hex("01 01 90 4E")), Convert.ToHexString(doc.EncodeStateVector()));
+    }
+
+    [TestMethod]
+    public void ApplyUpdateV2_StructsBeyondALoweredLimit_AreRejected()
+    {
+        var update = RunOfGcStructsV2(10_001);
+        var doc = new YDoc(new YDocOptions { MaxStructsPerUpdate = 10_000 });
+
+        AssertRejected(doc, () => doc.ApplyUpdateV2(update), "");
+    }
+
+    [TestMethod]
+    public void MaxStructsPerUpdate_NotPositive_Throws()
+    {
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new YDocOptions { MaxStructsPerUpdate = 0 });
     }
 }

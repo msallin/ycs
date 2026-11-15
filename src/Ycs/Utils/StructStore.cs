@@ -64,6 +64,8 @@ internal sealed partial class StructStore
     /// <summary>Deletions of structs this store does not have yet (Yjs' <c>store.pendingDs</c>).</summary>
     internal PendingDeletes PendingDs { get; } = new();
 
+    internal bool HasPending => Pending != null || PendingDs.Count != 0;
+
     /// <summary>The encoded size of what is pending, as <see cref="YDocOptions.MaxPendingBytes"/> counts it.</summary>
     internal long PendingBytes => (Pending?.Bytes ?? 0) + PendingDs.Bytes;
 
@@ -422,7 +424,7 @@ internal sealed partial class StructStore
             // encoded form, as Yjs does.
             var update = Pending.Merge();
             Pending = null;
-            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, trusted: true);
+            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, maxStructs: long.MaxValue);
             ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, long.MaxValue);
         }
     }
@@ -820,7 +822,7 @@ internal sealed partial class StructStore
                     break;
                 }
 
-                var origin = (item.RightOrigin ?? item.LeftOrigin).Value;
+                var origin = (item.LeftOrigin ?? item.RightOrigin).Value;
                 if (origin.Clock < _store.GetState(origin.Client))
                 {
                     depth = _store.Find(origin) is Item { Parent: AbstractType parent } ? parent.Depth : -1;
@@ -953,6 +955,19 @@ internal sealed partial class StructStore
 
                 Bytes += entry.Bytes;
             }
+        }
+
+        /// <summary>A copy of every client's ranges, sorted and merged (the v2 encoding needs them ascending).</summary>
+        public DeleteSet ToDeleteSet()
+        {
+            var ds = new DeleteSet();
+            foreach (var (client, entry) in _clients)
+            {
+                ds.Clients[client] = new List<DeleteSet.DeleteItem>(entry.Ranges);
+            }
+
+            ds.SortAndMergeDeleteSet();
+            return ds;
         }
 
         /// <summary>Removes and returns the ranges of the clients whose state reached one of them, or null.</summary>

@@ -153,7 +153,8 @@ internal static class EncodingUtils
             var target = targetStateVector.Decode(encodedTargetStateVector);
             encoder = v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
             WriteStateAsUpdate(encoder, store, target);
-            return encoder.ToArray();
+            var update = encoder.ToArray();
+            return store.HasPending ? UpdateOperations.MergeWithPending(update, store, target, v2) : update;
         }
         finally
         {
@@ -176,7 +177,13 @@ internal static class EncodingUtils
         try
         {
             var target = targetStateVector.Decode(encodedTargetStateVector);
-            if (v2)
+            if (store.HasPending)
+            {
+                encoder = v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
+                WriteStateAsUpdate(encoder, store, target);
+                destination.Write(UpdateOperations.MergeWithPending(encoder.ToArray(), store, target, v2));
+            }
+            else if (v2)
             {
                 var encoderV2 = UpdateEncoderV2.Rent();
                 encoder = encoderV2;
@@ -231,7 +238,7 @@ internal static class EncodingUtils
         }
     }
 
-    private static void ReturnEncoder(IUpdateEncoder encoder)
+    internal static void ReturnEncoder(IUpdateEncoder encoder)
     {
         switch (encoder)
         {
@@ -486,7 +493,7 @@ internal static class EncodingUtils
         clients.Sort(clocks);
         for (var i = clients.Length - 1; i >= 0; i--)
         {
-            encoder.RestWriter.WriteVarUint((uint)clients[i]);
+            encoder.RestWriter.WriteVarUint((ulong)clients[i]);
             encoder.RestWriter.WriteVarUint((uint)clocks[i]);
         }
     }
@@ -505,7 +512,7 @@ internal static class EncodingUtils
     {
         for (long i = 0; i < count; i++)
         {
-            var client = reader.ReadVarUint();
+            var client = reader.ReadVarUint53();
             var clock = Limits.CheckClock(reader.ReadVarUint());
             ss[client] = clock;
         }

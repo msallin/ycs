@@ -21,3 +21,6 @@ small console app under `Ycs.*.Interop/` and exits non-zero on any mismatch.
 The same updates are pinned as base64 fixtures in `tests/Ycs.Tests/`, so
 `dotnet test` catches format drift without Node. Re-generate them from the JSON that `run.sh`
 leaves in `$TMPDIR` when bumping the tested Yjs version.
+
+`traces/gen.mjs` records the differential traces of the shared types and their events that
+`tests/Ycs.Tests/TraceReplayTests.cs` replays (see `docs/testing.md`).

@@ -18,14 +18,27 @@ public class YDocOptions
     public bool Gc { get; set; } = true;
     public Predicate<Item> GcFilter { get; set; } = DefaultPredicate;
     public string Guid { get; set; } = System.Guid.NewGuid().ToString("D");
-    public IDictionary<string, object> Meta { get; set; } = null;
-    public bool AutoLoad { get; set; } = false;
+
+    /// <summary>
+    /// Yjs' <c>collectionid</c>: associates the document with a collection of the provider. A
+    /// subdocument without one takes its parent's when it is added. Not encoded.
+    /// </summary>
+    public string CollectionId { get; set; }
+
+    /// <summary>Any value of the 'any' encoding; a subdocument's meta travels with its item.</summary>
+    public object Meta { get; set; }
+
+    public bool AutoLoad { get; set; }
+
+    /// <summary>Whether the document should be synced by the provider now; <see cref="YDoc.Load"/> sets it. Yjs' default is true.</summary>
+    public bool ShouldLoad { get; set; } = true;
 
     /// <summary>
     /// The most an applied update may add to what waits for missing structs (structs and deletions
     /// of other clients this document has not received yet), counted as encoded bytes. An update that
     /// would grow it beyond this is rejected with a <see cref="YUpdateException"/> and the document
-    /// is unchanged. Default 16 MiB.
+    /// is unchanged. Default: no limit, as Yjs (a valid update of any size can arrive before the one it
+    /// builds on); a server that applies updates from untrusted peers sets one.
     /// </summary>
     public long MaxPendingBytes
     {
@@ -33,19 +46,38 @@ public class YDocOptions
         set => _maxPendingBytes = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "The limit cannot be negative.");
     }
 
-    private long _maxPendingBytes = 16 * 1024 * 1024;
+    private long _maxPendingBytes = long.MaxValue;
+
+    /// <summary>
+    /// The most structs an applied v2 update may hold (never fewer than one per byte of the update),
+    /// which bounds the memory a small update can make the decoder allocate: the v2 format can
+    /// describe any number of structs in a few bytes. A v1 update needs at least two bytes per struct
+    /// and is not limited. A struct costs about 110 bytes while it is decoded, so the default bounds a
+    /// small update to about 230 MiB. An update beyond it is rejected with a <see cref="YUpdateException"/>
+    /// and the document is unchanged. Default 2,097,152; Yjs has no limit.
+    /// </summary>
+    public long MaxStructsPerUpdate
+    {
+        get => _maxStructsPerUpdate;
+        set => _maxStructsPerUpdate = Limits.CheckMaxStructs(value);
+    }
+
+    private long _maxStructsPerUpdate = Limits.DefaultMaxStructsPerUpdate;
 
     /// <summary>
     /// The client id to start with instead of a random one; for tests and reproducible benchmarks.
-    /// Two documents that edit concurrently must never share a client id.
+    /// Two documents that edit concurrently must never share a client id. 0 to 2^53 - 1, as Yjs'
+    /// <c>doc.clientID</c> (which it generates as a random 32-bit unsigned integer).
     /// </summary>
-    public int? ClientId
+    public long? ClientId
     {
         get => _clientId;
-        set => _clientId = value is null or >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "A client id cannot be negative.");
+        set => _clientId = value is null or >= 0 and <= Limits.MaxClient
+            ? value
+            : throw new ArgumentOutOfRangeException(nameof(value), "A client id is 0 to 2^53 - 1.");
     }
 
-    private int? _clientId;
+    private long? _clientId;
 
     internal YDocOptions Clone()
     {
@@ -54,49 +86,13 @@ public class YDocOptions
             Gc = Gc,
             GcFilter = GcFilter,
             Guid = Guid,
-            Meta = Meta == null ? null : new Dictionary<string, object>(Meta),
+            CollectionId = CollectionId,
+            Meta = Meta,
             AutoLoad = AutoLoad,
+            ShouldLoad = ShouldLoad,
             MaxPendingBytes = MaxPendingBytes,
+            MaxStructsPerUpdate = MaxStructsPerUpdate,
         };
-    }
-
-    internal void Write(IUpdateEncoder encoder, int offset)
-    {
-        var dict = new Dictionary<string, object>();
-        dict["gc"] = Gc;
-        dict["guid"] = Guid;
-        dict["autoLoad"] = AutoLoad;
-
-        if (Meta != null)
-        {
-            dict["meta"] = Meta;
-        }
-
-        encoder.WriteAny(dict);
-    }
-
-    /// <summary>A subdocument's options as another peer wrote them; anything of the wrong type is a <see cref="YUpdateException"/>.</summary>
-    internal static YDocOptions Read(IUpdateDecoder decoder)
-    {
-        if (decoder.ReadAny() is not IDictionary<string, object> dict)
-        {
-            throw new YUpdateException("A subdocument's options are not an object.");
-        }
-
-        return new YDocOptions
-        {
-            Gc = Get(dict, "gc", true),
-            AutoLoad = Get(dict, "autoLoad", false),
-            // The guid is read before the options (Yjs ignores 'guid' in the options as well).
-            Meta = dict.TryGetValue("meta", out var meta) && meta != null
-                ? meta as Dictionary<string, object> ?? throw new YUpdateException("A subdocument's 'meta' is not an object.")
-                : null,
-        };
-
-        static bool Get(IDictionary<string, object> dict, string key, bool defaultValue) =>
-            !dict.TryGetValue(key, out var value) || value == null ? defaultValue
-            : value is bool b ? b
-            : throw new YUpdateException($"A subdocument's '{key}' is not a boolean.");
     }
 }
 
@@ -111,9 +107,11 @@ public partial class YDoc
     public bool Gc => _opts.Gc;
     public Predicate<Item> GcFilter => _opts.GcFilter;
     public bool AutoLoad => _opts.AutoLoad;
-    public IDictionary<string, object> Meta => _opts.Meta;
+    public object Meta => _opts.Meta;
+    public string CollectionId { get; internal set; }
 
-    internal bool ShouldLoad;
+    /// <summary>Whether the document should be synced by the provider now (Yjs' <c>shouldLoad</c>); <see cref="Load"/> sets it.</summary>
+    public bool ShouldLoad { get; private set; }
     internal List<Transaction> _transactionCleanups;
     // The list of the batch before, kept for the next one (see Transaction.CleanupTransactions).
     internal List<Transaction> _spareTransactionCleanups;
@@ -135,10 +133,12 @@ public partial class YDoc
     /// .NET Framework targets, so two documents created in the same tick - or two server
     /// processes started together - would share a client id and silently corrupt the merge.
     /// </summary>
-    internal static int GenerateNewClientId()
+    /// <summary>32 random bits, as Yjs' <c>random.uint32()</c>.</summary>
+    internal static long GenerateNewClientId()
     {
-        // Non-negative, to stay within the int-typed ClientId; the wire format writes it as a uint.
-        return System.Security.Cryptography.RandomNumberGenerator.GetInt32(int.MaxValue);
+        Span<byte> bytes = stackalloc byte[sizeof(uint)];
+        System.Security.Cryptography.RandomNumberGenerator.Fill(bytes);
+        return System.Buffers.Binary.BinaryPrimitives.ReadUInt32LittleEndian(bytes);
     }
 
     /// <param name="gc">Disable garbage collection.</param>
@@ -152,7 +152,8 @@ public partial class YDoc
         _share = new Dictionary<string, AbstractType>();
         Store = new StructStore();
         Subdocs = new HashSet<YDoc>();
-        ShouldLoad = _opts.AutoLoad;
+        ShouldLoad = _opts.ShouldLoad;
+        CollectionId = _opts.CollectionId;
     }
 
     /// <summary>
@@ -180,7 +181,8 @@ public partial class YDoc
 
     public void Destroy()
     {
-        foreach (var sd in Subdocs)
+        // A subdocument's Destroy runs a transaction here whose cleanup changes Subdocs.
+        foreach (var sd in Subdocs.ToArray())
         {
             sd.Destroy();
         }
@@ -189,30 +191,18 @@ public partial class YDoc
         if (item != null)
         {
             _item = null;
+            // A collected item holds ContentDeleted already (Yjs sets a property nothing reads).
             var content = item.Content as ContentDoc;
-
-            if (item.Deleted)
+            if (content != null)
             {
-                if (content != null)
-                {
-                    content.Doc = null;
-                }
-            }
-            else
-            {
-                Debug.Assert(content != null);
-                var newOpts = content.Opts;
-                newOpts.Guid = Guid;
-
-                content.Doc = new YDoc(newOpts);
+                content.Doc = ContentDoc.CreateDocFromOpts(Guid, content.Opts, shouldLoad: false);
                 content.Doc._item = item;
             }
 
-            (item.Parent as AbstractType).Doc.Transact((doc: this, item, content), static (s, tr) =>
+            ((AbstractType)item.Parent).Doc.Transact((doc: this, item, content), static (s, tr) =>
             {
                 if (!s.item.Deleted)
                 {
-                    Debug.Assert(s.content != null);
                     tr.SubdocsAdded.Add(s.content.Doc);
                 }
 
@@ -242,16 +232,16 @@ public partial class YDoc
     public event EventHandler Destroyed;
     public event EventHandler<(ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed)> SubdocsChanged;
 
-    public int ClientId { get; internal set; }
+    public long ClientId { get; internal set; }
     internal StructStore Store { get; private set; }
 
     /// <summary>
     /// Whether received structs or deletions wait for an update this document has not received (Yjs'
-    /// <c>doc.store.pendingStructs</c> and <c>pendingDs</c>). What waits is not in the document yet, and
-    /// <see cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/> leaves it out; it is integrated when the
-    /// missing update arrives. Updates that do not depend on it are integrated meanwhile.
+    /// <c>doc.store.pendingStructs</c> and <c>pendingDs</c>). What waits is not in the document yet; it is
+    /// integrated when the missing update arrives, and updates that do not depend on it are integrated
+    /// meanwhile. <see cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/> includes it, as Yjs does.
     /// </summary>
-    public bool HasPending => Store.Pending != null || Store.PendingDs.Count != 0;
+    public bool HasPending => Store.HasPending;
 
     /// <summary>
     /// Changes that happen inside of a transaction are bundled.
@@ -391,7 +381,8 @@ public partial class YDoc
         }
 
         // Remote type is realized when this method is called.
-        if (typeof(T) != typeof(AbstractType) && type is not T)
+        // As Yjs' constructor check: a subclass (YXmlElement for YXmlFragment) is another type.
+        if (typeof(T) != typeof(AbstractType) && type.GetType() != typeof(T))
         {
             if (type.GetType() == typeof(AbstractType))
             {
@@ -421,7 +412,7 @@ public partial class YDoc
             }
             else
             {
-                throw new Exception($"Type with the name {name} has already been defined with a different constructor");
+                throw new InvalidOperationException($"Type with the name {name} has already been defined with a different constructor");
             }
         }
 
@@ -562,7 +553,7 @@ public partial class YDoc
         UpdateReader.Lease update;
         try
         {
-            update = UpdateReader.Read(buffer, 0, count, v2);
+            update = UpdateReader.Read(buffer, 0, count, v2, _opts.MaxStructsPerUpdate);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {

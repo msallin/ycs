@@ -148,7 +148,7 @@ public class UndoRedoTests : YTestBase
         var undoManager = new UndoManager(array0);
 
         array0.Insert(0, new object[] { 1, 2, 3 });
-        array1.Insert(9, new object[] { 4, 5, 6 });
+        array1.Insert(0, new object[] { 4, 5, 6 });
         Connector.SyncAll();
         CollectionAssert.AreEqual(new[] { 1, 2, 3, 4, 5, 6 }, (ICollection)array0.ToArray());
         undoManager.Undo();
@@ -236,7 +236,7 @@ public class UndoRedoTests : YTestBase
     {
         Init(users: 3);
         var text0 = Texts[Users[0]];
-        var undoManager = new UndoManager(new[] { text0 }, 500, it => true, new HashSet<object> { typeof(int) });
+        var undoManager = new UndoManager(text0, new UndoManagerOptions { TrackedOrigins = new HashSet<object> { typeof(int) } });
 
         Users[0].Transact(tr =>
         {
@@ -259,10 +259,10 @@ public class UndoRedoTests : YTestBase
         array0.Insert(0, new[] { text0, text1 });
 
         var undoManager = new UndoManager(text0);
-        var undoManagerBoth = new UndoManager(new[] { text0, text1 }, 500, it => true, new HashSet<object> { null });
+        var undoManagerBoth = new UndoManager(new[] { text0, text1 });
         text1.Insert(0, "abc");
-        Assert.AreEqual(0, undoManager.Count);
-        Assert.AreEqual(1, undoManagerBoth.Count);
+        Assert.AreEqual(0, undoManager.UndoStack.Count);
+        Assert.AreEqual(1, undoManagerBoth.UndoStack.Count);
         Assert.AreEqual("abc", text1.ToString());
         undoManager.Undo();
         Assert.AreEqual("abc", text1.ToString());
@@ -275,7 +275,7 @@ public class UndoRedoTests : YTestBase
     {
         Init(users: 3);
         var array0 = Arrays[Users[0]];
-        var undoManager = new UndoManager(new[] { array0 }, 500, it => !(it is Item item) || (item.Content is ContentType ct && ct.Type._map.Count == 0), new HashSet<object> { null });
+        var undoManager = new UndoManager(array0, new UndoManagerOptions { DeleteFilter = it => !(it is Item item) || (item.Content is ContentType ct && ct.Type._map.Count == 0) });
         var map0 = new YMap();
         map0.Set("hi", 1);
         var map1 = new YMap();

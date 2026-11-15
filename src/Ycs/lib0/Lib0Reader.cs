@@ -90,8 +90,8 @@ internal sealed class Lib0Reader
 
     /// <summary>
     /// Unsigned variable-length integer (lib0 <c>readVarUint</c>). Values that do not fit
-    /// into 32 bits are rejected instead of being silently truncated: Ycs keeps client ids,
-    /// clocks and lengths in 32 bits, as Yjs does in practice.
+    /// into 32 bits are rejected instead of being silently truncated: Ycs keeps clocks, lengths
+    /// and counts in 32 bits; client ids are read with <see cref="ReadVarUint53"/>.
     /// </summary>
     public uint ReadVarUint()
     {
@@ -115,6 +115,38 @@ internal sealed class Lib0Reader
             }
 
             if (shift > 35)
+            {
+                throw new YUpdateException("A variable-length integer is out of range.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Unsigned variable-length integer up to 2^53 - 1, the range of lib0's <c>readVarUint</c> (a
+    /// JavaScript number): client ids, which applications and other implementations set freely.
+    /// </summary>
+    public long ReadVarUint53()
+    {
+        ulong num = 0;
+        var shift = 0;
+
+        while (true)
+        {
+            var r = ReadByte();
+            num |= (ulong)(r & 0x7F) << shift;
+            shift += 7;
+
+            if (num > Limits.MaxClient)
+            {
+                throw new YUpdateException("A variable-length integer is out of range.");
+            }
+
+            if (r < 0x80)
+            {
+                return (long)num;
+            }
+
+            if (shift > 49)
             {
                 throw new YUpdateException("A variable-length integer is out of range.");
             }
@@ -150,11 +182,27 @@ internal sealed class Lib0Reader
 
     private static YUpdateException EndOfInput() => new("The input ended early.");
 
-    /// <summary>UTF-8 string prefixed by its byte length (lib0 <c>readVarString</c>).</summary>
+    // lib0 decodes with a fatal TextDecoder (ignoreBOM: a byte order mark is kept as U+FEFF).
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>UTF-8 string prefixed by its byte length (lib0 <c>readVarString</c>); invalid UTF-8 is rejected, as lib0 does.</summary>
     public string ReadVarString()
     {
         var length = (int)ReadVarUint();
-        return length == 0 ? string.Empty : Encoding.UTF8.GetString(ReadBytes(length));
+        if (length == 0)
+        {
+            return string.Empty;
+        }
+
+        var bytes = ReadBytes(length);
+        try
+        {
+            return StrictUtf8.GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw new YUpdateException("A string is not valid UTF-8.");
+        }
     }
 
     /// <summary>Length-prefixed byte array (lib0 <c>readVarUint8Array</c>), as a span over the input.</summary>

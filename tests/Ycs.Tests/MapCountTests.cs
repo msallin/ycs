@@ -92,7 +92,7 @@ public class MapCountTests
             };
         }
 
-        var undo = new UndoManager(new AbstractType[] { docs[0].GetMap("m") }, captureTimeout: 0, deleteFilter: _ => true, trackedOrigins: new HashSet<object> { null });
+        var undo = new UndoManager(docs[0].GetMap("m"), new UndoManagerOptions { CaptureTimeout = 0 });
 
         for (var step = 0; step < 150; step++)
         {

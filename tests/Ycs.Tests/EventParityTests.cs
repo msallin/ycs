@@ -147,18 +147,9 @@ public class EventParityTests
     }
 
     [TestMethod]
-    public void TestYTextEventDeltaOverridesTheBaseDeltaShortcut()
+    public void TestYTextEventChangesDeltaIsTheTextDelta()
     {
-        // YText's own Delta is a Quill-style, attribute-aware computation -- structurally
-        // different from (and must NOT be the same object as) the plain insert/retain/delete
-        // ops in Changes.Delta, exactly as in Yjs (YTextEvent.delta overrides YEvent.delta).
-        //
-        // Note: this deliberately inserts *without* formatting attributes. `Changes.Delta` (the
-        // base, non-overridden computation) walks every Item in the changed range and calls
-        // `Content.GetContent()` on it; `ContentFormat.GetContent()` throws `NotImplementedException`
-        // in this port (src/Ycs/Structs/ContentFormat.cs, outside this task's file ownership --
-        // real Yjs's equivalent returns `[]`). Exercising that codepath is a separate, pre-existing
-        // bug tracked out-of-band; this test sticks to plain text so it only proves the override.
+        // As in Yjs, a text event's changes.delta is its Quill-style delta itself (YTextEvent#changes).
         var doc = new YDoc();
         var text = doc.GetText("text");
 
@@ -173,7 +164,7 @@ public class EventParityTests
         text.Insert(0, "abc");
 
         Assert.IsNotNull(evt);
-        Assert.AreNotSame(evt.Changes.Delta, evt.Delta);
+        Assert.AreSame(evt.Changes.Delta, evt.Delta);
         Assert.AreEqual(1, evt.Delta.Count);
         Assert.AreEqual("abc", evt.Delta[0].Insert);
         Assert.IsNull(evt.Delta[0].Attributes);

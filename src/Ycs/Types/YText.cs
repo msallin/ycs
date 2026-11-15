@@ -25,6 +25,7 @@ public class YTextEvent : YEvent
     private readonly ISet<string> _subs;
     private ISet<string> _keysChanged;
     private IList<Delta> _delta = null;
+    private ChangesCollection _changes;
 
     internal YTextEvent(YText arr, Transaction transaction, ISet<string> subs)
         : base(arr, transaction)
@@ -41,6 +42,18 @@ public class YTextEvent : YEvent
     /// Gets whether the children keys changed.
     /// </summary>
     public bool ChildListChanged => _subs?.Contains(null) ?? false;
+
+    /// <summary>
+    /// Yjs' <c>YTextEvent#changes</c>: the <see cref="Keys"/> and the text <see cref="Delta"/>; no
+    /// added or deleted items.
+    /// </summary>
+    public override ChangesCollection Changes => _changes ??= new ChangesCollection
+    {
+        Keys = Keys,
+        Delta = Delta,
+        Added = new HashSet<Item>(),
+        Deleted = new HashSet<Item>(),
+    };
 
     /// <summary>
     /// Compute the changes in the delta format. Overrides <see cref="YEvent.Delta"/> — for
@@ -76,45 +89,56 @@ public class YTextEvent : YEvent
                     {
                         if (action != null)
                         {
-                            Delta op;
+                            Delta op = null;
 
                             switch (action)
                             {
                                 case ChangeType.Delete:
-                                    op = new Delta { Delete = deleteLen };
+                                    if (deleteLen > 0)
+                                    {
+                                        op = new Delta { Delete = deleteLen };
+                                    }
+
                                     deleteLen = 0;
                                     break;
                                 case ChangeType.Insert:
-                                    op = new Delta { Insert = insert };
-                                    if (currentAttributes?.Count > 0)
+                                    if (insert is not string pending || pending.Length > 0)
                                     {
-                                        op.Attributes = new Dictionary<string, object>();
-                                        foreach (var kvp in currentAttributes)
+                                        op = new Delta { Insert = insert };
+                                        if (currentAttributes.Count > 0)
                                         {
-                                            if (kvp.Value != null)
+                                            op.Attributes = new Dictionary<string, object>();
+                                            foreach (var kvp in currentAttributes)
                                             {
-                                                op.Attributes[kvp.Key] = kvp.Value;
+                                                if (kvp.Value != null)
+                                                {
+                                                    op.Attributes[kvp.Key] = kvp.Value;
+                                                }
                                             }
                                         }
                                     }
+
+                                    insert = string.Empty;
                                     break;
                                 case ChangeType.Retain:
-                                    op = new Delta { Retain = retain };
-                                    if (attributes.Count > 0)
+                                    if (retain > 0)
                                     {
-                                        op.Attributes = new Dictionary<string, object>();
-                                        foreach (var kvp in attributes)
+                                        op = new Delta { Retain = retain };
+                                        if (attributes.Count > 0)
                                         {
-                                            op.Attributes[kvp.Key] = attributes[kvp.Key];
+                                            op.Attributes = new Dictionary<string, object>(attributes);
                                         }
                                     }
+
                                     retain = 0;
                                     break;
-                                default:
-                                    throw new InvalidOperationException($"Unexpected action: {action}");
                             }
 
-                            delta.Add(op);
+                            if (op != null)
+                            {
+                                delta.Add(op);
+                            }
+
                             action = null;
                         }
                     }
@@ -123,14 +147,15 @@ public class YTextEvent : YEvent
                     {
                         switch (item.Content)
                         {
-                            case ContentEmbed _:
+                            case ContentType:
+                            case ContentEmbed:
                                 if (Adds(item))
                                 {
                                     if (!Deletes(item))
                                     {
                                         addOp();
                                         action = ChangeType.Insert;
-                                        insert = (item.Content as ContentEmbed).Embed;
+                                        insert = YText.EmbedOf(item.Content);
                                         addOp();
                                     }
                                 }
@@ -221,9 +246,10 @@ public class YTextEvent : YEvent
                                                 attributes[cf.Key] = cf.Value;
                                             }
                                         }
-                                        else
+                                        else if (cf.Value != null)
                                         {
-                                            item.Delete(Transaction);
+                                            // In the delta's own transaction, not the event's: its observers are running.
+                                            item.Delete(transaction);
                                         }
                                     }
                                 }
@@ -261,16 +287,17 @@ public class YTextEvent : YEvent
 
                                             if (cf.Value == null)
                                             {
-                                                attributes[cf.Key] = null;
+                                                attributes.Remove(cf.Key);
                                             }
                                             else
                                             {
-                                                attributes.Remove(cf.Key);
+                                                attributes[cf.Key] = cf.Value;
                                             }
                                         }
-                                        else
+                                        else if (attr != null)
                                         {
-                                            item.Delete(Transaction);
+                                            // A repeated null is left to the contextless cleanup, as in Yjs.
+                                            item.Delete(transaction);
                                         }
                                     }
                                 }
@@ -317,6 +344,10 @@ public class YTextEvent : YEvent
 /// <summary>
 /// Type that represents text with formatting information.
 /// </summary>
+/// <remarks>
+/// Changes made before the text is in a document are replayed when it is added to one; as in Yjs, a
+/// change that fails then ends the replay, and the changes after it are dropped.
+/// </remarks>
 public partial class YText : YArrayBase
 {
     /// <summary>
@@ -465,11 +496,13 @@ public partial class YText : YArrayBase
         Removed
     }
 
+    /// <summary>The <c>ychange</c> attribute of <see cref="ToDelta"/>: whether, and by whom, the text was added or removed.</summary>
     public class YTextChangeAttributes
     {
         public YTextChangeType Type { get; set; }
-        public int User { get; set; }
-        public YTextChangeType State { get; set; }
+
+        /// <summary>The client id of the change; null when <c>computeYChange</c> does not set it (as the default does not).</summary>
+        public long? User { get; set; }
     }
 
     // TODO: [alekseyk] To util class? Might not be needed here.
@@ -598,20 +631,8 @@ public partial class YText : YArrayBase
             }
         }
 
-        // Snapshots are merged again after the transaction, so we need to keep the
-        // transaction alive until we are done.
-        doc.Transact(tr =>
+        void computeDelta()
         {
-            if (snapshot != null)
-            {
-                Transaction.SplitSnapshotAffectedStructs(tr, snapshot);
-            }
-
-            if (prevSnapshot != null)
-            {
-                Transaction.SplitSnapshotAffectedStructs(tr, prevSnapshot);
-            }
-
             while (n != null)
             {
                 if (n.IsVisible(snapshot) || (prevSnapshot != null && n.IsVisible(prevSnapshot)))
@@ -628,7 +649,7 @@ public partial class YText : YArrayBase
 
                             if (snapshot != null && !n.IsVisible(snapshot))
                             {
-                                if (cur == null || cur.User != n.Id.Client || cur.State != YTextChangeType.Removed)
+                                if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Removed)
                                 {
                                     packStr();
                                     currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YTextChangeType.Removed, n.Id) : new YTextChangeAttributes { Type = YTextChangeType.Removed };
@@ -636,7 +657,7 @@ public partial class YText : YArrayBase
                             }
                             else if (prevSnapshot != null && !n.IsVisible(prevSnapshot))
                             {
-                                if (cur == null || cur.User != n.Id.Client || cur.State != YTextChangeType.Added)
+                                if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Added)
                                 {
                                     packStr();
                                     currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YTextChangeType.Added, n.Id) : new YTextChangeAttributes { Type = YTextChangeType.Added };
@@ -650,9 +671,10 @@ public partial class YText : YArrayBase
 
                             str += cs.GetString();
                             break;
-                        case ContentEmbed ce:
+                        case ContentType:
+                        case ContentEmbed:
                             packStr();
-                            var op = new Delta { Insert = ce.Embed };
+                            var op = new Delta { Insert = EmbedOf(n.Content) };
                             if (currentAttributes.Count > 0)
                             {
                                 var attrs = new Dictionary<string, object>();
@@ -678,7 +700,36 @@ public partial class YText : YArrayBase
             }
 
             packStr();
-        }, "splitSnapshotAffectedStructs");
+        }
+
+        if (snapshot != null || prevSnapshot != null)
+        {
+            if (doc == null)
+            {
+                throw new InvalidOperationException("The text is not in a document yet, so it has no state as of a snapshot. Nothing was read.");
+            }
+
+            // Snapshots are merged again after the transaction, so we need to keep the
+            // transaction alive until we are done.
+            doc.Transact(tr =>
+            {
+                if (snapshot != null)
+                {
+                    Transaction.SplitSnapshotAffectedStructs(tr, snapshot);
+                }
+
+                if (prevSnapshot != null)
+                {
+                    Transaction.SplitSnapshotAffectedStructs(tr, prevSnapshot);
+                }
+
+                computeDelta();
+            }, "cleanup");
+        }
+        else
+        {
+            computeDelta();
+        }
 
         return ops;
     }
@@ -714,21 +765,23 @@ public partial class YText : YArrayBase
         InsertText(transaction, ref pos, text, attributes);
     }
 
+    /// <summary>
+    /// Inserts an embed: a shared type (which becomes part of this text, as in an array), or any
+    /// other value as JSON. It counts one towards <see cref="AbstractType.Length"/>.
+    /// </summary>
     public void InsertEmbed(int index, object embed, IDictionary<string, object> attributes = null)
     {
-        attributes = attributes ?? new Dictionary<string, object>();
-
         if (Doc != null)
         {
             Doc.Transact((self: this, index, embed, attributes), static (s, tr) =>
             {
-                var pos = s.self.FindPosition(tr, s.index, useSearchMarker: false);
-                s.self.InsertText(tr, ref pos, s.embed, s.attributes);
+                var pos = s.self.FindPosition(tr, s.index, useSearchMarker: s.attributes == null);
+                s.self.InsertText(tr, ref pos, s.embed, s.attributes ?? new Dictionary<string, object>());
             });
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, attributes));
+            AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, attributes ?? new Dictionary<string, object>()));
         }
     }
 
@@ -952,6 +1005,19 @@ public partial class YText : YArrayBase
             return;
         }
 
+        // As Yjs: an operation that throws ends the replay, and the operations after it are dropped.
+        try
+        {
+            ReplayPending(pending);
+        }
+        catch (Exception)
+        {
+            // Yjs logs it to the console; the integration of the text goes on.
+        }
+    }
+
+    private void ReplayPending(List<PendingOperation> pending)
+    {
         foreach (var op in pending)
         {
             switch (op.Kind)
@@ -980,6 +1046,8 @@ public partial class YText : YArrayBase
             }
         }
     }
+
+    internal override AbstractType InternalCopy() => new YText();
 
     internal override AbstractType InternalClone()
     {
@@ -1037,7 +1105,7 @@ public partial class YText : YArrayBase
         OrderedDictionary<string, object> negatedAttributes = null;
 
         // Insert format-start items.
-        foreach (var kvp in attributes)
+        foreach (var kvp in InJavaScriptKeyOrder(attributes))
         {
             var key = kvp.Key;
             var value = kvp.Value;
@@ -1060,6 +1128,11 @@ public partial class YText : YArrayBase
     /// <param name="attributes">The attributes of the text; null for none. Attributes at the position that are not in them are set to null in them, as in Yjs.</param>
     private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, object text, IDictionary<string, object> attributes)
     {
+        if (text is AbstractType)
+        {
+            CheckCanNest();
+        }
+
         if (currPos.CurrentAttributes?.Count > 0)
         {
             attributes ??= new Dictionary<string, object>();
@@ -1076,7 +1149,12 @@ public partial class YText : YArrayBase
         var negatedAttributes = InsertAttributes(transaction, ref currPos, attributes);
 
         // Insert content.
-        var content = text is string s ? (IContent)new ContentString(s) : new ContentEmbed(text);
+        var content = text switch
+        {
+            string s => (IContent)new ContentString(s),
+            AbstractType type => new ContentType(type),
+            _ => new ContentEmbed(text),
+        };
 
         if (_searchMarkers?.Count > 0)
         {
@@ -1414,12 +1492,16 @@ public partial class YText : YArrayBase
             CleanupFormattingGap(transaction, start, curPos.Right, startAttrs, ref curPos.CurrentAttributes);
         }
 
-        var parent = (curPos.Left ?? curPos.Right)?.Parent as YText;
+        // Yjs reads the parent from the position's items and fails with a TypeError when the text has none.
+        var parent = (curPos.Left ?? curPos.Right ?? throw new InvalidOperationException("The text has no content to delete. Nothing was changed.")).Parent as YText;
         if (parent?._searchMarkers?.Count > 0)
         {
             parent._searchMarkers.UpdateMarkerChanges(curPos.Index, -startLength + length);
         }
     }
+
+    /// <summary>The value an embed or an embedded shared type stands for in a delta.</summary>
+    internal static object EmbedOf(IContent content) => content is ContentEmbed embed ? embed.Embed : ((ContentType)content).Type;
 
     private static OrderedDictionary<string, object> Copy(OrderedDictionary<string, object> attributes) =>
         attributes?.Count > 0 ? new OrderedDictionary<string, object>(attributes) : null;
@@ -1447,13 +1529,16 @@ public partial class YText : YArrayBase
     public static int CleanupYTextFormatting(YText type) => type.CleanupFormatting();
 
     /// <summary>
-    /// Yjs' <c>equalAttrs</c>: <c>a === b</c>, or two objects (a map or a list) with the same own
-    /// properties, each compared with <c>===</c>.
+    /// Yjs' <c>equalAttrs</c>: <c>a === b</c>, or two objects (a map, a list or a byte array) with the
+    /// same own properties, each compared with <c>===</c>; a list's properties are its indexes, so
+    /// <c>[1, 2]</c> equals <c>{ "0": 1, "1": 2 }</c>.
     /// </summary>
     internal static bool EqualAttrs(object attr1, object attr2) =>
         StrictEquals(attr1, attr2) ||
         (attr1 is IDictionary<string, object> map1 && attr2 is IDictionary<string, object> map2 && EqualFlat(map1, map2)) ||
-        (attr1 is System.Collections.IList list1 && attr2 is System.Collections.IList list2 && EqualFlat(list1, list2));
+        (attr1 is System.Collections.IList list1 && attr2 is System.Collections.IList list2 && EqualFlat(list1, list2)) ||
+        (attr1 is IDictionary<string, object> map && attr2 is System.Collections.IList list && EqualFlat(map, list)) ||
+        (attr1 is System.Collections.IList list3 && attr2 is IDictionary<string, object> map3 && EqualFlat(map3, list3));
 
     private static bool EqualFlat(IDictionary<string, object> a, IDictionary<string, object> b)
     {
@@ -1489,6 +1574,71 @@ public partial class YText : YArrayBase
         }
 
         return true;
+    }
+
+    private static bool EqualFlat(IDictionary<string, object> map, System.Collections.IList list)
+    {
+        if (map.Count != list.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in map)
+        {
+            if (!IsArrayIndex(key, out var index) || index >= list.Count || !StrictEquals(value, list[(int)index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether <paramref name="key"/> is a JavaScript array index: a canonical integer below 2^32 - 1.</summary>
+    private static bool IsArrayIndex(string key, out uint index)
+    {
+        index = 0;
+        if (key.Length == 0 || key.Length > 10 || (key[0] == '0' && key.Length > 1))
+        {
+            return false;
+        }
+
+        ulong value = 0;
+        foreach (var c in key)
+        {
+            if (c < '0' || c > '9')
+            {
+                return false;
+            }
+
+            value = (value * 10) + (ulong)(c - '0');
+        }
+
+        if (value >= uint.MaxValue)
+        {
+            return false;
+        }
+
+        index = (uint)value;
+        return true;
+    }
+
+    /// <summary>
+    /// The keys of <paramref name="attributes"/> in the order of JavaScript's <c>for..in</c>: array
+    /// indexes first, ascending, then the others in insertion order. The dictionary itself when it
+    /// has no array index (nothing is allocated).
+    /// </summary>
+    private static IEnumerable<KeyValuePair<string, object>> InJavaScriptKeyOrder(IDictionary<string, object> attributes)
+    {
+        foreach (var key in attributes.Keys)
+        {
+            if (IsArrayIndex(key, out _))
+            {
+                return attributes.OrderBy(kvp => IsArrayIndex(kvp.Key, out var i) ? i : uint.MaxValue).ToList();
+            }
+        }
+
+        return attributes;
     }
 
     /// <summary>
@@ -1527,6 +1677,10 @@ public partial class YText : YArrayBase
                 case short s: number = s; return true;
                 case uint u: number = u; return true;
                 case ulong ul: number = ul; return true;
+                case byte b: number = b; return true;
+                case sbyte sb: number = sb; return true;
+                case ushort us: number = us; return true;
+                case decimal m: number = (double)m; return true;
                 default: number = 0; return false;
             }
         }

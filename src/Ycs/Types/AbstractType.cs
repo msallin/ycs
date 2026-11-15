@@ -6,6 +6,8 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Runtime.ExceptionServices;
+
 namespace Ycs;
 
 public class YEventArgs
@@ -97,7 +99,17 @@ public partial class AbstractType
     /// <summary>
     /// Unregister an observer function previously registered with <see cref="Observe"/> (or <c>+=</c>).
     /// </summary>
-    public void Unobserve(EventHandler<YEventArgs> handler) => EventHandler -= handler;
+    /// <remarks>As Yjs' <c>unobserve</c>: a handler registered more than once is removed every time.</remarks>
+    public void Unobserve(EventHandler<YEventArgs> handler)
+    {
+        EventHandler<YEventArgs> before;
+        do
+        {
+            before = EventHandler;
+            EventHandler -= handler;
+        }
+        while (!ReferenceEquals(before, EventHandler));
+    }
 
     /// <summary>
     /// Observe all events that are created by this type and its children (Yjs' <c>observeDeep(f)</c>).
@@ -112,7 +124,17 @@ public partial class AbstractType
     /// <summary>
     /// Unregister a deep observer function previously registered with <see cref="ObserveDeep"/> (or <c>+=</c>).
     /// </summary>
-    public void UnobserveDeep(EventHandler<YDeepEventArgs> handler) => DeepEventHandler -= handler;
+    /// <remarks>As Yjs' <c>unobserveDeep</c>: a handler registered more than once is removed every time.</remarks>
+    public void UnobserveDeep(EventHandler<YDeepEventArgs> handler)
+    {
+        EventHandler<YDeepEventArgs> before;
+        do
+        {
+            before = DeepEventHandler;
+            DeepEventHandler -= handler;
+        }
+        while (!ReferenceEquals(before, DeepEventHandler));
+    }
 
     private sealed class Subscription(Action unsubscribe) : IDisposable
     {
@@ -198,14 +220,50 @@ public partial class AbstractType
         return n;
     }
 
+    internal bool HasDeepObservers => DeepEventHandler != null;
+
     internal void InvokeEventHandlers(YEvent evt, Transaction transaction)
     {
-        EventHandler?.Invoke(this, new YEventArgs(evt, transaction));
+        var handler = EventHandler;
+        if (handler != null && !transaction._buildingSkippedEvents)
+        {
+            CallAll(handler, this, new YEventArgs(evt, transaction));
+        }
     }
 
     internal void CallDeepEventHandlerListeners(IList<YEvent> events, Transaction transaction)
     {
-        DeepEventHandler?.Invoke(this, new YDeepEventArgs(events, transaction));
+        var handler = DeepEventHandler;
+        if (handler != null)
+        {
+            CallAll(handler, this, new YDeepEventArgs(events, transaction));
+        }
+    }
+
+    // Yjs' callEventHandlerListeners (lib0 callAll): every handler runs even if one before threw, and
+    // the exception thrown last propagates afterwards.
+    private static void CallAll<TArgs>(EventHandler<TArgs> handler, object sender, TArgs args)
+    {
+        if (handler.HasSingleTarget)
+        {
+            handler(sender, args);
+            return;
+        }
+
+        ExceptionDispatchInfo error = null;
+        foreach (var h in Delegate.EnumerateInvocationList(handler))
+        {
+            try
+            {
+                h(sender, args);
+            }
+            catch (Exception e)
+            {
+                error = ExceptionDispatchInfo.Capture(e);
+            }
+        }
+
+        error?.Throw();
     }
 
     // The name of a root type: it never changes, and finding it walks the document's root types.
@@ -293,9 +351,16 @@ public partial class AbstractType
 
     protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
 
-    /// <summary>The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.</summary>
-    internal static object ValueAt(IContent content, int index) =>
-        content is ContentAny any ? any.ValueAt(index) : content.GetContent()[index];
+    /// <summary>
+    /// The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.
+    /// Null for collected content, as Yjs' <c>getContent()[index]</c> of <c>[]</c> is <c>undefined</c>.
+    /// </summary>
+    internal static object ValueAt(IContent content, int index) => content switch
+    {
+        ContentAny any => any.ValueAt(index),
+        ContentDeleted => null,
+        _ => content.GetContent()[index],
+    };
 
     /// <summary>How many keys have a value that is not deleted, by walking the map (<see cref="_mapCount"/> is kept instead).</summary>
     internal int TypeMapCount()

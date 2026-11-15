@@ -41,12 +41,11 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
     // Every struct costs at least one byte.
     public long MaxStructs => long.MaxValue;
 
-    // A var-uint is at most 2^32 - 1, the client id range; the clock is checked.
-    public ID ReadLeftId() => new ID(Reader.ReadVarUint(), Limits.CheckClock(Reader.ReadVarUint()));
+    public ID ReadLeftId() => new ID(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
 
-    public ID ReadRightId() => new ID(Reader.ReadVarUint(), Limits.CheckClock(Reader.ReadVarUint()));
+    public ID ReadRightId() => new ID(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
 
-    public long ReadClient() => Reader.ReadVarUint();
+    public long ReadClient() => Reader.ReadVarUint53();
 
     public byte ReadInfo() => Reader.ReadByte();
 

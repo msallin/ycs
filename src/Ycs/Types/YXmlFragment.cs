@@ -7,6 +7,7 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
 using System.Collections;
+using System.Globalization;
 using System.Text;
 
 namespace Ycs;
@@ -38,6 +39,99 @@ internal static class YXmlNodeHelpers
         }
 
         return n;
+    }
+
+    /// <summary>
+    /// JavaScript's <c>String(value)</c>, which Yjs' <c>toString</c> of the XML types uses for values:
+    /// <c>null</c>, <c>true</c>, numbers as JavaScript prints them, an object as
+    /// <c>[object Object]</c>, a list joined with commas (null as nothing), a text or an XML type
+    /// as its string, any other shared type as an object.
+    /// </summary>
+    internal static string JsString(object value) => value switch
+    {
+        null => "null",
+        string s => s,
+        bool b => b ? "true" : "false",
+        double d => JsNumber(d),
+        float f => JsNumber(f),
+        decimal m => JsNumber((double)m),
+        System.Numerics.BigInteger i => i.ToString(CultureInfo.InvariantCulture),
+        IFormattable n when n is int or long or short or sbyte or byte or ushort or uint or ulong => JsNumber(Convert.ToDouble(n, CultureInfo.InvariantCulture)),
+        YText or YXmlFragment => value.ToString(),
+        IList list => JsJoin(list),
+        _ => "[object Object]",
+    };
+
+    private static string JsJoin(IList list)
+    {
+        var sb = new StringBuilder();
+        for (var i = 0; i < list.Count; i++)
+        {
+            if (i > 0)
+            {
+                sb.Append(',');
+            }
+
+            if (list[i] != null)
+            {
+                sb.Append(JsString(list[i]));
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>ECMAScript's Number::toString: the shortest round-trip digits, positional from 1e-6 to below 1e21.</summary>
+    private static string JsNumber(double d)
+    {
+        if (double.IsNaN(d))
+        {
+            return "NaN";
+        }
+
+        if (double.IsInfinity(d))
+        {
+            return d > 0 ? "Infinity" : "-Infinity";
+        }
+
+        if (d == 0)
+        {
+            return "0";
+        }
+
+        // Digits and the position of the decimal point (n) of the shortest round-trip form.
+        var shortest = Math.Abs(d).ToString("R", CultureInfo.InvariantCulture);
+        var e = shortest.IndexOf('E');
+        var mantissa = e < 0 ? shortest : shortest[..e];
+        var exponent = e < 0 ? 0 : int.Parse(shortest[(e + 1)..], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture);
+        var point = mantissa.IndexOf('.');
+        var digits = point < 0 ? mantissa : mantissa.Remove(point, 1);
+        var n = (point < 0 ? mantissa.Length : point) + exponent;
+        var lead = digits.Length - digits.TrimStart('0').Length;
+        digits = digits.Trim('0');
+        n -= lead;
+        var k = digits.Length;
+
+        string result;
+        if (k <= n && n <= 21)
+        {
+            result = digits + new string('0', n - k);
+        }
+        else if (0 < n && n <= 21)
+        {
+            result = digits[..n] + "." + digits[n..];
+        }
+        else if (-6 < n && n <= 0)
+        {
+            result = "0." + new string('0', -n) + digits;
+        }
+        else
+        {
+            var exp = n - 1;
+            result = digits[..1] + (k > 1 ? "." + digits[1..] : string.Empty) + "e" + (exp >= 0 ? "+" : "-") + Math.Abs(exp).ToString(CultureInfo.InvariantCulture);
+        }
+
+        return d < 0 ? "-" + result : result;
     }
 
     internal static AbstractType ContentTypeOf(Item item)
@@ -261,7 +355,7 @@ public class YXmlFragment : YArrayBase
         var sb = new StringBuilder();
         foreach (var child in EnumerateContent())
         {
-            sb.Append(child);
+            sb.Append(YXmlNodeHelpers.JsString(child));
         }
 
         return sb.ToString();
@@ -280,7 +374,7 @@ public class YXmlFragment : YArrayBase
         }
         else
         {
-            _prelimContent.InsertRange(index, content);
+            PrelimInsert(_prelimContent, index, content);
         }
     }
 
@@ -324,7 +418,7 @@ public class YXmlFragment : YArrayBase
         }
         else
         {
-            _prelimContent.RemoveRange(index, length);
+            PrelimDelete(_prelimContent, index, length);
         }
     }
 

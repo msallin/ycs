@@ -45,15 +45,15 @@ internal sealed class UpdateReader
     /// Nothing decoded refers to the buffer after the lease is disposed. Malformed input throws (as the
     /// decoders do; the caller wraps it in a <see cref="YUpdateException"/>), and the reader is released.
     /// </summary>
-    /// <param name="trusted">A v2 update this library wrote (pending structs): no limit on the number of structs.</param>
-    public static Lease Read(byte[] buffer, int offset, int count, bool v2, bool trusted = false)
+    /// <param name="maxStructs">The most structs a v2 update may hold (see <see cref="UpdateDecoderV2"/>).</param>
+    public static Lease Read(byte[] buffer, int offset, int count, bool v2, long maxStructs = Limits.DefaultMaxStructsPerUpdate)
     {
         var reader = t_free ?? new UpdateReader();
         t_free = null;
         var version = reader._version;
         try
         {
-            reader.ReadCore(buffer, offset, count, v2, trusted);
+            reader.ReadCore(buffer, offset, count, v2, maxStructs);
         }
         catch
         {
@@ -67,7 +67,7 @@ internal sealed class UpdateReader
     /// <summary>Whether this thread's reader is free, that is no lease of it is open (for tests).</summary>
     internal static bool IsFreeOnCurrentThread => t_free != null;
 
-    private void ReadCore(byte[] buffer, int offset, int count, bool v2, bool trusted)
+    private void ReadCore(byte[] buffer, int offset, int count, bool v2, long maxStructs)
     {
         _input.Reset(buffer, offset, count);
 
@@ -76,11 +76,11 @@ internal sealed class UpdateReader
         {
             if (_v2 == null)
             {
-                _v2 = new UpdateDecoderV2(_input, trusted);
+                _v2 = new UpdateDecoderV2(_input, maxStructs);
             }
             else
             {
-                _v2.Reset(trusted);
+                _v2.Reset(maxStructs);
             }
 
             decoder = _v2;

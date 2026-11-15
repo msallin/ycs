@@ -46,6 +46,9 @@ public partial class Transaction
     private bool _local;
     private bool _ended;
 
+    // Set while the events of types skipped in the observer loop are built: their handlers had their turn.
+    internal bool _buildingSkippedEvents;
+
     // A remote change touched a text with formatting: YText.CleanupAfterTransaction runs after the
     // AfterTransaction handlers.
     internal bool _needFormattingCleanup;
@@ -59,7 +62,9 @@ public partial class Transaction
     private bool _beforeStateTaken;
     private bool _afterStateTaken;
 
-    internal readonly Dictionary<AbstractType, ISet<string>> _changed = new();
+    // Insertion-ordered, as a JavaScript Map: a type removed when deleted must not hand its slot to
+    // the next changed type, which would then be observed out of the order of change.
+    internal readonly OrderedDictionary<AbstractType, ISet<string>> _changed = new();
     internal readonly Dictionary<AbstractType, IList<YEvent>> _changedParentTypes = new();
     internal readonly List<AbstractStruct> _mergeStructs = new();
 
@@ -201,7 +206,13 @@ public partial class Transaction
         _subdocsAdded = null;
         _subdocsRemoved = null;
         _subdocsLoaded = null;
-        Clear(_changed);
+        var largeChanged = _changed.Count > KeepCapacity;
+        _changed.Clear();
+        if (largeChanged)
+        {
+            _changed.TrimExcess();
+        }
+
         Clear(_changedParentTypes);
         _mergeStructs.Clear();
         if (_mergeStructs.Capacity > KeepCapacity)
@@ -261,6 +272,79 @@ public partial class Transaction
             if (!ReferenceEquals(updated, set))
             {
                 _changed[type] = updated;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A changed type builds its event only when someone observes it at its turn (see
+    /// <see cref="AbstractType.IsObserved"/>); Yjs builds every event. When an observer attached a deep
+    /// observer or a document listener meanwhile, the skipped types build theirs now, without calling
+    /// their own observers, and every event list is put back into the order of change.
+    /// </summary>
+    private static void BuildSkippedEvents(Transaction transaction)
+    {
+        List<KeyValuePair<AbstractType, ISet<string>>> skipped = null;
+        foreach (var kvp in transaction._changed)
+        {
+            var type = kvp.Key;
+            if ((type._item == null || !type._item.Deleted) && !HasOwnEvent(transaction, type) && type.IsObserved(transaction))
+            {
+                (skipped ??= new()).Add(kvp);
+            }
+        }
+
+        if (skipped == null)
+        {
+            return;
+        }
+
+        transaction._buildingSkippedEvents = true;
+        try
+        {
+            foreach (var kvp in skipped)
+            {
+                kvp.Key.CallObserver(transaction, kvp.Value);
+            }
+        }
+        finally
+        {
+            transaction._buildingSkippedEvents = false;
+        }
+
+        SortEventsByOrderOfChange(transaction);
+
+        static bool HasOwnEvent(Transaction transaction, AbstractType type)
+        {
+            if (transaction._changedParentTypes.TryGetValue(type, out var events))
+            {
+                for (var i = 0; i < events.Count; i++)
+                {
+                    if (events[i].Target == type)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+
+    // Separate from BuildSkippedEvents, whose common path must not allocate the closure.
+    private static void SortEventsByOrderOfChange(Transaction transaction)
+    {
+        var order = new Dictionary<AbstractType, int>(transaction._changed.Count);
+        foreach (var kvp in transaction._changed)
+        {
+            order[kvp.Key] = order.Count;
+        }
+
+        foreach (var events in transaction._changedParentTypes.Values)
+        {
+            if (events is List<YEvent> list && list.Count > 1)
+            {
+                StableSort.Sort(list, (a, b) => order.GetValueOrDefault(a.Target, int.MaxValue).CompareTo(order.GetValueOrDefault(b.Target, int.MaxValue)));
             }
         }
     }
@@ -370,6 +454,15 @@ public partial class Transaction
                 error ??= ExceptionDispatchInfo.Capture(e);
             }
 
+            try
+            {
+                BuildSkippedEvents(transaction);
+            }
+            catch (Exception e)
+            {
+                error ??= ExceptionDispatchInfo.Capture(e);
+            }
+
             // Deep observe events: every event gets its current target first, then the observers
             // are called (an event shared by several types keeps the last one, as in Yjs).
             var deepCalls = transaction._deepCalls;
@@ -381,23 +474,31 @@ public partial class Transaction
                     var events = kvp.Value;
 
                     // We need to think about the possibility that the user transforms the YDoc in the event.
-                    if (type._item == null || !type._item.Deleted)
+                    if (type.HasDeepObservers && (type._item == null || !type._item.Deleted))
                     {
+                        // As Yjs: the events whose target was deleted meanwhile are left out (the
+                        // observer is still called when none is left).
+                        var delivered = events;
                         for (var i = 0; i < events.Count; i++)
                         {
-                            var evt = events[i];
-                            if (evt.Target._item == null || !evt.Target._item.Deleted)
+                            if (events[i].Target._item?.Deleted == true)
                             {
-                                evt.CurrentTarget = type;
+                                delivered = events.Where(static e => e.Target._item == null || !e.Target._item.Deleted).ToList();
+                                break;
                             }
                         }
 
-                        Debug.Assert(events.Count > 0);
+                        for (var i = 0; i < delivered.Count; i++)
+                        {
+                            delivered[i].CurrentTarget = type;
+                        }
+
+                        events = delivered;
                         if (events.Count > 1)
                         {
                             // Sort events by path length so that top-level events are fired first.
                             var sortedEvents = new List<YEvent>(events);
-                            sortedEvents.Sort(ByPathLength);
+                            StableSort.Sort(sortedEvents, ByPathLength);
                             events = sortedEvents;
                         }
 
@@ -470,9 +571,9 @@ public partial class Transaction
                 {
                     var structs = store.Clients[client];
                     var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
-                    for (int j = structs.Count - 1; j >= firstChangePos; j--)
+                    for (int j = structs.Count - 1; j >= firstChangePos;)
                     {
-                        DeleteSet.TryToMergeWithLeft(structs, j);
+                        j -= 1 + DeleteSet.TryToMergeWithLefts(structs, j);
                     }
                 }
             }
@@ -480,21 +581,22 @@ public partial class Transaction
             // Try to merge mergeStructs.
             // TODO: It makes more sense to transform mergeStructs to a DS, sort it, and merge from right to left
             //       but at the moment DS does not handle duplicates.
-            for (int j = 0; j < mergeStructs.Count; j++)
+            for (int j = mergeStructs.Count - 1; j >= 0; j--)
             {
                 var client = mergeStructs[j].Id.Client;
                 var clock = mergeStructs[j].Id.Clock;
                 var structs = store.Clients[client];
                 var replacedStructPos = StructStore.FindIndexSS(structs, clock);
 
-                if (replacedStructPos + 1 < structs.Count)
+                // Both neighbours merged already when more than one struct went.
+                if (replacedStructPos + 1 < structs.Count && DeleteSet.TryToMergeWithLefts(structs, replacedStructPos + 1) > 1)
                 {
-                    DeleteSet.TryToMergeWithLeft(structs, replacedStructPos + 1);
+                    continue;
                 }
 
                 if (replacedStructPos > 0)
                 {
-                    DeleteSet.TryToMergeWithLeft(structs, replacedStructPos);
+                    DeleteSet.TryToMergeWithLefts(structs, replacedStructPos);
                 }
             }
 
@@ -530,6 +632,8 @@ public partial class Transaction
 
                 foreach (var subDoc in added)
                 {
+                    subDoc.ClientId = doc.ClientId;
+                    subDoc.CollectionId ??= doc.CollectionId;
                     doc.Subdocs.Add(subDoc);
                 }
 
@@ -548,127 +652,6 @@ public partial class Transaction
         }
 
         error?.Throw();
-    }
-
-    /// <summary>
-    /// Redoes the effect of this operation.
-    /// </summary>
-    internal AbstractStruct RedoItem(Item item, ISet<Item> redoItems)
-    {
-        var doc = Doc;
-        var store = doc.Store;
-        var ownClientId = doc.ClientId;
-        var redone = item.Redone;
-
-        if (redone != null)
-        {
-            return store.GetItemCleanStart(this, redone.Value);
-        }
-
-        var parentItem = (item.Parent as AbstractType)?._item;
-        AbstractStruct left;
-        AbstractStruct right;
-
-        if (item.ParentSub == null)
-        {
-            // Is an array item. Insert at the old position.
-            left = item.Left;
-            right = item;
-        }
-        else
-        {
-            // Is a map item. Insert at current value.
-            left = item;
-            while ((left as Item)?.Right != null)
-            {
-                left = (left as Item).Right;
-                if (left.Id.Client != ownClientId)
-                {
-                    // It is not possible to redo this item because it conflicts with a change from another client.
-                    return null;
-                }
-            }
-
-            if ((left as Item)?.Right != null)
-            {
-                left = (item.Parent as AbstractType)?._map[item.ParentSub];
-            }
-
-            right = null;
-        }
-
-        // Make sure that parent is redone.
-        if (parentItem != null && parentItem.Deleted && parentItem.Redone == null)
-        {
-            // Try to undo parent if it will be undone anyway.
-            if (!redoItems.Contains(parentItem) || RedoItem(parentItem, redoItems) == null)
-            {
-                return null;
-            }
-        }
-
-        if (parentItem != null && parentItem.Redone != null)
-        {
-            while (parentItem.Redone != null)
-            {
-                parentItem = (Item)store.GetItemCleanStart(this, parentItem.Redone.Value);
-            }
-
-            // Find next cloned_redo items.
-            while (left != null)
-            {
-                var leftTrace = left;
-                while (leftTrace != null && ((leftTrace as Item)?.Parent as AbstractType)?._item != parentItem)
-                {
-                    leftTrace = (leftTrace as Item).Redone == null ? null : store.GetItemCleanStart(this, (leftTrace as Item).Redone.Value);
-                }
-
-                if (leftTrace != null && ((leftTrace as Item)?.Parent as AbstractType)?._item == parentItem)
-                {
-                    left = leftTrace;
-                    break;
-                }
-
-                left = (left as Item)?.Left;
-            }
-
-            while (right != null)
-            {
-                var rightTrace = right;
-                while (rightTrace != null && ((rightTrace as Item)?.Parent as AbstractType)?._item != parentItem)
-                {
-                    rightTrace = (rightTrace as Item).Redone == null ? null : store.GetItemCleanStart(this, (rightTrace as Item).Redone.Value);
-                }
-
-                if (rightTrace != null && ((rightTrace as Item)?.Parent as AbstractType)?._item == parentItem)
-                {
-                    right = rightTrace;
-                    break;
-                }
-
-                right = (right as Item)?.Right;
-            }
-        }
-
-        var nextClock = store.GetState(ownClientId);
-        var nextId = new ID(ownClientId, nextClock);
-
-        var redoneItem = new Item(
-            nextId,
-            left,
-            (left as Item)?.LastId,
-            right,
-            right?.Id,
-            parentItem == null ? item.Parent : (parentItem.Content as ContentType)?.Type,
-            item.ParentSub,
-            item.Content.Copy());
-
-        item.Redone = nextId;
-
-        redoneItem.KeepItemAndParents(true);
-        redoneItem.Integrate(this, 0);
-
-        return redoneItem;
     }
 
     internal static void SplitSnapshotAffectedStructs(Transaction transaction, Snapshot snapshot)
@@ -696,7 +679,8 @@ public partial class Transaction
                 }
             }
 
-            snapshot.DeleteSet.IterateDeletedStructs(transaction, item => true);
+            snapshot.DeleteSet.IterateDeletedStructs(transaction, static _ => true);
+
             meta.Add(snapshot);
         }
     }

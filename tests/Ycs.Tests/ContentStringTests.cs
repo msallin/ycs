@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -10,6 +11,15 @@ namespace Ycs;
 [TestClass]
 public class ContentStringTests
 {
+    [TestMethod]
+    public void GetContent_WithSurrogatePair_OneStringPerCodeUnitAsYjs()
+    {
+        // Yjs: new ContentString('a😀').getContent() is ['a', '\ud83d', '\ude00'].
+        var content = new ContentString("a😀");
+
+        CollectionAssert.AreEqual(new object[] { "a", "\ud83d", "\ude00" }, content.GetContent().ToArray());
+    }
+
     [TestMethod]
     public void Splice_String_SplitsAtOffset()
     {
