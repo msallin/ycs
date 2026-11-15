@@ -107,8 +107,10 @@ the document, then plans the integration against the document without changing i
 integrate in which order, which wait for others), and only then carries it out. A failure in
 either step leaves the document exactly as it was: same text, state vector and encoding, no events
 (an empty transaction may be observed when the failure is found in the planning step); the
-exceptions are the conflict-resolution budget below and structs of the update that waited for
-pending structs that are dropped (see [pending structs](#pending-structs-retried)). What is checked
+exceptions are the conflict-resolution budget below, structs of the update that waited for
+pending structs that are dropped (see [pending structs](#pending-structs-retried)), and an item with a
+parent whose first clocks the document holds as a GC struct (no peer writes one; Yjs throws a
+`TypeError` at the same point), which is rejected when it is reached, with what came before it applied. What is checked
 before anything changes:
 
 * every value is in range: client ids up to 2^53 - 1 (as lib0 reads them), and **clocks**: every struct, delete range and

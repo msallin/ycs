@@ -354,6 +354,18 @@ public partial class Item : AbstractStruct
         {
             Id = new ID(Id.Client, Id.Clock + offset);
             Left = transaction.Doc.Store.GetItemCleanEnd(transaction, new ID(Id.Client, Id.Clock - 1));
+            if (Left is GC && Parent != null)
+            {
+                // The store collected the first part of an item that still has a parent: no peer writes that. Yjs
+                // throws (a TypeError, in the conflict resolution) at the same point.
+                throw new YUpdateException(
+                    $"The struct {Id.Client}:{Id.Clock - offset} continues a struct the document holds as garbage collected, but has a parent. " +
+                    "The structs integrated before stay in the document; the rest of the update, and its deletions, were not applied.")
+                {
+                    PartlyApplied = true,
+                };
+            }
+
             LeftOrigin = (Left as Item)?.LastId;
             Content = (IContentEx)Content.Splice(offset);
             Length -= offset;
