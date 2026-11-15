@@ -150,6 +150,8 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             json["type"] = IdToJson(TypeId.Value);
         }
 
+        // Yjs leaves out an empty tname, so its JSON of a position at the end of the root "" cannot be
+        // resolved; this keeps it.
         if (TName != null)
         {
             json["tname"] = TName;
@@ -166,14 +168,25 @@ public partial class RelativePosition : IEquatable<RelativePosition>
     }
 
     /// <summary>
-    /// Yjs parity: <c>createRelativePositionFromJSON(json)</c>.
+    /// Yjs parity: <c>createRelativePositionFromJSON(json)</c>. The JSON may come from another peer: a
+    /// malformed one (an id that is not an object of two integers from 0 to 2^53 - 1, an <c>assoc</c>
+    /// that is not an integer, neither <c>item</c>, <c>type</c> nor <c>tname</c>) throws
+    /// <see cref="YUpdateException"/>. <c>assoc</c> is clamped to the range of an <see cref="int"/>.
     /// </summary>
     public static RelativePosition CreateRelativePositionFromJSON(IDictionary<string, object> json)
     {
-        ID? typeId = json.TryGetValue("type", out var type) && type != null ? JsonToId(type) : (ID?)null;
-        string tname = json.TryGetValue("tname", out var tn) ? tn as string : null;
-        ID? item = json.TryGetValue("item", out var it) && it != null ? JsonToId(it) : (ID?)null;
-        int assoc = json.TryGetValue("assoc", out var a) && a != null ? Convert.ToInt32(a) : 0;
+        ArgumentNullException.ThrowIfNull(json);
+        ID? typeId = json.TryGetValue("type", out var type) && type != null ? JsonToId(type, "type") : null;
+        string tname = json.TryGetValue("tname", out var tn) && tn != null
+            ? tn as string ?? throw new YUpdateException("The tname of a relative position is not a string.")
+            : null;
+        ID? item = json.TryGetValue("item", out var it) && it != null ? JsonToId(it, "item") : null;
+        int assoc = json.TryGetValue("assoc", out var a) && a != null ? (int)Math.Clamp(JsonInteger(a, "assoc"), int.MinValue, int.MaxValue) : 0;
+
+        if (item == null && tname == null && typeId == null)
+        {
+            throw new YUpdateException("A relative position names neither an item, a type nor a root type.");
+        }
 
         return new RelativePosition(typeId, tname, item, assoc);
     }
@@ -184,11 +197,34 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         ["clock"] = id.Clock
     };
 
-    private static ID JsonToId(object json)
+    // JavaScript's safe integers: what a client id or a clock can be in a Yjs peer.
+    private const long MaxSafeInteger = (1L << 53) - 1;
+
+    private static ID JsonToId(object json, string name)
     {
-        var dict = (IDictionary<string, object>)json;
-        return new ID(Convert.ToInt64(dict["client"]), Convert.ToInt64(dict["clock"]));
+        if (json is not IDictionary<string, object> dict
+            || !dict.TryGetValue("client", out var client) || !dict.TryGetValue("clock", out var clock))
+        {
+            throw new YUpdateException($"The {name} of a relative position is not an object with a client and a clock.");
+        }
+
+        var clientValue = JsonInteger(client, name + ".client");
+        var clockValue = JsonInteger(clock, name + ".clock");
+        if (clientValue < 0 || clientValue > MaxSafeInteger || clockValue < 0 || clockValue > MaxSafeInteger)
+        {
+            throw new YUpdateException($"The {name} of a relative position is out of range (0 to 2^53 - 1).");
+        }
+
+        return new ID(clientValue, clockValue);
     }
+
+    private static long JsonInteger(object value, string name) => value switch
+    {
+        int i => i,
+        long l => l,
+        double d when Math.Floor(d) == d && Math.Abs(d) <= MaxSafeInteger => (long)d,
+        _ => throw new YUpdateException($"The {name} of a relative position is not an integer."),
+    };
 
     internal void Write(Lib0Writer writer)
     {
@@ -204,15 +240,12 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             writer.WriteVarUint(1);
             writer.WriteVarString(TName);
         }
-        else if (TypeId != null)
-        {
-            // Case 3: Found position at the end of the list and type is attached to an item.
-            writer.WriteVarUint(2);
-            TypeId.Value.Write(writer);
-        }
         else
         {
-            throw new Exception();
+            // Case 3: Found position at the end of the list and type is attached to an item.
+            // Every constructor sets one of the three.
+            writer.WriteVarUint(2);
+            TypeId.Value.Write(writer);
         }
 
         writer.WriteVarInt(Assoc);

@@ -78,7 +78,7 @@ for a discussion with the maintainers:
 Ycs is meant to apply updates from peers it does not trust (a server relaying for browsers, a
 Blazor WebAssembly client). Every API that decodes bytes — `ApplyUpdate…`, `TryApplyUpdate…`,
 `EncodeStateAsUpdate…(stateVector)`, everything in `UpdateOperations`, `Snapshot.DecodeSnapshot…`,
-`SnapshotContainsUpdate…`, `RelativePosition.Read`, `SyncProtocol.Read…` — throws only
+`SnapshotContainsUpdate…`, `RelativePosition.Read`, `RelativePosition.CreateRelativePositionFromJSON`, `SyncProtocol.Read…` — throws only
 `YUpdateException` for malformed input, with a message that says what was wrong (never the
 input's content).
 

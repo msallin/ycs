@@ -102,8 +102,9 @@ public class AbsolutePosition
             {
                 type = doc.Get<AbstractType>(tName);
             }
-            else if (typeId != null)
+            else
             {
+                // Every RelativePosition names an item, a root type or a type.
                 if (store.GetState(typeId.Value.Client) <= typeId.Value.Clock)
                 {
                     // Type does not exist yet.
@@ -121,10 +122,6 @@ public class AbsolutePosition
                     // Struct is garbage collected.
                     return null;
                 }
-            }
-            else
-            {
-                throw new Exception();
             }
 
             index = assoc >= 0 ? type.Length : 0;
