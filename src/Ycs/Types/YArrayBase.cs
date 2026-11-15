@@ -343,8 +343,10 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 {
                     if (index < n.Length)
                     {
-                        // insert in-between
-                        transaction.Doc.Store.GetItemCleanStart(transaction, new ID(n.Id.Client, n.Id.Clock + index));
+                        // Insert in-between. After a stale marker beyond the index, index is negative, as in Yjs: the
+                        // clock lies in an earlier struct of n's client, which is split as Yjs splits it, or below 0,
+                        // where the lookup throws as Yjs' findIndexSS does.
+                        transaction.Doc.Store.GetItemCleanStart(transaction, n.Id.Client, n.Id.Clock + index);
                     }
 
                     break;

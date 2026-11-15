@@ -81,3 +81,26 @@ gcCase('B2.3', i => i.id.clock % 2 === 0, doc => { const a = doc.getArray('a'); 
   doc.transact(() => { x.insert(0, 'x'); y.push([1]) })
   console.log('B4.2', log.join(' | '))
 }
+// B5: a marker left stale by a remote transaction lies beyond the index an observer of another type reads or edits
+// (the observer runs before the list's own observer call empties its markers), so the remainder is negative.
+const staleBeyond = (act) => {
+  const doc = new Y.Doc(); doc.clientID = 1; const a = doc.getArray('a'); const m = doc.getMap('m')
+  a.insert(0, [1]); a.push([new Y.Map()])
+  const peer = new Y.Doc(); peer.clientID = 2; sync(doc, peer)
+  for (let i = 0; i < 5; i++) peer.getArray('a').insert(0, [new Y.Map()])
+  sync(peer, doc)
+  a.get(5) // a marker on the item of client 1 at index 5
+  peer.transact(() => { peer.getMap('m').set('k', 1); peer.getArray('a').delete(0, 5) })
+  let r
+  m.observe(() => { try { r = act(a) } catch { r = 'throws' } })
+  sync(peer, doc)
+  return `${r === undefined ? 'undefined' : JSON.stringify(r)} ${JSON.stringify(a.toJSON())} ${hex(Y.encodeStateAsUpdate(doc))}`
+}
+console.log('B5.1', staleBeyond(a => a.get(1)))
+console.log('B5.2', staleBeyond(a => { a.insert(1, [7]); return 'inserted' }))
+console.log('B5.3', staleBeyond(a => { a.delete(1, 1); return 'deleted' }))
+{ // B5 a negative index
+  const doc = new Y.Doc(); const a = doc.getArray('a'); const x = doc.getXmlFragment('x')
+  a.push([1, 2]); x.push([new Y.XmlText('t')])
+  console.log('B5.4', String(a.get(-1)), String(x.get(-1)))
+}

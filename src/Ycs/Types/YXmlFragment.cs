@@ -358,6 +358,13 @@ public class YXmlFragment : YArrayBase
             index -= marker.Index;
         }
 
+        if (index < 0)
+        {
+            // A negative index: Yjs' typeListGet reads the first visible item's content at it, which is undefined (an XML
+            // fragment has no search markers).
+            return default;
+        }
+
         var steps = 0;
         for (; n != null; n = n.Right as Item)
         {

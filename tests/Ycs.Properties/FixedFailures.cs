@@ -69,5 +69,10 @@ internal static class FixedFailures
             "applyDelta ('this._pending.push(() => this.applyDelta(delta))' drops the option); with sanitize: false Ycs " +
             "dropped the trailing newline that Yjs keeps.",
             """{"clients":[{"gc":false,"id":16}],"roots":[{"kind":"text","name":"t2"}],"steps":[{"c":0,"delta":[{"insert":{"$t":"text","dl":[{"insert":"x\u000a"}],"dls":false}}],"op":"delta","path":["t2"]}]}"""),
+        new("stale-marker-get-beyond-index",
+            "YArray.Get returns nothing for a negative remainder, as Yjs' typeListGet reads the content at a negative offset " +
+            "(undefined): an observer of another type read the list during a remote transaction's cleanup, before the list's own " +
+            "observer call emptied its markers, and the marker the lookup found lay beyond the index. Ycs threw ArgumentOutOfRangeException.",
+            """{"clients":[{"gc":false,"id":3,"quiet":true},{"gc":false,"id":10,"quiet":true}],"roots":[{"kind":"array","name":"a"},{"kind":"xml","name":"x"}],"steps":[{"c":0,"op":"transact","ops":[{"op":"push","path":["a"],"values":[0]},{"op":"push","path":["a"],"values":[0]},{"op":"push","path":["a"],"values":[{"$t":"map"}]},{"at":4,"op":"ains","path":["a"],"values":[true]},{"op":"push","path":["a"],"values":[{"$t":"array"}]},{"at":3,"op":"ains","path":["a"],"values":[0]}]},{"from":0,"k":0,"op":"deliver","to":1,"via":"v2"},{"c":1,"key":"b","op":"set","path":["a",2],"value":0},{"c":0,"op":"transact","ops":[{"from":1,"k":0,"op":"deliver","to":0,"via":"v1"},{"at":0,"op":"ains","path":["a",5],"values":[]}]},{"c":1,"op":"transact","ops":[{"op":"unshift","path":["x"],"values":[{"$t":"xmle","n":"div"}]},{"at":0,"len":3,"op":"delete","path":["a"]}]},{"c":0,"id":"x1","op":"react","ops":[{"key":"k2","op":"set","path":["a",2],"value":{"$t":"map"}}],"path":["x"],"txn":true},{"from":1,"k":1,"op":"deliver","to":0,"via":"v2"}]}"""),
     ];
 }

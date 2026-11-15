@@ -192,6 +192,14 @@ public partial class YArray : YArrayBase
             index -= marker.Index;
         }
 
+        if (index < 0)
+        {
+            // Yjs' typeListGet reads the first visible item's content at the negative offset, which is undefined: for a
+            // negative index, and for a marker beyond the index (an observer of another type reads while a remote
+            // transaction's cleanup has not yet emptied this list's stale markers).
+            return default;
+        }
+
         var steps = 0;
         for (; n != null; n = n.Right as Item)
         {

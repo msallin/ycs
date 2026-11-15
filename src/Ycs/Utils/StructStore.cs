@@ -330,14 +330,20 @@ internal sealed partial class StructStore
         return index;
     }
 
-    public AbstractStruct GetItemCleanStart(Transaction transaction, ID id)
+    public AbstractStruct GetItemCleanStart(Transaction transaction, ID id) => GetItemCleanStart(transaction, id.Client, id.Clock);
+
+    /// <summary>
+    /// <see cref="GetItemCleanStart(Transaction, ID)"/> for a clock that can be negative (no <see cref="ID"/> is made of
+    /// one): it throws then, as <see cref="ClientStructs.FindIndex(long)"/> does for any clock not in the store.
+    /// </summary>
+    public AbstractStruct GetItemCleanStart(Transaction transaction, long client, long clock)
     {
-        if (!Clients.TryGetValue(id.Client, out var structs))
+        if (!Clients.TryGetValue(client, out var structs))
         {
             throw new Exception();
         }
 
-        int indexCleanStart = FindIndexCleanStart(transaction, structs, id.Clock);
+        int indexCleanStart = FindIndexCleanStart(transaction, structs, clock);
         Debug.Assert(indexCleanStart >= 0 && indexCleanStart < structs.Count);
         return structs[indexCleanStart];
     }

@@ -8,8 +8,8 @@ namespace Ycs;
 /// <summary>
 /// The windows in which a run extended in place (<see cref="Item.ExtendRun"/>) or the search markers could tell
 /// Ycs from Yjs, each with what Yjs 13.6.32 gives (recorded with interop/markers/blockers.mjs): search markers left
-/// stale by a remote change, a garbage collection filter, snapshot reads within a transaction, and a transaction
-/// started from an observer.
+/// stale by a remote change (also one beyond the index looked up), a garbage collection filter, snapshot reads within
+/// a transaction, and a transaction started from an observer.
 /// </summary>
 [TestClass]
 public class RunExtensionYjsTests
@@ -295,6 +295,96 @@ public class RunExtensionYjsTests
         });
 
         return (t.ToString(), Hex(doc.EncodeStateAsUpdateV1()));
+    }
+
+    [TestMethod]
+    public void Get_StaleMarkerBeyondTheIndex_ReturnsNothingAsYjs()
+    {
+        // Yjs reads the content at a negative offset (undefined), although index 1 holds a value.
+        var (result, v1) = StaleMarkerBeyondTheIndex(a => a.Get(1) ?? "undefined");
+
+        Assert.AreEqual(("undefined", "0206020041010001410200014102010141020201410203012801016d016b017d0102010008010161017d01870100010102010005"), (result, v1));
+    }
+
+    [TestMethod]
+    public void Insert_StaleMarkerBeyondTheIndexAndTheClock_ThrowsAndChangesNothingAsYjs()
+    {
+        var (result, v1) = StaleMarkerBeyondTheIndex(a =>
+        {
+            a.Insert(1, new object[] { 7 });
+            return "inserted";
+        });
+
+        Assert.AreEqual(("throws", "0206020041010001410200014102010141020201410203012801016d016b017d0102010008010161017d01870100010102010005"), (result, v1));
+    }
+
+    [TestMethod]
+    public void Delete_StaleMarkerBeyondTheIndex_DeletesFromTheStartAsYjs()
+    {
+        var (result, v1) = StaleMarkerBeyondTheIndex(a =>
+        {
+            a.Delete(1, 1);
+            return "deleted";
+        });
+
+        Assert.AreEqual(("deleted", "0206020041010001410200014102010141020201410203012801016d016b017d01020100010101610187010001020201000501010001"), (result, v1));
+    }
+
+    [TestMethod]
+    public void Get_NegativeIndex_ReturnsNothingAsYjs()
+    {
+        var doc = new YDoc();
+        var a = doc.GetArray("a");
+        var x = doc.GetXmlFragment("x");
+        a.Push(new object[] { 1, 2 });
+        x.Push(new object[] { new YXmlText("t") });
+
+        Assert.AreEqual(((object)null, (object)null), (a.Get(-1), x.Get(-1)));
+    }
+
+    /// <summary>
+    /// A marker on client 1's item at index 5; a remote transaction deletes the five items before it and changes the
+    /// map first, so the map's observer runs <paramref name="act"/> while the list's markers are still stale.
+    /// </summary>
+    private static (object Result, string V1) StaleMarkerBeyondTheIndex(Func<YArray, object> act)
+    {
+        var doc = Doc(1);
+        var a = doc.GetArray("a");
+        var m = doc.GetMap("m");
+        a.Insert(0, new object[] { 1 });
+        a.Push(new object[] { new YMap() });
+        var peer = Doc(2);
+        Sync(doc, peer);
+        var pa = peer.GetArray("a");
+        for (var i = 0; i < 5; i++)
+        {
+            pa.Insert(0, new object[] { new YMap() });
+        }
+
+        Sync(peer, doc);
+        a.Get(5);
+        peer.Transact(_ =>
+        {
+            peer.GetMap("m").Set("k", 1);
+            pa.Delete(0, 5);
+        });
+        object result = null;
+        m.EventHandler += (_, _) =>
+        {
+            try
+            {
+                result = act(a);
+            }
+            catch (InvalidOperationException)
+            {
+                // Yjs throws as well (findIndexSS on a negative clock).
+                result = "throws";
+            }
+        };
+
+        Sync(peer, doc);
+
+        return (result, Hex(doc.EncodeStateAsUpdateV1()));
     }
 
     private static (string Calls, string Updates, string V1) Filtered(Func<Item, bool> keep, Action<YDoc> body)
