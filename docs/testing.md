@@ -131,10 +131,10 @@ long traces) stays theirs: add an operation here when it needs the cross-area or
 
 | Layer | Proves | Does not prove |
 | --- | --- | --- |
-| Recorded fixtures (`RecordedTests`, `interop/properties/fixtures/*.jsonl`) | On 190 pairwise scripts (every unordered pair of the 19 operation kinds, and each with itself, made concurrently by two or three clients, then exchanged in random order with duplicates and mixed formats), 150 random scripts and 80 fuzzed ones, every step's observation equals Yjs'. Needs no Node. | Anything outside these 420 scripts. Intermediate steps are stored as hashes (`he`, `hs`), so a failure says which step differs; `YCS_PROP_EXPLAIN` (with Node) says how. |
+| Recorded fixtures (`RecordedTests`, `interop/properties/fixtures/*.jsonl`) | On 190 pairwise scripts (every unordered pair of the 19 operation kinds, and each with itself, made concurrently by two or three clients, then exchanged in random order with duplicates and mixed formats), 150 random scripts, 80 fuzzed ones and the scripts of the fixed known failures (`FixedFailures.cs`), every step's observation equals Yjs'. Needs no Node. | Anything outside these scripts. Intermediate steps are stored as hashes (`he`, `hs`), so a failure says which step differs; `YCS_PROP_EXPLAIN` (with Node) says how. |
 | Live soak (`SoakTests.LiveSoak_ScriptsAgreeWithYjs`, `interop/properties/soak.sh`) | The same on any number of fresh scripts (seeded, deterministic); each distinct mismatch is shrunk to a minimal script. | Behaviour the generator does not produce (see the coverage table); timing-dependent behaviour (an UndoManager's capture timeout is 0 or effectively infinite). |
-| Properties (`PropertyTests`, `Properties.cs`) | Laws that need no oracle, on generated scripts: convergence, encode round trip, merge of any partition, diff, v1/v2 conversion, undo/redo, snapshot stability, relative positions, GC invisibility, naive recomputation, the Lean item-list invariants, idempotence, commutativity, event replay, clean rejection of fuzzed updates. | That the laws match Yjs: where Yjs itself breaks one (a split surrogate pair, a lone surrogate, a format without attributes) the property's generator leaves that out, and says so. `EventReplay_HoldsForYjs` checks the event-replay property on Yjs. |
-| Structure-aware fuzzer (`UpdateFuzz.cs`, `UpdateFuzzTests`) | Updates encoded by the tests' own v1 encoder from a model (several synthetic clients in any order, runs split where Yjs merges, origins inside other runs, parents that arrive later, Skip and GC structs, overlapping/repeated/unsorted delete sets, clocks near 2^31 - 1, nesting near 256, clients with no structs) are applied, or rejected with `YUpdateException` and the document unchanged; with Node, as Yjs applies them. | Byte-level damage (that is `tests/Ycs.Fuzz`); v2 input other than Ycs' and Yjs' own conversions of the model's v1. |
+| Properties (`PropertyTests`, `Properties.cs`) | Laws that need no oracle, on generated scripts: convergence, encode round trip, merge of any partition, diff, v1/v2 conversion, undo/redo, snapshot stability, relative positions, GC invisibility, naive recomputation, the Lean item-list invariants, idempotence, commutativity, event replay, clean rejection of fuzzed updates. | That the laws match Yjs: where Yjs itself breaks one (a split surrogate pair, a lone surrogate, a format without attributes, a snapshot read of an array or a map, which shows an item merged across the snapshot whole) the property's generator leaves that out, and says so. `EventReplay_HoldsForYjs` checks the event-replay property on Yjs. |
+| Structure-aware fuzzer (`UpdateFuzz.cs`, `UpdateFuzzTests`) | Updates encoded by the tests' own v1 encoder from a model (several synthetic clients in any order, runs split where Yjs merges, origins inside other runs and inside map values, parents that arrive later, Skip and GC structs, overlapping/repeated/unsorted delete sets, a map value's tail deleted with its map, clocks near 2^31 - 1, nesting near 256, clients with no structs) are applied, or rejected with `YUpdateException` and the document unchanged; with Node, as Yjs applies them. | Byte-level damage (that is `tests/Ycs.Fuzz`); v2 input other than Ycs' and Yjs' own conversions of the model's v1. |
 
 A divergence that is a bug in Ycs is pinned in `KnownFailures.cs` (see [pinning](#from-a-minimal-script-to-a-pinned-test)).
 
@@ -255,7 +255,10 @@ that name; any other mismatch fails.
    fixtures it explains; the recorder fails on a mismatch nothing explains), then
    `dotnet test tests/Ycs.Properties`: the new pinned test is Inconclusive.
 
-When the bug is fixed the pinned test fails: delete the entry and record the fixtures again.
+When the bug is fixed the pinned test fails: move the entry to `FixedFailures.cs` (with what the fix was) and
+record the fixtures again. Its script stays as a regression case: a divergence's is recorded in
+`fixtures/fixed.jsonl` and replayed by `Recorded_ObservationsEqualYjs`, a property's is checked by
+`FixedProperties_Hold`.
 
 ### Adding an operation
 

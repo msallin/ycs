@@ -84,6 +84,12 @@ for a discussion with the maintainers:
 - `YMap.Get` and `TryGet` return `object`. Typed accessors (`TryGet<T>(key, out T value)`) would
   remove casts without introducing YDotNet's `Output` wrapper.
 - Nullable annotations cover the encoding layer only; the public types are not annotated yet.
+- Clocks up to 2^53 - 1, as Yjs reads them (Ycs rejects clocks beyond 2^31 - 1, see below). `ID.Clock` is a
+  `long` already; what is `int` is a struct's and a content's `Length` (public on `AbstractStruct`, `Item`,
+  `IContent`) and the offsets derived from clocks (nine `(int)` narrowings in `StructStore`, `EncodingUtils`,
+  `AbsolutePosition`; `SplitItem`, `Integrate`, `Write` and `Splice` take an `int` offset). Moving them to `long`
+  changes the public API, adds 4 bytes to every struct, and needs every narrowing checked; a GC or deleted run longer
+  than 2^31 - 1 clocks is the only content that would need it (strings and lists cannot be that long).
 
 ## Untrusted input
 
@@ -119,6 +125,13 @@ exception is the conflict-resolution budget below. What is checked before anythi
   each input of the `UpdateOperations` functions; `ConvertUpdateFormatV2ToV1`, `DecodeUpdateV2` and
   `DescribeUpdateV2` expand a v2 update to the size of its structs (131,072 structs are about 0.8 MiB
   of v1, 30 MiB decoded, and a description of 11 million characters);
+* garbage collection: in a document that collects garbage, an update whose cleanup would collect a deleted type
+  in which a key holds two live items is rejected (Yjs integrates it and then throws "Unexpected case" from
+  `Item.gc`). Yjs never writes a key's value of several live items; a crafted update can, and splitting such a
+  value (by a deleted range, or an origin, inside it) leaves its first part live next to the key's value. When the
+  split and the deletion come in one update, where its items land among a key's items is estimated as YATA orders
+  them, and a rare crafted update that Yjs applies is rejected too (1 in 20,000 of the structure-aware fuzzer's
+  scripts). Without garbage collection both keep the second item, unseen;
 * pending data: what waits for structs the document does not have yet holds at most
   `UpdateLimits.MaxPendingStructs` structs (131,072) and `UpdateLimits.MaxPendingBytes` bytes (16 MiB):
   the structs as their v2 encoding counts them, the deletions as their v1 encoding does. The struct

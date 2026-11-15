@@ -96,7 +96,7 @@ difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**
 | `toJSON` | `ToJson` | identical |
 | `typeListSlice` | `YArrayBase.InternalSlice` | DIFFERS, finding 17 (`start > end` throws) |
 | `typeListToArray` | `YArray.ToArray`, `YXmlFragment.ToArray` | equivalent (the fragment's skips only deleted items, not uncountable ones; none occur) |
-| `typeListToArraySnapshot` | `YArrayBase.ToArraySnapshot` | equivalent (splits first, which Yjs leaves to the caller) |
+| `typeListToArraySnapshot` | `YArrayBase.ToArraySnapshot` | identical |
 | `typeListForEach`, `typeListMap` | `YArrayBase.ForEach`, `YArray.ForEach`/`Map` | identical |
 | `typeListCreateIterator` | `YArrayBase.EnumerateContent` | identical |
 | `typeListForEachSnapshot` | `YArrayBase.ForEachSnapshot` | identical |

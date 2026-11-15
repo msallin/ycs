@@ -22,6 +22,18 @@ public class SubdocumentParityTests
     }
 
     [TestMethod]
+    public void Push_NewSubdocumentWithoutAutoLoad_IsAddedAndLoaded()
+    {
+        // Yjs 13.6.32: subdocs { added: ['doc-1'], removed: [], loaded: ['doc-1'] } (a new Y.Doc has shouldLoad true).
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var events = Events(doc);
+
+        doc.GetArray("a").Push([new YDoc(new YDocOptions { Guid = "doc-1", AutoLoad = false })]);
+
+        CollectionAssert.AreEqual(new[] { "doc-1||doc-1" }, events);
+    }
+
+    [TestMethod]
     public void EncodeStateAsUpdate_DefaultSubdocument_WritesEmptyOptions()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });

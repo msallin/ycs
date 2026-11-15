@@ -20,7 +20,7 @@ walkthrough below describes the code at 40d7fdb.
 | 11 lone surrogate escape in v1 JSON | fixed in 1d11000 |
 | 12 PermanentUserData | fixed in f49d651; the filter still gets the transaction only, on purpose (the delete set is internal) |
 | 13 events of the UndoManager | fixed in 3735809 and 0ddbae0 |
-| 14 snapshot-aware reads | `GetAttributes(snapshot)` fixed in 0ecec64; the reads that split structs in a transaction are kept on purpose (right results for merged structs) |
+| 14 snapshot-aware reads | `GetAttributes(snapshot)` fixed in 0ecec64; `ToArraySnapshot`, `GetSnapshot`, `GetAllSnapshot` read without a transaction or a split since fix-prop, as Yjs (a split could replace a lone high surrogate and the next character with U+FFFD) |
 | 15 sync protocol errors | fixed in f48345c (optional error handler) |
 | 16 decoding leniency | invalid UTF-8 fixed in 1d11000; the rest is kept on purpose (hardening) |
 | 17 merging to the left stops after one struct | fixed in 0b1cbe6; the 20 scripts of a 20,000 x 60 undo fuzz run it broke are replayed since 05564bc (the run matches Yjs on every step) |
@@ -373,10 +373,10 @@ Written by Ycs, by reading:
 | `createDocFromSnapshot` | `YDoc.CreateDocFromSnapshot` | equivalent (holes above) |
 | `snapshotContainsUpdateV2`, `snapshotContainsUpdate` | `SnapshotContainsUpdateV2`, `SnapshotContainsUpdate` | equivalent (reads all structs, checks the last per client) |
 | | `Snapshot.RestoreDocument` | port-only |
-| `typeListToArraySnapshot` | `YArrayBase.ToArraySnapshot` | port-only behaviour (splits in a transaction; 14) |
+| `typeListToArraySnapshot` | `YArrayBase.ToArraySnapshot` | identical |
 | `typeListForEachSnapshot` | `ForEachSnapshot` | identical |
-| `typeMapGetSnapshot` | `TypeMapGetSnapshot`, `GetSnapshot` | identical (wrapper splits) |
-| `typeMapGetAllSnapshot` | `GetAllSnapshot` | identical (wrapper splits) |
+| `typeMapGetSnapshot` | `TypeMapGetSnapshot`, `GetSnapshot` | identical |
+| `typeMapGetAllSnapshot` | `GetAllSnapshot` | identical |
 | `YXmlElement.getAttributes(snapshot)` | `GetAttributes(snapshot)` | DIFFERS (14) |
 | `YText.toDelta(snapshot, prevSnapshot, computeYChange)` | `YText.ToDelta` | DIFFERS (10) |
 | **utils/RelativePosition.js** | | |

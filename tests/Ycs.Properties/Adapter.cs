@@ -73,6 +73,9 @@ namespace Ycs.Properties
             return result;
         }
 
+        /// <summary>The exception the last step that failed threw (the observation records only "err").</summary>
+        public Exception LastException { get; private set; }
+
         public Dictionary<string, object> Step(Dictionary<string, object> step)
         {
             Events = new List<object>();
@@ -88,6 +91,7 @@ namespace Ycs.Properties
             catch (Exception e)
             {
                 obs["err"] = true;
+                LastException = e;
                 Debug(e);
             }
 
@@ -407,6 +411,20 @@ namespace Ycs.Properties
             return d;
         }
 
+        /// <summary>Whether the v1 update's delete set has a client whose ranges are out of order or overlap (valid v1, not v2).</summary>
+        internal static bool HasUnorderedDeleteSet(string base64V1)
+        {
+            try
+            {
+                return UpdateOperations.DecodeUpdate(Convert.FromBase64String(base64V1)).DeleteSet.Values
+                    .Any(ranges => ranges.Zip(ranges.Skip(1)).Any(p => p.Second.Clock < p.First.Clock + p.First.Length));
+            }
+            catch (YUpdateException)
+            {
+                return false;
+            }
+        }
+
         internal static string IdText(object id) => id switch
         {
             JsonNumber n => n.Text,
@@ -467,9 +485,9 @@ namespace Ycs.Properties
             };
             doc.SubdocsChanged += (_, e) => Push(Obj(
                 ("w", "subdocs"),
-                ("added", Guids(e.Item1)),
-                ("removed", Guids(e.Item2)),
-                ("loaded", Guids(e.Item3))));
+                ("added", Guids(e.Added)),
+                ("removed", Guids(e.Removed)),
+                ("loaded", Guids(e.Loaded))));
         }
 
         private static List<object> Guids(IEnumerable<YDoc> docs) => docs.Select(d => d.Guid).Order(StringComparer.Ordinal).Cast<object>().ToList();

@@ -172,9 +172,16 @@ internal sealed partial class StructStore
         Version++;
     }
 
+    /// <summary>
+    /// Set once an undeleted item with a key was split: its first part can be a second live item of the key, which
+    /// <see cref="IntegrationPlan.CheckGarbageCollection"/> then looks for in a type an update deletes. Never reset.
+    /// </summary>
+    internal bool MaySplitMapValues { get; private set; }
+
     private Item SplitItem(Transaction transaction, Item item, int diff)
     {
         Version++;
+        MaySplitMapValues |= item.ParentSub != null && !item.Deleted;
         return item.SplitItem(transaction, diff);
     }
 
@@ -374,6 +381,11 @@ internal sealed partial class StructStore
         var plan = _spare ?? new IntegrationPlan(this);
         _spare = null;
         plan.Plan(structs);
+        if (transaction.Doc.Gc)
+        {
+            plan.CheckGarbageCollection(transaction.Doc, ds, PendingDs);
+        }
+
         var (restUpdate, restStructs) = plan.EncodeRest();
         var retry = false;
         if (Pending != null)
@@ -412,12 +424,23 @@ internal sealed partial class StructStore
         plan.Clear();
         _spare = plan;
 
-        // As in Yjs: the update's deletions first, then those that were waiting.
+        // As in Yjs: the update's deletions first, then those that were waiting. When both leave deletions waiting,
+        // Yjs merges the two (mergeUpdatesV2), which sorts and merges every client's ranges: adjacent ranges are then
+        // applied as one, without a split between them (which would replace a split surrogate pair with U+FFFD).
         var waiting = PendingDs.TakeApplicable(this);
+        var waitingKept = PendingDs.Count > 0;
+        var additions = PendingDs.Additions;
         ApplyDeleteSet(transaction, ds);
+        var updateLeft = PendingDs.Additions != additions;
+        additions = PendingDs.Additions;
         if (waiting != null)
         {
             ApplyDeleteSet(transaction, waiting);
+        }
+
+        if (updateLeft && (waitingKept || PendingDs.Additions != additions))
+        {
+            PendingDs.Compact();
         }
 
         if (retry)
@@ -585,6 +608,11 @@ internal sealed partial class StructStore
         private Dictionary<ID, int> _typeDepths;
         private Dictionary<Item, int> _parentDepths;
 
+        // The parent and key of the planned items without a parent (by their references), for the garbage collection check.
+        private Dictionary<Item, (object Parent, string Key)> _keys;
+        private readonly List<(long Client, long Clock, long End)> _ranges = new();
+        private readonly List<Item> _keyChain = new();
+
         public IntegrationPlan(StructStore store)
         {
             _store = store;
@@ -659,6 +687,7 @@ internal sealed partial class StructStore
             _clientsStructRefs.Clear();
             _typeDepths?.Clear();
             _parentDepths?.Clear();
+            _keys?.Clear();
             Rest = null;
             Missing = null;
         }
@@ -920,6 +949,511 @@ internal sealed partial class StructStore
             return _typeDepths != null && _typeDepths.TryGetValue(id, out var depth) ? depth : -1;
         }
 
+        /// <summary>
+        /// Rejects an update whose cleanup would throw: the garbage collection of a deleted type requires every item
+        /// in it to be deleted (Yjs' Item.gc throws "Unexpected case" there, after integrating). The one item a deleted
+        /// type can leave undeleted is a part of a key's value other than its last part: when a value of several items
+        /// (Yjs never writes one undeleted) is split, by an origin or a right origin inside it or by a deleted range that
+        /// starts or ends inside it, the key holds two live items, and deleting the type deletes only the last. Such a
+        /// part, made by this update or kept from an earlier one (unseen, as in Yjs), fails the update that collects a
+        /// type above it. Called only when the document collects garbage; see docs/api.md (Untrusted input).
+        /// </summary>
+        public void CheckGarbageCollection(YDoc doc, DeleteSet ds, PendingDeletes waiting)
+        {
+            // The ranges in the order ApplyDeleteSet takes them: the update's, then the waiting ones.
+            var ranges = _ranges;
+            ranges.Clear();
+            foreach (var (client, list) in ds.Clients)
+            {
+                foreach (var range in list)
+                {
+                    ranges.Add((client, range.Clock, range.Clock + range.Length));
+                }
+            }
+
+            waiting.AddApplicableRanges(this, ranges);
+            var splits = MapValueSplits(ranges);
+            if (splits == null && !_store.MaySplitMapValues)
+            {
+                return;
+            }
+
+            var deleted = DeletedTypes(doc, ranges);
+            if (deleted == null)
+            {
+                return;
+            }
+
+            if (_store.MaySplitMapValues)
+            {
+                foreach (var type in deleted.Keys)
+                {
+                    if (type is { Parent: AbstractType, Content: ContentType content } && HasLiveNonValue(content.Type, doc.GcFilter, !type.Keep && doc.GcFilter(type), ranges))
+                    {
+                        throw MapValueSplit();
+                    }
+                }
+            }
+
+            foreach (var part in LiveNonValues(doc, splits, ranges, deleted))
+            {
+                // Collected when a type above it is deleted now and collected (it, or one between them).
+                var collected = false;
+                for (var ancestor = ParentTypeItem(part); ancestor != null; ancestor = ParentTypeItem(ancestor))
+                {
+                    collected |= !ancestor.Keep && doc.GcFilter(ancestor);
+                    if (collected && deleted.ContainsKey(ancestor))
+                    {
+                        throw MapValueSplit();
+                    }
+                }
+            }
+        }
+
+        private static YUpdateException MapValueSplit() => new(
+            "The update deletes a type in which a key has two values (its value was split, by this update or an earlier one), " +
+            "which the garbage collection cannot remove. The document is unchanged.");
+
+        // The times of the events that split and delete items, in the order the update carries them out: the structs'
+        // references split items (and a key's new item deletes its old value), then range k (from 1, in ApplyDeleteSet's
+        // order) splits at its start, deletes what it covers, and splits at its end.
+        private const int ReferenceSplit = 0;
+        private const int ValueReplaced = 1;
+
+        private static int RangeStart(int k) => 3 * k;
+
+        private static int RangeDeletes(int k) => (3 * k) + 1;
+
+        private static int RangeEnd(int k) => (3 * k) + 2;
+
+        /// <summary>
+        /// The boundaries (with their time) at which the update's references and ranges cut an item with a key that
+        /// is not deleted, by item, or null when there is none (the common case: a key's value is one item).
+        /// </summary>
+        private Dictionary<Item, List<(long Boundary, int Time)>> MapValueSplits(List<(long Client, long Clock, long End)> ranges)
+        {
+            Dictionary<Item, List<(long Boundary, int Time)>> splits = null;
+            foreach (var (str, _, _) in _steps)
+            {
+                if (str is Item item)
+                {
+                    if (item.LeftOrigin is ID left)
+                    {
+                        Split(ref splits, left, left.Clock + 1, ReferenceSplit);
+                    }
+
+                    if (item.RightOrigin is ID right)
+                    {
+                        Split(ref splits, right, right.Clock, ReferenceSplit);
+                    }
+                }
+            }
+
+            for (var k = 0; k < ranges.Count; k++)
+            {
+                var (client, start, end) = ranges[k];
+                Split(ref splits, new ID(client, start), start, RangeStart(k + 1));
+                if (end > start)
+                {
+                    Split(ref splits, new ID(client, end - 1), end, RangeEnd(k + 1));
+                }
+            }
+
+            return splits;
+        }
+
+        /// <summary>Records <paramref name="boundary"/> if it falls inside the item that holds <paramref name="id"/> and that item may be a key's undeleted value.</summary>
+        private void Split(ref Dictionary<Item, List<(long Boundary, int Time)>> splits, ID id, long boundary, int time)
+        {
+            var (target, start) = Target(id);
+            if (target != null && start < boundary && boundary < target.Id.Clock + target.Length
+                && !target.Deleted && target.Content is not ContentDeleted && (target.ParentSub != null || target.Parent == null))
+            {
+                splits ??= new Dictionary<Item, List<(long, int)>>();
+                if (!splits.TryGetValue(target, out var list))
+                {
+                    splits[target] = list = new List<(long, int)>();
+                }
+
+                list.Add((boundary, time));
+            }
+        }
+
+        /// <summary>
+        /// The type items this update deletes by its ranges and the values of keys it replaces (when the new item is
+        /// estimated to land last, see <see cref="LandsLast"/>), with the time they are deleted, or null.
+        /// </summary>
+        private Dictionary<Item, int> DeletedTypes(YDoc doc, List<(long Client, long Clock, long End)> ranges)
+        {
+            Dictionary<Item, int> deleted = null;
+
+            void Add(Item type, int time)
+            {
+                deleted ??= new Dictionary<Item, int>();
+                if (!deleted.TryGetValue(type, out var earlier) || earlier > time)
+                {
+                    deleted[type] = time;
+                }
+            }
+
+            var chains = new KeyChains();
+            foreach (var (str, _, integrate) in _steps)
+            {
+                if (integrate && str is Item item && LandsLast(doc, item, chains) is { Deleted: false } replaced)
+                {
+                    Add(replaced, ValueReplaced);
+                }
+            }
+
+            for (var k = 0; k < ranges.Count; k++)
+            {
+                var (client, start, end) = ranges[k];
+                var known = _store.GetState(client);
+                end = Math.Min(end, GetState(client));
+                for (var clock = start; clock < end;)
+                {
+                    var str = clock < known ? _store.Find(new ID(client, clock)) : FindPlanned(new ID(client, clock));
+                    if (str == null)
+                    {
+                        break;
+                    }
+
+                    if (str is Item { Deleted: false, Content: ContentType } type)
+                    {
+                        Add(type, RangeDeletes(k + 1));
+                    }
+
+                    clock = str.Id.Clock + str.Length;
+                }
+            }
+
+            return deleted;
+        }
+
+        /// <summary>
+        /// For a planned item with a key: whether it lands last among its key's items (it becomes the key's value) and
+        /// so deletes the value before it, which is returned (or null when there was none or it does not land last).
+        /// <paramref name="chains"/> holds each key's first item and value so far, taken from the store and updated
+        /// with the planned items in plan order (those estimated deleted are kept there too). Where an item lands is estimated as YATA orders the items of one
+        /// origin (by client): before its right origin; before the rest of an item its origin splits, unless that rest
+        /// is of a lower client; after an origin only when that is the end of the key's value; without origins, after
+        /// the key's first item only when that item's client is lower. Items under a deleted type are deleted.
+        /// </summary>
+        private Item LandsLast(YDoc doc, Item item, KeyChains chains)
+        {
+            var (parent, key) = KeyOf(item);
+            if (parent is Item parentItem && (parentItem.Deleted || chains.Deleted.Contains(parentItem)))
+            {
+                chains.Deleted.Add(item);
+                return null;
+            }
+
+            if (item.Content is ContentDeleted || key == null)
+            {
+                return null;
+            }
+
+            // A root is named by planned items and is the type itself for those in the store.
+            if (parent is string name && doc.TryGetRoot(name, out var defined))
+            {
+                parent = defined;
+            }
+
+            if (!chains.Keys.TryGetValue((parent, key), out var chain))
+            {
+                var type = parent switch
+                {
+                    Item { Parent: AbstractType } typeItem => (typeItem.Content as ContentType)?.Type,
+                    AbstractType root => root,
+                    _ => null,
+                };
+                if (type != null && type._map.TryGetValue(key, out var value))
+                {
+                    var head = value;
+                    while (head.Left is Item l)
+                    {
+                        head = l;
+                    }
+
+                    chain = (head, value);
+                }
+            }
+
+            bool last;
+            if (chain.Value == null)
+            {
+                last = item.RightOrigin == null;
+            }
+            else if (item.RightOrigin != null)
+            {
+                last = false;
+            }
+            else if (item.LeftOrigin is ID origin)
+            {
+                last = origin.Equals(chain.Value.LastId)
+                    || (Target(origin).Item is { } left && !origin.Equals(left.LastId) && left.Id.Client < item.Id.Client && ReferenceEquals(left, chain.Value));
+            }
+            else
+            {
+                last = chain.Head.Id.Client < item.Id.Client;
+            }
+
+            // Without origins and not last, it lands before the key's first item.
+            var first = chain.Head == null || (!last && item.LeftOrigin == null) ? item : chain.Head;
+            chains.Keys[(parent, key)] = (first, last ? item : chain.Value);
+            if (!last)
+            {
+                chains.Deleted.Add(item);
+            }
+
+            return last ? chain.Value : null;
+        }
+
+        /// <summary>The state of <see cref="LandsLast"/>: per key its first item and value, and the planned items estimated deleted on integration.</summary>
+        private sealed class KeyChains
+        {
+            public Dictionary<(object, string), (Item Head, Item Value)> Keys { get; } = new();
+
+            public HashSet<Item> Deleted { get; } = new();
+        }
+
+        /// <summary>
+        /// Of the items <paramref name="splits"/> cuts, those that are a key's live value (or become one, see
+        /// <see cref="LandsLast"/>) and keep a part other than the last undeleted: a boundary cuts a part only while
+        /// that part is not deleted yet (by an earlier range, or as the key's value with a type above it).
+        /// </summary>
+        private List<Item> LiveNonValues(YDoc doc, Dictionary<Item, List<(long Boundary, int Time)>> splits, List<(long Client, long Clock, long End)> ranges, Dictionary<Item, int> deleted)
+        {
+            var parts = new List<Item>();
+            if (splits == null)
+            {
+                return parts;
+            }
+
+            HashSet<Item> values = null;
+            foreach (var (target, events) in splits)
+            {
+                if (KeyOf(target).Key == null)
+                {
+                    continue;
+                }
+
+                if (target.Parent is not AbstractType)
+                {
+                    if (values == null)
+                    {
+                        // The planned items that are a key's value once the plan is carried out.
+                        values = new HashSet<Item>();
+                        var chains = new KeyChains();
+                        foreach (var (str, _, integrate) in _steps)
+                        {
+                            if (integrate && str is Item item)
+                            {
+                                LandsLast(doc, item, chains);
+                            }
+                        }
+
+                        foreach (var chain in chains.Keys.Values)
+                        {
+                            if (!chains.Deleted.Contains(chain.Value))
+                            {
+                                values.Add(chain.Value);
+                            }
+                        }
+                    }
+
+                    if (!values.Contains(target))
+                    {
+                        continue;
+                    }
+                }
+
+                // When the value is replaced, or a type above it is deleted, its last part (then the key's value) is deleted.
+                var typeDeleted = deleted.TryGetValue(target, out var replacedAt) ? replacedAt : int.MaxValue;
+                for (var ancestor = ParentTypeItem(target); ancestor != null; ancestor = ParentTypeItem(ancestor))
+                {
+                    if (deleted.TryGetValue(ancestor, out var time))
+                    {
+                        typeDeleted = Math.Min(typeDeleted, time);
+                    }
+                }
+
+                var client = target.Id.Client;
+                var valueEnd = target.Id.Clock + target.Length;
+                var boundaries = new List<long> { Target(target.Id).Start, valueEnd };
+                events.Sort((a, b) => a.Time.CompareTo(b.Time));
+                foreach (var (boundary, time) in events)
+                {
+                    var i = boundaries.BinarySearch(boundary);
+                    if (i >= 0)
+                    {
+                        continue;
+                    }
+
+                    i = ~i;
+                    var (partStart, partEnd) = (boundaries[i - 1], boundaries[i]);
+                    if (!((partEnd == valueEnd && typeDeleted < time) || IsCovered(client, partStart, partEnd, ranges, time)))
+                    {
+                        boundaries.Insert(i, boundary);
+                    }
+                }
+
+                // Every part but the last must be deleted by a range.
+                for (var i = 0; i < boundaries.Count - 2; i++)
+                {
+                    if (!IsCovered(client, boundaries[i], boundaries[i + 1], ranges, int.MaxValue))
+                    {
+                        parts.Add(target);
+                        break;
+                    }
+                }
+            }
+
+            return parts;
+        }
+
+        /// <summary>
+        /// Whether a type below a collected one holds an undeleted item that is not the value of its key and that
+        /// <paramref name="ranges"/> do not delete (the collection walks every key's items, the value and those left of it).
+        /// </summary>
+        private static bool HasLiveNonValue(AbstractType type, Predicate<Item> gcFilter, bool collected, List<(long Client, long Clock, long End)> ranges)
+        {
+            var stack = new List<(AbstractType Type, bool Collected)> { (type, collected) };
+            while (stack.Count > 0)
+            {
+                var (t, c) = stack[^1];
+                stack.RemoveAt(stack.Count - 1);
+                foreach (var value in t._map.Values)
+                {
+                    for (var item = value; item != null; item = item.Left as Item)
+                    {
+                        if (c && item != value && !item.Deleted && !IsCovered(item.Id.Client, item.Id.Clock, item.Id.Clock + item.Length, ranges, int.MaxValue))
+                        {
+                            return true;
+                        }
+
+                        Push(item);
+                    }
+                }
+
+                for (var item = t._start; item != null; item = item.Right as Item)
+                {
+                    Push(item);
+                }
+
+                void Push(Item item)
+                {
+                    if (item.Content is ContentType child)
+                    {
+                        stack.Add((child.Type, c || (!item.Keep && gcFilter(item))));
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Whether the ranges that delete before <paramref name="time"/> cover [<paramref name="start"/>, <paramref name="end"/>) of <paramref name="client"/>.</summary>
+        private static bool IsCovered(long client, long start, long end, List<(long Client, long Clock, long End)> ranges, int time)
+        {
+            var own = new List<(long Clock, long End)>();
+            for (var k = 0; k < ranges.Count && RangeDeletes(k + 1) < time; k++)
+            {
+                if (ranges[k].Client == client)
+                {
+                    own.Add((ranges[k].Clock, ranges[k].End));
+                }
+            }
+
+            own.Sort((a, b) => a.Clock.CompareTo(b.Clock));
+            var covered = start;
+            foreach (var (clock, rangeEnd) in own)
+            {
+                if (clock > covered)
+                {
+                    break;
+                }
+
+                covered = Math.Max(covered, rangeEnd);
+                if (covered >= end)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// The item that holds <paramref name="id"/> once the plan is carried out, with the clock it starts at (a
+        /// planned item that overlaps the store is integrated from the store's state on), or null for a GC struct.
+        /// </summary>
+        private (Item Item, long Start) Target(ID id)
+        {
+            var known = _store.GetState(id.Client);
+            if (id.Clock < known)
+            {
+                return _store.Find(id) is Item item ? (item, item.Id.Clock) : (null, 0);
+            }
+
+            return id.Clock < GetState(id.Client) && FindPlanned(id) is Item planned ? (planned, Math.Max(planned.Id.Clock, known)) : (null, 0);
+        }
+
+        /// <summary>
+        /// The parent (a root's name or the type's item, or the root type) and key <paramref name="item"/> has once
+        /// integrated: its own, else those of the item its origin (or right origin) refers to, as
+        /// <see cref="Item.ResolveReferences"/> takes them; (null, null) when it is integrated as a GC struct.
+        /// </summary>
+        private (object Parent, string Key) KeyOf(Item item)
+        {
+            // Only a planned item has no parent yet; its references are integrated before it. The walk is memoized
+            // (a large update's items each refer to the one before).
+            var chain = _keyChain;
+            chain.Clear();
+            (object Parent, string Key) result;
+            while (true)
+            {
+                if (_keys != null && _keys.TryGetValue(item, out result))
+                {
+                    break;
+                }
+
+                if (item.Parent != null)
+                {
+                    result = (item.Parent switch
+                    {
+                        AbstractType type => (object)type._item ?? type,
+                        ID id => Target(id).Item,
+                        var root => root,
+                    }, item.ParentSub);
+                    break;
+                }
+
+                chain.Add(item);
+                if ((item.LeftOrigin is ID l && Target(l).Item == null) || (item.RightOrigin is ID r && Target(r).Item == null) || (item.LeftOrigin ?? item.RightOrigin) is not ID origin)
+                {
+                    result = (null, null);
+                    break;
+                }
+
+                item = Target(origin).Item;
+            }
+
+            if (chain.Count > 0)
+            {
+                _keys ??= new Dictionary<Item, (object, string)>();
+                foreach (var c in chain)
+                {
+                    _keys[c] = result;
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>The item of the type <paramref name="item"/> lands in, or null for a root (or a GC struct).</summary>
+        private Item ParentTypeItem(Item item) => KeyOf(item).Parent as Item;
+
         private AbstractStruct FindPlanned(ID id)
         {
             if (!_refs.TryGetValue(id.Client, out var list) || list.Count == 0 || id.Clock < list[0].Id.Clock)
@@ -951,6 +1485,9 @@ internal sealed partial class StructStore
         /// <summary>The size of the ranges as a v1 delete set would encode them.</summary>
         public long Bytes { get; private set; }
 
+        /// <summary>How many ranges were ever added (it only grows), to tell whether an operation added one.</summary>
+        public long Additions { get; private set; }
+
         public int Count => _clients.Count;
 
         public void Add(long client, long clock, long length)
@@ -963,6 +1500,7 @@ internal sealed partial class StructStore
             }
 
             entry.Ranges.Add(new DeleteSet.DeleteItem(clock, length));
+            Additions++;
             entry.MinClock = Math.Min(entry.MinClock, clock);
             var size = RangeSize(clock, length);
             entry.Bytes += size;
@@ -1031,6 +1569,21 @@ internal sealed partial class StructStore
 
             ds.SortAndMergeDeleteSet();
             return ds;
+        }
+
+        /// <summary>Adds the ranges <see cref="TakeApplicable"/> will take once <paramref name="plan"/> is carried out, as (client, clock, end).</summary>
+        public void AddApplicableRanges(IntegrationPlan plan, List<(long Client, long Clock, long End)> ranges)
+        {
+            foreach (var (client, entry) in _clients)
+            {
+                if (entry.MinClock < plan.GetState(client))
+                {
+                    foreach (var range in entry.Ranges)
+                    {
+                        ranges.Add((client, range.Clock, range.Clock + range.Length));
+                    }
+                }
+            }
         }
 
         /// <summary>Removes and returns the ranges of the clients whose state reached one of them, or null.</summary>

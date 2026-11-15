@@ -600,6 +600,9 @@ public partial class YDoc
         }
     }
 
+    /// <summary>The root type named <paramref name="name"/>, if it was defined (without defining it).</summary>
+    internal bool TryGetRoot(string name, out AbstractType type) => _share.TryGetValue(name, out type);
+
     internal void InvokeSubdocsChanged(ISet<YDoc> loaded, ISet<YDoc> added, ISet<YDoc> removed)
     {
         SubdocsChanged?.Invoke(this, (loaded, added, removed));

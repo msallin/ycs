@@ -4,8 +4,6 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.Diagnostics;
-
 namespace Ycs;
 
 /// <summary>
@@ -13,7 +11,8 @@ namespace Ycs;
 /// The count approach is similar to the <see cref="UintOptRleDecoder"/>, but instead of using
 /// the negative bitflag, it encodes in the LSB whether a count is to be read.
 /// <br/>
-/// WARNING: Therefore this encoder only supports 31 bit integers.
+/// The flag is added to <c>diff * 2</c> (as lib0 does, not shifted in), so a value is not limited to 31 bits:
+/// the clocks it encodes go up to <see cref="Limits.MaxClock"/>, and lib0 writes any safe integer.
 /// <br/>
 /// Encodes <c>[1, 2, 3, 2]</c> as <c>[3, 1, -2]</c> (more specifically <c>[(1 * 2) + 1, 3 - 2, (-1 * 2) + 0]</c>).
 /// <br/>
@@ -41,8 +40,6 @@ internal class IntDiffOptRleEncoder : AbstractStreamEncoder<long>
     /// <inheritdoc/>
     protected override void WriteValue(long value)
     {
-        Debug.Assert(value <= Bits.Bits30);
-
         if (_diff == value - _state)
         {
             _state = value;
