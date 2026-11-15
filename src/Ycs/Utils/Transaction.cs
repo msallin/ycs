@@ -530,6 +530,8 @@ public partial class Transaction
 
                 foreach (var subDoc in added)
                 {
+                    subDoc.ClientId = doc.ClientId;
+                    subDoc.CollectionId ??= doc.CollectionId;
                     doc.Subdocs.Add(subDoc);
                 }
 

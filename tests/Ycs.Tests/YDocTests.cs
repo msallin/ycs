@@ -82,7 +82,7 @@ public class YDocTests : YTestBase
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
             events = null;
 
-            subdocs.Set("b", new YDoc(new YDocOptions { Guid = "a" }));
+            subdocs.Set("b", new YDoc(new YDocOptions { Guid = "a", ShouldLoad = false }));
             CollectionAssert.AreEqual(new[] { "a" }, events[0]);
             CollectionAssert.AreEqual(new object[] { }, events[1]);
             CollectionAssert.AreEqual(new object[] { }, events[2]);

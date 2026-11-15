@@ -18,8 +18,20 @@ public class YDocOptions
     public bool Gc { get; set; } = true;
     public Predicate<Item> GcFilter { get; set; } = DefaultPredicate;
     public string Guid { get; set; } = System.Guid.NewGuid().ToString("D");
-    public IDictionary<string, object> Meta { get; set; } = null;
-    public bool AutoLoad { get; set; } = false;
+
+    /// <summary>
+    /// Yjs' <c>collectionid</c>: associates the document with a collection of the provider. A
+    /// subdocument without one takes its parent's when it is added. Not encoded.
+    /// </summary>
+    public string CollectionId { get; set; }
+
+    /// <summary>Any value of the 'any' encoding; a subdocument's meta travels with its item.</summary>
+    public object Meta { get; set; }
+
+    public bool AutoLoad { get; set; }
+
+    /// <summary>Whether the document should be synced by the provider now; <see cref="YDoc.Load"/> sets it. Yjs' default is true.</summary>
+    public bool ShouldLoad { get; set; } = true;
 
     /// <summary>
     /// The most an applied update may add to what waits for missing structs (structs and deletions
@@ -54,49 +66,12 @@ public class YDocOptions
             Gc = Gc,
             GcFilter = GcFilter,
             Guid = Guid,
-            Meta = Meta == null ? null : new Dictionary<string, object>(Meta),
+            CollectionId = CollectionId,
+            Meta = Meta,
             AutoLoad = AutoLoad,
+            ShouldLoad = ShouldLoad,
             MaxPendingBytes = MaxPendingBytes,
         };
-    }
-
-    internal void Write(IUpdateEncoder encoder, int offset)
-    {
-        var dict = new Dictionary<string, object>();
-        dict["gc"] = Gc;
-        dict["guid"] = Guid;
-        dict["autoLoad"] = AutoLoad;
-
-        if (Meta != null)
-        {
-            dict["meta"] = Meta;
-        }
-
-        encoder.WriteAny(dict);
-    }
-
-    /// <summary>A subdocument's options as another peer wrote them; anything of the wrong type is a <see cref="YUpdateException"/>.</summary>
-    internal static YDocOptions Read(IUpdateDecoder decoder)
-    {
-        if (decoder.ReadAny() is not IDictionary<string, object> dict)
-        {
-            throw new YUpdateException("A subdocument's options are not an object.");
-        }
-
-        return new YDocOptions
-        {
-            Gc = Get(dict, "gc", true),
-            AutoLoad = Get(dict, "autoLoad", false),
-            // The guid is read before the options (Yjs ignores 'guid' in the options as well).
-            Meta = dict.TryGetValue("meta", out var meta) && meta != null
-                ? meta as Dictionary<string, object> ?? throw new YUpdateException("A subdocument's 'meta' is not an object.")
-                : null,
-        };
-
-        static bool Get(IDictionary<string, object> dict, string key, bool defaultValue) =>
-            !dict.TryGetValue(key, out var value) || value == null ? defaultValue
-            : value is bool b ? b
-            : throw new YUpdateException($"A subdocument's '{key}' is not a boolean.");
     }
 }
 
@@ -111,9 +86,11 @@ public partial class YDoc
     public bool Gc => _opts.Gc;
     public Predicate<Item> GcFilter => _opts.GcFilter;
     public bool AutoLoad => _opts.AutoLoad;
-    public IDictionary<string, object> Meta => _opts.Meta;
+    public object Meta => _opts.Meta;
+    public string CollectionId { get; internal set; }
 
-    internal bool ShouldLoad;
+    /// <summary>Whether the document should be synced by the provider now (Yjs' <c>shouldLoad</c>); <see cref="Load"/> sets it.</summary>
+    public bool ShouldLoad { get; private set; }
     internal List<Transaction> _transactionCleanups;
     // The list of the batch before, kept for the next one (see Transaction.CleanupTransactions).
     internal List<Transaction> _spareTransactionCleanups;
@@ -152,7 +129,8 @@ public partial class YDoc
         _share = new Dictionary<string, AbstractType>();
         Store = new StructStore();
         Subdocs = new HashSet<YDoc>();
-        ShouldLoad = _opts.AutoLoad;
+        ShouldLoad = _opts.ShouldLoad;
+        CollectionId = _opts.CollectionId;
     }
 
     /// <summary>
@@ -180,7 +158,8 @@ public partial class YDoc
 
     public void Destroy()
     {
-        foreach (var sd in Subdocs)
+        // A subdocument's Destroy runs a transaction here whose cleanup changes Subdocs.
+        foreach (var sd in Subdocs.ToArray())
         {
             sd.Destroy();
         }
@@ -189,30 +168,18 @@ public partial class YDoc
         if (item != null)
         {
             _item = null;
+            // A collected item holds ContentDeleted already (Yjs sets a property nothing reads).
             var content = item.Content as ContentDoc;
-
-            if (item.Deleted)
+            if (content != null)
             {
-                if (content != null)
-                {
-                    content.Doc = null;
-                }
-            }
-            else
-            {
-                Debug.Assert(content != null);
-                var newOpts = content.Opts;
-                newOpts.Guid = Guid;
-
-                content.Doc = new YDoc(newOpts);
+                content.Doc = ContentDoc.CreateDocFromOpts(Guid, content.Opts, shouldLoad: false);
                 content.Doc._item = item;
             }
 
-            (item.Parent as AbstractType).Doc.Transact((doc: this, item, content), static (s, tr) =>
+            ((AbstractType)item.Parent).Doc.Transact((doc: this, item, content), static (s, tr) =>
             {
                 if (!s.item.Deleted)
                 {
-                    Debug.Assert(s.content != null);
                     tr.SubdocsAdded.Add(s.content.Doc);
                 }
 

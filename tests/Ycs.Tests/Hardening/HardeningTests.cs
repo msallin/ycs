@@ -471,11 +471,10 @@ public class HardeningTests
     private static byte[] Subdocument(string optionsHex) =>
         Concat(Hex("01 01 05 00 29 01 01 6D 01 6B 01 67"), Hex(optionsHex), Hex("00"));
 
+    // Yjs spreads the options into an object: only null throws there, and options are only tested.
     [TestMethod]
     [DataRow("7E")] // null
-    [DataRow("77 01 78")] // a string
-    [DataRow("76 01 02 67 63 77 01 78")] // gc: "x"
-    [DataRow("76 01 04 6D 65 74 61 7D 01")] // meta: 1
+    [DataRow("76 01 04 67 75 69 64 7D 01")] // guid: 1
     public void ApplyUpdate_SubdocumentOptionsOfWrongType_AreRejected(string options)
     {
         var doc = new YDoc();
@@ -490,7 +489,7 @@ public class HardeningTests
         var subdoc = (YDoc)doc.GetMap("m").Get("k");
 
         Assert.IsFalse(subdoc.Gc);
-        Assert.AreEqual(1, subdoc.Meta["a"]);
+        Assert.AreEqual(1, ((IDictionary<string, object>)subdoc.Meta)["a"]);
     }
 
     [TestMethod]

@@ -299,7 +299,6 @@ class Ycs.YDeepEventArgs
     Transaction Transaction { get; }
 class Ycs.YDoc
     Snapshot CreateSnapshot()
-    System.Collections.Generic.IDictionary<string, object> Meta { get; }
     System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
     System.Predicate<Item> GcFilter { get; }
     T Get<T>(string name) where T : AbstractType, new()
@@ -314,6 +313,7 @@ class Ycs.YDoc
     bool AutoLoad { get; }
     bool Gc { get; }
     bool HasPending { get; }
+    bool ShouldLoad { get; }
     bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
     bool TryApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
     byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
@@ -333,6 +333,8 @@ class Ycs.YDoc
     event System.EventHandler<Transaction> BeforeObserverCalls
     event System.EventHandler<Transaction> BeforeTransaction
     int ClientId { get; }
+    object Meta { get; }
+    string CollectionId { get; }
     string Guid { get; }
     void ApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
     void ApplyUpdate(byte[] update, object transactionOrigin = null)
@@ -349,13 +351,15 @@ class Ycs.YDoc
     void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
     void Transact<TState>(TState state, System.Action<TState, Transaction> action, object origin = null, bool local = true)
 class Ycs.YDocOptions
-    System.Collections.Generic.IDictionary<string, object> Meta { get; set; }
     System.Predicate<Item> GcFilter { get; set; }
     YDocOptions()
     bool AutoLoad { get; set; }
     bool Gc { get; set; }
+    bool ShouldLoad { get; set; }
     int? ClientId { get; set; }
     long MaxPendingBytes { get; set; }
+    object Meta { get; set; }
+    string CollectionId { get; set; }
     string Guid { get; set; }
 class Ycs.YEvent
     AbstractType CurrentTarget { get; set; }
