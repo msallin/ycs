@@ -196,4 +196,70 @@ public class SubdocumentParityTests
         static string Describe((ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed) e) =>
             $"{string.Join(",", e.Added.Select(d => d.Guid))}|{string.Join(",", e.Removed.Select(d => d.Guid))}|{string.Join(",", e.Loaded.Select(d => d.Guid))}";
     }
+
+    private static readonly string[] UndoRedoOfSubdocumentNoAutoLoad =
+    [
+            "insert  +[g:true:7] -[] L[g:true:7] items [g:true:7] guids [g] AQEHAAkBAWEBZ3YAAA==",
+            "undo true +[] -[g:true:7] L[] +[] -[g:true:7] L[] items [] guids [] AQEHAAkBAWEBZ3YAAQcBAAE=",
+            "redo true +[g:false:7] -[] L[] items [g:false:7] guids [g] AQIHAAkBAWEBZ3YASQcAAWd2AAEHAQAB",
+            "delete  +[] -[g:false:7] L[] +[] -[g:false:7] L[] items [] guids [] AQIHAAkBAWEBZ3YASQcAAWd2AAEHAQAC",
+            "undo true +[g:false:7] -[] L[] items [g:false:7] guids [g] AQMHAAkBAWEBZ3YASQcAAWd2AEkHAQFndgABBwEAAg==",
+            "redo true +[] -[g:false:7] L[] +[] -[g:false:7] L[] items [] guids [] AQMHAAkBAWEBZ3YASQcAAWd2AEkHAQFndgABBwEAAw==",
+            "undo true +[g:false:7] -[] L[] items [g:false:7] guids [g] AQQHAAkBAWEBZ3YASQcAAWd2AEkHAQFndgBJBwIBZ3YAAQcBAAM=",
+    ];
+
+    private static readonly string[] UndoRedoOfSubdocumentAutoLoad =
+    [
+            "insert  +[g:true:7] -[] L[g:true:7] items [g:true:7] guids [g] AQEHAAkBAWEBZ3YBCGF1dG9Mb2FkeAA=",
+            "undo true +[] -[g:true:7] L[] +[] -[g:true:7] L[] items [] guids [] AQEHAAkBAWEBZ3YBCGF1dG9Mb2FkeAEHAQAB",
+            "redo true +[g:true:7] -[] L[g:true:7] items [g:true:7] guids [g] AQIHAAkBAWEBZ3YBCGF1dG9Mb2FkeEkHAAFndgEIYXV0b0xvYWR4AQcBAAE=",
+            "delete  +[] -[g:true:7] L[] +[] -[g:true:7] L[] items [] guids [] AQIHAAkBAWEBZ3YBCGF1dG9Mb2FkeEkHAAFndgEIYXV0b0xvYWR4AQcBAAI=",
+            "undo true +[g:true:7] -[] L[g:true:7] items [g:true:7] guids [g] AQMHAAkBAWEBZ3YBCGF1dG9Mb2FkeEkHAAFndgEIYXV0b0xvYWR4SQcBAWd2AQhhdXRvTG9hZHgBBwEAAg==",
+            "redo true +[] -[g:true:7] L[] +[] -[g:true:7] L[] items [] guids [] AQMHAAkBAWEBZ3YBCGF1dG9Mb2FkeEkHAAFndgEIYXV0b0xvYWR4SQcBAWd2AQhhdXRvTG9hZHgBBwEAAw==",
+            "undo true +[g:true:7] -[] L[g:true:7] items [g:true:7] guids [g] AQQHAAkBAWEBZ3YBCGF1dG9Mb2FkeEkHAAFndgEIYXV0b0xvYWR4SQcBAWd2AQhhdXRvTG9hZHhJBwIBZ3YBCGF1dG9Mb2FkeAEHAQAD",
+    ];
+
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void UndoRedo_InsertedAndDeletedSubdocument_EventsDocumentsAndBytesAsYjs(bool autoLoad)
+    {
+        // Yjs 13.6.32: an UndoManager (captureTimeout 0) on array 'a' of a document with client id 7;
+        // insert new Y.Doc({ guid: 'g', autoLoad }), undo, redo, delete it, undo, redo, undo. Each line:
+        // the step, what undo/redo returned, the 'subdocs' events, the array's documents, getSubdocGuids()
+        // and encodeStateAsUpdate (documents as guid:shouldLoad:clientID).
+        var doc = new YDoc(new YDocOptions { ClientId = 7 });
+        var array = doc.GetArray("a");
+        var undoManager = new UndoManager(array, new UndoManagerOptions { CaptureTimeout = 0 });
+        var events = new List<string>();
+        static string Docs(IEnumerable<object> docs) =>
+            string.Join(",", docs.Cast<YDoc>().Select(d => $"{d.Guid}:{(d.ShouldLoad ? "true" : "false")}:{d.ClientId}").Order(StringComparer.Ordinal));
+        doc.SubdocsChanged += (_, e) => events.Add($"+[{Docs(e.Added)}] -[{Docs(e.Removed)}] L[{Docs(e.Loaded)}]");
+        var lines = new List<string>();
+        void Step(string name, Func<object> action)
+        {
+            events.Clear();
+            var result = action();
+            var returned = name is "undo" or "redo" ? (result != null ? "true" : "false") : string.Empty;
+            lines.Add($"{name} {returned} {string.Join(" ", events)} items [{Docs(array.ToArray())}] guids [{string.Join(",", doc.GetSubdocGuids().Order(StringComparer.Ordinal))}] {S(doc.EncodeStateAsUpdate())}");
+        }
+
+        Step("insert", () =>
+        {
+            array.Insert(0, [new YDoc(new YDocOptions { Guid = "g", AutoLoad = autoLoad })]);
+            return null;
+        });
+        Step("undo", undoManager.Undo);
+        Step("redo", undoManager.Redo);
+        Step("delete", () =>
+        {
+            array.Delete(0, 1);
+            return null;
+        });
+        Step("undo", undoManager.Undo);
+        Step("redo", undoManager.Redo);
+        Step("undo", undoManager.Undo);
+
+        CollectionAssert.AreEqual(autoLoad ? UndoRedoOfSubdocumentAutoLoad : UndoRedoOfSubdocumentNoAutoLoad, lines);
+    }
 }
