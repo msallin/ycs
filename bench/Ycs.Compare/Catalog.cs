@@ -35,7 +35,7 @@ internal static class Catalog
         new("text-append-1txn-25k", "text", "the first 25,000 of them in one transaction (how the batched form scales)", "text",
             f => YcsCases.TextAppendOneTxn(f, 25_000), f => YrsCases.TextAppendOneTxn(f, 25_000), _ => Typed(25_000)),
         new("text-append-1txn-observed", "text", "text-append-1txn with a text observer that counts its events (Yjs' items, merged at the end)", "text",
-            f => YcsCases.TextAppendOneTxnObserved(f, Inputs.TypingN), f => YrsCases.TextAppendOneTxnObserved(f, Inputs.TypingN), _ => $"1 {Typed()}") { Heavy = true },
+            f => YcsCases.TextAppendOneTxnObserved(f, Inputs.TypingN), f => YrsCases.TextAppendOneTxnObserved(f, Inputs.TypingN), _ => $"1 {Typed()}") { Heavy = true, LightOnYcs = true },
         new("text-append-1txn-observed-25k", "text", "the first 25,000 of them, observed, in one transaction", "text",
             f => YcsCases.TextAppendOneTxnObserved(f, 25_000), f => YrsCases.TextAppendOneTxnObserved(f, 25_000), _ => $"1 {Typed(25_000)}"),
         new("txn-empty", "text", "100,000 empty write transactions (the fixed cost of a transaction)", "text",
@@ -88,7 +88,7 @@ internal static class Catalog
         new("array-insert-random", "array", "50,000 integers inserted at random positions, one transaction each", "array",
             YcsCases.ArrayInsertRandom, YrsCases.ArrayInsertRandom, _ => ArrayInsertModel()),
         new("array-delete-random", "array", "50,000 single deletes at random positions of a 100,000-element array, one transaction each", "array",
-            YcsCases.ArrayDeleteRandom, YrsCases.ArrayDeleteRandom, _ => ArrayDeleteModel()) { Heavy = true },
+            YcsCases.ArrayDeleteRandom, YrsCases.ArrayDeleteRandom, _ => ArrayDeleteModel()) { Heavy = true, LightOnYcs = true },
 
         new("read-text", "read", "the loaded trace document's text as a string, 100 times", "text",
             YcsCases.ReadText, YrsCases.ReadText, f => $"{100L * f.Trace.EndContent.Length} {f.Trace.EndContent}"),

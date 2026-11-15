@@ -394,6 +394,49 @@ load 2 to 10: 38fcba1 (before the branch), f857189 (the refused version) and the
    does not know reliably that it never held formats (a root that received formats before `GetText` was asked
    for does not record it, as in Yjs), so this needs another signal.
 
+## After layout steps 1 and 2 (2026-11-15, ycs only)
+
+Steps 1 and 2 of [`docs/design-item-layout.md`](../../docs/design-item-layout.md), on today's objects (branch
+`layout-s12`): each client's structs keep their start clocks in an array beside them (`FindIndexSS` searches it), and a
+run-head index (a flag byte per position: a break of Yjs' marker walk-left, visible, a live format; the visible length
+per block of 512 positions) lets the marker walks and the walks from the marker to the index jump within one client's
+chain of pieces, ending where Yjs' loops end. The ycs child of 53a35de and of the branch, interleaved with `ab.py`, 4
+processes x 10 timed runs each (the two heavy workloads: 3 processes; 53a35de runs them as heavy, one cold run per
+process, the branch with warm-ups and 5 runs, since ycs now takes about a second: `LightOnYcs`), load 1.3 to 3.8.
+**YDotNet was not run again**: its figures are the 2026-11-15 ones, *(carried)*. Medians of all timed runs; memory held
+is managed + native as above (the native part is noise here).
+
+| workload | 53a35de | layout-s12 | change | alloc 53a35de / s12 (MiB) | held 53a35de / s12 (MiB) | YDotNet (carried) |
+| --- | ---: | ---: | --- | ---: | ---: | ---: |
+| `array-delete-random` | 57,169 ms (cold) | 896 ms (cold first run 1,048) | 64× | 32.4 / 33.6 | 19.4 / 19.8 | 25,511 ms |
+| `text-append-1txn-observed` (new) | 48,888 ms (cold) | 790 ms | 62× | 19.0 / 21.2 | 4.0 / 4.4 | not run |
+| `text-append-1txn-observed-25k` (new) | 2,811 ms | 96 ms | 29× | 4.8 / 5.3 | 0.8 / 1.1 | not run |
+| `apply-state-v1/ycs` | 56.7 ms | 50.2 ms | -11% | 32.0 / 33.0 | 4.4 / 4.5 | 39.3 ms |
+| `apply-state-v2/ycs` | 54.8 ms | 52.7 ms | -4% | 34.0 / 35.0 | 4.3 / 4.4 | 40.3 ms |
+| `apply-updates/ycs` | 259.0 ms | 308.8 ms | +19% | 54.8 / 55.1 | 18.3 / 18.5 | 261 ms |
+| `concurrent-20` | 64.6 ms | 66.5 ms | +3% | 26.4 / 27.6 | 26.9 / 28.1 | 65.8 ms |
+| `trace-replay` | 247.1 ms | 284.2 ms | +15% | 42.9 / 43.1 | 2.8 / 2.9 | 8,053 ms |
+| `text-random` | 25.4 ms | 27.0 ms | +6% (noise) | 3.9 / 4.4 | 5.2 / 5.5 | 1,512 ms |
+| `array-insert-random` | 189.1 ms | 163.7 ms | noise (120-340 / 138-266) | 17.0 / 18.2 | 18.6 / 19.1 | 18,023 ms |
+| `text-random-100k` | 1,573 ms | 1,553 ms | noise (1,073-2,083 / 1,278-2,041) | 18.8 / 21.1 | 26.3 / 27.5 | 175,337 ms |
+| `map-set-distinct` | 38.2 ms | 42.1 ms | +10% (noise: 34-92 / 34-55) | 36.8 / 39.0 | 38.2 / 39.3 | 119 ms |
+| `text-append` (control) | 17.3 ms | 17.7 ms | +2% | 0.20 / 0.20 | 1.3 / 1.3 | 3,118 ms |
+
+* **Won:** the two quadratic cases of the marker walk. `array-delete-random` goes from about a minute to under a second
+  (YDotNet: 26 s): the walks over the 50,000 pieces of one client's chain (the walk right and left in `findMarker`, and
+  `Delete`'s walk from the marker) are now jumps; what remains is the splits (`ContentAny.Splice` copies the values
+  after the split point) and the shift of the client's struct list. Typing 100,000 characters in one transaction into
+  an observed text (an editor binding, an UndoManager: Yjs' items, merged at the end) goes from 49 s to 0.8 s.
+  Finding a struct by clock reads the start array: loading a state is 4-11% faster.
+* **Lost:** a split or a merge in the middle of a long list now shifts 17 bytes per later struct instead of 8 (the
+  start clock and the flag byte beside the reference) and updates the block sums after it: `apply-updates` (+19%)
+  and `trace-replay` (+15%), which split and merge in the middle of the trace's 11,000-struct list for every edit,
+  pay for it. The design's B+tree order (step 7: leaves of 128 positions) is what removes that shift.
+* **Memory:** the index costs 9 bytes per struct (8 for the start, 1 for the flags, 8 per 512 for the block sums),
+  plus the arrays' doubling slack, and a client's list object is a little larger than a `List`: held memory grows by
+  0.5 MiB (`array-insert-random`, 50,000 structs) to 1.2 MiB (`concurrent-20`, 128,560 structs over 20 documents;
+  `text-random-100k`, 100,000 structs), about 4% of what those documents hold.
+
 ## Not compared
 
 * XML types and formatting attributes, subdocuments, snapshots and relative/sticky positions: both have them, but

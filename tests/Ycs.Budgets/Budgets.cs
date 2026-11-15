@@ -31,7 +31,7 @@ internal static class Budgets
         ["undo.delete-backwards-one-capture-100k"] = new(672, 50),     // 579 B, 5 µs (was 3 100 B: the deleted run was copied on every merge)
         ["array.push-100k-in-one-transaction"] = new(2415904, 800000),  // 2.1 MB, 14 ms (was beyond 8 GiB: each push walked the list, the end of the transaction copied the run into each left neighbour)
         ["text.type-100k-in-one-transaction"] = new(247696, 840000),    // 215 KB, 11 ms (was 58 s and 22 MB: each marker lookup walked back over the transaction's keystrokes, each made an item)
-        ["array.delete-random-100k"] = new(2624, 520),                // 2 282 B, 52 µs (the lookup walks back over the pieces split off the item, as Yjs' findMarker: quadratic, as in Yjs)
+        ["array.delete-random-100k"] = new(2624, 52),                 // 2 342 B, 5 µs (the marker walks cross the pieces split off the item through the run-head index; Yjs' loops walk them)
         ["doc.encode-state-with-pending-100k"] = new(7377400, 80000),  // 6.4 MB, 7.8 ms (the state merged with what is pending, as Yjs does)
     };
 }
