@@ -46,6 +46,9 @@ public partial class Transaction
     private bool _local;
     private bool _ended;
 
+    // Set while the events of types skipped in the observer loop are built: their handlers had their turn.
+    internal bool _buildingSkippedEvents;
+
     // A remote change touched a text with formatting: YText.CleanupAfterTransaction runs after the
     // AfterTransaction handlers.
     internal bool _needFormattingCleanup;
@@ -59,7 +62,9 @@ public partial class Transaction
     private bool _beforeStateTaken;
     private bool _afterStateTaken;
 
-    internal readonly Dictionary<AbstractType, ISet<string>> _changed = new();
+    // Insertion-ordered, as a JavaScript Map: a type removed when deleted must not hand its slot to
+    // the next changed type, which would then be observed out of the order of change.
+    internal readonly OrderedDictionary<AbstractType, ISet<string>> _changed = new();
     internal readonly Dictionary<AbstractType, IList<YEvent>> _changedParentTypes = new();
     internal readonly List<AbstractStruct> _mergeStructs = new();
 
@@ -201,7 +206,13 @@ public partial class Transaction
         _subdocsAdded = null;
         _subdocsRemoved = null;
         _subdocsLoaded = null;
-        Clear(_changed);
+        var largeChanged = _changed.Count > KeepCapacity;
+        _changed.Clear();
+        if (largeChanged)
+        {
+            _changed.TrimExcess();
+        }
+
         Clear(_changedParentTypes);
         _mergeStructs.Clear();
         if (_mergeStructs.Capacity > KeepCapacity)
@@ -261,6 +272,79 @@ public partial class Transaction
             if (!ReferenceEquals(updated, set))
             {
                 _changed[type] = updated;
+            }
+        }
+    }
+
+    /// <summary>
+    /// A changed type builds its event only when someone observes it at its turn (see
+    /// <see cref="AbstractType.IsObserved"/>); Yjs builds every event. When an observer attached a deep
+    /// observer or a document listener meanwhile, the skipped types build theirs now, without calling
+    /// their own observers, and every event list is put back into the order of change.
+    /// </summary>
+    private static void BuildSkippedEvents(Transaction transaction)
+    {
+        List<KeyValuePair<AbstractType, ISet<string>>> skipped = null;
+        foreach (var kvp in transaction._changed)
+        {
+            var type = kvp.Key;
+            if ((type._item == null || !type._item.Deleted) && !HasOwnEvent(transaction, type) && type.IsObserved(transaction))
+            {
+                (skipped ??= new()).Add(kvp);
+            }
+        }
+
+        if (skipped == null)
+        {
+            return;
+        }
+
+        transaction._buildingSkippedEvents = true;
+        try
+        {
+            foreach (var kvp in skipped)
+            {
+                kvp.Key.CallObserver(transaction, kvp.Value);
+            }
+        }
+        finally
+        {
+            transaction._buildingSkippedEvents = false;
+        }
+
+        SortEventsByOrderOfChange(transaction);
+
+        static bool HasOwnEvent(Transaction transaction, AbstractType type)
+        {
+            if (transaction._changedParentTypes.TryGetValue(type, out var events))
+            {
+                for (var i = 0; i < events.Count; i++)
+                {
+                    if (events[i].Target == type)
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+    }
+
+    // Separate from BuildSkippedEvents, whose common path must not allocate the closure.
+    private static void SortEventsByOrderOfChange(Transaction transaction)
+    {
+        var order = new Dictionary<AbstractType, int>(transaction._changed.Count);
+        foreach (var kvp in transaction._changed)
+        {
+            order[kvp.Key] = order.Count;
+        }
+
+        foreach (var events in transaction._changedParentTypes.Values)
+        {
+            if (events is List<YEvent> list && list.Count > 1)
+            {
+                StableSort.Sort(list, (a, b) => order.GetValueOrDefault(a.Target, int.MaxValue).CompareTo(order.GetValueOrDefault(b.Target, int.MaxValue)));
             }
         }
     }
@@ -370,6 +454,15 @@ public partial class Transaction
                 error ??= ExceptionDispatchInfo.Capture(e);
             }
 
+            try
+            {
+                BuildSkippedEvents(transaction);
+            }
+            catch (Exception e)
+            {
+                error ??= ExceptionDispatchInfo.Capture(e);
+            }
+
             // Deep observe events: every event gets its current target first, then the observers
             // are called (an event shared by several types keeps the last one, as in Yjs).
             var deepCalls = transaction._deepCalls;
@@ -381,18 +474,26 @@ public partial class Transaction
                     var events = kvp.Value;
 
                     // We need to think about the possibility that the user transforms the YDoc in the event.
-                    if (type._item == null || !type._item.Deleted)
+                    if (type.HasDeepObservers && (type._item == null || !type._item.Deleted))
                     {
+                        // As Yjs: the events whose target was deleted meanwhile are left out (the
+                        // observer is still called when none is left).
+                        var delivered = events;
                         for (var i = 0; i < events.Count; i++)
                         {
-                            var evt = events[i];
-                            if (evt.Target._item == null || !evt.Target._item.Deleted)
+                            if (events[i].Target._item?.Deleted == true)
                             {
-                                evt.CurrentTarget = type;
+                                delivered = events.Where(static e => e.Target._item == null || !e.Target._item.Deleted).ToList();
+                                break;
                             }
                         }
 
-                        Debug.Assert(events.Count > 0);
+                        for (var i = 0; i < delivered.Count; i++)
+                        {
+                            delivered[i].CurrentTarget = type;
+                        }
+
+                        events = delivered;
                         if (events.Count > 1)
                         {
                             // Sort events by path length so that top-level events are fired first.

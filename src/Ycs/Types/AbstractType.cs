@@ -6,6 +6,8 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Runtime.ExceptionServices;
+
 namespace Ycs;
 
 public class YEventArgs
@@ -198,14 +200,50 @@ public partial class AbstractType
         return n;
     }
 
+    internal bool HasDeepObservers => DeepEventHandler != null;
+
     internal void InvokeEventHandlers(YEvent evt, Transaction transaction)
     {
-        EventHandler?.Invoke(this, new YEventArgs(evt, transaction));
+        var handler = EventHandler;
+        if (handler != null && !transaction._buildingSkippedEvents)
+        {
+            CallAll(handler, this, new YEventArgs(evt, transaction));
+        }
     }
 
     internal void CallDeepEventHandlerListeners(IList<YEvent> events, Transaction transaction)
     {
-        DeepEventHandler?.Invoke(this, new YDeepEventArgs(events, transaction));
+        var handler = DeepEventHandler;
+        if (handler != null)
+        {
+            CallAll(handler, this, new YDeepEventArgs(events, transaction));
+        }
+    }
+
+    // Yjs' callEventHandlerListeners (lib0 callAll): every handler runs even if one before threw, and
+    // the exception thrown last propagates afterwards.
+    private static void CallAll<TArgs>(EventHandler<TArgs> handler, object sender, TArgs args)
+    {
+        if (handler.HasSingleTarget)
+        {
+            handler(sender, args);
+            return;
+        }
+
+        ExceptionDispatchInfo error = null;
+        foreach (var h in Delegate.EnumerateInvocationList(handler))
+        {
+            try
+            {
+                h(sender, args);
+            }
+            catch (Exception e)
+            {
+                error = ExceptionDispatchInfo.Capture(e);
+            }
+        }
+
+        error?.Throw();
     }
 
     // The name of a root type: it never changes, and finding it walks the document's root types.
