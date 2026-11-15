@@ -17,6 +17,7 @@ public sealed class UpdateLimits
     private readonly long _maxStructsPerUpdate = 1 << 17;
     private readonly long _maxPendingStructs = 1 << 17;
     private readonly long _maxPendingBytes = 16L << 20;
+    private readonly long _maxIntegrationSteps = 1 << 24;
 
     /// <summary>The defaults below.</summary>
     public static UpdateLimits Default { get; } = new();
@@ -27,6 +28,7 @@ public sealed class UpdateLimits
         MaxStructsPerUpdate = long.MaxValue,
         MaxPendingStructs = long.MaxValue,
         MaxPendingBytes = long.MaxValue,
+        MaxIntegrationSteps = long.MaxValue,
     };
 
     /// <summary>
@@ -65,6 +67,21 @@ public sealed class UpdateLimits
     {
         get => _maxPendingBytes;
         init => _maxPendingBytes = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), value, "The limit cannot be negative.");
+    }
+
+    /// <summary>
+    /// The most steps the conflict resolution may take for one update: each step passes one item that
+    /// another client inserted concurrently at the same place (Yjs' conflict loop in
+    /// <c>Item.integrate</c>, quadratic in the number of such items). Unlike the other limits it is
+    /// found out while the update is integrated, so an update beyond it is applied in part (see
+    /// <see cref="YUpdateException.PartlyApplied"/>). Default 16,777,216 (2^24), about 0.1 s, or 1.5 s
+    /// where the items' origins branch; an honest update takes far fewer (see <c>docs/api.md</c>).
+    /// Positive.
+    /// </summary>
+    public long MaxIntegrationSteps
+    {
+        get => _maxIntegrationSteps;
+        init => _maxIntegrationSteps = Positive(value);
     }
 
     private static long Positive(long value) =>

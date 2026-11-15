@@ -253,6 +253,7 @@ sealed class Ycs.UndoManagerOptions
     int CaptureTimeout { get; set; }
 sealed class Ycs.UpdateLimits
     UpdateLimits()
+    long MaxIntegrationSteps { get; init; }
     long MaxPendingBytes { get; init; }
     long MaxPendingStructs { get; init; }
     long MaxStructsPerUpdate { get; init; }
@@ -449,6 +450,7 @@ sealed class Ycs.YUpdateException : System.FormatException
     YUpdateException()
     YUpdateException(string message)
     YUpdateException(string message, System.Exception innerException)
+    bool PartlyApplied { get; init; }
 class Ycs.YXmlElement : YXmlFragment
     System.Collections.Generic.IDictionary<string, object> GetAttributes(Snapshot snapshot = null)
     YXmlElement Clone()

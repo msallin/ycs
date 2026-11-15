@@ -43,6 +43,7 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | `YDocOptions.Meta`, `YDoc.Meta`: `IDictionary<string, string>` (always null when read from an update) | `object` (any value of the 'any' encoding) | Yjs' `meta` is any value; the old cast always failed, and an update with a `meta` that was not an object was rejected |
 | a subdocument's options written as `{ gc, guid, autoLoad }` with a random guid of their own; `ShouldLoad` defaulted to `AutoLoad`; `Destroy` threw with subdocuments and left a deleted subdocument's content without a document; a subdocument kept its own client id | as Yjs 13.6: the options are `{}` plus `gc: false`, `autoLoad: true`, `meta` when they differ from the defaults; reading lets every key override (a `guid` too, as `createDocFromOpts`); `YDocOptions.ShouldLoad` (default true) and `YDoc.ShouldLoad`; a destroyed subdocument is replaced by a fresh document that does not load; an added subdocument takes the parent's client id and `CollectionId` (new, Yjs' `collectionid`) | a Yjs peer reading Ycs' options took the random guid as the subdocument's identity |
 | no limit on what an update may cost; pending structs and deletions unbounded | `UpdateLimits` (immutable; `Default`, `Unlimited`): `MaxStructsPerUpdate` (131,072, v1 and v2), `MaxPendingStructs` (131,072), `MaxPendingBytes` (16 MiB); `YDocOptions.Limits` for the document (a subdocument takes its parent's), an optional `limits` parameter of `ApplyUpdate…`/`TryApplyUpdate…` for one update, and of every `UpdateOperations` function and `Snapshot.SnapshotContainsUpdate…` | a v2 update of 30 bytes could make the decoder allocate gigabytes and the document keep half of it, and a peer could send updates that never integrate and fill memory. Migrate: `YDocOptions.MaxPendingBytes = n` becomes `YDocOptions.Limits = new UpdateLimits { MaxPendingBytes = n }`; `UpdateOperations.MaxStructsPerUpdate` (process-wide) becomes the `limits` argument; a valid state larger than the defaults (see [Untrusted input](#untrusted-input)) is applied with `UpdateLimits.Unlimited` or raised limits |
+| the conflict loop filled two sets per integrated item (n items after n concurrent ones: n^2 set entries); no bound on its steps | the sets are filled only where an item's origin is another scanned item that is not the one just before; `UpdateLimits.MaxIntegrationSteps` (2^24) per update, beyond which the update is applied in part and `YUpdateException.PartlyApplied` is set | two updates of 28 bytes took 97 s and 111 GiB; see [Untrusted input](#untrusted-input) |
 | pending structs and deletions: not visible, and left out of `EncodeStateAsUpdate` | `YDoc.HasPending`; `EncodeStateAsUpdate…` includes them, as Yjs 13.6 does (the pending deletions whole, the pending structs beyond the target state vector, merged into the state) | Yjs exposes `doc.store.pendingStructs`/`pendingDs`; a server that persisted its state and restarted lost what was pending |
 | — (Yjs has none either) | `YText.RemoveNonText()`: deletes every embed, nested type, other non-string content and formatting in one transaction; returns whether it changed anything | a plain-text editor (a textarea) bound to a `YText` that other peers may fill with rich content: afterwards `Length` is the string's length and indexes agree. It deletes the items themselves, so nothing is added to the document |
 | every changed type built its event (`YTextEvent`, `YMapEvent`, …) and added itself and its ancestors to `Transaction.ChangedParentTypes`, observed or not | only when the type has an `EventHandler`, it or an ancestor a `DeepEventHandler`, or the document an `AfterTransaction`, `AfterTransactionCleanup` or `AfterAllTransactions` handler (an `UndoManager` is one); `Transaction.Changed` is filled as before. When an observer attaches a deep observer or such a handler during the cleanup, the types skipped before build their events then (without calling their own observers), so the late observer sees every event, as in Yjs. `YTextEvent.KeysChanged` and `YXmlEvent.AttributesChanged` are built when read (also after the transaction ended: they hold the event's own set of changed keys, not the transaction) | an unobserved document (a server that applies and relays updates) builds no events; Yjs always does. A handler of `Update` or of another type's events that reads `ChangedParentTypes` sees only the observed types |
@@ -98,8 +99,8 @@ input's content). The snapshot reads (`ToArraySnapshot`, `GetSnapshot`, `GetAllS
 the document, then plans the integration against the document without changing it (which structs
 integrate in which order, which wait for others), and only then carries it out. A failure in
 either step leaves the document exactly as it was: same text, state vector and encoding, no events
-(an empty transaction may be observed when the failure is found in the planning step). What is
-checked before anything changes:
+(an empty transaction may be observed when the failure is found in the planning step); the one
+exception is the conflict-resolution budget below. What is checked before anything changes:
 
 * every value is in range: client ids up to 2^53 - 1 (as lib0 reads them), and **clocks**: every struct, delete range and
   state-vector entry ends at clock 2^31 - 1 or before (about two billion operations per client id),
@@ -152,11 +153,29 @@ server) passes `UpdateLimits.Unlimited`, or its own instance, for that call:
 `doc.ApplyUpdate(stored, origin, UpdateLimits.Unlimited)`; `YDocOptions.Limits` sets the document's
 limits for every update. The limits of an update from an untrusted peer stay the document's.
 
-After these checks the integration does not fail on input alone; an exception from it would be a
-bug in Ycs and cannot be rolled back. Structurally odd but well-formed updates (an item whose two
-origins are in different parents, say) are integrated as Yjs integrates them. Observers run after
-the update was applied; an exception from one propagates to the caller of `ApplyUpdate` after all
-other observers ran, and the document stays usable.
+**Conflict resolution.** Where several clients inserted at the same place, an item passes the
+others' items between its origins (Yjs' conflict loop): n items of one client after n of another
+take n^2 steps, in Yjs too, and a v2 update of 28 bytes can describe them. Ycs walks those items
+without allocating (Yjs fills two sets per item: 40,000 after 40,000 took 97 s and 111 GiB, now 4.8 s
+and 11 MiB) and bounds the walk by `UpdateLimits.MaxIntegrationSteps` per update (16,777,216 = 2^24
+by default: about 0.1 s, 1.5 s at most where the items' origins branch). Honest updates take far
+fewer steps: the Yjs corpus at most 102 per update, the unit tests 18,301, 64 peers that each typed
+1,000 characters offline at the same place 33,888 per update when they meet; the largest honest
+shape, one peer typing forward where another typed backwards at the same index, takes n·m steps,
+and the default admits 4,096 by 4,096. This is the one limit found while the update is integrated:
+**beyond it, the update is applied in part.** `ApplyUpdate` throws `YUpdateException` with
+`PartlyApplied` set (`TryApplyUpdate` returns false); the structs integrated before stay (a causally
+complete part of the update, as if the peer had sent less), observers and `Update` see them, and the
+rest of the structs and the update's deletions are dropped. The document is valid, and converges
+with any peer that has the same part; a peer that sends the rest again is refused again.
+
+After these checks the integration does not fail on input alone; an exception from it other than
+the one above would be a bug in Ycs and cannot be rolled back. What can still happen is
+`OutOfMemoryException`: the limits bound one update (see the table above), not a document, which
+grows with every update it accepts, and not a process that holds many documents. Structurally odd but
+well-formed updates (an item whose two origins are in different parents, say) are integrated as Yjs
+integrates them. Observers run after the update was applied; an exception from one propagates to the
+caller of `ApplyUpdate` after all other observers ran, and the document stays usable.
 
 ## Thread safety
 

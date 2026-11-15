@@ -283,52 +283,7 @@ public partial class Item : AbstractStruct
                     o = (Parent as AbstractType)?._start;
                 }
 
-                var conflictingItems = new HashSet<AbstractStruct>();
-                var itemsBeforeOrigin = new HashSet<AbstractStruct>();
-
-                while (o != null && o != Right)
-                {
-                    itemsBeforeOrigin.Add(o);
-                    conflictingItems.Add(o);
-
-                    if (ID.Equals(LeftOrigin, (o as Item)?.LeftOrigin))
-                    {
-                        // Case 1
-                        if (o.Id.Client < Id.Client)
-                        {
-                            left = o;
-                            conflictingItems.Clear();
-                        }
-                        else if (ID.Equals(RightOrigin, (o as Item)?.RightOrigin))
-                        {
-                            // This and 'o' are conflicting and point to the same integration points.
-                            // The id decides which item comes first.
-                            // Since this is to the left of 'o', we can break here.
-                            break;
-                        }
-                        // Else, 'o' might be integrated before an item that this conflicts with.
-                        // If so, we will find it in the next iterations.
-                    }
-                    // Use 'Find' instead of 'GetItemCleanEnd', because we don't want / need to split items.
-                    else if ((o as Item)?.LeftOrigin != null && itemsBeforeOrigin.Contains(transaction.Doc.Store.Find((o as Item).LeftOrigin.Value)))
-                    {
-                        // Case 2
-                        // TODO: Store.Find is called twice here, call once?
-                        if (!conflictingItems.Contains(transaction.Doc.Store.Find((o as Item).LeftOrigin.Value)))
-                        {
-                            left = o;
-                            conflictingItems.Clear();
-                        }
-                    }
-                    else
-                    {
-                        break;
-                    }
-
-                    o = (o as Item)?.Right;
-                }
-
-                Left = left;
+                Left = transaction.Doc.Store.ResolveConflict(this, left, o);
             }
 
             // Reconnect left/right + update parent map/start if necessary.

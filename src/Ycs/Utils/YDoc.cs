@@ -409,12 +409,13 @@ public partial class YDoc
     /// not local, as in Yjs, also when it is the caller's.
     /// <br/>
     /// A malformed update, or one beyond a limit, throws <see cref="YUpdateException"/> and leaves the
-    /// document as it was.
+    /// document as it was, except beyond <see cref="UpdateLimits.MaxIntegrationSteps"/>
+    /// (<see cref="YUpdateException.PartlyApplied"/>).
     /// </summary>
     /// <param name="update">The update.</param>
     /// <param name="transactionOrigin">Stored on the transaction; observers and the undo manager see it.</param>
     /// <param name="limits">For this update instead of <see cref="YDocOptions.Limits"/>, e.g. <see cref="UpdateLimits.Unlimited"/> for a stored state the application trusts.</param>
-    /// <exception cref="YUpdateException">The update is malformed or beyond a limit; the document is unchanged.</exception>
+    /// <exception cref="YUpdateException">The update is malformed or beyond a limit; the document is unchanged unless <see cref="YUpdateException.PartlyApplied"/>.</exception>
     public void ApplyUpdate(byte[] update, object transactionOrigin = null, UpdateLimits limits = null) => ApplyUpdateV1(update, transactionOrigin, limits);
 
     /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
@@ -451,14 +452,16 @@ public partial class YDoc
 
     /// <summary>
     /// Like <see cref="ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/> (v1), but returns false instead of throwing
-    /// <see cref="YUpdateException"/>; the document is then unchanged.
+    /// <see cref="YUpdateException"/>; the document is then unchanged, except beyond
+    /// <see cref="UpdateLimits.MaxIntegrationSteps"/> (see <see cref="YUpdateException.PartlyApplied"/>).
     /// </summary>
     public bool TryApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) =>
         TryApply(update, v2: false, transactionOrigin, limits);
 
     /// <summary>
     /// Like <see cref="ApplyUpdateV2(ReadOnlySpan{byte}, object, UpdateLimits)"/>, but returns false instead of throwing
-    /// <see cref="YUpdateException"/>; the document is then unchanged.
+    /// <see cref="YUpdateException"/>; the document is then unchanged, except beyond
+    /// <see cref="UpdateLimits.MaxIntegrationSteps"/> (see <see cref="YUpdateException.PartlyApplied"/>).
     /// </summary>
     public bool TryApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) =>
         TryApply(update, v2: true, transactionOrigin, limits);
@@ -556,7 +559,15 @@ public partial class YDoc
             {
                 // As Yjs' readUpdateV2: also when this runs in the caller's transaction.
                 tr.Local = false;
-                s.store.ApplyUpdate(tr, s.update.Structs, s.update.DeleteSet, s.limits);
+                s.store.IntegrationSteps = s.limits.MaxIntegrationSteps;
+                try
+                {
+                    s.store.ApplyUpdate(tr, s.update.Structs, s.update.DeleteSet, s.limits);
+                }
+                finally
+                {
+                    s.store.IntegrationSteps = long.MaxValue;
+                }
             }, transactionOrigin, local: false);
         }
         finally
@@ -698,3 +709,4 @@ public partial class YDoc
         throw new Exception();
     }
 }
+
