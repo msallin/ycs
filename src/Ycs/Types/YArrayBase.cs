@@ -641,6 +641,8 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     protected void ForEachSnapshot(Action<object, int, YArrayBase> fun, Snapshot snapshot)
     {
+        // Visibility is decided per item, by its first clock: Yjs' items.
+        Doc?.MaterializeRunExtensions();
         int index = 0;
         var n = _start;
 

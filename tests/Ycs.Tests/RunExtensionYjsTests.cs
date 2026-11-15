@@ -129,6 +129,60 @@ public class RunExtensionYjsTests
         Assert.AreEqual(("0+1,1+1,2+1", "010301000101016101880100017d02810101010101010003", "010301000101016101880100017d02810101010101010003"), (calls, updates, v1));
     }
 
+    [TestMethod]
+    public void ToArraySnapshot_TakenAndReadWithinATransaction_ShowsWhatTheSnapshotHolds()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var a = doc.GetArray("a");
+        a.Push(new object[] { 1, 2 });
+        IList<object> read = null;
+
+        doc.Transact(_ =>
+        {
+            a.Push(new object[] { 3 });
+            var snapshot = doc.CreateSnapshot();
+            a.Push(new object[] { 4 });
+            a.Push(new object[] { 5 });
+            read = a.ToArraySnapshot(snapshot);
+        });
+
+        Assert.AreEqual("1,2,3", string.Join(",", read));
+    }
+
+    [TestMethod]
+    public void ToDelta_SnapshotsWithinATransaction_ChangesPerYjsItem()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var t = doc.GetText("t");
+        t.Insert(0, "ab");
+        var s1 = doc.CreateSnapshot();
+        var calls = new List<string>();
+        string withChanges = null;
+        string plain = null;
+
+        doc.Transact(_ =>
+        {
+            t.Insert(2, "c");
+            t.Insert(3, "d");
+            t.Insert(4, "e");
+            t.Insert(5, "f");
+            t.Delete(1, 2);
+            var s2 = doc.CreateSnapshot();
+
+            // A user that never equals the client, as Yjs' 'u' + client: every item is a change of its own.
+            withChanges = Describe(t.ToDelta(s2, s1, (type, id) =>
+            {
+                calls.Add($"{type} {id.Client}:{id.Clock}");
+                return new YText.YTextChangeAttributes { Type = type };
+            }));
+            plain = Describe(t.ToDelta(s2, s1));
+        });
+
+        Assert.AreEqual(
+            ("Removed 1:1,Added 1:3,Added 1:4,Added 1:5", "a|b:Removed|d:Added|e:Added|f:Added", "a|b:Removed|d:Added|e:Added|f:Added"),
+            (string.Join(",", calls), withChanges, plain));
+    }
+
     private static (string Content, string V1) AppliedInsideTransaction(bool observed)
     {
         var doc = Doc(3);

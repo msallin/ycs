@@ -718,6 +718,8 @@ public partial class YText : YArrayBase
             // transaction alive until we are done.
             doc.Transact(tr =>
             {
+                // Visibility is decided per item, by its first clock: Yjs' items.
+                tr.MaterializeRunExtensions();
                 if (snapshot != null)
                 {
                     Transaction.SplitSnapshotAffectedStructs(tr, snapshot);
