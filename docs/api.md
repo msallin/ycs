@@ -78,9 +78,11 @@ for a discussion with the maintainers:
 Ycs is meant to apply updates from peers it does not trust (a server relaying for browsers, a
 Blazor WebAssembly client). Every API that decodes bytes — `ApplyUpdate…`, `TryApplyUpdate…`,
 `EncodeStateAsUpdate…(stateVector)`, everything in `UpdateOperations`, `Snapshot.DecodeSnapshot…`,
+`CreateDocFromSnapshot` and `Snapshot.RestoreDocument` (a snapshot that holds more than the document),
 `SnapshotContainsUpdate…`, `RelativePosition.Read`, `RelativePosition.CreateRelativePositionFromJSON`, `SyncProtocol.Read…` — throws only
 `YUpdateException` for malformed input, with a message that says what was wrong (never the
-input's content).
+input's content). The snapshot reads (`ToArraySnapshot`, `GetSnapshot`, `GetAllSnapshot`,
+`ToDelta(snapshot)`) ignore deletions of clients or clocks the document does not have, as Yjs does.
 
 **Atomicity.** `ApplyUpdate` decodes the whole update (structs and delete set) before it touches
 the document, then plans the integration against the document without changing it (which structs

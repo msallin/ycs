@@ -575,7 +575,26 @@ public partial class Transaction
                 }
             }
 
-            snapshot.DeleteSet.IterateDeletedStructs(transaction, item => true);
+            // The snapshot may come from another peer: as in Yjs' iterateDeletedStructs, ranges of
+            // clients the document does not know, or beyond what it has of them, split nothing.
+            foreach (var (client, deletes) in snapshot.DeleteSet.Clients)
+            {
+                if (!store.Clients.TryGetValue(client, out var structs) || structs.Count == 0)
+                {
+                    continue;
+                }
+
+                var last = structs[^1];
+                var clockState = last.Id.Clock + last.Length;
+                foreach (var del in deletes)
+                {
+                    if (del.Clock < clockState)
+                    {
+                        store.IterateStructs(transaction, structs, del.Clock, del.Length, static _ => true);
+                    }
+                }
+            }
+
             meta.Add(snapshot);
         }
     }
