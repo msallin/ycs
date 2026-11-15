@@ -134,14 +134,15 @@ public class YTextEvent : YEvent
                     {
                         switch (item.Content)
                         {
-                            case ContentEmbed embed:
+                            case ContentType:
+                            case ContentEmbed:
                                 if (Adds(item))
                                 {
                                     if (!Deletes(item))
                                     {
                                         addOp();
                                         action = ChangeType.Insert;
-                                        insert = embed.Embed;
+                                        insert = YText.EmbedOf(item.Content);
                                         addOp();
                                     }
                                 }
@@ -663,9 +664,10 @@ public partial class YText : YArrayBase
 
                             str += cs.GetString();
                             break;
-                        case ContentEmbed ce:
+                        case ContentType:
+                        case ContentEmbed:
                             packStr();
-                            var op = new Delta { Insert = ce.Embed };
+                            var op = new Delta { Insert = EmbedOf(n.Content) };
                             if (currentAttributes.Count > 0)
                             {
                                 var attrs = new Dictionary<string, object>();
@@ -727,21 +729,23 @@ public partial class YText : YArrayBase
         InsertText(transaction, ref pos, text, attributes);
     }
 
+    /// <summary>
+    /// Inserts an embed: a shared type (which becomes part of this text, as in an array), or any
+    /// other value as JSON. It counts one towards <see cref="AbstractType.Length"/>.
+    /// </summary>
     public void InsertEmbed(int index, object embed, IDictionary<string, object> attributes = null)
     {
-        attributes = attributes ?? new Dictionary<string, object>();
-
         if (Doc != null)
         {
             Doc.Transact((self: this, index, embed, attributes), static (s, tr) =>
             {
-                var pos = s.self.FindPosition(tr, s.index, useSearchMarker: false);
-                s.self.InsertText(tr, ref pos, s.embed, s.attributes);
+                var pos = s.self.FindPosition(tr, s.index, useSearchMarker: s.attributes == null);
+                s.self.InsertText(tr, ref pos, s.embed, s.attributes ?? new Dictionary<string, object>());
             });
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, attributes));
+            AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, attributes ?? new Dictionary<string, object>()));
         }
     }
 
@@ -1073,6 +1077,11 @@ public partial class YText : YArrayBase
     /// <param name="attributes">The attributes of the text; null for none. Attributes at the position that are not in them are set to null in them, as in Yjs.</param>
     private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, object text, IDictionary<string, object> attributes)
     {
+        if (text is AbstractType)
+        {
+            CheckCanNest();
+        }
+
         if (currPos.CurrentAttributes?.Count > 0)
         {
             attributes ??= new Dictionary<string, object>();
@@ -1089,7 +1098,12 @@ public partial class YText : YArrayBase
         var negatedAttributes = InsertAttributes(transaction, ref currPos, attributes);
 
         // Insert content.
-        var content = text is string s ? (IContent)new ContentString(s) : new ContentEmbed(text);
+        var content = text switch
+        {
+            string s => (IContent)new ContentString(s),
+            AbstractType type => new ContentType(type),
+            _ => new ContentEmbed(text),
+        };
 
         if (_searchMarkers?.Count > 0)
         {
@@ -1433,6 +1447,9 @@ public partial class YText : YArrayBase
             parent._searchMarkers.UpdateMarkerChanges(curPos.Index, -startLength + length);
         }
     }
+
+    /// <summary>The value an embed or an embedded shared type stands for in a delta.</summary>
+    internal static object EmbedOf(IContent content) => content is ContentEmbed embed ? embed.Embed : ((ContentType)content).Type;
 
     private static OrderedDictionary<string, object> Copy(OrderedDictionary<string, object> attributes) =>
         attributes?.Count > 0 ? new OrderedDictionary<string, object>(attributes) : null;

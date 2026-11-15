@@ -83,4 +83,45 @@ public class YjsTypeParityTests
         // Yjs: the delta deletes B's redundant 'bold' start in its own transaction, which fires again.
         Assert.AreEqual("""[[{"attributes":{"bold":true},"retain":3}],[]]""", Json(deltas) + (updates == 2 ? string.Empty : $" updates {updates}"));
     }
+
+    [TestMethod]
+    public void TextWithEmbeddedType_RemoteInsert_ToDeltaAndEventShowTheType()
+    {
+        var a = new YDoc(new YDocOptions { ClientId = 1 });
+        var t = a.GetText("t");
+        t.Insert(0, "ab");
+        var o = new YDoc(new YDocOptions { ClientId = 2 });
+        o.ApplyUpdate(a.EncodeStateAsUpdate());
+        var sv = a.EncodeStateVector();
+        var deltas = new List<string>();
+        o.GetText("t").Observe((_, e) => deltas.Add(Json(e.Event.Delta)));
+        a.Transact(_ =>
+        {
+            t.InsertEmbed(1, new YMap(new Dictionary<string, object> { ["k"] = 1 }));
+            t.Insert(3, "c");
+        });
+
+        o.ApplyUpdate(a.EncodeStateAsUpdate(sv));
+
+        var delta = o.GetText("t").ToDelta();
+        Assert.AreEqual(
+            """[{"insert":"a"},{"insert":"<YMap>"},{"insert":"bc"}] [[{"retain":1},{"insert":"<YMap>"},{"retain":1},{"insert":"c"}]] 4 1""",
+            $"{Json(delta)} {Json(deltas)} {o.GetText("t").Length} {((YMap)delta[1].Insert).Get("k")}");
+    }
+
+    [TestMethod]
+    public void TextInsertEmbed_SharedType_IntegratesItAsYjsDoes()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var text = doc.GetText("t");
+        text.Insert(0, "ab");
+        var map = new YMap();
+
+        text.InsertEmbed(1, map, new Dictionary<string, object> { ["bold"] = true });
+        map.Set("x", 2);
+
+        Assert.AreEqual(
+            """[{"insert":"a"},{"attributes":{"bold":true},"insert":"<YMap>"},{"insert":"b"}] AQYBAAQBAXQBYYQBAAFixgEAAQEEYm9sZAR0cnVlxwECAQEBxgEDAQEEYm9sZARudWxsKAABAwF4AX0CAA==""",
+            $"{Json(text.ToDelta())} {System.Convert.ToBase64String(doc.EncodeStateAsUpdate())}");
+    }
 }
