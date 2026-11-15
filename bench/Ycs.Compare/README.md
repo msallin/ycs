@@ -428,10 +428,12 @@ is managed + native as above (the native part is noise here).
   after the split point) and the shift of the client's struct list. Typing 100,000 characters in one transaction into
   an observed text (an editor binding, an UndoManager: Yjs' items, merged at the end) goes from 49 s to 0.8 s.
   Finding a struct by clock reads the start array: loading a state is 4-11% faster.
-* **Lost:** a split or a merge in the middle of a long list now shifts 17 bytes per later struct instead of 8 (the
-  start clock and the flag byte beside the reference) and updates the block sums after it: `apply-updates` (+19%)
-  and `trace-replay` (+15%), which split and merge in the middle of the trace's 11,000-struct list for every edit,
-  pay for it. The design's B+tree order (step 7: leaves of 128 positions) is what removes that shift.
+* **Lost:** `apply-updates` (+19%) and `trace-replay` (+15%), which split and merge in the middle of the trace's
+  11,000-struct list for every edit. Most of it is step 1, the start-clock array and the list class: with the index's
+  maintenance off (no flags, block sums or `Refresh`, the starts kept) the review measured +11% and +15% against
+  53a35de; the index is at most 4 points of it. A split or a merge shifts 17 bytes per later struct instead of 8 (the
+  start clock and the flag byte beside the reference); the design's B+tree order (step 7: leaves of 128 positions) is
+  what removes that shift.
 * **Memory:** the index costs 9 bytes per struct (8 for the start, 1 for the flags, 8 per 512 for the block sums and 4 per 512 for the break counts),
   plus the arrays' doubling slack, and a client's list object is a little larger than a `List`: held memory grows by
   0.5 MiB (`array-insert-random`, 50,000 structs) to 1.2 MiB (`concurrent-20`, 128,560 structs over 20 documents;

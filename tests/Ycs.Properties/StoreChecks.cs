@@ -19,7 +19,7 @@ public static class StoreChecks
         BlockShift(null) = 1;
     }
 
-    [UnsafeAccessor(UnsafeAccessorKind.StaticField, Name = "BlockShiftForNewLists")]
+    [UnsafeAccessor(UnsafeAccessorKind.StaticField, Name = "BlockShiftForTests")]
     private static extern ref int BlockShift([UnsafeAccessorType("Ycs.ClientStructs, Ycs")] object structs);
 
     [UnsafeAccessor(UnsafeAccessorKind.StaticField, Name = "CheckAfterTransactionsForTests")]

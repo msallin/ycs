@@ -57,6 +57,8 @@ public partial class Item : AbstractStruct
     /// <summary>
     /// The item that is currently to the left of this item.
     /// </summary>
+    // Whether it is this item's predecessor by clock is in the run-head index: a writer of an item the store holds
+    // calls StructStore.Refresh (Integrate); a split and a merge go through ClientStructs, which keeps it.
     public AbstractStruct Left { get; internal set; }
 
     /// <summary>
@@ -201,6 +203,8 @@ public partial class Item : AbstractStruct
         }
     }
 
+    // The run-head index holds whether an item is deleted: for an item the store holds, the caller then calls
+    // StructStore.Refresh (MarkDeleted(Transaction), ContentDeleted.Integrate); a split's right part is not in it yet.
     internal void MarkDeleted()
     {
         _info |= InfoEnum.Deleted;
@@ -458,7 +462,8 @@ public partial class Item : AbstractStruct
             {
                 if (Right is Item rightItem)
                 {
-                    // Linked to its old left (the run-head index): only when that one is its predecessor by clock.
+                    // Its left changes: when the old one is its predecessor by clock, it was linked in the run-head index and
+                    // becomes a break, which StructStore.Refresh records.
                     var relinked = rightItem.Left is Item oldLeft && oldLeft.Id.Client == rightItem.Id.Client && oldLeft.Id.Clock + oldLeft.Length == rightItem.Id.Clock;
                     rightItem.Left = this;
                     if (relinked)

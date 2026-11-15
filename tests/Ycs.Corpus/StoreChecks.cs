@@ -12,6 +12,6 @@ public static class StoreChecks
         StructStore.CheckAfterTransactionsForTests = true;
 
         // Blocks of 2 positions in the run-head index, so that short lists cross block boundaries.
-        ClientStructs.BlockShiftForNewLists = 1;
+        ClientStructs.BlockShiftForTests = 1;
     }
 }

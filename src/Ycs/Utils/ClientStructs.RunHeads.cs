@@ -37,9 +37,11 @@ internal sealed partial class ClientStructs
     /// the blocks after it, a lookup scans at most a block on each side and the block sums between); the property
     /// tests make blocks of 2, so that their short lists cross block boundaries.
     /// </summary>
-    internal static int BlockShiftForNewLists = 9;
+    internal static int BlockShiftForTests = 9;
 
-    private readonly int _blockShift = BlockShiftForNewLists;
+    // Per list, so that lists of different block sizes live side by side (the differential tests compare them in one
+    // process) and a change of BlockShiftForTests leaves the lists already made intact.
+    private readonly int _blockShift = BlockShiftForTests;
 
     // The flag values with Break set, and with Format set.
     private static readonly SearchValues<byte> Breaks = SearchValues.Create([Break, Break | Visible, Break | Format]);
