@@ -82,7 +82,7 @@ internal static class YJson
                     var dict = new Dictionary<string, object?>();
                     while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
                     {
-                        var key = reader.GetString()!;
+                        var key = GetString(ref reader);
                         reader.Read();
                         dict[key] = ReadValue(ref reader); // a repeated key: the last one wins, as in JSON.parse
                     }
@@ -100,7 +100,7 @@ internal static class YJson
                     return list;
                 }
             case JsonTokenType.String:
-                return reader.GetString();
+                return GetString(ref reader);
             case JsonTokenType.Number:
                 {
                     if (reader.ValueSpan.IndexOfAny((byte)'.', (byte)'e', (byte)'E') < 0
@@ -121,6 +121,72 @@ internal static class YJson
             default:
                 throw new JsonException($"Unexpected JSON token: {reader.TokenType}.");
         }
+    }
+
+    /// <summary>
+    /// The string or property name at the reader. JSON.parse accepts an escaped lone surrogate
+    /// (<c>"\ud83d"</c>, which JSON.stringify writes for one) and keeps it; Utf8JsonReader.GetString
+    /// rejects it, so such a string is unescaped here.
+    /// </summary>
+    private static string GetString(ref Utf8JsonReader reader)
+    {
+        if (!reader.ValueIsEscaped)
+        {
+            return reader.GetString()!;
+        }
+
+        // The reader runs over a span, so the value is never a sequence.
+        var raw = reader.ValueSpan;
+        if (raw.IndexOf("\\u"u8) < 0)
+        {
+            return reader.GetString()!;
+        }
+
+        return Unescape(Encoding.UTF8.GetString(raw));
+    }
+
+    // The reader has validated the escapes: a backslash is followed by one of "\/bfnrt or u and four hex digits.
+    private static string Unescape(string escaped)
+    {
+        var sb = new StringBuilder(escaped.Length);
+        for (var i = 0; i < escaped.Length; i++)
+        {
+            var c = escaped[i];
+            if (c != '\\')
+            {
+                sb.Append(c);
+                continue;
+            }
+
+            c = escaped[++i];
+            switch (c)
+            {
+                case 'b':
+                    sb.Append('\b');
+                    break;
+                case 'f':
+                    sb.Append('\f');
+                    break;
+                case 'n':
+                    sb.Append('\n');
+                    break;
+                case 'r':
+                    sb.Append('\r');
+                    break;
+                case 't':
+                    sb.Append('\t');
+                    break;
+                case 'u':
+                    sb.Append((char)int.Parse(escaped.AsSpan(i + 1, 4), NumberStyles.HexNumber, CultureInfo.InvariantCulture));
+                    i += 4;
+                    break;
+                default:
+                    sb.Append(c);
+                    break;
+            }
+        }
+
+        return sb.ToString();
     }
 
     private static void Write(StringBuilder sb, object? value, int depth)

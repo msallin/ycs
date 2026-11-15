@@ -378,4 +378,39 @@ public class CoreParityTests
 
         Assert.AreEqual(string.Join(",", Enumerable.Range(0, 40).Reverse().Select(i => "k" + i)), string.Join(",", order));
     }
+
+    [TestMethod]
+    public void ApplyUpdate_JsonEmbedWithLoneSurrogateEscapes_IsReadAndReEncodedUnchanged()
+    {
+        // Yjs: insertEmbed(0, { v: 'a\uD83Db', 'k\uDC00': 1 }), v1: the JSON holds "\ud83d" and "\udc00".
+        const string update = "AQEBAAUBAXQceyJ2IjoiYVx1ZDgzZGIiLCJrXHVkYzAwIjoxfQA=";
+        var doc = new YDoc();
+
+        doc.ApplyUpdate(B(update));
+        var embed = (IDictionary<string, object>)doc.GetText("t").ToDelta()[0].Insert;
+
+        Assert.AreEqual(("a\uD83Db", 1, update), ((string)embed["v"], embed["k\uDC00"], S(doc.EncodeStateAsUpdate())));
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_StringNotValidUtf8_IsRejectedAsByYjs()
+    {
+        // A text item "\xFFri": lib0's TextDecoder is fatal.
+        var doc = new YDoc();
+
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(B("AQEBAAQBAXQD/3JpAA==")));
+        Assert.AreEqual(string.Empty, doc.GetText("t").ToString());
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_StringWithByteOrderMark_KeepsIt()
+    {
+        var source = new YDoc(new YDocOptions { ClientId = 1 });
+        source.GetText("t").Insert(0, "\uFEFFx");
+        var doc = new YDoc();
+
+        doc.ApplyUpdate(source.EncodeStateAsUpdate());
+
+        Assert.AreEqual("\uFEFFx", doc.GetText("t").ToString());
+    }
 }

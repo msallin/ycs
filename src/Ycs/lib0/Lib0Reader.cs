@@ -182,11 +182,27 @@ internal sealed class Lib0Reader
 
     private static YUpdateException EndOfInput() => new("The input ended early.");
 
-    /// <summary>UTF-8 string prefixed by its byte length (lib0 <c>readVarString</c>).</summary>
+    // lib0 decodes with a fatal TextDecoder (ignoreBOM: a byte order mark is kept as U+FEFF).
+    private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+
+    /// <summary>UTF-8 string prefixed by its byte length (lib0 <c>readVarString</c>); invalid UTF-8 is rejected, as lib0 does.</summary>
     public string ReadVarString()
     {
         var length = (int)ReadVarUint();
-        return length == 0 ? string.Empty : Encoding.UTF8.GetString(ReadBytes(length));
+        if (length == 0)
+        {
+            return string.Empty;
+        }
+
+        var bytes = ReadBytes(length);
+        try
+        {
+            return StrictUtf8.GetString(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw new YUpdateException("A string is not valid UTF-8.");
+        }
     }
 
     /// <summary>Length-prefixed byte array (lib0 <c>readVarUint8Array</c>), as a span over the input.</summary>
