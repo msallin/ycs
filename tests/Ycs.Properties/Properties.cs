@@ -56,6 +56,8 @@ internal static class Properties
             ListsOrWindows, MergeOrder),
         new("run-extension", "inserts that continue a run in place (with the one-pass merge) leave the same structs (as merge-order, search markers included) and observations as Yjs' items, one per insert, merged pair by pair, after every step",
             ListsOrWindows, RunExtension),
+        new("walk-index", "the marker lookups through the run-head index end on the same item with the same index as Yjs' loops item by item, at every lookup, with the same structs (as merge-order, search markers included) and observations, after every step; with run extension as the script has it and off",
+            ListsOrWindows, WalkIndex),
         new("event-replay", "replaying the deltas and key changes the root observers saw onto a shadow copy reproduces each root (text, array, xml, map) after every step",
             seed => Generator.Generate(seed, BmpOnly), EventReplay),
     ];
@@ -1036,9 +1038,23 @@ internal static class Properties
         SameStores("run-extension", script, With(With(script, "extend", false), "merge", "pairwise"), markers: true)
         ?? SameStores("run-extension", With(script, "quiet", true), With(With(With(script, "quiet", true), "extend", false), "merge", "pairwise"), markers: true);
 
-    private static Violation SameStores(string property, Dictionary<string, object> candidate, Dictionary<string, object> reference, bool markers) =>
+    // Eager: the candidate asks the index from the first step of a walk, so that short lists use it too.
+    private static Violation WalkIndex(Dictionary<string, object> script) =>
+        SameStores("walk-index", With(script, "walk", "eager"), With(script, "walk", "plain"), markers: true, lookups: true)
+        ?? SameStores("walk-index", With(With(script, "walk", "eager"), "extend", false), With(With(script, "walk", "plain"), "extend", false), markers: true, lookups: true);
+
+    private static Violation SameStores(string property, Dictionary<string, object> candidate, Dictionary<string, object> reference, bool markers, bool lookups = false) =>
         Lockstep(property, candidate, reference, (a, obsA, b, obsB) =>
         {
+            for (var k = 0; k < a.Clients.Count && lookups; k++)
+            {
+                var (x, y) = (a.Clients[k].Replica.TakeMarkerLookups(), b.Clients[k].Replica.TakeMarkerLookups());
+                if (x != y)
+                {
+                    return $"lookup differs: client {k}: {Short(x)}{Environment.NewLine}  reference {Short(y)}";
+                }
+            }
+
             for (var k = 0; k < a.Clients.Count; k++)
             {
                 var (x, y) = (a.Clients[k].Replica.StoreDump(markers), b.Clients[k].Replica.StoreDump(markers));

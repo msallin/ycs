@@ -26,7 +26,8 @@ edit lands. What proves both:
 | Test | Compared with | What |
 | --- | --- | --- |
 | `RunExtensionYjsTests` | Yjs 13.6.32 (values recorded by `interop/markers/blockers.mjs`) | the four windows a review found: an update applied between index edits in one transaction, an observer editing during a remote transaction's cleanup, a marker an insert moves off a deleted item; a garbage collection filter (its calls, the updates and states); snapshot reads within a transaction; a transaction started from an observer (the inner and the outer events) |
-| `StaleMarkerScriptTests` | Yjs (`interop/markers/gen.mjs`: modes `apply`, `small`, `observer`) | the content after every step and the final state of scripts in which Yjs' markers are stale when an edit looks them up. `Fixtures/stale-markers.jsonl.gz`: seeds 1 to 300 of each mode, and every script a refused version failed; `interop/markers/soak.sh <scripts per mode> <first seed> [modes]` generates and replays more |
+| `StaleMarkerScriptTests` | Yjs (`interop/markers/gen.mjs`: modes `apply`, `small`, `observer`) | the content after every step and the final state of scripts in which Yjs' markers are stale when an edit looks them up, each run three times: the marker walks as by default, through the run-head index from the first step (`eager`), and item by item (`plain`). `Fixtures/stale-markers.jsonl.gz`: seeds 1 to 300 of each mode, and every script a refused version failed; `interop/markers/soak.sh <scripts per mode> <first seed> [modes]` generates and replays more |
+| `RunHeadIndexTests` | the walks item by item (`YDoc.RunHeadIndexDisabledForTests`) and Yjs | the design review's script (a stale marker that Yjs' walk right puts on the item after a chain, "cdeqpD" in Yjs 13.6.32), text and array; random edits of a long list split into one client's chain, with the other client's items inside it, deleted members and both stale windows: content, markers and where every lookup ends, eager, default and plain |
 | `RunExtensionScenarioTests` | the reference (`ReferenceRun`: `YDoc.RunExtensionsDisabledForTests`, `StructStore.PairwiseMergeForTests`) | 36 hand-written scenarios (observers and handlers attached within a transaction, throwing bodies and handlers, updates applied and encodings made within a transaction, undo, surrogates, snapshots, relative positions, prelim types, a parent deleted while typing, filters, transactions started from observers): their logs (events with the items they added and deleted, updates, states, every struct with its marker flag) |
 | `RunExtensionFuzzTests` | the reference | random scenarios mixing all of that with peer syncs, a map observer that edits the lists during remote cleanups and an update handler that types; the search markers of both lists after every step. 300 seeds; `YCS_EXTENSION_FUZZ=first:count` for more |
 | `run-extension`, `merge-order` (`tests/Ycs.Properties`) | the reference | see [reference comparisons](#reference-comparisons) |
@@ -309,19 +310,27 @@ the exceptions the operations threw.
 
 ### Reference comparisons
 
-Three properties compare Ycs with itself, run step by step on the same script with an internal switch flipped
+Four properties compare Ycs with itself, run step by step on the same script with an internal switch flipped
 (set through `Adapter.cs`' accessors; script options only Ycs reads): every other seed is a script of the general
 generator, the others one of `ListScripts.cs` (a text and an array grown to a few hundred elements by typing runs,
 backspaces, random inserts, deletes and pushes, most of them in one transaction, with a late UndoManager, formats
-and syncs: the general scripts stay too short to make search markers). `merge-order` and `run-extension` take them
-with the windows of the run extension (`GenOptions.Windows`; in `ListScripts`, updates applied in the middle of
+and syncs: the general scripts stay too short to make search markers). `merge-order`, `run-extension` and
+`walk-index` take them with the windows of the run extension (`GenOptions.Windows`; in `ListScripts`, updates applied in the middle of
 transactions); `markers-invisible` without (where Yjs leaves markers stale, markers on and off differ in Yjs too).
 
 | Property | Candidate | Reference | Compared after every step |
 | --- | --- | --- | --- |
 | `markers-invisible` | search markers on | off (`YDoc.SearchMarkersDisabledForTests`, option `markers: false`) | every observation (content, encodings, results, events); and every marker of a live type points at an item of its list with the right index (`YArrayBase.SearchMarkerViolations`, usable from a Debug session too) |
 | `merge-order` | the end of a transaction merges a run in one pass | Yjs' pair-by-pair order (`StructStore.PairwiseMergeForTests`, option `merge: "pairwise"`), inserts as items of their own in both | the struct store of every client (`Replica.StoreDump`: kind, id, length, deletion, content, left/right, origins, parent, key, keep, redone, marker flag; each type's map entries and markers) and the observations |
+| `walk-index` | the marker walks through the run-head index (`ClientStructs`: the walk-left to the run's head, the walk right and the middle walk jumping within a run, the callers' walks from the marker), asked from the first step (option `walk: "eager"`) | Yjs' loops item by item (`YDoc.RunHeadIndexDisabledForTests`, option `walk: "plain"`) | where every marker lookup ends (item and index, `YDoc.MarkerLookupsForTests`), the store as `merge-order` (markers included) and the observations; with run extension as the script has it and off |
 | `run-extension` | inserts that continue a run extend it in place | every insert an item of its own (`YDoc.RunExtensionsDisabledForTests`, option `extend: false`), merged pair by pair | the store as above, search markers included (between steps every marker sits where Yjs' would), and the observations; once as the script has it (quiet clients extend runs), once with every client quiet (script option `quiet`) |
+
+The test suites (`Ycs.Tests`, `Ycs.Corpus`, `Ycs.Fuzz`, `Ycs.Properties`) recount the struct lists after every
+transaction (`StructStore.CheckAfterTransactionsForTests`: the start clocks, the run-head index's flags, links and
+block sums; lists over 1,024 structs every count/256th time); `Ycs.Corpus` and `Ycs.Properties` use blocks of 2
+positions, so that short lists cross block boundaries (`YCS_NO_RECOUNT=1` leaves the recount out, to see what a
+property alone finds). `walk-index` fails when the index misses an update: the refresh of an item another one was
+integrated before, the block sums after a split, the block sums after a merge.
 
 Each fails on a sabotaged change (a marker index off by one in a merge, a map entry not moved to the struct a
 run merges into, the split before the observers left out, the surrogate condition of the run extension dropped);

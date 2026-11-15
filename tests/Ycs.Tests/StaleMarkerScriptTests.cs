@@ -19,13 +19,17 @@ namespace Ycs;
 /// Fixtures/stale-markers.jsonl.gz holds seeds 1 to 300 of each mode and every script a refused version of the run
 /// extension failed (171 of 3,000 "apply", 547 of 20,000 "observer", 1,211 of 60,000 "small"). With
 /// <c>YCS_STALE_MARKER_SCRIPTS</c> set to a file the generator wrote, that file is replayed instead
-/// (interop/markers/soak.sh).
+/// (interop/markers/soak.sh). Each script runs three times: with the marker walks as by default (the run-head index
+/// after 32 steps), asking the index at once (<c>eager</c>), and item by item as Yjs (<c>plain</c>).
 /// </remarks>
 [TestClass]
 public class StaleMarkerScriptTests
 {
     [TestMethod]
-    public void Scripts_ContentAndStateEqualYjs()
+    [DataRow("default")]
+    [DataRow("eager")]
+    [DataRow("plain")]
+    public void Scripts_ContentAndStateEqualYjs(string walk)
     {
         var failures = new List<string>();
         var total = 0;
@@ -39,7 +43,7 @@ public class StaleMarkerScriptTests
 
             total++;
             using var json = JsonDocument.Parse(line);
-            if (Replay(json.RootElement) is { } problem && failures.Count < 6)
+            if (Replay(json.RootElement, walk) is { } problem && failures.Count < 6)
             {
                 failures.Add(problem);
             }
@@ -69,10 +73,16 @@ public class StaleMarkerScriptTests
     }
 
     /// <summary>What differs from Yjs in the script, or null.</summary>
-    private static string Replay(JsonElement script)
+    private static string Replay(JsonElement script, string walk)
     {
         var doc = new YDoc(new YDocOptions { ClientId = script.GetProperty("client").GetInt64() });
         var peer = new YDoc(new YDocOptions { ClientId = 2 });
+        foreach (var d in new[] { doc, peer })
+        {
+            d.LiteralWalkSteps = walk == "eager" ? 1 : d.LiteralWalkSteps;
+            d.RunHeadIndexDisabledForTests = walk == "plain";
+        }
+
         var text = script.GetProperty("kind").GetString() == "text";
         AbstractType Root(YDoc d) => text ? d.GetText("t") : d.GetArray("t");
         var t = Root(doc);

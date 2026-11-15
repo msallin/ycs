@@ -520,7 +520,7 @@ namespace Ycs.Properties
             Replica = new Replica(spec.Int("id"), spec.Get("gc") is not false, run.Roots, gcFilter);
             Id = Replica.ClientId;
             var doc = Replica.Doc;
-            Replica.UseReferences(markers: run.Script.Get("markers") is not false, pairwiseMerge: run.Script.Get("merge") is "pairwise", extendRuns: run.Script.Get("extend") is not false);
+            Replica.UseReferences(markers: run.Script.Get("markers") is not false, pairwiseMerge: run.Script.Get("merge") is "pairwise", extendRuns: run.Script.Get("extend") is not false, walk: run.Script.Get("walk") as string);
             // "quiet" (the client's, as oracle.mjs reads it, or the script's, which only Ycs reads): no observers and no
             // transaction handlers (only the update handlers the log needs), so that nothing makes the document split
             // the runs it extended in place.
@@ -1676,11 +1676,43 @@ namespace Ycs.Properties
         /// <summary>How many inserts extended a run in place in this document.</summary>
         internal long RunsExtended => RunsExtendedOf(StoreOf(Doc));
 
-        internal void UseReferences(bool markers, bool pairwiseMerge, bool extendRuns)
+        /// <param name="walk">"plain": the marker lookups walk item by item (Yjs' loops); "eager": they ask the run-head
+        /// index at once (instead of after 32 steps); null: as by default. Either way every lookup is logged.</param>
+        internal void UseReferences(bool markers, bool pairwiseMerge, bool extendRuns, string walk = null)
         {
             SearchMarkersDisabled(Doc) = !markers;
             PairwiseMerge(StoreOf(Doc)) = pairwiseMerge;
             RunExtensionsDisabled(Doc) = !extendRuns;
+            RunHeadIndexDisabled(Doc) = walk == "plain";
+            if (walk == "eager")
+            {
+                LiteralWalkSteps(Doc) = 1;
+            }
+
+            MarkerLookups(Doc) = walk == null ? null : [];
+        }
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "RunHeadIndexDisabledForTests")]
+        private static extern ref bool RunHeadIndexDisabled(YDoc doc);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "LiteralWalkSteps")]
+        private static extern ref int LiteralWalkSteps(YDoc doc);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "MarkerLookupsForTests")]
+        private static extern ref List<(ID Item, int Index)> MarkerLookups(YDoc doc);
+
+        /// <summary>The marker lookups since the last call, as "client:clock@index" (with the script option "walk"), and forgets them.</summary>
+        public string TakeMarkerLookups()
+        {
+            var lookups = MarkerLookups(Doc);
+            if (lookups == null)
+            {
+                return "";
+            }
+
+            var text = string.Join(" ", lookups.Select(l => $"{l.Item.Client}:{l.Item.Clock}@{l.Index}"));
+            lookups.Clear();
+            return text;
         }
 
         private static string IdOf(AbstractStruct s) => s == null ? "-" : $"{s.Id.Client}:{s.Id.Clock}";

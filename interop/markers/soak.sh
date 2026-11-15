@@ -20,4 +20,4 @@ for mode in $modes; do
 done
 echo "$(wc -l < "$scripts") scripts ($modes, seeds $first..$((first + count - 1)))"
 YCS_STALE_MARKER_SCRIPTS="$scripts" dotnet test "$root/tests/Ycs.Tests" -c Release \
-  --filter Name=Scripts_ContentAndStateEqualYjs --logger "console;verbosity=normal" "$@"
+  --filter "Name~Scripts_ContentAndStateEqualYjs" --logger "console;verbosity=normal" "$@"
