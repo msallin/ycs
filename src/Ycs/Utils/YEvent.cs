@@ -70,7 +70,7 @@ internal static class ChangedKeys
             return parentSub == null ? ChildList : new SingleKey(parentSub);
         }
 
-        // The shared sets and a single key are read-only: a second key makes a set of its own.
+        // The shared sets are read-only: a second key makes a set of its own.
         if (changed.IsReadOnly)
         {
             return changed.Contains(parentSub) ? changed : new HashSet<string>(changed) { parentSub };
@@ -81,62 +81,64 @@ internal static class ChangedKeys
     }
 
     /// <summary>
-    /// The set of a type of which one key changed (most map changes: a set or a delete of one key), read-only as
-    /// <see cref="ChildList"/>; a HashSet costs several times its size.
+    /// The set of a type of which one key changed (most map changes: a set or a delete of one key), without the
+    /// HashSet, which costs several times its size, until the set is changed: by a second key, or by a handler (Yjs'
+    /// set is a mutable Set). Then it holds a HashSet and is one.
     /// </summary>
     private sealed class SingleKey : ISet<string>, IReadOnlySet<string>
     {
         private readonly string _key;
+        private HashSet<string> _set;
 
         public SingleKey(string key) => _key = key;
 
-        public int Count => 1;
+        private HashSet<string> Set => _set ??= new HashSet<string> { _key };
 
-        public bool IsReadOnly => true;
+        public int Count => _set?.Count ?? 1;
 
-        public bool Contains(string item) => string.Equals(item, _key, StringComparison.Ordinal);
+        public bool IsReadOnly => false;
 
-        public IEnumerator<string> GetEnumerator()
+        public bool Contains(string item) => _set?.Contains(item) ?? string.Equals(item, _key, StringComparison.Ordinal);
+
+        public IEnumerator<string> GetEnumerator() => _set?.GetEnumerator() ?? One();
+
+        private IEnumerator<string> One()
         {
             yield return _key;
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
 
-        public void CopyTo(string[] array, int arrayIndex) => array[arrayIndex] = _key;
+        public void CopyTo(string[] array, int arrayIndex) => Set.CopyTo(array, arrayIndex);
 
-        public bool IsProperSubsetOf(IEnumerable<string> other) => AsSet().IsProperSubsetOf(other);
+        public bool IsProperSubsetOf(IEnumerable<string> other) => Set.IsProperSubsetOf(other);
 
-        public bool IsProperSupersetOf(IEnumerable<string> other) => AsSet().IsProperSupersetOf(other);
+        public bool IsProperSupersetOf(IEnumerable<string> other) => Set.IsProperSupersetOf(other);
 
-        public bool IsSubsetOf(IEnumerable<string> other) => AsSet().IsSubsetOf(other);
+        public bool IsSubsetOf(IEnumerable<string> other) => Set.IsSubsetOf(other);
 
-        public bool IsSupersetOf(IEnumerable<string> other) => AsSet().IsSupersetOf(other);
+        public bool IsSupersetOf(IEnumerable<string> other) => Set.IsSupersetOf(other);
 
-        public bool Overlaps(IEnumerable<string> other) => AsSet().Overlaps(other);
+        public bool Overlaps(IEnumerable<string> other) => Set.Overlaps(other);
 
-        public bool SetEquals(IEnumerable<string> other) => AsSet().SetEquals(other);
+        public bool SetEquals(IEnumerable<string> other) => Set.SetEquals(other);
 
-        public bool Add(string item) => throw ReadOnly();
+        // The key again (a map entry set again in the transaction) changes nothing and makes no set.
+        public bool Add(string item) => (_set != null || !Contains(item)) && Set.Add(item);
 
-        void ICollection<string>.Add(string item) => throw ReadOnly();
+        void ICollection<string>.Add(string item) => Add(item);
 
-        public void Clear() => throw ReadOnly();
+        public void Clear() => Set.Clear();
 
-        public bool Remove(string item) => throw ReadOnly();
+        public bool Remove(string item) => Set.Remove(item);
 
-        public void ExceptWith(IEnumerable<string> other) => throw ReadOnly();
+        public void ExceptWith(IEnumerable<string> other) => Set.ExceptWith(other);
 
-        public void IntersectWith(IEnumerable<string> other) => throw ReadOnly();
+        public void IntersectWith(IEnumerable<string> other) => Set.IntersectWith(other);
 
-        public void SymmetricExceptWith(IEnumerable<string> other) => throw ReadOnly();
+        public void SymmetricExceptWith(IEnumerable<string> other) => Set.SymmetricExceptWith(other);
 
-        public void UnionWith(IEnumerable<string> other) => throw ReadOnly();
-
-        private HashSet<string> AsSet() => new() { _key };
-
-        // As the shared sets (ReadOnlySet) answer a change.
-        private static NotSupportedException ReadOnly() => new("Collection is read-only.");
+        public void UnionWith(IEnumerable<string> other) => Set.UnionWith(other);
     }
 
     /// <summary>The keys in <paramref name="changed"/> other than <c>null</c>, as a new set.</summary>

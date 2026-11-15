@@ -106,13 +106,38 @@ public class EventGatingTests
     }
 
     [TestMethod]
-    public void ChangedKeys_OneKey_IsReadOnlyAndAddingAgainKeepsIt()
+    public void ChangedKeys_OneKey_AddingAgainKeepsIt()
     {
         var keys = ChangedKeys.Add(null, "key");
 
         var again = ChangedKeys.Add(keys, "key");
 
-        Assert.IsTrue(keys.IsReadOnly && ReferenceEquals(keys, again) && keys.Count == 1 && keys.Contains("key") && !keys.Contains("other"));
+        Assert.IsTrue(!keys.IsReadOnly && ReferenceEquals(keys, again) && keys.Count == 1 && keys.Contains("key") && !keys.Contains("other"));
+    }
+
+    [TestMethod]
+    public void ChangedKeys_OneKeyChangedByItsHolder_HoldsBoth()
+    {
+        var keys = ChangedKeys.Add(null, "key");
+
+        var added = keys.Add("other") && !keys.Add("key");
+
+        Assert.IsTrue(added && keys.SetEquals(new[] { "key", "other" }) && ReferenceEquals(keys, ChangedKeys.Add(keys, "third")) && keys.Count == 3);
+    }
+
+    [TestMethod]
+    public void Changed_MapKeyAddedByHandler_IsInTheSet()
+    {
+        // Yjs' transaction.changed holds mutable Sets: a handler may add to one.
+        var doc = new YDoc();
+        var map = doc.GetMap("map");
+        var seen = new List<string>();
+        doc.AfterTransaction += (_, tr) => tr.Changed[map].Add("added");
+        doc.AfterTransactionCleanup += (_, tr) => seen.AddRange(tr.Changed[map]);
+
+        map.Set("key", 1);
+
+        CollectionAssert.AreEqual(new[] { "key", "added" }, seen);
     }
 
     [TestMethod]
