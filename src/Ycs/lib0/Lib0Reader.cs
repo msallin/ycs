@@ -171,7 +171,7 @@ internal sealed class Lib0Reader
             num |= (ulong)(r & 0x7F) << shift;
             shift += 7;
 
-            if (shift > 53 + 7 || num > (1UL << 53) - 1)
+            if (shift > 53 + 7 || num > (ulong)JsValue.MaxSafeInteger)
             {
                 throw new YUpdateException("A variable-length integer is out of range.");
             }

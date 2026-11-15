@@ -9,7 +9,6 @@ namespace Ycs;
 /// <seealso cref="IntDiffOptRleEncoder"/>
 internal class IntDiffOptRleDecoder : AbstractStreamDecoder<long>
 {
-    private const long MaxSafeInteger = (1L << 53) - 1;
 
     private long _state;
     private ulong _count;
@@ -42,7 +41,7 @@ internal class IntDiffOptRleDecoder : AbstractStreamDecoder<long>
 
         // Both stay within ±2^53, so the sum cannot overflow; the result must stay there too.
         _state += _diff;
-        if (_state > MaxSafeInteger || _state < -MaxSafeInteger)
+        if (_state > JsValue.MaxSafeInteger || _state < -JsValue.MaxSafeInteger)
         {
             throw new YUpdateException("A value in a v2 column is out of range.");
         }

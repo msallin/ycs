@@ -130,13 +130,13 @@ public class YXmlText : YText
                 sb.Append('<').Append(node.NodeName);
                 foreach (var attr in node.Attrs)
                 {
-                    sb.Append(' ').Append(attr.Key).Append("=\"").Append(YXmlNodeHelpers.JsString(attr.Value)).Append('"');
+                    sb.Append(' ').Append(attr.Key).Append("=\"").Append(JsValue.ToJsString(attr.Value)).Append('"');
                 }
 
                 sb.Append('>');
             }
 
-            sb.Append(YXmlNodeHelpers.JsString(delta.Insert));
+            sb.Append(JsValue.ToJsString(delta.Insert));
 
             for (int i = nestedNodes.Count - 1; i >= 0; i--)
             {

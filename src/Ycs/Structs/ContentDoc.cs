@@ -4,8 +4,6 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-using System.Numerics;
-
 namespace Ycs;
 
 internal class ContentDoc : IContentEx
@@ -158,7 +156,7 @@ internal class ContentDoc : IContentEx
         /// </summary>
         public static Options Parse(string guid, IDictionary<string, object> opts, bool? shouldLoad)
         {
-            var autoLoad = opts.TryGetValue("autoLoad", out var al) && Truthy(al);
+            var autoLoad = opts.TryGetValue("autoLoad", out var al) && JsValue.Truthy(al);
             string? collectionId = null;
             if (opts.TryGetValue("collectionid", out var cid) && cid != null)
             {
@@ -167,11 +165,11 @@ internal class ContentDoc : IContentEx
 
             return new Options(
                 opts.TryGetValue("guid", out var g) ? g as string ?? throw new YUpdateException("A subdocument's 'guid' is not a string.") : guid,
-                !opts.TryGetValue("gc", out var gc) || Truthy(gc),
+                !opts.TryGetValue("gc", out var gc) || JsValue.Truthy(gc),
                 autoLoad,
                 opts.TryGetValue("meta", out var meta) ? meta : null,
                 collectionId,
-                shouldLoad ?? ((opts.TryGetValue("shouldLoad", out var sl) && Truthy(sl)) || autoLoad));
+                shouldLoad ?? ((opts.TryGetValue("shouldLoad", out var sl) && JsValue.Truthy(sl)) || autoLoad));
         }
 
         public YDoc Create(UpdateLimits? limits) => new(new YDocOptions
@@ -185,18 +183,4 @@ internal class ContentDoc : IContentEx
             Limits = limits ?? UpdateLimits.Default,
         });
     }
-
-    // JavaScript's truthiness: Yjs only tests these options.
-    private static bool Truthy(object value) => value switch
-    {
-        null => false,
-        bool b => b,
-        string s => s.Length != 0,
-        double d => d != 0 && !double.IsNaN(d),
-        float f => f != 0 && !float.IsNaN(f),
-        int i => i != 0,
-        long l => l != 0,
-        BigInteger bi => !bi.IsZero,
-        _ => true,
-    };
 }

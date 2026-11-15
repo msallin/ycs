@@ -161,7 +161,7 @@ public class YXmlElement : YXmlFragment
         var parts = new List<string>(keys.Count);
         foreach (var key in keys)
         {
-            parts.Add($"{key}=\"{YXmlNodeHelpers.JsString(attrs[key])}\"");
+            parts.Add($"{key}=\"{JsValue.ToJsString(attrs[key])}\"");
         }
 
         var nodeName = NodeName.ToLowerInvariant();

@@ -197,9 +197,6 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         ["clock"] = id.Clock
     };
 
-    // JavaScript's safe integers: what a client id or a clock can be in a Yjs peer.
-    private const long MaxSafeInteger = (1L << 53) - 1;
-
     private static ID JsonToId(object json, string name)
     {
         if (json is not IDictionary<string, object> dict
@@ -210,7 +207,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
 
         var clientValue = JsonInteger(client, name + ".client");
         var clockValue = JsonInteger(clock, name + ".clock");
-        if (clientValue < 0 || clientValue > MaxSafeInteger || clockValue < 0 || clockValue > MaxSafeInteger)
+        if (clientValue < 0 || clientValue > JsValue.MaxSafeInteger || clockValue < 0 || clockValue > JsValue.MaxSafeInteger)
         {
             throw new YUpdateException($"The {name} of a relative position is out of range (0 to 2^53 - 1).");
         }
@@ -218,13 +215,8 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         return new ID(clientValue, clockValue);
     }
 
-    private static long JsonInteger(object value, string name) => value switch
-    {
-        int i => i,
-        long l => l,
-        double d when Math.Floor(d) == d && Math.Abs(d) <= MaxSafeInteger => (long)d,
-        _ => throw new YUpdateException($"The {name} of a relative position is not an integer."),
-    };
+    private static long JsonInteger(object value, string name) =>
+        JsValue.IsInteger(value, out var integer) ? integer : throw new YUpdateException($"The {name} of a relative position is not an integer.");
 
     internal void Write(Lib0Writer writer)
     {

@@ -30,7 +30,6 @@ namespace Ycs;
 /// </summary>
 internal static class YJson
 {
-    private const long MaxSafeInteger = (1L << 53) - 1;
 
     private static readonly JsonReaderOptions ReaderOptions = new() { MaxDepth = Limits.MaxDepth };
 
@@ -105,7 +104,7 @@ internal static class YJson
                 {
                     if (reader.ValueSpan.IndexOfAny((byte)'.', (byte)'e', (byte)'E') < 0
                         && reader.TryGetInt64(out var l)
-                        && l >= -MaxSafeInteger && l <= MaxSafeInteger)
+                        && l >= -JsValue.MaxSafeInteger && l <= JsValue.MaxSafeInteger)
                     {
                         return l >= int.MinValue && l <= int.MaxValue ? (object)(int)l : l;
                     }
@@ -217,7 +216,7 @@ internal static class YJson
                 WriteInteger(sb, Convert.ToInt64(value, CultureInfo.InvariantCulture));
                 return;
             case ulong ul:
-                WriteInteger(sb, ul <= MaxSafeInteger ? (long)ul : throw AnyEncoding.OutOfRange(ul));
+                WriteInteger(sb, ul <= JsValue.MaxSafeInteger ? (long)ul : throw AnyEncoding.OutOfRange(ul));
                 return;
             case BigInteger:
                 // JSON.stringify throws a TypeError for a BigInt.
@@ -287,7 +286,7 @@ internal static class YJson
 
     private static void WriteInteger(StringBuilder sb, long l)
     {
-        if (l < -MaxSafeInteger || l > MaxSafeInteger)
+        if (l < -JsValue.MaxSafeInteger || l > JsValue.MaxSafeInteger)
         {
             throw AnyEncoding.OutOfRange(l);
         }

@@ -17,7 +17,7 @@ internal static class Limits
     /// Client ids: Yjs generates random 32-bit unsigned integers, but reads any var-uint up to
     /// JavaScript's safe integers, and applications and other implementations (u64 in yrs) set wider ones.
     /// </summary>
-    public const long MaxClient = (1L << 53) - 1;
+    public const long MaxClient = JsValue.MaxSafeInteger;
 
     /// <summary>
     /// Nesting depth of 'any' and JSON values, and of shared types inside each other, so that the

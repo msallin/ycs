@@ -1278,12 +1278,12 @@ public partial class YText : YArrayBase
                 var key = cf.Key;
                 var value = cf.Value;
                 var startAttrValue = GetAttribute(startAttributes, key);
-                if (endFormats == null || !endFormats.TryGetValue(key, out var endFormat) || endFormat != cf || StrictEquals(startAttrValue, value))
+                if (endFormats == null || !endFormats.TryGetValue(key, out var endFormat) || endFormat != cf || JsValue.StrictEquals(startAttrValue, value))
                 {
                     // Either this format is overwritten or it is not necessary because the attribute already existed.
                     start.Delete(transaction);
                     cleanups++;
-                    if (!reachedCurr && StrictEquals(GetAttribute(currAttributes, key), value) && !StrictEquals(startAttrValue, value))
+                    if (!reachedCurr && JsValue.StrictEquals(GetAttribute(currAttributes, key), value) && !JsValue.StrictEquals(startAttrValue, value))
                     {
                         if (startAttrValue == null)
                         {
@@ -1528,7 +1528,7 @@ public partial class YText : YArrayBase
     /// <c>[1, 2]</c> equals <c>{ "0": 1, "1": 2 }</c>.
     /// </summary>
     internal static bool EqualAttrs(object attr1, object attr2) =>
-        StrictEquals(attr1, attr2) ||
+        JsValue.StrictEquals(attr1, attr2) ||
         (attr1 is IDictionary<string, object> map1 && attr2 is IDictionary<string, object> map2 && EqualFlat(map1, map2)) ||
         (attr1 is System.Collections.IList list1 && attr2 is System.Collections.IList list2 && EqualFlat(list1, list2)) ||
         (attr1 is IDictionary<string, object> map && attr2 is System.Collections.IList list && EqualFlat(map, list)) ||
@@ -1543,7 +1543,7 @@ public partial class YText : YArrayBase
 
         foreach (var (key, value) in a)
         {
-            if (!b.TryGetValue(key, out var other) || !StrictEquals(value, other))
+            if (!b.TryGetValue(key, out var other) || !JsValue.StrictEquals(value, other))
             {
                 return false;
             }
@@ -1561,7 +1561,7 @@ public partial class YText : YArrayBase
 
         for (var i = 0; i < a.Count; i++)
         {
-            if (!StrictEquals(a[i], b[i]))
+            if (!JsValue.StrictEquals(a[i], b[i]))
             {
                 return false;
             }
@@ -1579,7 +1579,7 @@ public partial class YText : YArrayBase
 
         foreach (var (key, value) in map)
         {
-            if (!IsArrayIndex(key, out var index) || index >= list.Count || !StrictEquals(value, list[(int)index]))
+            if (!IsArrayIndex(key, out var index) || index >= list.Count || !JsValue.StrictEquals(value, list[(int)index]))
             {
                 return false;
             }
@@ -1633,51 +1633,6 @@ public partial class YText : YArrayBase
         }
 
         return attributes;
-    }
-
-    /// <summary>
-    /// JavaScript's <c>===</c> on the values an attribute can hold: numbers by value (whatever their
-    /// CLR type), strings, booleans and big integers by value, maps, lists and byte arrays by reference.
-    /// </summary>
-    internal static bool StrictEquals(object a, object b)
-    {
-        if (ReferenceEquals(a, b))
-        {
-            return true;
-        }
-
-        switch (a)
-        {
-            case null:
-                return false;
-            case string sa:
-                return b is string sb && string.Equals(sa, sb, StringComparison.Ordinal);
-            case bool ba:
-                return b is bool bb && ba == bb;
-            case System.Numerics.BigInteger ia:
-                return b is System.Numerics.BigInteger ib && ia == ib;
-        }
-
-        return TryGetNumber(a, out var na) && TryGetNumber(b, out var nb) && na == nb;
-
-        static bool TryGetNumber(object value, out double number)
-        {
-            switch (value)
-            {
-                case int i: number = i; return true;
-                case long l: number = l; return true;
-                case double d: number = d; return true;
-                case float f: number = f; return true;
-                case short s: number = s; return true;
-                case uint u: number = u; return true;
-                case ulong ul: number = ul; return true;
-                case byte b: number = b; return true;
-                case sbyte sb: number = sb; return true;
-                case ushort us: number = us; return true;
-                case decimal m: number = (double)m; return true;
-                default: number = 0; return false;
-            }
-        }
     }
 
     /// <summary>Applies <paramref name="format"/> to <paramref name="attributes"/>, which is created when a value is set.</summary>

@@ -39,7 +39,6 @@ namespace Ycs;
 /// </summary>
 internal static class AnyEncoding
 {
-    private const long MaxSafeInteger = (1L << 53) - 1;
 
     public static void WriteAny(this Lib0Writer writer, object? o) => WriteAny(writer, o, 0);
 
@@ -90,7 +89,7 @@ internal static class AnyEncoding
                 WriteInteger(writer, ui);
                 break;
             case ulong ul:
-                WriteInteger(writer, ul <= MaxSafeInteger ? (long)ul : throw OutOfRange(ul));
+                WriteInteger(writer, ul <= JsValue.MaxSafeInteger ? (long)ul : throw OutOfRange(ul));
                 break;
             case BigInteger bi: // TYPE 122: BigInt
                 writer.WriteByte(122);
@@ -222,7 +221,7 @@ internal static class AnyEncoding
             case null or string or bool or double or float or int or long or short or sbyte or byte or ushort or uint or byte[]:
                 return;
             case ulong ul:
-                if (ul > MaxSafeInteger)
+                if (ul > JsValue.MaxSafeInteger)
                 {
                     throw OutOfRange(ul);
                 }
@@ -294,7 +293,7 @@ internal static class AnyEncoding
             writer.WriteByte(125);
             writer.WriteVarInt(l);
         }
-        else if (l >= -MaxSafeInteger && l <= MaxSafeInteger)
+        else if (l >= -JsValue.MaxSafeInteger && l <= JsValue.MaxSafeInteger)
         {
             // Beyond 31 bits a JavaScript number is written as a float.
             WriteNumber(writer, l);

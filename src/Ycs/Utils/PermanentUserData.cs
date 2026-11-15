@@ -22,9 +22,6 @@ namespace Ycs;
 /// </summary>
 public sealed class PermanentUserData
 {
-    // JavaScript's safe integers: the client ids a Yjs peer can write.
-    private const double MaxSafeInteger = (1L << 53) - 1;
-
     public YDoc Doc { get; }
 
     public YMap YUsers { get; }
@@ -108,17 +105,9 @@ public sealed class PermanentUserData
     private void AddClientId(object clientIdValue, string userDescription)
     {
         // Written by other peers: anything but a client id is ignored.
-        double? id = clientIdValue switch
+        if (JsValue.IsInteger(clientIdValue, out var id) && id >= 0 && id <= JsValue.MaxSafeInteger)
         {
-            int i => i,
-            long l => l,
-            double d => d,
-            _ => null,
-        };
-
-        if (id is double value && value >= 0 && value <= MaxSafeInteger && Math.Floor(value) == value)
-        {
-            Clients[(long)value] = userDescription;
+            Clients[id] = userDescription;
         }
     }
 
