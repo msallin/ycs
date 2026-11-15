@@ -47,6 +47,9 @@ public class ScalingTests
     [TestMethod]
     public void UndoManager_ManyEditsInOneCapture_IsNotQuadratic()
     {
+#if DEBUG
+        Assert.Inconclusive("Timed with -c Release (a Debug build checks every marker lookup against Yjs' literal walk).");
+#endif
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("t");
         text.Insert(0, new string('a', 20_000));

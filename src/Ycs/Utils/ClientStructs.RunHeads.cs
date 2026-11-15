@@ -6,6 +6,7 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Buffers;
 using System.Diagnostics;
 
 namespace Ycs;
@@ -30,7 +31,16 @@ internal sealed partial class ClientStructs
     // A live non-countable item (a format): the walks of a text read it, so they do not jump over it.
     private const byte Format = 4;
 
-    private const int BlockShift = 6;
+    /// <summary>
+    /// The log2 of the block size of the lists made from now on: 64 positions; the property tests make blocks of 2,
+    /// so that their short lists cross block boundaries.
+    /// </summary>
+    internal static int BlockShiftForNewLists = 6;
+
+    private readonly int _blockShift = BlockShiftForNewLists;
+
+    // The flag values with Break set.
+    private static readonly SearchValues<byte> Breaks = SearchValues.Create([Break, Break | Visible, Break | Format]);
 
     // A rebuild of the sums after a merge, instead of their update, when more structs than this merged at once.
     private const int MaxIncrementalMerge = 32;
@@ -41,7 +51,7 @@ internal sealed partial class ClientStructs
     // Per block of 64 positions, the sum of the visible lengths. long: a block of int lengths can exceed int.
     private long[] _sums;
 
-    private static int BlockOf(int position) => position >> BlockShift;
+    private int BlockOf(int position) => position >> _blockShift;
 
     /// <summary>The flags of the struct at <paramref name="i"/>, computed from it and its predecessor.</summary>
     private byte FlagsAt(int i)
@@ -91,7 +101,7 @@ internal sealed partial class ClientStructs
         var previous = 0L;
         for (var b = BlockOf(index - 1); b <= last; b++)
         {
-            var end = (b + 1) << BlockShift;
+            var end = (b + 1) << _blockShift;
             var next = end >= index ? -Value(end) : 0;
             _sums[b] += next - previous;
             previous = next;
@@ -120,7 +130,7 @@ internal sealed partial class ClientStructs
         var previous = 0L;
         for (var b = BlockOf(index - 1); b <= last; b++)
         {
-            var end = (b + 1) << BlockShift;
+            var end = (b + 1) << _blockShift;
             var next = 0L;
             if (end >= index)
             {
@@ -148,7 +158,7 @@ internal sealed partial class ClientStructs
         {
             var first = BlockOf(index - 1);
             Array.Clear(_sums, first, _sums.Length - first);
-            for (var k = first << BlockShift; k < _count; k++)
+            for (var k = first << _blockShift; k < _count; k++)
             {
                 _sums[BlockOf(k)] += Value(k);
             }
@@ -164,6 +174,41 @@ internal sealed partial class ClientStructs
         var old = Value(index);
         _flags[index] = FlagsAt(index);
         _sums[BlockOf(index)] += Value(index) - old;
+    }
+
+    /// <summary>
+    /// The position where Yjs' walk-left from position <paramref name="index"/> ends (the last break at or before it),
+    /// and the visible length of the positions it steps onto (from there up to <paramref name="index"/>, exclusive).
+    /// </summary>
+    internal int RunHead(int index, out long passed)
+    {
+        var head = _flags.AsSpan(0, index + 1).LastIndexOfAny(Breaks);
+        Debug.Assert(head >= 0, "Position 0 is a break.");
+        passed = VisibleBetween(head, index);
+        return head;
+    }
+
+    /// <summary>The visible length of the positions from <paramref name="from"/> up to <paramref name="to"/> (exclusive).</summary>
+    private long VisibleBetween(int from, int to)
+    {
+        var sum = 0L;
+        var k = from;
+        for (; k < to && (k & ((1 << _blockShift) - 1)) != 0; k++)
+        {
+            sum += Value(k);
+        }
+
+        for (; k + (1 << _blockShift) <= to; k += 1 << _blockShift)
+        {
+            sum += _sums[BlockOf(k)];
+        }
+
+        for (; k < to; k++)
+        {
+            sum += Value(k);
+        }
+
+        return sum;
     }
 
     /// <summary>What is wrong with the run-head index against a recount, or null.</summary>
@@ -185,7 +230,7 @@ internal sealed partial class ClientStructs
         for (var b = 0; b < _sums.Length; b++)
         {
             var sum = 0L;
-            for (var k = b << BlockShift; k < Math.Min((b + 1) << BlockShift, _count); k++)
+            for (var k = b << _blockShift; k < Math.Min((b + 1) << _blockShift, _count); k++)
             {
                 sum += Value(k);
             }

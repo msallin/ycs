@@ -201,6 +201,22 @@ internal sealed partial class StructStore
         structs.Refresh(index);
     }
 
+    /// <summary>The list and position of <paramref name="item"/>, if the store holds it (a collected type's items it does not).</summary>
+    internal bool TryFindPosition(Item item, out ClientStructs structs, out int index)
+    {
+        if (Clients.TryGetValue(item.Id.Client, out structs) && item.Id.Clock < structs.End)
+        {
+            index = structs.FindIndex(item.Id.Clock);
+            if (ReferenceEquals(structs[index], item))
+            {
+                return true;
+            }
+        }
+
+        index = -1;
+        return false;
+    }
+
     /// <summary>Recounts the struct lists after every transaction and throws on a difference (the tests switch it on).</summary>
     internal static bool CheckAfterTransactionsForTests;
 

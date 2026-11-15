@@ -727,6 +727,34 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             marker.Timestamp = _searchMarkers.NextTimestamp();
         }
 
+        var indexed = !Doc.RunHeadIndexDisabledForTests;
+        var (start, startIndex) = (p, pIndex);
+        (p, pIndex) = Walk(p, pIndex, index, indexed ? Doc.Store : null, Doc.LiteralWalkSteps);
+        Debug.Assert(!indexed || Walk(start, startIndex, index, null, 0) == (p, pIndex), "The run-head index ends the marker walk where Yjs' loops end.");
+        Doc.MarkerLookupsForTests?.Add((p.Id, pIndex));
+
+        if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as AbstractType).Length / (double)MaxSearchMarkers)
+        {
+            // Adjust existing marker.
+            marker.Update(p, pIndex, _searchMarkers.NextTimestamp());
+            return marker;
+        }
+        else
+        {
+            // Create a new marker.
+            return _searchMarkers.MarkPosition(p, pIndex);
+        }
+    }
+
+    /// <summary>
+    /// Yjs' three walks of <c>findMarker</c> from <paramref name="p"/> at <paramref name="pIndex"/> towards
+    /// <paramref name="index"/>: right while before it, left while beyond it, then left while the left neighbour has
+    /// p's client and ends at p's clock. With <paramref name="store"/>, a walk that goes on for
+    /// <paramref name="literalSteps"/> steps (a lookup in the index costs more than a few) is finished by the run-head
+    /// index (<see cref="ClientStructs.RunHead"/>), which ends where the loop ends; without, item by item (the reference).
+    /// </summary>
+    private static (Item P, int Index) Walk(Item p, int pIndex, int index, StructStore store, int literalSteps)
+    {
         // Iterate to right if possible.
         while (p.Right != null && pIndex < index)
         {
@@ -762,8 +790,17 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         // transaction, an observer editing during a remote transaction's cleanup), later lookups start from it. The
         // walk ends at the same item whether a run extended in place (Item.ExtendRun) is one item or Yjs' several:
         // their boundaries continue each other by clock.
+        var steps = 0;
         while (p.Left != null && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
         {
+            if (store != null && ++steps == literalSteps && store.TryFindPosition(p, out var structs, out var position))
+            {
+                // The rest of the walk: to the run's head, subtracting what it steps onto.
+                p = (Item)structs[structs.RunHead(position, out var passed)];
+                pIndex -= checked((int)passed);
+                break;
+            }
+
             p = p.Left as Item;
             if (p == null)
             {
@@ -775,16 +812,6 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
-        if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as AbstractType).Length / (double)MaxSearchMarkers)
-        {
-            // Adjust existing marker.
-            marker.Update(p, pIndex, _searchMarkers.NextTimestamp());
-            return marker;
-        }
-        else
-        {
-            // Create a new marker.
-            return _searchMarkers.MarkPosition(p, pIndex);
-        }
+        return (p, pIndex);
     }
 }
