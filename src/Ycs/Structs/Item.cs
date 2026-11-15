@@ -18,14 +18,23 @@ public partial class Item : AbstractStruct
         Keep = 1 << 0,
         Countable = 1 << 1,
         Deleted = 1 << 2,
-        Marker = 1 << 3
+        Marker = 1 << 3,
+
+        // Whether _leftOrigin, _rightOrigin, _redone hold an id: an ID? field is 24 bytes, an ID 16.
+        HasLeftOrigin = 1 << 4,
+        HasRightOrigin = 1 << 5,
+        HasRedone = 1 << 6,
     }
 
     private InfoEnum _info;
+    private ID _leftOrigin;
+    private ID _rightOrigin;
+    private ID _redone;
 
     internal Item(ID id, AbstractStruct left, ID? leftOrigin, AbstractStruct right, ID? rightOrigin, object parent, string parentSub, IContent content)
         : base(id, content.Length)
     {
+        _info = content.Countable ? InfoEnum.Countable : 0;
         LeftOrigin = leftOrigin;
         Left = left;
         Right = right;
@@ -34,14 +43,16 @@ public partial class Item : AbstractStruct
         ParentSub = parentSub;
         Redone = null;
         Content = (IContentEx)content;
-
-        _info = content.Countable ? InfoEnum.Countable : 0;
     }
 
     /// <summary>
     /// The item that was originally to the left of this item.
     /// </summary>
-    public ID? LeftOrigin { get; internal set; }
+    public ID? LeftOrigin
+    {
+        get => (_info & InfoEnum.HasLeftOrigin) != 0 ? _leftOrigin : null;
+        internal set => SetId(ref _leftOrigin, InfoEnum.HasLeftOrigin, value);
+    }
 
     /// <summary>
     /// The item that is currently to the left of this item.
@@ -51,7 +62,11 @@ public partial class Item : AbstractStruct
     /// <summary>
     /// The item that was originally to the right of this item.
     /// </summary>
-    public ID? RightOrigin { get; internal set; }
+    public ID? RightOrigin
+    {
+        get => (_info & InfoEnum.HasRightOrigin) != 0 ? _rightOrigin : null;
+        internal set => SetId(ref _rightOrigin, InfoEnum.HasRightOrigin, value);
+    }
 
     /// <summary>
     /// The item that is currently to the right of this item.
@@ -74,7 +89,25 @@ public partial class Item : AbstractStruct
     /// <summary>
     /// Refers to the type that undid this operation.
     /// </summary>
-    public ID? Redone { get; internal set; }
+    public ID? Redone
+    {
+        get => (_info & InfoEnum.HasRedone) != 0 ? _redone : null;
+        internal set => SetId(ref _redone, InfoEnum.HasRedone, value);
+    }
+
+    private void SetId(ref ID field, InfoEnum flag, ID? value)
+    {
+        if (value is ID id)
+        {
+            field = id;
+            _info |= flag;
+        }
+        else
+        {
+            field = default;
+            _info &= ~flag;
+        }
+    }
 
     internal IContentEx Content { get; set; }
 
