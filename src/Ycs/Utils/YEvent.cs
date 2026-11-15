@@ -121,7 +121,11 @@ public partial class YEvent
     /// </summary>
     public IDictionary<string, ChangeKey> Keys => CollectKeys();
 
-    public ChangesCollection Changes => CollectChanges();
+    /// <summary>
+    /// What changed (Yjs' <c>event.changes</c>): the added and deleted items, the list delta and the
+    /// keys. A text overrides it with its own form (see <see cref="YTextEvent.Changes"/>).
+    /// </summary>
+    public virtual ChangesCollection Changes => CollectChanges();
 
     /// <summary>
     /// Check if a struct is deleted by this event.

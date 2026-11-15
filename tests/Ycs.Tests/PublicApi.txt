@@ -360,12 +360,12 @@ class Ycs.YDocOptions
 class Ycs.YEvent
     AbstractType CurrentTarget { get; set; }
     AbstractType Target { get; set; }
-    ChangesCollection Changes { get; }
     System.Collections.Generic.IDictionary<string, ChangeKey> Keys { get; }
     System.Collections.Generic.IReadOnlyCollection<object> Path { get; }
     Transaction Transaction { get; set; }
     bool Adds(AbstractStruct str)
     bool Deletes(AbstractStruct str)
+    virtual ChangesCollection Changes { get; }
     virtual System.Collections.Generic.IList<Delta> Delta { get; }
 class Ycs.YEventArgs
     Transaction Transaction { get; }
@@ -412,16 +412,16 @@ class Ycs.YText : YArrayBase
     void SetAttribute(string name, object value)
     void WriteTo(System.Buffers.IBufferWriter<char> writer)
 class Ycs.YText.YTextChangeAttributes
-    YText.YTextChangeType State { get; set; }
     YText.YTextChangeType Type { get; set; }
     YTextChangeAttributes()
-    int User { get; set; }
+    long? User { get; set; }
 enum Ycs.YText.YTextChangeType : int
     Added = 0
     Removed = 1
 class Ycs.YTextEvent : YEvent
     System.Collections.Generic.ISet<string> KeysChanged { get; }
     bool ChildListChanged { get; }
+    override ChangesCollection Changes { get; }
     override System.Collections.Generic.IList<Delta> Delta { get; }
 sealed class Ycs.YUpdateException : System.FormatException
     YUpdateException()

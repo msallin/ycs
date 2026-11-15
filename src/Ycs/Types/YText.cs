@@ -25,6 +25,7 @@ public class YTextEvent : YEvent
     private readonly ISet<string> _subs;
     private ISet<string> _keysChanged;
     private IList<Delta> _delta = null;
+    private ChangesCollection _changes;
 
     internal YTextEvent(YText arr, Transaction transaction, ISet<string> subs)
         : base(arr, transaction)
@@ -41,6 +42,18 @@ public class YTextEvent : YEvent
     /// Gets whether the children keys changed.
     /// </summary>
     public bool ChildListChanged => _subs?.Contains(null) ?? false;
+
+    /// <summary>
+    /// Yjs' <c>YTextEvent#changes</c>: the <see cref="Keys"/> and the text <see cref="Delta"/>; no
+    /// added or deleted items.
+    /// </summary>
+    public override ChangesCollection Changes => _changes ??= new ChangesCollection
+    {
+        Keys = Keys,
+        Delta = Delta,
+        Added = new HashSet<Item>(),
+        Deleted = new HashSet<Item>(),
+    };
 
     /// <summary>
     /// Compute the changes in the delta format. Overrides <see cref="YEvent.Delta"/> — for
@@ -479,11 +492,13 @@ public partial class YText : YArrayBase
         Removed
     }
 
+    /// <summary>The <c>ychange</c> attribute of <see cref="ToDelta"/>: whether, and by whom, the text was added or removed.</summary>
     public class YTextChangeAttributes
     {
         public YTextChangeType Type { get; set; }
-        public int User { get; set; }
-        public YTextChangeType State { get; set; }
+
+        /// <summary>The client id of the change; null when <c>computeYChange</c> does not set it (as the default does not).</summary>
+        public long? User { get; set; }
     }
 
     // TODO: [alekseyk] To util class? Might not be needed here.
@@ -612,20 +627,8 @@ public partial class YText : YArrayBase
             }
         }
 
-        // Snapshots are merged again after the transaction, so we need to keep the
-        // transaction alive until we are done.
-        doc.Transact(tr =>
+        void computeDelta()
         {
-            if (snapshot != null)
-            {
-                Transaction.SplitSnapshotAffectedStructs(tr, snapshot);
-            }
-
-            if (prevSnapshot != null)
-            {
-                Transaction.SplitSnapshotAffectedStructs(tr, prevSnapshot);
-            }
-
             while (n != null)
             {
                 if (n.IsVisible(snapshot) || (prevSnapshot != null && n.IsVisible(prevSnapshot)))
@@ -642,7 +645,7 @@ public partial class YText : YArrayBase
 
                             if (snapshot != null && !n.IsVisible(snapshot))
                             {
-                                if (cur == null || cur.User != n.Id.Client || cur.State != YTextChangeType.Removed)
+                                if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Removed)
                                 {
                                     packStr();
                                     currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YTextChangeType.Removed, n.Id) : new YTextChangeAttributes { Type = YTextChangeType.Removed };
@@ -650,7 +653,7 @@ public partial class YText : YArrayBase
                             }
                             else if (prevSnapshot != null && !n.IsVisible(prevSnapshot))
                             {
-                                if (cur == null || cur.User != n.Id.Client || cur.State != YTextChangeType.Added)
+                                if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Added)
                                 {
                                     packStr();
                                     currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YTextChangeType.Added, n.Id) : new YTextChangeAttributes { Type = YTextChangeType.Added };
@@ -693,7 +696,36 @@ public partial class YText : YArrayBase
             }
 
             packStr();
-        }, "splitSnapshotAffectedStructs");
+        }
+
+        if (snapshot != null || prevSnapshot != null)
+        {
+            if (doc == null)
+            {
+                throw new InvalidOperationException("The text is not in a document yet, so it has no state as of a snapshot. Nothing was read.");
+            }
+
+            // Snapshots are merged again after the transaction, so we need to keep the
+            // transaction alive until we are done.
+            doc.Transact(tr =>
+            {
+                if (snapshot != null)
+                {
+                    Transaction.SplitSnapshotAffectedStructs(tr, snapshot);
+                }
+
+                if (prevSnapshot != null)
+                {
+                    Transaction.SplitSnapshotAffectedStructs(tr, prevSnapshot);
+                }
+
+                computeDelta();
+            }, "cleanup");
+        }
+        else
+        {
+            computeDelta();
+        }
 
         return ops;
     }

@@ -124,4 +124,64 @@ public class YjsTypeParityTests
             """[{"insert":"a"},{"attributes":{"bold":true},"insert":"<YMap>"},{"insert":"b"}] AQYBAAQBAXQBYYQBAAFixgEAAQEEYm9sZAR0cnVlxwECAQEBxgEDAQEEYm9sZARudWxsKAABAwF4AX0CAA==""",
             $"{Json(text.ToDelta())} {System.Convert.ToBase64String(doc.EncodeStateAsUpdate())}");
     }
+
+    [TestMethod]
+    public void TextEventChanges_InsertAndDelete_IsTheTextDeltaWithoutItems()
+    {
+        var doc = new YDoc();
+        var text = doc.GetText("t");
+        text.Insert(0, "xyz");
+        ChangesCollection changes = null;
+        text.Observe((_, e) => changes = e.Event.Changes);
+
+        doc.Transact(_ =>
+        {
+            text.Insert(1, "a");
+            text.Delete(3, 1);
+        });
+
+        Assert.AreEqual(
+            """[{"retain":1},{"insert":"a"},{"retain":1},{"delete":1}] 0 0 0""",
+            $"{Json(changes.Delta)} {changes.Added.Count} {changes.Deleted.Count} {changes.Keys.Count}");
+    }
+
+    [TestMethod]
+    public void ToDelta_ComputeYChangeWithUser_SeparatesRemovedAndAddedOfOneUser()
+    {
+        // Written by Yjs with client id 3000000001 (half of all Yjs client ids are above 2^31):
+        // 'abc', then 'z' at 0, snapshot, delete 'a' and 'b', insert 'X' at 1, snapshot.
+        var doc = new YDoc(new YDocOptions { Gc = false });
+        doc.ApplyUpdate(System.Convert.FromBase64String("AQSBvMGWCwAEAQF0AmFihIG8wZYLAQFjRIG8wZYLAAF6xIG8wZYLAYG8wZYLAgFYAYG8wZYLAQAC"));
+        var before = Snapshot.DecodeSnapshot(System.Convert.FromBase64String("AAGBvMGWCwQ="));
+        var after = Snapshot.DecodeSnapshot(System.Convert.FromBase64String("AYG8wZYLAQACAYG8wZYLBQ=="));
+        var text = doc.GetText("t");
+
+        var delta = text.ToDelta(after, before, (type, id) => new YText.YTextChangeAttributes { Type = type, User = id.Client });
+
+        Assert.AreEqual(
+            """[{"insert":"z"},{"attributes":{"ychange":{"type":"removed","user":3000000001}},"insert":"ab"},{"attributes":{"ychange":{"type":"added","user":3000000001}},"insert":"X"},{"insert":"c"}]""",
+            Json(delta));
+    }
+
+    [TestMethod]
+    public void ToDelta_WithoutSnapshot_StartsNoTransaction()
+    {
+        var doc = new YDoc();
+        var text = doc.GetText("t");
+        text.Insert(0, "ab");
+        var transactions = 0;
+        doc.AfterTransaction += (_, _) => transactions++;
+
+        text.ToDelta();
+
+        Assert.AreEqual(0, transactions);
+    }
+
+    [TestMethod]
+    public void TextNotInADocument_ToDeltaToStringClone_ReadAsEmpty()
+    {
+        var result = $"{Json(new YText("abc").ToDelta())} '{new YXmlText("abc")}' {Json(new YText("abc").Clone().ToDelta())}";
+
+        Assert.AreEqual("[] '' []", result);
+    }
 }
