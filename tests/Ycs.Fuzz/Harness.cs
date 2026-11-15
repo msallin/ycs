@@ -154,8 +154,8 @@ internal sealed class Harness : IDisposable
 
     private static YDoc Load(FuzzInput input)
     {
-        // About 110 bytes per decoded struct: a run of structs at this limit stays within the allocation budget.
-        var doc = new YDoc(new YDocOptions { Gc = input.Gc, ClientId = 1, MaxStructsPerUpdate = 200_000 });
+        // At most about 1.1 KB per decoded struct (a shared type): a run of structs at this limit stays within the allocation budget.
+        var doc = new YDoc(new YDocOptions { Gc = input.Gc, ClientId = 1, Limits = new UpdateLimits { MaxStructsPerUpdate = 32_768 } });
         if (input.BaseState.Length > 0)
         {
             doc.ApplyUpdateV1(input.BaseState);

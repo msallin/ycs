@@ -37,19 +37,31 @@ internal sealed partial class StructStore
         public List<byte[]> Updates { get; } = new();
         public long Bytes { get; private set; }
 
-        public void Add(byte[] update)
+        /// <summary>How many structs <see cref="Updates"/> hold (Skip structs included), as they were written.</summary>
+        public long Structs { get; private set; }
+
+        public void Add(byte[] update, long structs)
         {
             Updates.Add(update);
             Bytes += update.Length;
+            Structs += structs;
         }
 
         public byte[] Merge()
         {
-            var merged = UpdateOperations.MergeUpdatesTrusted(Updates);
-            Updates.Clear();
-            Updates.Add(merged);
-            Bytes = merged.Length;
+            var structs = Structs;
+            var merged = UpdateOperations.MergeUpdatesTrusted(Updates, ref structs);
+            Replace(merged, structs);
             return merged;
+        }
+
+        /// <summary>Makes <paramref name="update"/> all that waits.</summary>
+        public void Replace(byte[] update, long structs)
+        {
+            Updates.Clear();
+            Updates.Add(update);
+            Bytes = update.Length;
+            Structs = structs;
         }
     }
 
@@ -66,8 +78,11 @@ internal sealed partial class StructStore
 
     internal bool HasPending => Pending != null || PendingDs.Count != 0;
 
-    /// <summary>The encoded size of what is pending, as <see cref="YDocOptions.MaxPendingBytes"/> counts it.</summary>
+    /// <summary>The encoded size of what is pending, as <see cref="UpdateLimits.MaxPendingBytes"/> counts it.</summary>
     internal long PendingBytes => (Pending?.Bytes ?? 0) + PendingDs.Bytes;
+
+    /// <summary>The structs pending, as <see cref="UpdateLimits.MaxPendingStructs"/> counts them.</summary>
+    internal long PendingStructCount => Pending?.Structs ?? 0;
 
     /// <summary>
     /// Counts the structs added and split. Every change to the content of a type adds a struct, splits
@@ -348,17 +363,18 @@ internal sealed partial class StructStore
     /// (Yjs' <c>readUpdateV2</c> after <c>readClientsStructRefs</c>).
     /// <br/>
     /// First the integration is planned without changing anything: which structs integrate in which
-    /// order, which wait for missing structs, and whether nesting or <paramref name="maxPendingBytes"/>
-    /// would be exceeded (a <see cref="YUpdateException"/>, and the document is unchanged). Then the
-    /// plan is carried out, the delete set applied, and pending structs that can now integrate are
-    /// retried, as in Yjs.
+    /// order, which wait for missing structs, and whether nesting or the pending limits of
+    /// <paramref name="limits"/> would be exceeded (a <see cref="YUpdateException"/>, and the document is
+    /// unchanged). Then the plan is carried out, the delete set applied, and pending structs that can
+    /// now integrate are retried, as in Yjs.
     /// </summary>
-    internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, long maxPendingBytes)
+    /// <param name="limits">Null for the pending structs themselves, which were admitted when they arrived.</param>
+    internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, UpdateLimits limits)
     {
         var plan = _spare ?? new IntegrationPlan(this);
         _spare = null;
         plan.Plan(structs);
-        var restUpdate = plan.EncodeRest();
+        var (restUpdate, restStructs) = plan.EncodeRest();
         var retry = false;
         if (Pending != null)
         {
@@ -372,24 +388,7 @@ internal sealed partial class StructStore
             }
         }
 
-        // A retry integrates what is pending (and re-checks what is left), so only an update that adds
-        // to it without a retry is held to the limit.
-        if (!retry && maxPendingBytes < long.MaxValue)
-        {
-            var growth = (restUpdate?.Length ?? 0) + PendingDs.Growth(ds, plan);
-            if (growth > 0 && PendingBytes + growth > maxPendingBytes)
-            {
-                // Duplicates (the same update received again) shrink when merged.
-                Pending?.Merge();
-                PendingDs.Compact();
-                if (PendingBytes + growth > maxPendingBytes)
-                {
-                    throw new YUpdateException(
-                        $"The update depends on structs this document does not have, and keeping it until they arrive would grow " +
-                        $"the pending data beyond {maxPendingBytes} bytes (YDocOptions.MaxPendingBytes). The document is unchanged.");
-                }
-            }
-        }
+        var restMerged = limits != null && CheckPendingLimits(limits, retry, restUpdate, restStructs, PendingDs.Growth(ds, plan));
 
         plan.Execute(transaction);
 
@@ -404,7 +403,10 @@ internal sealed partial class StructStore
                 }
             }
 
-            Pending.Add(restUpdate);
+            if (!restMerged)
+            {
+                Pending.Add(restUpdate, restStructs);
+            }
         }
 
         plan.Clear();
@@ -423,10 +425,65 @@ internal sealed partial class StructStore
             // Something the pending structs were waiting for arrived: read them again, from their
             // encoded form, as Yjs does.
             var update = Pending.Merge();
+            var count = Pending.Structs;
             Pending = null;
-            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, maxStructs: long.MaxValue);
-            ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, long.MaxValue);
+            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, maxStructs: count);
+            ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, limits: null);
         }
+    }
+
+    /// <summary>
+    /// Rejects an update that would make more wait than <paramref name="limits"/> allow. One that lets
+    /// pending structs integrate (<paramref name="retry"/>) may add up to the limits on top of what
+    /// waits, since what waits is then integrated, wholly or in part: so what waits never exceeds
+    /// twice the limits, and the retry's re-read is bounded with it. Returns true when
+    /// <paramref name="rest"/> had to be merged into <see cref="Pending"/> to fit (a duplicate).
+    /// </summary>
+    private bool CheckPendingLimits(UpdateLimits limits, bool retry, byte[] rest, long restStructs, long deleteGrowth)
+    {
+        var restBytes = rest?.Length ?? 0;
+        if (restStructs == 0 && restBytes + deleteGrowth <= 0)
+        {
+            return false;
+        }
+
+        var maxStructs = retry ? Twice(limits.MaxPendingStructs) : limits.MaxPendingStructs;
+        var maxBytes = retry ? Twice(limits.MaxPendingBytes) : limits.MaxPendingBytes;
+        if (Fits(restStructs, restBytes))
+        {
+            return false;
+        }
+
+        // Duplicates (the same update received again) shrink when merged, also with the update's rest.
+        Pending?.Merge();
+        PendingDs.Compact();
+        if (Fits(restStructs, restBytes))
+        {
+            return false;
+        }
+
+        if (rest != null && Pending != null)
+        {
+            var (pending, pendingStructs) = (Pending.Updates[0], Pending.Structs);
+            Pending.Add(rest, restStructs);
+            Pending.Merge();
+            if (Fits(0, 0))
+            {
+                return true;
+            }
+
+            Pending.Replace(pending, pendingStructs);
+        }
+
+        throw new YUpdateException(
+            $"The update depends on structs this document does not have, and keeping it until they arrive would grow " +
+            $"the pending data beyond {maxStructs} structs or {maxBytes} bytes (UpdateLimits.MaxPendingStructs, " +
+            $"UpdateLimits.MaxPendingBytes). The document is unchanged.");
+
+        bool Fits(long addedStructs, long addedBytes) =>
+            addedStructs <= maxStructs - PendingStructCount && addedBytes + deleteGrowth <= maxBytes - PendingBytes;
+
+        static long Twice(long limit) => limit > long.MaxValue / 2 ? long.MaxValue : 2 * limit;
     }
 
     /// <summary>
@@ -556,12 +613,18 @@ internal sealed partial class StructStore
             }
         }
 
-        /// <summary>The structs set aside as a v2 update (with an empty delete set), or null.</summary>
-        public byte[] EncodeRest()
+        /// <summary>The structs set aside as a v2 update (with an empty delete set), or null, and how many they are.</summary>
+        public (byte[] Update, long Structs) EncodeRest()
         {
             if (Rest == null)
             {
-                return null;
+                return (null, 0);
+            }
+
+            long structs = 0;
+            foreach (var list in Rest.Clients.Values)
+            {
+                structs += list.Count;
             }
 
             var encoder = UpdateEncoderV2.Rent();
@@ -571,7 +634,7 @@ internal sealed partial class StructStore
 
                 // Write an empty delete set: there is no need for an extra function call, just write 0 deletes.
                 encoder.RestWriter.WriteVarUint(0);
-                return encoder.ToArray();
+                return (encoder.ToArray(), structs);
             }
             finally
             {

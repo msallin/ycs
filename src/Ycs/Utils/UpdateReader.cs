@@ -45,8 +45,8 @@ internal sealed class UpdateReader
     /// Nothing decoded refers to the buffer after the lease is disposed. Malformed input throws (as the
     /// decoders do; the caller wraps it in a <see cref="YUpdateException"/>), and the reader is released.
     /// </summary>
-    /// <param name="maxStructs">The most structs a v2 update may hold (see <see cref="UpdateDecoderV2"/>).</param>
-    public static Lease Read(byte[] buffer, int offset, int count, bool v2, long maxStructs = Limits.DefaultMaxStructsPerUpdate)
+    /// <param name="maxStructs">The most structs the update may hold (<see cref="UpdateLimits.MaxStructsPerUpdate"/>).</param>
+    public static Lease Read(byte[] buffer, int offset, int count, bool v2, long maxStructs)
     {
         var reader = t_free ?? new UpdateReader();
         t_free = null;
@@ -87,7 +87,9 @@ internal sealed class UpdateReader
         }
         else
         {
-            decoder = _v1 ??= new UpdateDecoderV1(_input);
+            _v1 ??= new UpdateDecoderV1(_input, maxStructs);
+            _v1.MaxStructs = maxStructs;
+            decoder = _v1;
         }
 
         EncodingUtils.ReadClientStructRefs(decoder, _structs, _clients, _spareStructLists);

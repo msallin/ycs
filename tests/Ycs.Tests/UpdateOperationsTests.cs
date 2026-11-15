@@ -39,28 +39,28 @@ public class UpdateOperationsTests
     private static Enc EncV1 => new Enc
     {
         IsV2 = false,
-        MergeUpdates = UpdateOperations.MergeUpdates,
+        MergeUpdates = u => UpdateOperations.MergeUpdates(u),
         EncodeStateAsUpdate = doc => doc.EncodeStateAsUpdateV1(),
         ApplyUpdate = (doc, u) => doc.ApplyUpdateV1(u),
-        EncodeStateVectorFromUpdate = UpdateOperations.EncodeStateVectorFromUpdate,
+        EncodeStateVectorFromUpdate = u => UpdateOperations.EncodeStateVectorFromUpdate(u),
         EncodeStateVector = doc => doc.EncodeStateVectorV1(),
-        ParseUpdateMeta = UpdateOperations.ParseUpdateMeta,
-        DiffUpdate = UpdateOperations.DiffUpdate,
-        DecodeUpdate = UpdateOperations.DecodeUpdate,
+        ParseUpdateMeta = u => UpdateOperations.ParseUpdateMeta(u),
+        DiffUpdate = (u, sv) => UpdateOperations.DiffUpdate(u, sv),
+        DecodeUpdate = u => UpdateOperations.DecodeUpdate(u),
         Subscribe = (doc, handler) => doc.Update += handler,
     };
 
     private static Enc EncV2 => new Enc
     {
         IsV2 = true,
-        MergeUpdates = UpdateOperations.MergeUpdatesV2,
+        MergeUpdates = u => UpdateOperations.MergeUpdatesV2(u),
         EncodeStateAsUpdate = doc => doc.EncodeStateAsUpdateV2(),
         ApplyUpdate = (doc, u) => doc.ApplyUpdateV2(u),
-        EncodeStateVectorFromUpdate = UpdateOperations.EncodeStateVectorFromUpdateV2,
+        EncodeStateVectorFromUpdate = u => UpdateOperations.EncodeStateVectorFromUpdateV2(u),
         EncodeStateVector = doc => doc.EncodeStateVectorV2(),
-        ParseUpdateMeta = UpdateOperations.ParseUpdateMetaV2,
-        DiffUpdate = UpdateOperations.DiffUpdateV2,
-        DecodeUpdate = UpdateOperations.DecodeUpdateV2,
+        ParseUpdateMeta = u => UpdateOperations.ParseUpdateMetaV2(u),
+        DiffUpdate = (u, sv) => UpdateOperations.DiffUpdateV2(u, sv),
+        DecodeUpdate = u => UpdateOperations.DecodeUpdateV2(u),
         Subscribe = (doc, handler) => doc.UpdateV2 += handler,
     };
 

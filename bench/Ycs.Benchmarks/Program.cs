@@ -25,6 +25,8 @@ namespace Ycs.Benchmarks;
 ///   decode-v1/v2 - applying that update to a fresh document.
 /// Each phase runs once to warm up and then [runs] times; the median is reported.
 /// encode and decode loop 10 times per run.
+/// <br/>
+/// <c>limits</c> instead of a trace measures updates at the default limits (<see cref="Limits"/>).
 /// </summary>
 internal static class Program
 {
@@ -32,8 +34,14 @@ internal static class Program
     {
         if (args.Length < 1)
         {
-            Console.Error.WriteLine("usage: Ycs.Benchmarks <trace.json.gz> [runs]");
+            Console.Error.WriteLine("usage: Ycs.Benchmarks <trace.json.gz> [runs] | limits");
             return 2;
+        }
+
+        if (args[0] == "limits")
+        {
+            Limits.Run();
+            return 0;
         }
 
         var runs = args.Length > 1 ? int.Parse(args[1]) : 5;

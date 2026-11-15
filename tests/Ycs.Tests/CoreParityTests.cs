@@ -289,8 +289,7 @@ public class CoreParityTests
         Assert.AreEqual(" world", string.Concat(System.Linq.Enumerable.Select(delta, d => d.Insert)));
     }
 
-    [TestMethod]
-    public void ApplyUpdate_LargeUpdateBeforeItsBase_WaitsWithoutALimitByDefault()
+    private static (byte[] First, byte[] Second) LargeUpdateAfterItsBase()
     {
         var source = new YDoc(new YDocOptions { ClientId = 1 });
         var text = source.GetText("t");
@@ -298,8 +297,22 @@ public class CoreParityTests
         var first = source.EncodeStateAsUpdate();
         var stateVector = source.EncodeStateVector();
         text.Insert(1, new string('b', 17 << 20));
-        var second = source.EncodeStateAsUpdate(stateVector);
-        var doc = new YDoc();
+        return (first, source.EncodeStateAsUpdate(stateVector));
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_LargeUpdateBeforeItsBase_IsRejectedByDefault()
+    {
+        var (_, second) = LargeUpdateAfterItsBase();
+
+        Assert.IsFalse(new YDoc().TryApplyUpdate(second));
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_LargeUpdateBeforeItsBase_WaitsWithRaisedLimits()
+    {
+        var (first, second) = LargeUpdateAfterItsBase();
+        var doc = new YDoc(new YDocOptions { Limits = UpdateLimits.Unlimited });
 
         doc.ApplyUpdate(second);
         doc.ApplyUpdate(first);

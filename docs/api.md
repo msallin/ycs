@@ -42,7 +42,7 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | malformed updates threw `EndOfStreamException`, `InvalidDataException`, `JsonReaderException`, `InvalidCastException`, `NullReferenceException`, `DivideByZeroException`, bare `Exception`, …, some after half the update was applied | `YUpdateException` (a `FormatException`), and the document is unchanged; `TryApplyUpdate` / `TryApplyUpdateV2` return false instead | see [Untrusted input](#untrusted-input) |
 | `YDocOptions.Meta`, `YDoc.Meta`: `IDictionary<string, string>` (always null when read from an update) | `object` (any value of the 'any' encoding) | Yjs' `meta` is any value; the old cast always failed, and an update with a `meta` that was not an object was rejected |
 | a subdocument's options written as `{ gc, guid, autoLoad }` with a random guid of their own; `ShouldLoad` defaulted to `AutoLoad`; `Destroy` threw with subdocuments and left a deleted subdocument's content without a document; a subdocument kept its own client id | as Yjs 13.6: the options are `{}` plus `gc: false`, `autoLoad: true`, `meta` when they differ from the defaults; reading lets every key override (a `guid` too, as `createDocFromOpts`); `YDocOptions.ShouldLoad` (default true) and `YDoc.ShouldLoad`; a destroyed subdocument is replaced by a fresh document that does not load; an added subdocument takes the parent's client id and `CollectionId` (new, Yjs' `collectionid`) | a Yjs peer reading Ycs' options took the random guid as the subdocument's identity |
-| pending structs and deletions: unbounded | `YDocOptions.MaxPendingBytes` (no limit by default, as Yjs) | a peer could send updates that never integrate and fill memory; the default does not reject a valid large update that arrives before its base |
+| no limit on what an update may cost; pending structs and deletions unbounded | `UpdateLimits` (immutable; `Default`, `Unlimited`): `MaxStructsPerUpdate` (131,072, v1 and v2), `MaxPendingStructs` (131,072), `MaxPendingBytes` (16 MiB); `YDocOptions.Limits` for the document (a subdocument takes its parent's), an optional `limits` parameter of `ApplyUpdate…`/`TryApplyUpdate…` for one update, and of every `UpdateOperations` function and `Snapshot.SnapshotContainsUpdate…` | a v2 update of 30 bytes could make the decoder allocate gigabytes and the document keep half of it, and a peer could send updates that never integrate and fill memory. Migrate: `YDocOptions.MaxPendingBytes = n` becomes `YDocOptions.Limits = new UpdateLimits { MaxPendingBytes = n }`; `UpdateOperations.MaxStructsPerUpdate` (process-wide) becomes the `limits` argument; a valid state larger than the defaults (see [Untrusted input](#untrusted-input)) is applied with `UpdateLimits.Unlimited` or raised limits |
 | pending structs and deletions: not visible, and left out of `EncodeStateAsUpdate` | `YDoc.HasPending`; `EncodeStateAsUpdate…` includes them, as Yjs 13.6 does (the pending deletions whole, the pending structs beyond the target state vector, merged into the state) | Yjs exposes `doc.store.pendingStructs`/`pendingDs`; a server that persisted its state and restarted lost what was pending |
 | — (Yjs has none either) | `YText.RemoveNonText()`: deletes every embed, nested type, other non-string content and formatting in one transaction; returns whether it changed anything | a plain-text editor (a textarea) bound to a `YText` that other peers may fill with rich content: afterwards `Length` is the string's length and indexes agree. It deletes the items themselves, so nothing is added to the document |
 | every changed type built its event (`YTextEvent`, `YMapEvent`, …) and added itself and its ancestors to `Transaction.ChangedParentTypes`, observed or not | only when the type has an `EventHandler`, it or an ancestor a `DeepEventHandler`, or the document an `AfterTransaction`, `AfterTransactionCleanup` or `AfterAllTransactions` handler (an `UndoManager` is one); `Transaction.Changed` is filled as before. When an observer attaches a deep observer or such a handler during the cleanup, the types skipped before build their events then (without calling their own observers), so the late observer sees every event, as in Yjs. `YTextEvent.KeysChanged` and `YXmlEvent.AttributesChanged` are built when read (also after the transaction ended: they hold the event's own set of changed keys, not the transaction) | an unobserved document (a server that applies and relays updates) builds no events; Yjs always does. A handler of `Update` or of another type's events that reads `ChangedParentTypes` sees only the observed types |
@@ -109,19 +109,48 @@ checked before anything changes:
 * nesting: 'any' and JSON values, and shared types inside each other, at most 256 levels deep (an
   insert beyond that throws `ArgumentException` / `InvalidOperationException`), so nothing recurses
   without bound;
-* size: a collection is never allocated larger than the remaining input can fill, and a v2 update
-  (whose run-length encoded columns can describe any number of structs in a few bytes: Yjs writes
-  20,000 deleted items in 42 bytes) holds at most `YDocOptions.MaxStructsPerUpdate` structs
-  (2,097,152 by default, never fewer than one per byte of the update; about 110 bytes each while
-  decoded, so at most about 230 MiB for a small update). `UpdateOperations.MaxStructsPerUpdate`
-  (process-wide, same default) bounds the v2 updates given to `UpdateOperations`. Lower them on a
-  server that applies updates from untrusted peers and knows its documents' size; a v1 update needs at
-  least two bytes per struct and is bounded by its size;
-* pending data: what waits for structs the document does not have yet may grow to
-  `YDocOptions.MaxPendingBytes` (no limit by default, as in Yjs: a valid update of any size can
-  arrive before the one it builds on), counted as encoded bytes; an update that would grow it further
-  is rejected (a duplicate is merged away first). A server that applies updates from untrusted peers
-  sets it.
+* size: a collection is never allocated larger than the remaining input can fill, and an update holds
+  at most `UpdateLimits.MaxStructsPerUpdate` structs (131,072 by default), in either format: the v2
+  format run-length encodes its columns (Yjs writes 20,000 deleted items in 42 bytes; 131,072 deleted
+  items are 42 bytes too), and a v1 struct can be as small as 4 bytes. The limit is six times Yjs'
+  example and can be set to anything above zero. The same limit, as their `limits` argument, bounds
+  each input of the `UpdateOperations` functions; `ConvertUpdateFormatV2ToV1`, `DecodeUpdateV2` and
+  `DescribeUpdateV2` expand a v2 update to the size of its structs (131,072 structs are about 0.8 MiB
+  of v1, 30 MiB decoded, and a description of 11 million characters);
+* pending data: what waits for structs the document does not have yet holds at most
+  `UpdateLimits.MaxPendingStructs` structs (131,072) and `UpdateLimits.MaxPendingBytes` bytes (16 MiB):
+  the structs as their v2 encoding counts them, the deletions as their v1 encoding does. The struct
+  count bounds what a struct costs whatever its encoding; the bytes bound the content (text, values,
+  keys), which both encodings carry as it is. An update that would grow either beyond its limit is
+  rejected (a duplicate is merged away first). An update that lets pending structs integrate may add
+  up to the limits on top of what waits, which is then read again and integrated, wholly or in part;
+  so what waits, and what that re-read decodes, never exceeds twice the limits.
+
+What the defaults allow, measured (`dotnet run -c Release --project bench/Ycs.Benchmarks -- limits`;
+.NET 11, x64; the updates are valid ones made through the API, so an honest update of that many
+structs costs the same):
+
+| One update of 131,072 structs of | v1 / v2 bytes | allocated | kept by the document |
+| --- | --- | --- | --- |
+| characters, one item each | 0.9 MB / 131 KB | 35 MiB | 30 MiB |
+| deleted items | 0.8 MB / 42 B | 38 MiB | 26 MiB |
+| shared types (`YText`, `YArray`, `YMap`; `YXmlElement`) | 0.8 MB / 36 B; 1 MB / 131 KB | 88 to 105 MiB | 61 to 73 MiB |
+| subdocuments | 5.8 MB / 5 MB | 184 MiB | 139 MiB |
+| shared types, pending | 0.8 MB / 35 B | 60 MiB | (encoded, 35 B) |
+| an update that lets those integrate and brings 131,072 more that wait (the largest re-read) | 45 B | 332 MiB | 73 MiB |
+| GC structs, pending | 23 B | 8 MiB | (encoded) |
+
+So a small update makes a document allocate at most about 340 MiB and keep about 140 MiB (the
+default of 2,097,152 structs before allowed 2.3 GiB and 1.2 GiB), and
+`EncodeStateAsUpdate` with 131,072 shared types pending allocates about 120 MiB per call (every
+joining peer). Halving the limits halves these.
+
+**Trusted input.** A document's own state can hold far more structs than the defaults allow (a
+million characters typed one at a time and never merged are a million structs, about 7 MB of v1).
+An application that applies a state it trusts (its own stored state, an update from its own
+server) passes `UpdateLimits.Unlimited`, or its own instance, for that call:
+`doc.ApplyUpdate(stored, origin, UpdateLimits.Unlimited)`; `YDocOptions.Limits` sets the document's
+limits for every update. The limits of an update from an untrusted peer stay the document's.
 
 After these checks the integration does not fail on input alone; an exception from it would be a
 bug in Ycs and cannot be rolled back. Structurally odd but well-formed updates (an item whose two

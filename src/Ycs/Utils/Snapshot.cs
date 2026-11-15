@@ -250,29 +250,29 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// Yjs parity: <c>snapshotContainsUpdate(snapshot, update)</c> - checks an original ('v1')
     /// update against this snapshot.
     /// </summary>
-    public bool SnapshotContainsUpdate(byte[] update) => SnapshotContainsUpdateCore(update, isV1: true);
+    public bool SnapshotContainsUpdate(byte[] update, UpdateLimits limits = null) => SnapshotContainsUpdateCore(update, isV1: true, limits);
 
     /// <summary>
     /// Yjs parity: <c>snapshotContainsUpdateV2(snapshot, update)</c>.
     /// </summary>
-    public bool SnapshotContainsUpdateV2(byte[] update) => SnapshotContainsUpdateCore(update, isV1: false);
+    public bool SnapshotContainsUpdateV2(byte[] update, UpdateLimits limits = null) => SnapshotContainsUpdateCore(update, isV1: false, limits);
 
     /// <summary>
     /// Unlike Yjs' version, which reads the struct headers lazily and stops at the first client the
     /// snapshot does not cover, this reads all structs first.
     /// </summary>
-    private bool SnapshotContainsUpdateCore(byte[] update, bool isV1)
+    private bool SnapshotContainsUpdateCore(byte[] update, bool isV1, UpdateLimits limits)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => ContainsUpdate(update, isV1));
+        return YUpdateException.Decode(() => ContainsUpdate(update, isV1, (limits ?? UpdateLimits.Default).MaxStructsPerUpdate));
     }
 
-    private bool ContainsUpdate(byte[] update, bool isV1)
+    private bool ContainsUpdate(byte[] update, bool isV1, long maxStructs)
     {
         var stream = new Lib0Reader(update);
         IUpdateDecoder decoder = isV1
-            ? (IUpdateDecoder)new UpdateDecoderV1(stream)
-            : new UpdateDecoderV2(stream);
+            ? (IUpdateDecoder)new UpdateDecoderV1(stream, maxStructs)
+            : new UpdateDecoderV2(stream, maxStructs);
 
         var clientStructRefs = EncodingUtils.ReadClientStructRefs(decoder);
 

@@ -171,8 +171,8 @@ sealed class Ycs.Skip : AbstractStruct
 sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
     YDoc RestoreDocument(YDoc originDoc, YDocOptions opts = null)
     bool Equals(Snapshot other)
-    bool SnapshotContainsUpdate(byte[] update)
-    bool SnapshotContainsUpdateV2(byte[] update)
+    bool SnapshotContainsUpdate(byte[] update, UpdateLimits limits = null)
+    bool SnapshotContainsUpdateV2(byte[] update, UpdateLimits limits = null)
     byte[] EncodeSnapshot()
     byte[] EncodeSnapshotV2()
     static Snapshot DecodeSnapshot(byte[] buf)
@@ -251,25 +251,31 @@ sealed class Ycs.UndoManagerOptions
     YDoc Doc { get; set; }
     bool IgnoreRemoteMapChanges { get; set; }
     int CaptureTimeout { get; set; }
+sealed class Ycs.UpdateLimits
+    UpdateLimits()
+    long MaxPendingBytes { get; init; }
+    long MaxPendingStructs { get; init; }
+    long MaxStructsPerUpdate { get; init; }
+    static UpdateLimits Default { get; }
+    static UpdateLimits Unlimited { get; }
 sealed class Ycs.UpdateMeta
     System.Collections.Generic.IReadOnlyDictionary<long, long> From { get; }
     System.Collections.Generic.IReadOnlyDictionary<long, long> To { get; }
 static class Ycs.UpdateOperations
-    static DecodedUpdate DecodeUpdate(byte[] update)
-    static DecodedUpdate DecodeUpdateV2(byte[] update)
-    static UpdateMeta ParseUpdateMeta(byte[] update)
-    static UpdateMeta ParseUpdateMetaV2(byte[] update)
-    static byte[] ConvertUpdateFormatV1ToV2(byte[] update)
-    static byte[] ConvertUpdateFormatV2ToV1(byte[] update)
-    static byte[] DiffUpdate(byte[] update, byte[] stateVector)
-    static byte[] DiffUpdateV2(byte[] update, byte[] stateVector)
-    static byte[] EncodeStateVectorFromUpdate(byte[] update)
-    static byte[] EncodeStateVectorFromUpdateV2(byte[] update)
-    static byte[] MergeUpdates(System.Collections.Generic.IList<byte[]> updates)
-    static byte[] MergeUpdatesV2(System.Collections.Generic.IList<byte[]> updates)
-    static long MaxStructsPerUpdate { get; set; }
-    static string DescribeUpdate(byte[] update)
-    static string DescribeUpdateV2(byte[] update)
+    static DecodedUpdate DecodeUpdate(byte[] update, UpdateLimits limits = null)
+    static DecodedUpdate DecodeUpdateV2(byte[] update, UpdateLimits limits = null)
+    static UpdateMeta ParseUpdateMeta(byte[] update, UpdateLimits limits = null)
+    static UpdateMeta ParseUpdateMetaV2(byte[] update, UpdateLimits limits = null)
+    static byte[] ConvertUpdateFormatV1ToV2(byte[] update, UpdateLimits limits = null)
+    static byte[] ConvertUpdateFormatV2ToV1(byte[] update, UpdateLimits limits = null)
+    static byte[] DiffUpdate(byte[] update, byte[] stateVector, UpdateLimits limits = null)
+    static byte[] DiffUpdateV2(byte[] update, byte[] stateVector, UpdateLimits limits = null)
+    static byte[] EncodeStateVectorFromUpdate(byte[] update, UpdateLimits limits = null)
+    static byte[] EncodeStateVectorFromUpdateV2(byte[] update, UpdateLimits limits = null)
+    static byte[] MergeUpdates(System.Collections.Generic.IList<byte[]> updates, UpdateLimits limits = null)
+    static byte[] MergeUpdatesV2(System.Collections.Generic.IList<byte[]> updates, UpdateLimits limits = null)
+    static string DescribeUpdate(byte[] update, UpdateLimits limits = null)
+    static string DescribeUpdateV2(byte[] update, UpdateLimits limits = null)
     static void LogUpdate(byte[] update)
     static void LogUpdateV2(byte[] update)
 class Ycs.YArray : YArrayBase
@@ -312,6 +318,7 @@ class Ycs.YDoc
     System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
     System.Predicate<Item> GcFilter { get; }
     T Get<T>(string name) where T : AbstractType, new()
+    UpdateLimits Limits { get; }
     YArray GetArray(string name = "")
     YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc newDoc = null)
     YDoc(YDocOptions opts = null)
@@ -324,8 +331,8 @@ class Ycs.YDoc
     bool Gc { get; }
     bool HasPending { get; }
     bool ShouldLoad { get; }
-    bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
-    bool TryApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
+    bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
+    bool TryApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
     byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     byte[] EncodeStateAsUpdateV1(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     byte[] EncodeStateAsUpdateV2(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
@@ -346,12 +353,12 @@ class Ycs.YDoc
     object Meta { get; }
     string CollectionId { get; }
     string Guid { get; }
-    void ApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
-    void ApplyUpdate(byte[] update, object transactionOrigin = null)
-    void ApplyUpdateV1(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
-    void ApplyUpdateV1(byte[] update, object transactionOrigin = null)
-    void ApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null)
-    void ApplyUpdateV2(byte[] update, object transactionOrigin = null)
+    void ApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
+    void ApplyUpdate(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
+    void ApplyUpdateV1(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
+    void ApplyUpdateV1(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
+    void ApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
+    void ApplyUpdateV2(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
     void Destroy()
     void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
     void EncodeStateAsUpdateV1(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
@@ -362,12 +369,11 @@ class Ycs.YDoc
     void Transact<TState>(TState state, System.Action<TState, Transaction> action, object origin = null, bool local = true)
 class Ycs.YDocOptions
     System.Predicate<Item> GcFilter { get; set; }
+    UpdateLimits Limits { get; set; }
     YDocOptions()
     bool AutoLoad { get; set; }
     bool Gc { get; set; }
     bool ShouldLoad { get; set; }
-    long MaxPendingBytes { get; set; }
-    long MaxStructsPerUpdate { get; set; }
     long? ClientId { get; set; }
     object Meta { get; set; }
     string CollectionId { get; set; }

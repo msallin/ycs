@@ -59,10 +59,10 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
 
     /// <param name="input">The update.</param>
     /// <param name="maxStructs">
-    /// The most structs the update may hold (<see cref="Limits.MaxStructsV2"/>); <see cref="long.MaxValue"/>
-    /// for an update this library wrote (pending structs).
+    /// The most structs the update may hold (<see cref="UpdateLimits.MaxStructsPerUpdate"/>); for an
+    /// update this library wrote (pending structs), what it counted when it wrote them.
     /// </param>
-    public UpdateDecoderV2(Lib0Reader input, long maxStructs = Limits.DefaultMaxStructsPerUpdate)
+    public UpdateDecoderV2(Lib0Reader input, long maxStructs)
         : base(input)
     {
         _keyClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
@@ -82,7 +82,7 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     /// Starts over on a new update: <see cref="DSDecoderV2.Reader"/> must have been pointed at it
     /// (<see cref="Lib0Reader.Reset"/>). The column decoders and their readers are reused.
     /// </summary>
-    public void Reset(long maxStructs = Limits.DefaultMaxStructsPerUpdate)
+    public void Reset(long maxStructs)
     {
         ResetDsCurVal();
         _keys.Clear();
@@ -107,7 +107,7 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
 
     private void ReadColumns(long maxStructs, bool createStringDecoder)
     {
-        MaxStructs = Limits.MaxStructsV2(maxStructs, Reader.Remaining);
+        MaxStructs = maxStructs;
 
         // Read feature flag - currently unused.
         Reader.ReadByte();

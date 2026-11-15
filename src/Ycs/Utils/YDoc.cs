@@ -34,35 +34,17 @@ public class YDocOptions
     public bool ShouldLoad { get; set; } = true;
 
     /// <summary>
-    /// The most an applied update may add to what waits for missing structs (structs and deletions
-    /// of other clients this document has not received yet), counted as encoded bytes. An update that
-    /// would grow it beyond this is rejected with a <see cref="YUpdateException"/> and the document
-    /// is unchanged. Default: no limit, as Yjs (a valid update of any size can arrive before the one it
-    /// builds on); a server that applies updates from untrusted peers sets one.
+    /// What an update applied to the document may cost (<see cref="UpdateLimits.Default"/> unless set);
+    /// <see cref="YDoc.ApplyUpdate(byte[], object, UpdateLimits)"/> can override it for one update. A
+    /// subdocument read from an update takes its parent's.
     /// </summary>
-    public long MaxPendingBytes
+    public UpdateLimits Limits
     {
-        get => _maxPendingBytes;
-        set => _maxPendingBytes = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "The limit cannot be negative.");
+        get => _limits;
+        set => _limits = value ?? throw new ArgumentNullException(nameof(value));
     }
 
-    private long _maxPendingBytes = long.MaxValue;
-
-    /// <summary>
-    /// The most structs an applied v2 update may hold (never fewer than one per byte of the update),
-    /// which bounds the memory a small update can make the decoder allocate: the v2 format can
-    /// describe any number of structs in a few bytes. A v1 update needs at least two bytes per struct
-    /// and is not limited. A struct costs about 110 bytes while it is decoded, so the default bounds a
-    /// small update to about 230 MiB. An update beyond it is rejected with a <see cref="YUpdateException"/>
-    /// and the document is unchanged. Default 2,097,152; Yjs has no limit.
-    /// </summary>
-    public long MaxStructsPerUpdate
-    {
-        get => _maxStructsPerUpdate;
-        set => _maxStructsPerUpdate = Limits.CheckMaxStructs(value);
-    }
-
-    private long _maxStructsPerUpdate = Limits.DefaultMaxStructsPerUpdate;
+    private UpdateLimits _limits = UpdateLimits.Default;
 
     /// <summary>
     /// The client id to start with instead of a random one; for tests and reproducible benchmarks.
@@ -72,7 +54,7 @@ public class YDocOptions
     public long? ClientId
     {
         get => _clientId;
-        set => _clientId = value is null or >= 0 and <= Limits.MaxClient
+        set => _clientId = value is null or >= 0 and <= Ycs.Limits.MaxClient
             ? value
             : throw new ArgumentOutOfRangeException(nameof(value), "A client id is 0 to 2^53 - 1.");
     }
@@ -90,8 +72,7 @@ public class YDocOptions
             Meta = Meta,
             AutoLoad = AutoLoad,
             ShouldLoad = ShouldLoad,
-            MaxPendingBytes = MaxPendingBytes,
-            MaxStructsPerUpdate = MaxStructsPerUpdate,
+            Limits = Limits,
         };
     }
 }
@@ -108,6 +89,9 @@ public partial class YDoc
     public Predicate<Item> GcFilter => _opts.GcFilter;
     public bool AutoLoad => _opts.AutoLoad;
     public object Meta => _opts.Meta;
+
+    /// <summary>What an applied update may cost (<see cref="YDocOptions.Limits"/>).</summary>
+    public UpdateLimits Limits => _opts.Limits;
     public string CollectionId { get; internal set; }
 
     /// <summary>Whether the document should be synced by the provider now (Yjs' <c>shouldLoad</c>); <see cref="Load"/> sets it.</summary>
@@ -424,63 +408,66 @@ public partial class YDoc
     /// and of every y-protocols provider (Yjs' <c>Y.applyUpdate</c>). The transaction it runs in is
     /// not local, as in Yjs, also when it is the caller's.
     /// <br/>
-    /// A malformed update, or one beyond a limit (see <see cref="YDocOptions.MaxPendingBytes"/>), throws
-    /// <see cref="YUpdateException"/> and leaves the document as it was.
+    /// A malformed update, or one beyond a limit, throws <see cref="YUpdateException"/> and leaves the
+    /// document as it was.
     /// </summary>
     /// <param name="update">The update.</param>
     /// <param name="transactionOrigin">Stored on the transaction; observers and the undo manager see it.</param>
+    /// <param name="limits">For this update instead of <see cref="YDocOptions.Limits"/>, e.g. <see cref="UpdateLimits.Unlimited"/> for a stored state the application trusts.</param>
     /// <exception cref="YUpdateException">The update is malformed or beyond a limit; the document is unchanged.</exception>
-    public void ApplyUpdate(byte[] update, object transactionOrigin = null) => ApplyUpdateV1(update, transactionOrigin);
+    public void ApplyUpdate(byte[] update, object transactionOrigin = null, UpdateLimits limits = null) => ApplyUpdateV1(update, transactionOrigin, limits);
 
-    /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
-    public void ApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null) => ApplyUpdateV1(update, transactionOrigin);
+    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
+    public void ApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) => ApplyUpdateV1(update, transactionOrigin, limits);
 
-    /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
-    public void ApplyUpdateV1(byte[] update, object transactionOrigin = null)
+    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
+    public void ApplyUpdateV1(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(update, update.Length, v2: false, transactionOrigin);
+        ApplyUpdate(update, update.Length, v2: false, transactionOrigin, limits);
     }
 
-    /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
-    public void ApplyUpdateV1(ReadOnlySpan<byte> update, object transactionOrigin = null)
+    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
+    public void ApplyUpdateV1(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
     {
-        ApplyPooledCopy(update, v2: false, transactionOrigin);
+        ApplyPooledCopy(update, v2: false, transactionOrigin, limits);
     }
 
     /// <summary>
     /// Applies an update in the v2 format (Yjs' <c>Y.applyUpdateV2</c>).
     /// </summary>
-    /// <inheritdoc cref="ApplyUpdate(byte[], object)"/>
-    public void ApplyUpdateV2(byte[] update, object transactionOrigin = null)
+    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
+    public void ApplyUpdateV2(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(update, update.Length, v2: true, transactionOrigin);
+        ApplyUpdate(update, update.Length, v2: true, transactionOrigin, limits);
     }
 
-    /// <inheritdoc cref="ApplyUpdateV2(byte[], object)"/>
-    public void ApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null)
+    /// <inheritdoc cref="ApplyUpdateV2(byte[], object, UpdateLimits)"/>
+    public void ApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
     {
-        ApplyPooledCopy(update, v2: true, transactionOrigin);
+        ApplyPooledCopy(update, v2: true, transactionOrigin, limits);
     }
 
     /// <summary>
-    /// Like <see cref="ApplyUpdate(ReadOnlySpan{byte}, object)"/> (v1), but returns false instead of throwing
+    /// Like <see cref="ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/> (v1), but returns false instead of throwing
     /// <see cref="YUpdateException"/>; the document is then unchanged.
     /// </summary>
-    public bool TryApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null) => TryApply(update, v2: false, transactionOrigin);
+    public bool TryApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) =>
+        TryApply(update, v2: false, transactionOrigin, limits);
 
     /// <summary>
-    /// Like <see cref="ApplyUpdateV2(ReadOnlySpan{byte}, object)"/>, but returns false instead of throwing
+    /// Like <see cref="ApplyUpdateV2(ReadOnlySpan{byte}, object, UpdateLimits)"/>, but returns false instead of throwing
     /// <see cref="YUpdateException"/>; the document is then unchanged.
     /// </summary>
-    public bool TryApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null) => TryApply(update, v2: true, transactionOrigin);
+    public bool TryApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) =>
+        TryApply(update, v2: true, transactionOrigin, limits);
 
-    private bool TryApply(ReadOnlySpan<byte> update, bool v2, object transactionOrigin)
+    private bool TryApply(ReadOnlySpan<byte> update, bool v2, object transactionOrigin, UpdateLimits limits)
     {
         try
         {
-            ApplyPooledCopy(update, v2, transactionOrigin);
+            ApplyPooledCopy(update, v2, transactionOrigin, limits);
             return true;
         }
         catch (YUpdateException)
@@ -548,12 +535,13 @@ public partial class YDoc
     /// it (<see cref="StructStore.ApplyUpdate"/>), which checks what depends on the document before it
     /// changes anything.
     /// </summary>
-    private void ApplyUpdate(byte[] buffer, int count, bool v2, object transactionOrigin)
+    private void ApplyUpdate(byte[] buffer, int count, bool v2, object transactionOrigin, UpdateLimits limits)
     {
+        limits ??= _opts.Limits;
         UpdateReader.Lease update;
         try
         {
-            update = UpdateReader.Read(buffer, 0, count, v2, _opts.MaxStructsPerUpdate);
+            update = UpdateReader.Read(buffer, 0, count, v2, limits.MaxStructsPerUpdate);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {
@@ -564,11 +552,11 @@ public partial class YDoc
         // themselves are integrated (or encoded as pending) inside the transaction.
         try
         {
-            Transact((store: Store, update, _opts.MaxPendingBytes), static (s, tr) =>
+            Transact((store: Store, update, limits), static (s, tr) =>
             {
                 // As Yjs' readUpdateV2: also when this runs in the caller's transaction.
                 tr.Local = false;
-                s.store.ApplyUpdate(tr, s.update.Structs, s.update.DeleteSet, s.MaxPendingBytes);
+                s.store.ApplyUpdate(tr, s.update.Structs, s.update.DeleteSet, s.limits);
             }, transactionOrigin, local: false);
         }
         finally
@@ -582,13 +570,13 @@ public partial class YDoc
     /// decoded keeps a reference to the input once the lease is disposed, so the array can be
     /// returned afterwards.
     /// </summary>
-    private void ApplyPooledCopy(ReadOnlySpan<byte> update, bool v2, object transactionOrigin)
+    private void ApplyPooledCopy(ReadOnlySpan<byte> update, bool v2, object transactionOrigin, UpdateLimits limits)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(update.Length);
         try
         {
             update.CopyTo(buffer);
-            ApplyUpdate(buffer, update.Length, v2, transactionOrigin);
+            ApplyUpdate(buffer, update.Length, v2, transactionOrigin, limits);
         }
         finally
         {

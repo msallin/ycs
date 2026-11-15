@@ -66,11 +66,11 @@ public class CodecPathTests
             foreach (var update in c.Updates.Append(c.ExpectedState).Append(c.Merged))
             {
                 var bytes = update.Get(v2);
-                IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(new Lib0Reader(bytes)) : new UpdateDecoderV1(new Lib0Reader(bytes));
+                IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue);
                 var expectedStructs = Describe(EncodingUtils.ReadClientStructRefs(decoder));
                 var expectedDs = Describe(DeleteSet.Read(decoder));
 
-                using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2);
+                using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2, long.MaxValue);
                 Assert.AreEqual(expectedStructs, Describe(lease.Structs));
                 Assert.AreEqual(expectedDs, Describe(lease.DeleteSet));
             }
@@ -84,11 +84,11 @@ public class CodecPathTests
         foreach (var update in c.Updates)
         {
             var bytes = update.Get(v2);
-            using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2);
+            using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2, long.MaxValue);
             doc.Transact(tr =>
             {
                 tr.Local = false;
-                doc.Store.ApplyUpdate(tr, lease.Structs, lease.DeleteSet, long.MaxValue);
+                doc.Store.ApplyUpdate(tr, lease.Structs, lease.DeleteSet, UpdateLimits.Unlimited);
             }, origin: null, local: false);
         }
 

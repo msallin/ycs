@@ -355,7 +355,7 @@ internal static class EncodingUtils
 
             if (numberOfStructs > _decoder.MaxStructs - _structCount)
             {
-                throw new YUpdateException($"The update holds more structs than its size allows ({_decoder.MaxStructs}).");
+                throw new YUpdateException($"The update holds more than {_decoder.MaxStructs} structs (UpdateLimits.MaxStructsPerUpdate).");
             }
 
             _structCount += numberOfStructs;

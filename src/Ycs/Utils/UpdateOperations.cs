@@ -73,23 +73,15 @@ public sealed class UpdateMeta
 /// <see cref="LazyStructReader"/> / <see cref="LazyStructWriter"/>, which stream structs
 /// (including 'Skip' placeholders for clock ranges we don't have data for) in and out of an
 /// update without needing a document.
+/// <br/>
+/// Every function takes an optional <see cref="UpdateLimits"/> (<see cref="UpdateLimits.Default"/>
+/// when null) whose <see cref="UpdateLimits.MaxStructsPerUpdate"/> bounds each input. Merging, diffing
+/// and the state vector stream; converting a v2 update to v1, decoding and describing it produce
+/// output in proportion to its structs, which a v2 update describes in a few bytes.
 /// </summary>
 public static class UpdateOperations
 {
-    /// <summary>
-    /// The most structs a v2 update given to these functions may hold (never fewer than one per byte
-    /// of the update), process-wide: the v2 format can describe any number of structs in a few bytes,
-    /// and merging, diffing or converting them takes time and memory per struct. An update beyond it
-    /// is rejected with a <see cref="YUpdateException"/>. Default 2,097,152, as
-    /// <see cref="YDocOptions.MaxStructsPerUpdate"/>; Yjs has no limit.
-    /// </summary>
-    public static long MaxStructsPerUpdate
-    {
-        get => Interlocked.Read(ref _maxStructsPerUpdate);
-        set => Interlocked.Exchange(ref _maxStructsPerUpdate, Limits.CheckMaxStructs(value));
-    }
-
-    private static long _maxStructsPerUpdate = Limits.DefaultMaxStructsPerUpdate;
+    private static long MaxStructs(UpdateLimits limits) => (limits ?? UpdateLimits.Default).MaxStructsPerUpdate;
 
     private sealed class WriteState
     {
@@ -105,28 +97,32 @@ public static class UpdateOperations
     /// themselves produced by an earlier merge (which may still contain 'Skip' gaps for data
     /// that update didn't have).
     /// </summary>
-    public static byte[] MergeUpdates(IList<byte[]> updates)
+    /// <param name="updates">The updates.</param>
+    /// <param name="limits">Bounds each input (<see cref="UpdateLimits.MaxStructsPerUpdate"/>); <see cref="UpdateLimits.Default"/> when null.</param>
+    public static byte[] MergeUpdates(IList<byte[]> updates, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(updates);
 
-        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: false, MaxStructsPerUpdate));
+        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: false, MaxStructs(limits), out _));
     }
 
     /// <summary>
     /// The v2-format counterpart of <see cref="MergeUpdates"/>.
     /// </summary>
-    public static byte[] MergeUpdatesV2(IList<byte[]> updates)
+    /// <inheritdoc cref="MergeUpdates"/>
+    public static byte[] MergeUpdatesV2(IList<byte[]> updates, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(updates);
 
-        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: true, MaxStructsPerUpdate));
+        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: true, MaxStructs(limits), out _));
     }
 
     /// <summary>
     /// Merges v2 updates this library wrote (pending structs), any number of them: in groups of a few,
     /// because <see cref="MergeUpdatesCore"/> re-sorts its inputs for every struct it writes.
+    /// <paramref name="structs"/> is how many structs the result holds (unchanged for a single update).
     /// </summary>
-    internal static byte[] MergeUpdatesTrusted(List<byte[]> updates)
+    internal static byte[] MergeUpdatesTrusted(List<byte[]> updates, ref long structs)
     {
         const int GroupSize = 8;
         while (updates.Count > 1)
@@ -135,7 +131,10 @@ public static class UpdateOperations
             for (var i = 0; i < updates.Count; i += GroupSize)
             {
                 var group = updates.GetRange(i, Math.Min(GroupSize, updates.Count - i));
-                next.Add(MergeUpdatesCore(group, v2: true, maxStructs: long.MaxValue));
+                next.Add(MergeUpdatesCore(group, v2: true, maxStructs: long.MaxValue, out var written));
+
+                // The last round merges a single group, and that is the result.
+                structs = written >= 0 ? written : structs;
             }
 
             updates = next;
@@ -144,8 +143,10 @@ public static class UpdateOperations
         return updates[0];
     }
 
-    private static byte[] MergeUpdatesCore(IList<byte[]> updates, bool v2, long maxStructs)
+    /// <param name="written">How many structs the result holds; -1 when the single update is returned as it is.</param>
+    private static byte[] MergeUpdatesCore(IList<byte[]> updates, bool v2, long maxStructs, out long written)
     {
+        written = -1;
         if (updates.Count == 1)
         {
             return updates[0];
@@ -155,7 +156,7 @@ public static class UpdateOperations
         var lazyStructDecoders = new List<LazyStructReader>(updates.Count);
         foreach (var update in updates)
         {
-            var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(new Lib0Reader(update), maxStructs) : new UpdateDecoderV1(new Lib0Reader(update));
+            var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(new Lib0Reader(update), maxStructs) : new UpdateDecoderV1(new Lib0Reader(update), maxStructs);
             updateDecoders.Add(decoder);
             lazyStructDecoders.Add(new LazyStructReader(decoder, filterSkips: true));
         }
@@ -163,7 +164,9 @@ public static class UpdateOperations
         IUpdateEncoder updateEncoder = v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
         try
         {
-            MergeStructs(lazyStructDecoders, new LazyStructWriter(updateEncoder));
+            var writer = new LazyStructWriter(updateEncoder);
+            MergeStructs(lazyStructDecoders, writer);
+            written = writer.TotalWritten;
 
             // Every decoder above was drained (Curr == null) before the loop could exit, so
             // each one's stream is now positioned right at the start of its delete set.
@@ -367,7 +370,7 @@ public static class UpdateOperations
     /// <paramref name="stateVector"/> (an encoded state vector, e.g. from
     /// <see cref="EncodeStateVectorFromUpdate"/> or <see cref="YDoc.EncodeStateVectorV1"/>).
     /// </summary>
-    public static byte[] DiffUpdate(byte[] update, byte[] stateVector)
+    public static byte[] DiffUpdate(byte[] update, byte[] stateVector, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
         ArgumentNullException.ThrowIfNull(stateVector);
@@ -376,7 +379,7 @@ public static class UpdateOperations
             var encoder = UpdateEncoderV1.Rent();
             try
             {
-                DiffUpdateCore(new UpdateDecoderV1(new Lib0Reader(update)), stateVector, encoder);
+                DiffUpdateCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits)), stateVector, encoder);
                 return encoder.ToArray();
             }
             finally
@@ -389,7 +392,7 @@ public static class UpdateOperations
     /// <summary>
     /// The v2-format counterpart of <see cref="DiffUpdate"/>.
     /// </summary>
-    public static byte[] DiffUpdateV2(byte[] update, byte[] stateVector)
+    public static byte[] DiffUpdateV2(byte[] update, byte[] stateVector, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
         ArgumentNullException.ThrowIfNull(stateVector);
@@ -398,7 +401,7 @@ public static class UpdateOperations
             var encoder = UpdateEncoderV2.Rent();
             try
             {
-                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructsPerUpdate), stateVector, encoder);
+                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits)), stateVector, encoder);
                 return encoder.ToArray();
             }
             finally
@@ -440,7 +443,7 @@ public static class UpdateOperations
             try
             {
                 var pending = store.Pending.Merge();
-                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(pending), maxStructs: long.MaxValue), targetStateVector, encoder);
+                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(pending), store.Pending.Structs), targetStateVector, encoder);
                 updates.Add(encoder.ToArray());
             }
             finally
@@ -449,7 +452,7 @@ public static class UpdateOperations
             }
         }
 
-        return MergeUpdatesCore(updates, v2, maxStructs: long.MaxValue);
+        return MergeUpdatesCore(updates, v2, maxStructs: long.MaxValue, out _);
     }
 
     private static void DiffUpdateCore(IUpdateDecoder decoder, IDictionary<long, long> state, IUpdateEncoder encoder)
@@ -507,19 +510,19 @@ public static class UpdateOperations
     /// document. Equivalent to (but far cheaper than) applying the update to an empty document
     /// and calling <see cref="YDoc.EncodeStateVectorV1"/>.
     /// </summary>
-    public static byte[] EncodeStateVectorFromUpdate(byte[] update)
+    public static byte[] EncodeStateVectorFromUpdate(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV1(new Lib0Reader(update))));
+        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits))));
     }
 
     /// <summary>
     /// The v2-format counterpart of <see cref="EncodeStateVectorFromUpdate"/>.
     /// </summary>
-    public static byte[] EncodeStateVectorFromUpdateV2(byte[] update)
+    public static byte[] EncodeStateVectorFromUpdateV2(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructsPerUpdate)));
+        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits))));
     }
 
     private static byte[] EncodeStateVectorFromUpdateCore(IUpdateDecoder decoder)
@@ -587,19 +590,19 @@ public static class UpdateOperations
     /// Returns, for every client that contributed at least one struct to a v1-format update,
     /// the clock range it covers.
     /// </summary>
-    public static UpdateMeta ParseUpdateMeta(byte[] update)
+    public static UpdateMeta ParseUpdateMeta(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV1(new Lib0Reader(update))));
+        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits))));
     }
 
     /// <summary>
     /// The v2-format counterpart of <see cref="ParseUpdateMeta"/>.
     /// </summary>
-    public static UpdateMeta ParseUpdateMetaV2(byte[] update)
+    public static UpdateMeta ParseUpdateMetaV2(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructsPerUpdate)));
+        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits))));
     }
 
     private static UpdateMeta ParseUpdateMetaCore(IUpdateDecoder decoder)
@@ -645,7 +648,7 @@ public static class UpdateOperations
     /// Re-encodes a v1-format update in the v2 format. The two formats carry the exact same
     /// information; this is a pure re-encoding.
     /// </summary>
-    public static byte[] ConvertUpdateFormatV1ToV2(byte[] update)
+    public static byte[] ConvertUpdateFormatV1ToV2(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
         return YUpdateException.Decode(() =>
@@ -653,7 +656,7 @@ public static class UpdateOperations
             var encoder = UpdateEncoderV2.Rent();
             try
             {
-                ConvertUpdateFormatCore(new UpdateDecoderV1(new Lib0Reader(update)), encoder);
+                ConvertUpdateFormatCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits)), encoder);
                 return encoder.ToArray();
             }
             finally
@@ -666,7 +669,7 @@ public static class UpdateOperations
     /// <summary>
     /// Re-encodes a v2-format update in the v1 format.
     /// </summary>
-    public static byte[] ConvertUpdateFormatV2ToV1(byte[] update)
+    public static byte[] ConvertUpdateFormatV2ToV1(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
         return YUpdateException.Decode(() =>
@@ -674,7 +677,7 @@ public static class UpdateOperations
             var encoder = UpdateEncoderV1.Rent();
             try
             {
-                ConvertUpdateFormatCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructsPerUpdate), encoder);
+                ConvertUpdateFormatCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits)), encoder);
                 return encoder.ToArray();
             }
             finally
@@ -708,19 +711,19 @@ public static class UpdateOperations
     /// Decodes a v1-format update into its structs (in order) and its delete set, without
     /// applying it to a document.
     /// </summary>
-    public static DecodedUpdate DecodeUpdate(byte[] update)
+    public static DecodedUpdate DecodeUpdate(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV1(new Lib0Reader(update))));
+        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits))));
     }
 
     /// <summary>
     /// The v2-format counterpart of <see cref="DecodeUpdate"/>.
     /// </summary>
-    public static DecodedUpdate DecodeUpdateV2(byte[] update)
+    public static DecodedUpdate DecodeUpdateV2(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructsPerUpdate)));
+        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits))));
     }
 
     private static DecodedUpdate DecodeUpdateCore(IUpdateDecoder decoder)
@@ -753,17 +756,17 @@ public static class UpdateOperations
     /// string, for debugging. Unlike Yjs' <c>logUpdate</c>, this does not attempt to reproduce
     /// browser/Node console formatting - it just returns a plain string.
     /// </summary>
-    public static string DescribeUpdate(byte[] update)
+    public static string DescribeUpdate(byte[] update, UpdateLimits limits = null)
     {
-        return DescribeDecodedUpdate(DecodeUpdate(update));
+        return DescribeDecodedUpdate(DecodeUpdate(update, limits));
     }
 
     /// <summary>
     /// The v2-format counterpart of <see cref="DescribeUpdate"/>.
     /// </summary>
-    public static string DescribeUpdateV2(byte[] update)
+    public static string DescribeUpdateV2(byte[] update, UpdateLimits limits = null)
     {
-        return DescribeDecodedUpdate(DecodeUpdateV2(update));
+        return DescribeDecodedUpdate(DecodeUpdateV2(update, limits));
     }
 
     /// <summary>

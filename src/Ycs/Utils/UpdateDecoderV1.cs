@@ -33,13 +33,14 @@ internal class DSDecoderV1 : IDSDecoder
 
 internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
 {
-    public UpdateDecoderV1(Lib0Reader input)
+    /// <param name="maxStructs">The most structs the update may hold (<see cref="UpdateLimits.MaxStructsPerUpdate"/>).</param>
+    public UpdateDecoderV1(Lib0Reader input, long maxStructs)
         : base(input)
     {
+        MaxStructs = maxStructs;
     }
 
-    // Every struct costs at least one byte.
-    public long MaxStructs => long.MaxValue;
+    public long MaxStructs { get; set; }
 
     public ID ReadLeftId() => new ID(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
 

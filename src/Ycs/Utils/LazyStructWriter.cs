@@ -39,6 +39,9 @@ internal sealed class LazyStructWriter
     public long CurrClient { get; set; }
     public int Written { get; set; }
 
+    /// <summary>How many structs were written, for every client.</summary>
+    public long TotalWritten { get; private set; }
+
     /// <summary>
     /// One entry per client written so far: how many structs, and where the bytes that client's
     /// structs wrote to <see cref="IUpdateEncoder.RestWriter"/> end (they start where the previous
@@ -72,6 +75,7 @@ internal sealed class LazyStructWriter
 
         str.Write(lazyWriter.Encoder, offset);
         lazyWriter.Written++;
+        lazyWriter.TotalWritten++;
     }
 
     /// <summary>
