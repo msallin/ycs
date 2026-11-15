@@ -1,0 +1,9 @@
+{
+  "name": "ycs-traces",
+  "private": true,
+  "type": "module",
+  "description": "Generates tests/Ycs.Tests/Fixtures/trace-*.json from real Yjs.",
+  "dependencies": {
+    "yjs": "13.6.32"
+  }
+}

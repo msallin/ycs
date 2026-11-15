@@ -5,13 +5,33 @@ What each project guards, and how to run, soak and update them. CI
 
 | Project | Guards | Run |
 | --- | --- | --- |
-| `tests/Ycs.Tests` | Behaviour: unit tests, updates written by real Yjs (byte-identical re-encoding), 40 randomized concurrent sessions replayed from Yjs, and the public API baseline (`PublicApi.txt`). | `dotnet test tests/Ycs.Tests` |
+| `tests/Ycs.Tests` | Behaviour: unit tests, updates written by real Yjs (byte-identical re-encoding), 40 randomized concurrent sessions replayed from Yjs, 1,425 differential traces of the shared types and their events (see below), and the public API baseline (`PublicApi.txt`). | `dotnet test tests/Ycs.Tests` |
 | `tests/Ycs.Corpus` | Convergence with Yjs on a recorded corpus of Yjs 13.6.32 sessions (`interop/corpus/`): the observer's state byte for byte, and for the scripted sessions (concurrent formatting) every client's, replayed with a Ycs document per client (`ClientReplayTests`); and the UndoManager, step by step, on random sessions run in Yjs (`UndoDifferentialTests`, `interop/corpus/undo-gen.mjs`). | `dotnet test tests/Ycs.Corpus` |
 | `tests/Ycs.Fuzz` | Robustness of `ApplyUpdate`/`ApplyUpdateV2` against damaged input. | `dotnet test tests/Ycs.Fuzz -c Release` |
 | `tests/Ycs.Budgets` | Allocated bytes and time per operation for a fixed set of scenarios. | `dotnet test tests/Ycs.Budgets -c Release --logger "console;verbosity=detailed"` |
 | `samples/Ycs.AotSample`, `samples/Ycs.WasmSample` | Native AOT and browser-wasm: publish without trim/AOT warnings and run. | see the README |
 | `interop/run.sh`, `interop/corpus/roundtrip.sh` | Live round-trips against real Yjs (Node). | see the README |
 | `bench/Ycs.Benchmarks` | Not a test: the editing-trace benchmark behind the README's numbers. | `bench/Ycs.Benchmarks/get-trace.sh`, then `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>` |
+
+## Differential traces (`TraceReplayTests`)
+
+`interop/traces/gen.mjs` runs three Yjs 13.6.32 clients that edit concurrently and records every
+step of the observed one (a local transaction, a remote update, a snapshot, the first access of a
+root) with what Yjs shows afterwards, in `tests/Ycs.Tests/Fixtures/trace-<set>.json.gz`.
+`TraceReplayTests` replays each trace on one Ycs document and compares after every step: content,
+`ToDelta` (with snapshots and `computeYChange` in `snapshots`), lengths, the state bytes (by a hash),
+and every observer call in order with what it read (`Delta`, `Changes`, `Keys`, `Path`). The sets:
+`text` (nobody observes), `text-observed` (an observer reads the delta, the changes and the keys),
+`text-markers` (long plain text), `text-placeholder` (a root text that got formats before it was
+asked for, so its search markers stay on), `list-map` and `list-map-push` (nested maps and arrays,
+an observer on every type, a deep one on every third), `xml`, `snapshots`.
+
+Every trace has to pass. To regenerate (after a change of the generator or of the tested Yjs
+version):
+
+```bash
+cd interop/traces && npm ci && node gen.mjs
+```
 
 ## Fuzzing (`tests/Ycs.Fuzz`)
 

@@ -52,15 +52,11 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
     /// </summary>
     public int Size => Count;
 
-    public object Get(string key)
-    {
-        if (!TryTypeMapGet(key, out var value))
-        {
-            throw new KeyNotFoundException();
-        }
+    /// <summary>The value of <paramref name="key"/>, or null when the map has none (Yjs: <c>undefined</c>); <see cref="TryGet"/> tells the two apart.</summary>
+    public object Get(string key) => TryTypeMapGet(key, out var value) ? value : null;
 
-        return value;
-    }
+    /// <summary>Whether the map has <paramref name="key"/>, and its value (which may be null).</summary>
+    public bool TryGet(string key, out object value) => TryTypeMapGet(key, out value);
 
     public void Set(string key, object value)
     {

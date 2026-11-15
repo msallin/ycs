@@ -148,7 +148,7 @@ public class UndoRedoTests : YTestBase
         var undoManager = new UndoManager(array0);
 
         array0.Insert(0, new object[] { 1, 2, 3 });
-        array1.Insert(9, new object[] { 4, 5, 6 });
+        array1.Insert(0, new object[] { 4, 5, 6 });
         Connector.SyncAll();
         CollectionAssert.AreEqual(new[] { 1, 2, 3, 4, 5, 6 }, (ICollection)array0.ToArray());
         undoManager.Undo();

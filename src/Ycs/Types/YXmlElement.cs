@@ -136,7 +136,7 @@ public class YXmlElement : YXmlFragment
     public bool HasAttribute(string attributeName) => _map.TryGetValue(attributeName, out var item) && !item.Deleted;
 
     /// <summary>
-    /// Returns all attribute name/value pairs, optionally as of a snapshot.
+    /// Returns all attribute name/value pairs (null values included), optionally as of a snapshot.
     /// </summary>
     public IDictionary<string, object> GetAttributes(Snapshot snapshot = null)
     {
@@ -145,22 +145,13 @@ public class YXmlElement : YXmlFragment
             return TypeMapEnumerateValues().ToDictionary(kv => kv.Key, kv => kv.Value);
         }
 
-        var result = new Dictionary<string, object>();
-        foreach (var key in _map.Keys)
-        {
-            var value = TypeMapGetSnapshot(key, snapshot);
-            if (value != null)
-            {
-                result[key] = value;
-            }
-        }
-
-        return result;
+        return GetAllSnapshot(snapshot);
     }
 
     /// <summary>
     /// The XML serialization of this element: '&lt;nodename attr="value"&gt;...children...&lt;/nodename&gt;'.
-    /// Attributes are ordered by attribute name, so this can be used to compare two elements.
+    /// Attributes are ordered by attribute name, so this can be used to compare two elements; values are
+    /// written as JavaScript's <c>String(value)</c> writes them, as in Yjs.
     /// </summary>
     public override string ToString()
     {
@@ -170,7 +161,7 @@ public class YXmlElement : YXmlFragment
         var parts = new List<string>(keys.Count);
         foreach (var key in keys)
         {
-            parts.Add($"{key}=\"{attrs[key]}\"");
+            parts.Add($"{key}=\"{YXmlNodeHelpers.JsString(attrs[key])}\"");
         }
 
         var nodeName = NodeName.ToLowerInvariant();

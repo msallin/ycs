@@ -204,6 +204,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     protected void InsertGenerics(Transaction transaction, int index, ICollection<object> content)
     {
+        if (index > Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"Length exceeded: the index is beyond the length ({Length}). Nothing was inserted.");
+        }
+
         if (index == 0)
         {
             if (_searchMarkers?.Count > 0)
@@ -260,6 +265,49 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         InsertGenericsAfter(transaction, n, content);
     }
 
+    /// <summary>
+    /// Appends after the last item, deleted ones included (Yjs' <c>typeListPushGenerics</c>): the new
+    /// item has no right origin, unlike an insert at <see cref="AbstractType.Length"/>.
+    /// </summary>
+    private protected void PushGenerics(Transaction transaction, ICollection<object> content)
+    {
+        // From the marker with the highest index, as Yjs: its reduce starts from { index: 0, p: _start }.
+        var n = _start;
+        var maxIndex = 0;
+        if (_searchMarkers != null)
+        {
+            foreach (var marker in _searchMarkers._searchMarkers)
+            {
+                if (marker.Index > maxIndex)
+                {
+                    maxIndex = marker.Index;
+                    n = marker.P;
+                }
+            }
+        }
+
+        while (n?.Right is Item right)
+        {
+            n = right;
+        }
+
+        InsertGenericsAfter(transaction, n, content);
+    }
+
+    /// <summary>JavaScript's <c>splice(index, 0, ...content)</c>, on the content of a type not in a document yet.</summary>
+    private protected static void PrelimInsert(List<object> list, int index, ICollection<object> content) =>
+        list.InsertRange(SpliceStart(list, index), content);
+
+    /// <summary>JavaScript's <c>splice(index, length)</c>, on the content of a type not in a document yet.</summary>
+    private protected static void PrelimDelete(List<object> list, int index, int length)
+    {
+        var start = SpliceStart(list, index);
+        list.RemoveRange(start, Math.Clamp(length, 0, list.Count - start));
+    }
+
+    private static int SpliceStart(List<object> list, int index) =>
+        index < 0 ? Math.Max(list.Count + index, 0) : Math.Min(index, list.Count);
+
     protected void InsertGenericsAfter(Transaction transaction, Item referenceItem, ICollection<object> content)
     {
         var left = referenceItem;
@@ -295,7 +343,9 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             {
                 case byte[] arr:
                     packJsonContent();
-                    left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, new ContentBinary(arr));
+
+                    // A copy, as Yjs: the caller's array must not change the document later.
+                    left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, new ContentBinary((byte[])arr.Clone()));
                     left.Integrate(transaction, 0);
                     break;
                 case YDoc d:
@@ -378,6 +428,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         }
     }
 
+    /// <summary>
+    /// Yjs' <c>typeListSlice</c>: never throws. A negative index counts from the end; an empty range
+    /// gives an empty list; a start that is still negative then yields null for each index before 0,
+    /// as JavaScript reads them.
+    /// </summary>
     protected IReadOnlyList<object> InternalSlice(int start, int end)
     {
         if (start < 0)
@@ -390,15 +445,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             end += Length;
         }
 
-        ArgumentOutOfRangeException.ThrowIfNegative(start);
-
-        ArgumentOutOfRangeException.ThrowIfNegative(end);
-
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(start, end);
-
         int length = end - start;
-        Debug.Assert(length >= 0);
-
         var cs = new List<object>();
         var n = _start;
 
@@ -415,7 +462,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 {
                     for (int i = start; i < c.Count && length > 0; i++)
                     {
-                        cs.Add(c[i]);
+                        cs.Add(i < 0 ? null : c[i]);
                         length--;
                     }
 
@@ -581,7 +628,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
-        if (marker != null && Math.Abs(marker.Index - pIndex) < ((p.Parent as AbstractType).Length / MaxSearchMarkers))
+        if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as AbstractType).Length / (double)MaxSearchMarkers)
         {
             // Adjust existing marker.
             marker.Update(p, pIndex, _searchMarkers.NextTimestamp());
