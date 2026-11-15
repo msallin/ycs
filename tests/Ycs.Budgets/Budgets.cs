@@ -29,6 +29,8 @@ internal static class Budgets
         ["undo.redo-after-undoing-typing-100k"] = new(2120, 50),       // 1 840 B, 2 µs (was about 40 KB: each split copied the rest of the undone run)
         ["undo.delete-backwards-one-capture-100k"] = new(864, 50),     // 746 B, 4 µs (was 3 100 B: the deleted run was copied on every merge)
         ["array.push-100k-in-one-transaction"] = new(47147552, 800000), // 41.0 MB, 80 ms (was beyond 8 GiB: each push walked the list, the end of the transaction copied the run into each left neighbour)
+        ["text.type-100k-in-one-transaction"] = new(25665584, 840000),  // 22.3 MB, 84 ms (was 58 s: each marker lookup walked back over the transaction's keystrokes)
+        ["array.delete-random-100k"] = new(2784, 31),                 // 2 418 B, 3.1 µs (was 51 µs: the lookup walked back over the pieces split off the run)
         ["doc.encode-state-with-pending-100k"] = new(7836896, 80000),  // 6.8 MB, 7.8 ms (the state merged with what is pending, as Yjs does)
     };
 }

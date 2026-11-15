@@ -6,7 +6,7 @@ namespace Ycs.Compare;
 
 /// <summary>
 /// One workload on one library in its own process: <see cref="WarmUps"/> warm-up runs, then <c>runs</c> timed runs,
-/// each on a fresh document after a forced full GC (a <see cref="Case.Heavy"/> workload: one timed run, no warm-up).
+/// each on a fresh document after a forced full GC (a <see cref="Case.HeavyOn"/> workload: one timed run, no warm-up).
 /// The first warm-up's time is reported as the cold time. What the last run's finished document holds is measured
 /// against the heap before its setup. Prints one JSON object.
 /// </summary>
@@ -23,8 +23,9 @@ internal static class Child
         var make = lib switch { "ycs" => c.Ycs, "yrs" => c.Yrs, _ => throw new ArgumentException(lib) };
         var fixtures = new Fixtures(fixturesDir);
         var load0 = File.ReadAllText("/proc/loadavg").Split(' ')[0];
-        var first = c.Heavy ? 1 : 1 - WarmUps;
-        runs = c.Heavy ? 1 : runs;
+        var heavy = c.HeavyOn(lib);
+        var first = heavy ? 1 : 1 - WarmUps;
+        runs = heavy ? 1 : runs;
         double cold = 0;
         var times = new List<double>();
         var allocs = new List<long>();

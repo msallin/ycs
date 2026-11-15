@@ -678,21 +678,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
-        // We want to make sure that p can't be merged with left, because that would screw up everything.
-        // In that case just return what we have (it is most likely the best marker anyway).
-        // Iterate to left until p can't be merged with left.
-        while (p.Left != null && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
-        {
-            p = p.Left as Item;
-            if (p == null)
-            {
-                break;
-            }
-            else if (!p.Deleted && p.Countable)
-            {
-                pIndex -= p.Length;
-            }
-        }
+        // Yjs walks on to the left here while the left neighbour has the same client and the clock before p, so that
+        // a marker does not point into a run that merges at the end of the transaction. Within one transaction every
+        // keystroke continues such a run, which makes the walk, and typing, quadratic. A marker on an item that merges
+        // into its left neighbour is moved there with its index (OnMerge), so the walk is not needed; the markers only
+        // speed up finding an index, and the markers-invisible property checks that they change nothing else.
 
         if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as AbstractType).Length / (double)MaxSearchMarkers)
         {

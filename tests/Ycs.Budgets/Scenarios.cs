@@ -195,6 +195,34 @@ internal static class Scenarios
             };
         }, Warmups: 2),
 
+        new("text.type-100k-in-one-transaction", 3, () =>
+        {
+            // One operation is the whole transaction on a fresh document: 100,000 keystrokes at the end, merged at its end.
+            return _ =>
+            {
+                var doc = new YDoc(new YDocOptions { ClientId = 1 });
+                var text = doc.GetText("text");
+                doc.Transact(_ =>
+                {
+                    for (var i = 0; i < 100_000; i++)
+                    {
+                        text.Insert(i, "x");
+                    }
+                });
+            };
+        }, Warmups: 2),
+
+        new("array.delete-random-100k", 5000, () =>
+        {
+            // Single deletes at random places of one 100,000-element run: the pieces it is split into continue each
+            // other by clock, which a marker lookup must not walk across.
+            var doc = new YDoc(new YDocOptions { ClientId = 1 });
+            var array = doc.GetArray("array");
+            array.Push(Enumerable.Range(0, 100_000).Select(i => (object)(long)i).ToList());
+            var random = new Random(7);
+            return _ => array.Delete(random.Next(array.Length), 1);
+        }),
+
         new("doc.encode-state-with-pending-100k", 100, () =>
         {
             var (doc, _) = LargeText();

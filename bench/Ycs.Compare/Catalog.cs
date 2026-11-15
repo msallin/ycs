@@ -9,8 +9,13 @@ using YDotNet.Document.Options;
 /// </summary>
 internal sealed record Case(string Name, string Group, string What, string Root, Func<Fixtures, Prepared> Ycs, Func<Fixtures, Prepared> Yrs, Func<Fixtures, string> Expected)
 {
-    /// <summary>A workload that takes a minute or more on one library: no warm-up and one timed run per process.</summary>
+    /// <summary>A workload that takes a minute or more on YDotNet: no warm-up and one timed run per process.</summary>
     public bool Heavy { get; init; }
+
+    /// <summary>Heavy only on YDotNet: ycs runs it with warm-ups and every timed run.</summary>
+    public bool LightOnYcs { get; init; }
+
+    public bool HeavyOn(string lib) => Heavy && !(LightOnYcs && lib == "ycs");
 }
 
 internal static class Catalog
@@ -26,7 +31,7 @@ internal static class Catalog
         new("text-append-utf8", "text", "text-append, YDotNet with DocEncoding.Utf8 (UTF-8 indexes: the same for this ASCII input, not interoperable with Yjs for other text); ycs as in text-append", "text",
             YcsCases.TextAppend, f => YrsCases.TextAppend(f, DocEncoding.Utf8), _ => Typed()),
         new("text-append-1txn", "text", "the same 100,000 inserts in one transaction (batched form)", "text",
-            f => YcsCases.TextAppendOneTxn(f, Inputs.TypingN), f => YrsCases.TextAppendOneTxn(f, Inputs.TypingN), _ => Typed()) { Heavy = true },
+            f => YcsCases.TextAppendOneTxn(f, Inputs.TypingN), f => YrsCases.TextAppendOneTxn(f, Inputs.TypingN), _ => Typed()) { Heavy = true, LightOnYcs = true },
         new("text-append-1txn-25k", "text", "the first 25,000 of them in one transaction (how the batched form scales)", "text",
             f => YcsCases.TextAppendOneTxn(f, 25_000), f => YrsCases.TextAppendOneTxn(f, 25_000), _ => Typed(25_000)),
         new("txn-empty", "text", "100,000 empty write transactions (the fixed cost of a transaction)", "text",
@@ -73,13 +78,13 @@ internal static class Catalog
         new("array-push", "array", "100,000 pushes of an integer, one transaction each", "array",
             f => YcsCases.ArrayPush(f, false, Inputs.ArrayN), f => YrsCases.ArrayPush(f, false, Inputs.ArrayN), _ => Canonical.Array(Enumerable.Range(0, Inputs.ArrayN).Select(i => (long)i))),
         new("array-push-1txn", "array", "the same in one transaction (batched form)", "array",
-            f => YcsCases.ArrayPush(f, true, Inputs.ArrayN), f => YrsCases.ArrayPush(f, true, Inputs.ArrayN), _ => Canonical.Array(Enumerable.Range(0, Inputs.ArrayN).Select(i => (long)i))) { Heavy = true },
+            f => YcsCases.ArrayPush(f, true, Inputs.ArrayN), f => YrsCases.ArrayPush(f, true, Inputs.ArrayN), _ => Canonical.Array(Enumerable.Range(0, Inputs.ArrayN).Select(i => (long)i))) { Heavy = true, LightOnYcs = true },
         new("array-push-1txn-20k", "array", "20,000 pushes in one transaction (how the batched form scales)", "array",
             f => YcsCases.ArrayPush(f, true, 20_000), f => YrsCases.ArrayPush(f, true, 20_000), _ => Canonical.Array(Enumerable.Range(0, 20_000).Select(i => (long)i))),
         new("array-insert-random", "array", "50,000 integers inserted at random positions, one transaction each", "array",
             YcsCases.ArrayInsertRandom, YrsCases.ArrayInsertRandom, _ => ArrayInsertModel()),
         new("array-delete-random", "array", "50,000 single deletes at random positions of a 100,000-element array, one transaction each", "array",
-            YcsCases.ArrayDeleteRandom, YrsCases.ArrayDeleteRandom, _ => ArrayDeleteModel()) { Heavy = true },
+            YcsCases.ArrayDeleteRandom, YrsCases.ArrayDeleteRandom, _ => ArrayDeleteModel()) { Heavy = true, LightOnYcs = true },
 
         new("read-text", "read", "the loaded trace document's text as a string, 100 times", "text",
             YcsCases.ReadText, YrsCases.ReadText, f => $"{100L * f.Trace.EndContent.Length} {f.Trace.EndContent}"),
