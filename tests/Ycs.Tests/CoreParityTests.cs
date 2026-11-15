@@ -428,4 +428,16 @@ public class CoreParityTests
     {
         Assert.AreEqual(0, new ContentDeleted(3).GetContent().Count);
     }
+
+    [TestMethod]
+    public void ApplyUpdate_ContentJsonWithUndefined_ReadsNullAndReEncodesUndefined()
+    {
+        // A legacy ContentJSON item in root map 'a': ['undefined', '{"k":1}'].
+        const string update = "AQECAAIBAWECCXVuZGVmaW5lZAd7ImsiOjF9AA==";
+        var doc = new YDoc();
+
+        doc.ApplyUpdate(B(update));
+
+        Assert.AreEqual(update, S(doc.EncodeStateAsUpdate()));
+    }
 }
