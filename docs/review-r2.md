@@ -51,7 +51,9 @@ The review's probes again, on `fix-r2` (same machine, Release; "before" is 28373
 | P4 `perf json`: `Get(i)` over 80,000 legacy values | 6,241 ms | 8 ms |
 
 Not a finding of the review, seen in the same probe: 40,000 redos of typing allocate 1.6 GiB (438 ms
-before, 684 ms after; unchanged by these fixes).
+before, 684 ms after; unchanged by these fixes). Fixed in f69e124: each redo split the undone run and
+copied its rest; split strings now share their characters (513 ms and 1,598 MiB to 317 ms and 72 MiB,
+budget `undo.redo-after-undoing-typing-100k`).
 
 
 ## The review
@@ -307,7 +309,8 @@ observed variant (`probe/Observed.cs` is a start).
    (C1 to C8 were all found by hand). Under WebAssembly nothing was measured at all.
 2. **Exceptions from observers** in each cleanup phase (walkthrough F18 b to d are open): whether `Update`
    still fires, the state of the document and of the UndoManager afterwards, transactions started by a
-   handler that then throws.
+   handler that then throws. Checked in f0054e7: 17 scenarios against Yjs, 9 differed; Yjs' paths are
+   ported, including the unfinished batch after a throwing `Update` handler.
 3. **UndoManager outside the fuzz's shape**: two UndoManagers on one document, `Undo` inside an outer
    transaction (the `_outerTransaction` bookkeeping is port-only), `StackItem.Meta` across undo and redo,
    real capture timeouts (tests use 0 or infinite), an UndoManager created or destroyed inside an observer,
@@ -318,7 +321,9 @@ observed variant (`probe/Observed.cs` is a start).
 5. **Late observers**: attaching or removing handlers during a cleanup (one order difference found in
    eight scenarios, E3), events kept beyond their transaction, more nested transactions than the pool of 4.
 6. **`ApplyDelta`** is in no differential trace (unit and parity tests only): retain with attributes beyond
-   the end, `sanitize`, embedded types, pending `ApplyDelta` on a text outside a document.
+   the end, `sanitize`, embedded types, pending `ApplyDelta` on a text outside a document. Checked in
+   ec2ebd9 (all four in the property engine's language): one divergence, a pending `ApplyDelta` kept
+   `sanitize` where Yjs drops it, fixed in f9836c4.
 7. **Snapshots on documents with gc** (only crash-fuzzed, not compared with Yjs), `computeYChange` with
    embeds and types, XML snapshot reads, `RestoreDocument` byte parity for documents with pending data.
 8. **Relative positions** outside a root text: arrays, XML, nested maps, `followUndoneDeletions` through
@@ -331,7 +336,8 @@ observed variant (`probe/Observed.cs` is a start).
     ids above 2^32, and a diff of pending data; `obfuscateUpdate` is not ported, awareness is not present.
 12. **Legacy `ContentJSON`** beyond single values: splitting, merging, `undefined` inside arrays.
 13. **`GcFilter`**, `Gc = false` documents that later collect, `MaxDepth` 256 against valid Yjs documents
-    nested deeper (kept on purpose, never measured against real data).
+    nested deeper (kept on purpose, never measured against real data). The depth part: 20dbcfd,
+    `UpdateLimits.MaxDepth` of 3,000, and Yjs documents at the limit round-trip.
 
 ## Reproducing
 
