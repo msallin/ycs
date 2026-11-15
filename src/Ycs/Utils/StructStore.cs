@@ -844,7 +844,7 @@ internal sealed partial class StructStore
         /// <summary>
         /// Rejects a type that would be nested deeper than <see cref="Limits.MaxDepth"/>. The depth of
         /// the type an item lands in follows its references as <see cref="Item.ResolveReferences"/> will:
-        /// the given parent, else the parent of its right origin, else of its left origin. (When the
+        /// the given parent, else the parent of its left origin, else of its right origin. (When the
         /// other origin is a GC struct the item becomes one too; ignoring that only overestimates.)
         /// </summary>
         private void CheckNesting(Item typeItem)

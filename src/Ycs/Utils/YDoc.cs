@@ -119,12 +119,10 @@ public partial class YDoc
     private readonly Dictionary<string, AbstractType> _share;
 
     /// <summary>
-    /// Yjs uses a random 32-bit client id (see 'generateNewClientId' in Doc.js). It has to be
-    /// unpredictable across processes: 'new Random()' is seeded from the clock on the
-    /// .NET Framework targets, so two documents created in the same tick - or two server
-    /// processes started together - would share a client id and silently corrupt the merge.
+    /// 32 random bits, as Yjs' <c>random.uint32()</c>, from the system's random number generator: two
+    /// documents (or two processes started together) must not share a client id, which would silently
+    /// corrupt the merge.
     /// </summary>
-    /// <summary>32 random bits, as Yjs' <c>random.uint32()</c>.</summary>
     internal static long GenerateNewClientId()
     {
         Span<byte> bytes = stackalloc byte[sizeof(uint)];
