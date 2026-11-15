@@ -73,6 +73,9 @@ namespace Ycs.Properties
             return result;
         }
 
+        /// <summary>The exception the last step that failed threw (the observation records only "err").</summary>
+        public Exception LastException { get; private set; }
+
         public Dictionary<string, object> Step(Dictionary<string, object> step)
         {
             Events = new List<object>();
@@ -88,6 +91,7 @@ namespace Ycs.Properties
             catch (Exception e)
             {
                 obs["err"] = true;
+                LastException = e;
                 Debug(e);
             }
 

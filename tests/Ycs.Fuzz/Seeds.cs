@@ -13,11 +13,12 @@ internal sealed record Seed(string Name, bool Gc, bool V2, byte[] BaseState, byt
 
 /// <summary>
 /// The seeds: every update of the recorded Yjs corpus (interop/corpus/cases, applied on top of the
-/// updates before it) and updates generated here for what the corpus covers thinly. Both formats.
+/// updates before it), updates generated here for what the corpus covers thinly, and crafted shapes
+/// Yjs never writes. Both formats.
 /// </summary>
 internal static class Seeds
 {
-    private static readonly Lazy<IReadOnlyList<Seed>> LazyAll = new(() => [.. Corpus(), .. Generated()]);
+    private static readonly Lazy<IReadOnlyList<Seed>> LazyAll = new(() => [.. Corpus(), .. Generated(), .. Crafted()]);
 
     public static IReadOnlyList<Seed> All => LazyAll.Value;
 
@@ -78,6 +79,30 @@ internal static class Seeds
                 yield return new Seed($"gen/{name}{(gc ? "" : "-nogc")}#all", gc, false, [], a.EncodeStateAsUpdateV1(), roots);
                 yield return new Seed($"gen/{name}{(gc ? "" : "-nogc")}#all", gc, true, [], a.EncodeStateAsUpdateV2(), roots);
             }
+        }
+    }
+
+    /// <summary>
+    /// A nested map's key with a value of three items, then an update that splits it with a deleted range and deletes
+    /// the map (the property engine's gc-cleanup-throws-on-crafted-update). With garbage collection the v1 one is
+    /// rejected (the collection would meet a second live item of the key), so it is a seed only without; its v2
+    /// conversion writes the map's deletion first, which deletes the value before the range could split it.
+    /// </summary>
+    private static IEnumerable<Seed> Crafted()
+    {
+        var value = Convert.FromBase64String("AwKsAgAIAQFhA353AXN9AQQBAXQD5LitAvj6//8HAIesAgIBhKwCAwJiYwPwogQAh6wCAAEoAPCiBAABbQF9RygA+Pr//wcAAWwDfUd4eAA=");
+        var splitAndDelete = Convert.FromBase64String("AQUKACgA+Pr//wcAAWsCeH0BxPj6//8HAfj6//8HAQJiYygA8KIEAAFsAnh9R4fwogQAAQoCA/CiBAEDAfj6//8HAQADCgIBAwQC");
+        foreach (var gc in new[] { true, false })
+        {
+            var name = $"crafted/map-value-split{(gc ? "" : "-nogc")}";
+            yield return new Seed(name + "#0", gc, false, [], value, ["t"]);
+            yield return new Seed(name + "#0", gc, true, [], UpdateOperations.ConvertUpdateFormatV1ToV2(value), ["t"]);
+            if (!gc)
+            {
+                yield return new Seed(name + "#1", gc, false, value, splitAndDelete, ["t"]);
+            }
+
+            yield return new Seed(name + "#1", gc, true, value, UpdateOperations.ConvertUpdateFormatV1ToV2(splitAndDelete), ["t"]);
         }
     }
 

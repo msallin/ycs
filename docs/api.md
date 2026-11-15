@@ -117,6 +117,13 @@ checked before anything changes:
   (process-wide, same default) bounds the v2 updates given to `UpdateOperations`. Lower them on a
   server that applies updates from untrusted peers and knows its documents' size; a v1 update needs at
   least two bytes per struct and is bounded by its size;
+* garbage collection: in a document that collects garbage, an update whose cleanup would collect a deleted type
+  in which a key holds two live items is rejected (Yjs integrates it and then throws "Unexpected case" from
+  `Item.gc`). Yjs never writes a key's value of several live items; a crafted update can, and splitting such a
+  value (by a deleted range, or an origin, inside it) leaves its first part live next to the key's value. When the
+  split and the deletion come in one update, where its items land among a key's items is estimated as YATA orders
+  them, and a rare crafted update that Yjs applies is rejected too (1 in 20,000 of the structure-aware fuzzer's
+  scripts). Without garbage collection both keep the second item, unseen;
 * pending data: what waits for structs the document does not have yet may grow to
   `YDocOptions.MaxPendingBytes` (no limit by default, as in Yjs: a valid update of any size can
   arrive before the one it builds on), counted as encoded bytes; an update that would grow it further

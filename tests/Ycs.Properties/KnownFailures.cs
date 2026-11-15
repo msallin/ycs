@@ -45,14 +45,26 @@ internal static class KnownFailures
         {
             Matches = (m, script) => m.Op is "raw" or "deliver" && Step(script, m).Str("via") == "v1to2" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal),
         },
-        new("gc-cleanup-throws-on-crafted-update", "medium",
-            "Two valid-looking updates (a nested type whose items are deleted while children of it arrive with parentSubs) " +
-            "make ApplyUpdate throw InvalidOperationException from Item.Gc in the transaction cleanup, after the update was " +
-            "integrated: not YUpdateException, and the document is changed, against docs/api.md ('the integration does not " +
-            "fail on input alone'). Yjs throws too ('Unexpected case' in Item.gc), so the differential agrees; the contract does not.",
+        new("yjs-gc-throws-after-integrating", "documented",
+            "Not a Ycs bug: an update that deletes a type in which a key holds two live items (a value of several items, " +
+            "which Yjs never writes undeleted, split by a deleted range or a reference inside it, by this update or an earlier " +
+            "one): Yjs integrates it and then throws in the cleanup ('Unexpected case' in Item.gc), so its document is left " +
+            "changed; Ycs rejects it with YUpdateException before integrating (docs/api.md, Untrusted input). Both reject; " +
+            "the states differ.",
             """{"clients":[{"gc":true,"id":1}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AwKsAgAIAQFhA353AXN9AQQBAXQD5LitAvj6//8HAIesAgIBhKwCAwJiYwPwogQAh6wCAAEoAPCiBAABbQF9RygA+Pr//wcAAWwDfUd4eAA=","via":"v1"},{"op":"raw","to":0,"u":"AQUKACgA+Pr//wcAAWsCeH0BxPj6//8HAfj6//8HAQJiYygA8KIEAAFsAnh9R4fwogQAAQoCA/CiBAEDAfj6//8HAQADCgIBAwQC","via":"v1"}]}""")
         {
-            Property = "rejects-cleanly: threw InvalidOperationException",
+            Documented = true,
+            Matches = (m, _) => m.Op == "raw" && Threw(m.Yjs) && Threw(m.Ycs),
+        },
+        new("gc-check-rejects-what-yjs-applies", "documented",
+            "Not a Ycs bug (docs/api.md, Untrusted input): Ycs estimates where a map value of an update lands among its key's " +
+            "items to find a value split as yjs-gc-throws-after-integrating describes, and in rare fuzzed updates (about 1 in " +
+            "20,000 of the structure-aware fuzzer's scripts, none Yjs writes) the estimate is wrong: Ycs rejects an update " +
+            "Yjs applies.",
+            """{"clients":[{"gc":true,"id":1}],"roots":[{"kind":"map","name":"m"}],"steps":[{"op":"raw","to":0,"u":"BAUMACcBAW0BbQEhAQFtAW0BRwwBAcMKAwoDAwECAygADAIBbAJ+fgANAAKsAgAiAAwAAWsCATEDImoiJwAMAAFtAQMKAAQBAXQD5LithAoAA3jDqQMBAWEDAQIDAgoCAAEDAwwBAgQ=","via":"v1"},{"op":"raw","to":0,"u":"AQMLAAQBAXQDeMOpBwEBeAMBcMQLAAsAA3jDqQIMAQgCrAIBAQE=","via":"v1to2"},{"op":"raw","to":0,"u":"AQTwogQAKAAMAgFtA30Bfn5CDAACATEDImoiJwAMAgFsAIQLBAJiYwA=","via":"v1"},{"op":"raw","to":0,"u":"AwMKBIgKAwF+KAEBbQFtAX4iAAwCAWsCATEDImoiBQwJRwsCBicADAABbAEiAQFtAW0CATEDImoiBAEBdAFhKAEBbQFsAX0BAvCiBAgnAAsCAW0GBADwogQIA+S4rQPwogQBCQcKAQQDCwECAw==","via":"v1"},{"op":"raw","to":0,"u":"AwQLBYMKAwMBAgOICwUBdwFzxvCiBAnwogQJBml0YWxpYwR0cnVlKAEBbQFtAns/+AAAAAAAAHs/+AAAAAAAAAL4+v//BwAnAQFtAWwExwsCCwIDAXABDA/E8KIEB/CiBAcD5LitAwsCBQEHAvCiBAEFAawCAQID","via":"v1"}]}""")
+        {
+            Documented = true,
+            Matches = (m, script) => m.Op == "raw" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal) && RejectedByGcCheck(script, m.Step),
         },
         new("pending-integration-events", "medium",
             "Fuzzed updates applied out of order: when a later update lets waiting structs integrate (an XmlText into a " +
@@ -141,6 +153,21 @@ internal static class KnownFailures
             Matches = (m, _) => m.Op == "raw" && m.Primary == "pend",
         },
     ];
+
+    private static bool Threw(string observation) => Json.Parse(observation) is Dictionary<string, object> o && o.Get("err") is true;
+
+    // Whether Ycs' rejection at step `step` is the garbage collection check's (StructStore.IntegrationPlan.CheckGarbageCollection).
+    private static bool RejectedByGcCheck(Dictionary<string, object> script, int step)
+    {
+        var run = new ScriptRun(script);
+        var steps = script.List("steps");
+        for (var i = 0; i <= step && i < steps.Count; i++)
+        {
+            run.Step((Dictionary<string, object>)steps[i]);
+        }
+
+        return run.LastException?.Message.Contains("garbage collection cannot remove", StringComparison.Ordinal) == true;
+    }
 
     private static Dictionary<string, object> Step(Dictionary<string, object> script, Mismatch m) =>
         m.Step >= 0 && m.Step < script.List("steps").Count ? (Dictionary<string, object>)script.List("steps")[m.Step] : new Dictionary<string, object>();

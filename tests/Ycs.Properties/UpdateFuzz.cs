@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using static Ycs.Properties.Json;
 
@@ -329,6 +330,8 @@ internal sealed class UpdateFuzzer
     // Nested types: (id, type ref, parent key of its children).
     private readonly List<((long, long) Id, int TypeRef)> _types = new();
     private readonly List<(long Client, long Clock, long Len)> _all = new();
+    // Items with a key (map values), by parent: their id and length.
+    private readonly Dictionary<string, List<(long Client, long Clock, long Len)>> _keyed = new();
 
     private readonly bool _sortedDeleteSets;
 
@@ -463,7 +466,21 @@ internal sealed class UpdateFuzzer
         (long, long)? origin = null;
         (long, long)? right = null;
         string sub = null;
-        if (isMap || (kind is 3 && _rng.Chance(0.4)))
+        if (isMap && _keyed.TryGetValue(key, out var values) && _rng.Chance(0.15))
+        {
+            // An origin (or right origin) inside a map value: the item takes its key, and the value is split there.
+            var (vc, vk, vl) = _rng.Pick(values);
+            var at = (vc, vk + _rng.Int((int)vl));
+            if (_rng.Chance(0.7))
+            {
+                origin = at;
+            }
+            else
+            {
+                right = at;
+            }
+        }
+        else if (isMap || (kind is 3 && _rng.Chance(0.4)))
         {
             sub = _rng.Pick(new[] { "k", "l", "m" });
         }
@@ -481,7 +498,11 @@ internal sealed class UpdateFuzzer
         }
 
         var item = new FStruct.Item(client, clock, origin, right, origin == null && right == null ? parentRoot : null, origin == null && right == null ? parentId : null, sub, content);
-        if (sub == null)
+        if (sub != null || (isMap && (origin != null || right != null)))
+        {
+            (_keyed.TryGetValue(key, out var list) ? list : _keyed[key] = new List<(long, long, long)>()).Add((client, clock, content.Length));
+        }
+        else
         {
             for (var k = 0; k < content.Length; k++)
             {
@@ -558,6 +579,18 @@ internal sealed class UpdateFuzzer
             {
                 ranges.Add((start, length)); // duplicated
             }
+        }
+
+        var longValues = _keyed.Where(kv => kv.Key.StartsWith("id:", StringComparison.Ordinal)).SelectMany(kv => kv.Value.Select(v => (Parent: kv.Key, Value: v))).Where(x => x.Value.Len > 1).ToList();
+        if (longValues.Count > 0 && _rng.Chance(0.2))
+        {
+            // The tail of a map value of a nested type, and that type: the value's first part would stay a second live value
+            // of its key, which the garbage collection of the deleted type throws on (KnownFailures: yjs-gc-throws-after-integrating).
+            var (parent, (client, clock, len)) = _rng.Pick(longValues);
+            (byClient.TryGetValue(client, out var r) ? r : byClient[client] = new List<(long, long)>()).Add((clock + 1, len - 1));
+            var parts = parent.Split(':');
+            var (typeClient, typeClock) = (long.Parse(parts[1], CultureInfo.InvariantCulture), long.Parse(parts[2], CultureInfo.InvariantCulture));
+            (byClient.TryGetValue(typeClient, out var t) ? t : byClient[typeClient] = new List<(long, long)>()).Add((typeClock, 1));
         }
 
         var result = byClient.Select(kv => (kv.Key, (IReadOnlyList<(long, long)>)(_sortedDeleteSets ? Disjoint(kv.Value) : kv.Value.OrderBy(_ => _rng.Next()).ToList()))).ToList();
