@@ -139,6 +139,8 @@ median of 5 runs on the same machine, before = upstream PRs merged, after = this
 Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
 `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`.
 
+A comparison with YDotNet (yrs) on the same workloads, with Native AOT, wasm and hostile-input findings, is in [`bench/Ycs.Compare`](bench/Ycs.Compare/README.md).
+
 **From the upstream pull requests** (#12, #13 by Yuriy Habarov; #14 by Kieren Johnstone): the v1
 format, the XML types, `UpdateOperations`, `PermanentUserData`, snapshots and relative positions,
 a CSPRNG client id, delete-set coalescing, the v2 JSON encoding, the `IntDiffOptRleEncoder` sign fix

@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.WebAssembly">
+
+  <!--
+    Does YDotNet run on browser-wasm? The YDotNetAot program, published as samples/Ycs.WasmSample is (the SDK
+    alone, no wasm-tools workload), run in Node: node <publish>/wwwroot/main.mjs. See wasm/probe.sh.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\aot\YDotNetAot\Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YDotNet" Version="[0.7.0]" />
+    <PackageReference Include="YDotNet.Native" Version="[0.7.0]" />
+  </ItemGroup>
+
+</Project>

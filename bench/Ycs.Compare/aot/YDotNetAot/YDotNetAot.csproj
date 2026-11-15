@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The same minimal program as YcsAot, on YDotNet: published with Native AOT to compare sizes (aot/measure.sh). -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YDotNet" Version="[0.7.0]" />
+    <PackageReference Include="YDotNet.Native" Version="[0.7.0]" />
+  </ItemGroup>
+
+</Project>

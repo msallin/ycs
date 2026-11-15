@@ -1,0 +1,6 @@
+native files in the publish output: 0
+MONO_WASM: yrs
+   at YDotNet.Document.Doc.CreateDoc(DocOptions)
+   at YDotNet.Document.Doc..ctor(DocOptions)
+   at Program.<Main>$(String[])
+exit 1

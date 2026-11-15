@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    ycs against YDotNet (the .NET binding of yrs). Not in Ycs.sln: YDotNet and its native
+    library are a dependency of this project only. Run with run.sh; results in README.md.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The AOT size probes and the wasm probe are projects of their own. -->
+    <Compile Remove="aot/**;wasm/**" />
+    <None Remove="aot/**;wasm/**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ycs\Ycs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Exact versions. YDotNet.Native pulls the Linux, macOS and Windows native packages. -->
+    <PackageReference Include="YDotNet" Version="[0.7.0]" />
+    <PackageReference Include="YDotNet.Native" Version="[0.7.0]" />
+  </ItemGroup>
+
+</Project>
