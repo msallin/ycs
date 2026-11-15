@@ -28,6 +28,10 @@ namespace Ycs.Benchmarks;
 /// <br/>
 /// <c>limits</c> instead of a trace measures updates at the default limits (<see cref="Limits"/>),
 /// <c>perf</c> the operations of <see cref="Perf"/>.
+/// <br/>
+/// <c>loop &lt;trace.json.gz&gt; &lt;phase&gt; &lt;iterations&gt;</c> repeats one operation on one document (encode-v1, encode-v2,
+/// encode-diff: against the state vector halfway; decode-v1, decode-v2: into a fresh document) and prints its time and
+/// allocations per operation: what to attach a sampling profiler to.
 /// </summary>
 internal static class Program
 {
@@ -49,6 +53,11 @@ internal static class Program
         {
             Perf.Run();
             return 0;
+        }
+
+        if (args[0] == "loop")
+        {
+            return Loop(args[1], args[2], int.Parse(args[3]));
         }
 
         var runs = args.Length > 1 ? int.Parse(args[1]) : 5;
@@ -122,6 +131,63 @@ internal static class Program
             }
         });
 
+        return 0;
+    }
+
+    private static int Loop(string tracePath, string phase, int iterations)
+    {
+        var (patches, txnStarts, endContent) = LoadTrace(tracePath);
+        var doc = new YDoc(new YDocOptions { ClientId = 123456789 });
+        var text = doc.GetText("text");
+        byte[] halfVector = null;
+        for (int t = 0; t + 1 < txnStarts.Count; t++)
+        {
+            if (t == (txnStarts.Count - 1) / 2)
+            {
+                halfVector = doc.EncodeStateVectorV1();
+            }
+
+            doc.Transact(tr =>
+            {
+                for (int i = txnStarts[t]; i < txnStarts[t + 1]; i++)
+                {
+                    var (pos, del, ins) = patches[i];
+                    if (del > 0) text.Delete(pos, del);
+                    if (ins.Length > 0) text.Insert(pos, ins);
+                }
+            });
+        }
+
+        Check(text.ToString(), endContent);
+        var v1 = doc.EncodeStateAsUpdateV1();
+        var v2 = doc.EncodeStateAsUpdateV2();
+        var loaded = new YDoc();
+        loaded.ApplyUpdateV1(v1);
+        Action op = phase switch
+        {
+            "encode-v1" => () => loaded.EncodeStateAsUpdateV1(),
+            "encode-v2" => () => loaded.EncodeStateAsUpdateV2(),
+            "encode-diff" => () => loaded.EncodeStateAsUpdateV1(halfVector),
+            "decode-v1" => () => new YDoc().ApplyUpdateV1(v1),
+            "decode-v2" => () => new YDoc().ApplyUpdateV2(v2),
+            _ => throw new ArgumentException("unknown phase " + phase),
+        };
+
+        for (var i = 0; i < Math.Min(iterations, 50); i++)
+        {
+            op();
+        }
+
+        var a0 = System.GC.GetTotalAllocatedBytes(precise: true);
+        var sw = Stopwatch.StartNew();
+        for (var i = 0; i < iterations; i++)
+        {
+            op();
+        }
+
+        sw.Stop();
+        var a1 = System.GC.GetTotalAllocatedBytes(precise: true);
+        Console.WriteLine($"{phase}: {sw.Elapsed.TotalMilliseconds * 1000 / iterations:F1} µs and {(a1 - a0) / iterations} bytes per operation ({iterations} operations)");
         return 0;
     }
 

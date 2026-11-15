@@ -35,6 +35,11 @@ internal sealed class Lib0Writer
     private byte[] _buffer = Array.Empty<byte>();
     private int _length;
 
+    // How much the pooled writer held when it was last reset: its first buffer is rented that large, so a writer
+    // that encodes documents of about the same size again and again (a pooled encoder) does not grow and copy from
+    // the initial capacity each time.
+    private int _lastLength;
+
     private IBufferWriter<byte>? _destination;
     private Memory<byte> _chunk;
     private int _committed;
@@ -60,7 +65,19 @@ internal sealed class Lib0Writer
         }
     }
 
-    public byte[] ToArray() => WrittenSpan.ToArray();
+    public byte[] ToArray()
+    {
+        var written = WrittenSpan;
+        if (written.IsEmpty)
+        {
+            return Array.Empty<byte>();
+        }
+
+        // Every byte is overwritten at once: no need to zero it first.
+        var array = System.GC.AllocateUninitializedArray<byte>(written.Length);
+        written.CopyTo(array);
+        return array;
+    }
 
     /// <summary>Forgets what was written and keeps the buffer.</summary>
     public void Clear()
@@ -77,6 +94,7 @@ internal sealed class Lib0Writer
     {
         if (_pooled && _buffer.Length > 0)
         {
+            _lastLength = _length;
             BufferPool<byte>.Return(_buffer);
             _buffer = Array.Empty<byte>();
         }
@@ -304,6 +322,11 @@ internal sealed class Lib0Writer
         var newSize = Math.Max(Math.Max(checked(_buffer.Length * 2), checked(_length + sizeHint)), _initialCapacity);
         if (_pooled)
         {
+            if (_buffer.Length == 0)
+            {
+                newSize = Math.Max(newSize, _lastLength);
+            }
+
             var newBuffer = BufferPool<byte>.Rent(newSize);
             _buffer.AsSpan(0, _length).CopyTo(newBuffer);
             if (_buffer.Length > 0)

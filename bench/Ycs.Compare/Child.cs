@@ -31,6 +31,7 @@ internal static class Child
         var allocs = new List<long>();
         int v1 = 0, v2 = 0;
         long managed0 = 0, native0 = 0, managed1 = 0, native1 = 0;
+        using var sampler = AllocationSampler.StartIfRequested();
         for (var r = first; r <= runs; r++)
         {
             if (r == runs)
@@ -43,11 +44,22 @@ internal static class Child
 
             using var p = make(fixtures);
             FullGc();
+            if (sampler != null && r > 0)
+            {
+                AllocationSampler.Settle();
+                sampler.Active = true;
+            }
+
             var a0 = System.GC.GetTotalAllocatedBytes(precise: true);
             var sw = Stopwatch.StartNew();
             p.Body();
             sw.Stop();
             var a1 = System.GC.GetTotalAllocatedBytes(precise: true);
+            if (sampler != null)
+            {
+                AllocationSampler.Settle();
+                sampler.Active = false;
+            }
             if (r == first)
             {
                 cold = sw.Elapsed.TotalMilliseconds;
@@ -76,6 +88,7 @@ internal static class Child
             }
         }
 
+        sampler?.Print(caseName, times.Count);
         using var stdout = Console.OpenStandardOutput();
         using var w = new Utf8JsonWriter(stdout);
         w.WriteStartObject();
