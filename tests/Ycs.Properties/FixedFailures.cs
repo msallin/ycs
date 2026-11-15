@@ -26,6 +26,10 @@ internal static class FixedFailures
         new("snapshot-array-read-opens-a-transaction",
             "The same change: ToArraySnapshot opens no transaction, so a read raises no AfterTransaction.",
             """{"clients":[{"gc":false,"id":2147483431}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":0,"id":"s0","op":"snap"},{"c":0,"id":"s0","op":"readSnap","path":["a"]}]}"""),
+        new("subdocs-event-removed-instead-of-loaded",
+            "Not a bug of Ycs: the adapter read YDoc.SubdocsChanged's (Loaded, Added, Removed) by position as Yjs' " +
+            "{ added, removed, loaded }; it reads the named elements now.",
+            """{"clients":[{"gc":false,"id":2147483114}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":0,"op":"push","path":["a"],"values":[{"$doc":{"autoLoad":false,"g":"doc-1"}}]}]}"""),
         new("gc-cleanup-throws-on-crafted-update",
             "ApplyUpdate rejects, before integrating, an update whose cleanup would garbage-collect a deleted type in which a key " +
             "holds two live items (StructStore.IntegrationPlan.CheckGarbageCollection); it threw InvalidOperationException from " +

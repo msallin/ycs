@@ -471,9 +471,9 @@ namespace Ycs.Properties
             };
             doc.SubdocsChanged += (_, e) => Push(Obj(
                 ("w", "subdocs"),
-                ("added", Guids(e.Item1)),
-                ("removed", Guids(e.Item2)),
-                ("loaded", Guids(e.Item3))));
+                ("added", Guids(e.Added)),
+                ("removed", Guids(e.Removed)),
+                ("loaded", Guids(e.Loaded))));
         }
 
         private static List<object> Guids(IEnumerable<YDoc> docs) => docs.Select(d => d.Guid).Order(StringComparer.Ordinal).Cast<object>().ToList();

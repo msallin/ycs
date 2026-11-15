@@ -98,14 +98,6 @@ internal static class KnownFailures
             Matches = (m, _) => m.Op is "deliver" or "merged" or "sync" or "raw" && m.Primary is "ev:update" or "v1" or "v2"
                 && m.Differences.Any(HasTwoReplacementCharacters),
         },
-        new("subdocs-event-removed-instead-of-loaded", "medium",
-            "Inserting a new subdocument: Yjs' 'subdocs' event lists it as added and loaded (a new Y.Doc has shouldLoad " +
-            "true); Ycs' SubdocsChanged lists it as added and removed. (The options Ycs wrote for a subdocument, a random " +
-            "guid among them, were fixed in modernize; this is what remains.)",
-            """{"clients":[{"gc":false,"id":2147483114}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":0,"op":"push","path":["a"],"values":[{"$doc":{"autoLoad":false,"g":"doc-1"}}]}]}""")
-        {
-            Matches = (m, _) => m.Primary == "ev:subdocs",
-        },
         new("debug-assert-clock-over-2^30", "low",
             "Debug builds only: a valid update with clocks between 2^30 and 2^31 - 1 (within docs/api.md's limit) fails " +
             "Debug.Assert(value <= Bits.Bits30) in the encoder; Release builds apply and re-encode it as Yjs does.",
