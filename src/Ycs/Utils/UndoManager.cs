@@ -405,8 +405,9 @@ public class UndoManager
         if ((now - _lastChange).TotalMilliseconds < _captureTimeout && stack.Count > 0 && !undoing && !redoing)
         {
             var lastOp = stack[^1];
-            lastOp.Deletions = new DeleteSet(new List<DeleteSet> { lastOp.Deletions, transaction.DeleteSet });
-            lastOp.Insertions = new DeleteSet(new List<DeleteSet> { lastOp.Insertions, insertions });
+            // Both are sorted and merged: the transaction's by its cleanup, the stack item's since it was made.
+            lastOp.Deletions.AddSortedAndMerged(transaction.DeleteSet);
+            lastOp.Insertions.AddSortedAndMerged(insertions);
         }
         else
         {

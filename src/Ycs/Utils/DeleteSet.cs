@@ -64,6 +64,65 @@ internal class DeleteSet
     }
 
     /// <summary>
+    /// Adds the ranges of <paramref name="other"/> to this set; both must be sorted and merged (as
+    /// <see cref="SortAndMergeDeleteSet"/> leaves them), and this one stays so. Each range is inserted
+    /// where it belongs, so the cost is that of <paramref name="other"/>, not of this set.
+    /// </summary>
+    internal void AddSortedAndMerged(DeleteSet other)
+    {
+        foreach (var (client, ranges) in other.Clients)
+        {
+            if (!Clients.TryGetValue(client, out var list))
+            {
+                Clients[client] = new List<DeleteItem>(ranges);
+                continue;
+            }
+
+            foreach (var range in ranges)
+            {
+                Insert(list, range.Clock, range.Clock + range.Length);
+            }
+        }
+
+        static void Insert(List<DeleteItem> list, long clock, long end)
+        {
+            // The first range that ends at or after 'clock': it and the ones after it that start at or
+            // before 'end' touch the new range and merge with it.
+            int lo = 0, hi = list.Count;
+            while (lo < hi)
+            {
+                var mid = (lo + hi) >> 1;
+                if (list[mid].Clock + list[mid].Length < clock)
+                {
+                    lo = mid + 1;
+                }
+                else
+                {
+                    hi = mid;
+                }
+            }
+
+            var last = lo;
+            while (last < list.Count && list[last].Clock <= end)
+            {
+                clock = Math.Min(clock, list[last].Clock);
+                end = Math.Max(end, list[last].Clock + list[last].Length);
+                last++;
+            }
+
+            if (last == lo)
+            {
+                list.Insert(lo, new DeleteItem(clock, end - clock));
+            }
+            else
+            {
+                list[lo] = new DeleteItem(clock, end - clock);
+                list.RemoveRange(lo + 1, last - lo - 1);
+            }
+        }
+    }
+
+    /// <summary>
     /// Iterate over all structs that the DeleteSet gc'd.
     /// </summary>
     public void IterateDeletedStructs(Transaction transaction, Predicate<AbstractStruct> fun)
