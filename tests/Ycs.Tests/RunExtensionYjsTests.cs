@@ -183,6 +183,94 @@ public class RunExtensionYjsTests
             (string.Join(",", calls), withChanges, plain));
     }
 
+    [TestMethod]
+    public void Observer_StartsTransactionTypingOntoTheOuterOne_EventsAsYjs()
+    {
+        // The outer transaction's merge takes the inner item in before the inner transaction's events are read.
+        var doc = Doc(1);
+        var x = doc.GetText("x");
+        var y = doc.GetText("y");
+        var deltas = new List<string>();
+        var fired = false;
+        x.EventHandler += (_, _) =>
+        {
+            if (fired)
+            {
+                return;
+            }
+
+            fired = true;
+            y.Insert(y.Length, "c");
+            y.EventHandler += (_, e) => deltas.Add(Describe(e.Event.Delta));
+        };
+
+        doc.Transact(_ =>
+        {
+            x.Insert(0, "x");
+            y.Insert(0, "b");
+        });
+
+        Assert.AreEqual(("bc | ", "010201000401017801780401017902626300"), (string.Join(" | ", deltas), Hex(doc.EncodeStateAsUpdateV1())));
+    }
+
+    [TestMethod]
+    public void Observer_StartsTransactionTypingOntoTheOuterOne_ChangedParentTypesAsYjs()
+    {
+        var doc = Doc(1);
+        var x = doc.GetText("x");
+        var y = doc.GetText("y");
+        var seen = new List<string>();
+        var fired = false;
+        x.EventHandler += (_, _) =>
+        {
+            if (fired)
+            {
+                return;
+            }
+
+            fired = true;
+            y.Insert(y.Length, "c");
+            doc.AfterTransaction += (_, tr) => seen.Add(tr.ChangedParentTypes.TryGetValue(y, out var events) ? string.Join(";", events.Select(e => Describe(e.Delta))) : "-");
+        };
+
+        doc.Transact(_ =>
+        {
+            x.Insert(0, "x");
+            y.Insert(0, "b");
+        });
+
+        Assert.AreEqual("bc | ", string.Join(" | ", seen.Take(2)));
+    }
+
+    [TestMethod]
+    public void Observer_StartsTransactionPushingOntoTheOuterOne_OuterEventAddsYjsItems()
+    {
+        var doc = Doc(1);
+        var x = doc.GetText("x");
+        var y = doc.GetArray("y");
+        var added = new List<string>();
+        var fired = false;
+        x.EventHandler += (_, _) =>
+        {
+            if (fired)
+            {
+                return;
+            }
+
+            fired = true;
+            y.Push(new object[] { 2 });
+            y.EventHandler += (_, e) => added.Add(string.Join(",", e.Event.Changes.Added.Select(i => $"{i.Id.Clock}+{i.Length}").Order(StringComparer.Ordinal)));
+        };
+
+        doc.Transact(_ =>
+        {
+            x.Insert(0, "x");
+            y.Push(new object[] { 1 });
+        });
+
+        Assert.AreEqual("1+1,2+1 | ", string.Join(" | ", added));
+    }
+
     private static (string Content, string V1) AppliedInsideTransaction(bool observed)
     {
         var doc = Doc(3);

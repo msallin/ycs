@@ -235,6 +235,7 @@ public partial class Item : AbstractStruct
         var rightItem = (Item)right;
         var merged = Content.MergeWith(rightItem.Content);
         Debug.Assert(merged);
+
         (Parent as YArrayBase)?.OnMerge(this, rightItem);
 
         if (rightItem.Keep)
@@ -258,13 +259,18 @@ public partial class Item : AbstractStruct
     /// new item would merge into this one at the end of the transaction (<see cref="CanMergeWith"/>: it would be this
     /// item's continuation by clock and origin, with this right origin, undeleted, not redone), this item is not kept,
     /// does not end with the first half of a surrogate pair (splitting there later would replace it), the parent
-    /// is not deleted (the new item would be deleted at once), and nobody observes the parent.
+    /// is not deleted (the new item would be deleted at once), nobody observes the parent, and the transaction is
+    /// the only one of its batch.
     /// </summary>
     internal bool CanExtendRun(Transaction transaction, AbstractType parent, Item right, Type kind, long client)
     {
         // Not when the run would be split again at the end of the transaction (someone observes it), which costs
         // more than the item: a split copies a long run's text out of its builder.
+        // Not in a transaction started while another one is cleaned up (from its observers): Yjs integrates the new
+        // item before the other one's merge, which merges it on its own terms, and the other one's events, read
+        // then, see it as an item of its own.
         return transaction.Local
+            && transaction.Doc._transactionCleanups.Count == 1
             && !transaction.Doc.RunExtensionsDisabledForTests
             && !parent.IsObserved(transaction)
             && !transaction.Doc.HasBeforeObserverCallsListeners
