@@ -386,4 +386,20 @@ public class YjsTypeParityTests
 
         Assert.AreEqual("""{"n":null,"s":"v"}""", Json(element.GetAttributes(doc.CreateSnapshot())));
     }
+
+    [TestMethod]
+    public void TextApplyDelta_InsertOfASharedType_EmbedsItAsYjs()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var text = doc.GetText("t");
+
+        text.ApplyDelta(
+        [
+            new Delta { Insert = "a" },
+            new Delta { Insert = new YArray(), Attributes = new Dictionary<string, object> { ["b"] = 1 } },
+            new Delta { Insert = "c" },
+        ]);
+
+        Assert.AreEqual("AQUBAAQBAXQBYYYBAAFiATGHAQEAhgECAWIEbnVsbIQBAwFjAA== 3", $"{System.Convert.ToBase64String(doc.EncodeStateAsUpdate())} {text.Length}");
+    }
 }
