@@ -1,0 +1,9 @@
+{
+  "name": "ycs-properties",
+  "private": true,
+  "type": "module",
+  "description": "The Yjs oracle of tests/Ycs.Properties: executes operation scripts against real Yjs and prints what it observes.",
+  "dependencies": {
+    "yjs": "13.6.32"
+  }
+}

@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <RootNamespace>Ycs.Properties</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
+    <PackageReference Include="MSTest.TestAdapter" Version="4.5.3" />
+    <PackageReference Include="MSTest.TestFramework" Version="4.5.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ycs\Ycs.csproj" />
+  </ItemGroup>
+
+  <!-- The Lean-derived item-list invariants, shared with tests/Ycs.Corpus (read only). -->
+  <ItemGroup>
+    <Compile Include="..\Ycs.Corpus\ItemListInvariants.cs" Link="Shared\ItemListInvariants.cs" />
+  </ItemGroup>
+
+  <!-- Scripts and the observations real Yjs made of them, recorded by RecordFixtures (see docs/testing.md). -->
+  <ItemGroup>
+    <None Include="..\..\interop\properties\fixtures\*.jsonl" Link="fixtures\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
