@@ -11,7 +11,7 @@ What each project guards, and how to run, soak and update them. CI
 | `tests/Ycs.Properties` | Differential testing against real Yjs over the whole API (texts, arrays, maps, XML, nested types, subdocuments, transactions, undo, snapshots, relative positions, events, every network path and encoding), on recorded scripts (no Node) and in a live soak; properties that need no oracle; a structure-aware update fuzzer. See [below](#model-based-differential-testing-testsycsproperties). | `dotnet test tests/Ycs.Properties -c Release` |
 | `tests/Ycs.Budgets` | Allocated bytes and time per operation for a fixed set of scenarios. | `dotnet test tests/Ycs.Budgets -c Release --logger "console;verbosity=detailed"` |
 | `samples/Ycs.AotSample`, `samples/Ycs.WasmSample` | Native AOT and browser-wasm: publish without trim/AOT warnings and run. | see the README |
-| `interop/run.sh`, `interop/corpus/roundtrip.sh` | Live round-trips against real Yjs (Node). | see the README |
+| `interop/run.sh`, `interop/corpus/roundtrip.sh`, `interop/v14/roundtrip.sh` | Live round-trips against real Yjs (Node); `run.sh` runs the v14 one too. | see the README |
 | `bench/Ycs.Benchmarks` | Not a test: the editing-trace benchmark behind the README's numbers; `limits`, what updates at the default `UpdateLimits` cost (the table in [api.md](api.md#untrusted-input)). | `bench/Ycs.Benchmarks/get-trace.sh`, then `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`; `... -- limits` |
 
 ## Differential traces (`TraceReplayTests`)
@@ -33,6 +33,43 @@ version):
 ```bash
 cd interop/traces && npm ci && node gen.mjs
 ```
+
+## Yjs v14 (`V14InteropTests`, `interop/v14`)
+
+Yjs v14 is published as `@y/y` (pinned to 14.0.0-rc.30, with lib0 1.0.0-rc.37, in `interop/v14/package.json`
+and its own lock; ESM only, Node >= 22). It writes the same v1 and v2 updates as v13 but has one type,
+`Y.Node`, and draws 53-bit client ids. Ycs does not port v14: the parity target stays Yjs 13.6.32, and the
+v14 interop checks that Ycs reads what v14 writes as Yjs 13.6.32 reads it, and that v14 takes Ycs' answers.
+
+`interop/v14/gen.mjs` (deterministic; every client id set) writes `tests/Ycs.Tests/Fixtures/v14-interop.json`,
+four documents of two v14 clients that edited concurrently: `nodes` (root nodes used as text, map, array and
+XML; nested named and unnamed nodes, attributes of every value kind, a node as an attribute value, formatted
+text, an object and a node inserted into text, list content, deletions of characters, list items, attributes
+and children) and three on client ids above 2^32 and at 2^53 - 1 (items, origins, deletions and map values of
+such clients; 2^53 - 1 also as a value). For each it records v14's updates (v1, v2, one per transaction),
+state vector, snapshots (v1, v2), relative positions in every sequence (start, inside, end, both
+associations) with what v14 resolves them to, a diff by state vector, a merge, how Yjs 13.6.32 reads the
+document (`interop/v14/lib.mjs`: a root as the type the reader asks for, a nested named node as a
+`YXmlElement`, an unnamed one as a `YXmlFragment`) and whether Yjs 13 re-encodes it byte for byte, and a change
+a third v14 client made concurrently. `V14InteropTests` (no Node) checks: Ycs reads v1 and v2 as Yjs 13 does
+(content through the types they arrive as, and lengths); re-encodes both byte for byte; writes v14's state
+vector bytes with the same clients and clocks; v14's snapshots, Ycs' own snapshot of the document, every
+relative position (decoded and re-encoded, and Ycs' own from the same index) and the diff and merge bytes
+equal v14's; and a Ycs peer with a 53-bit client id (2^53 - 4) and one just above 2^32 edits every root
+through the type it arrived as (text with formatting, map, array, an XML element with an XML text, a nested
+element) and applies v14's concurrent change, keeping its own client id. `interop/v14/roundtrip.sh` exports
+those peers' answers (`V14InteropTests.Export_WhenRequested_WritesYcsAnswers`, with `YCS_V14_EXPORT`) and
+`roundtrip.mjs` applies them in v14: Ycs' diff for v14's state vector (v1, v2), its whole state (v1, v2) and
+its edits one by one; v14 must reach Ycs' content and state vector with nothing pending, encode the converged
+state byte for byte as Ycs does, and equal Ycs' snapshot. Regenerate the fixture after a change of
+`gen.mjs` or of the pinned version: `cd interop/v14 && npm ci && node gen.mjs > ../../tests/Ycs.Tests/Fixtures/v14-interop.json`.
+
+Findings (14.0.0-rc.30): no divergence of Ycs, and no v14 defect on the wire. One v13/v14 difference that
+consumers see, pinned by the fixture: v14 writes an object inserted into a text node as `ContentAny` (a
+list element), where v13's `insertEmbed` writes `ContentEmbed`; Yjs 13's `toDelta` leaves `ContentAny`
+out but counts it in `length`, and Ycs does the same (`ToDelta`, `Length`), so a
+v13 or Ycs binding of such a text is off by one per such object. A node inserted into text arrives as an
+embedded `YXmlElement`, as a v13 embedded type.
 
 ## Fuzzing (`tests/Ycs.Fuzz`)
 

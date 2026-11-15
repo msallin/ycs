@@ -25,3 +25,6 @@ for CHECK in js/check-*.mjs; do
   [ -e "$CHECK" ] || continue
   DOTNET="$DOTNET" node "$CHECK"
 done
+
+# Yjs v14 (@y/y), with its own package.json and lock in v14/.
+bash v14/roundtrip.sh

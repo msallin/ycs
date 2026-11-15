@@ -28,7 +28,7 @@ System.Text.Json package to make up for it. Dropping it removes those branches a
 encoding layer use spans throughout. If you need .NET Framework, Unity or older runtimes, use
 upstream ycs.
 
-#### Verified against Yjs 13.6.32 and 13.6.33 (and 14.0.0-16 beta)
+#### Verified against Yjs 13.6.32 and 13.6.33 (and v14: 14.0.0-16 beta, `@y/y` 14.0.0-rc.30)
 
 * `tests/Ycs.Tests` (364 tests) pins updates written by real Yjs as base64 and checks byte-identical
   re-encoding, and `TextDifferentialTests` replays 40 seeded random concurrent editing sessions on
@@ -38,6 +38,9 @@ upstream ycs.
   ([`interop/corpus/`](interop/corpus/README.md)).
 * `interop/run.sh` and `interop/corpus/roundtrip.sh` run Ycs and Yjs against each other live
   (Node needed).
+* Yjs v14 (`@y/y`, wire-compatible with v13, one type `Y.Node`, 53-bit client ids): `V14InteropTests`
+  reads documents v14 wrote as Yjs 13 does and re-encodes them byte for byte, and `interop/v14/roundtrip.sh`
+  checks that v14 converges with Ycs' answers. The parity target stays Yjs 13.6.32; no v14 API is ported.
 
 #### Untrusted input
 

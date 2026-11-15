@@ -18,6 +18,13 @@ shared types), `check-updates` (merge/diff/state-vector/format conversion), `che
 (snapshots and relative positions) and `check-types` (events, deltas, undo/redo). Each drives its own
 small console app under `Ycs.*.Interop/` and exits non-zero on any mismatch.
 
+`run.sh` ends with `v14/roundtrip.sh`, the interop with Yjs v14 as published on npm (`@y/y`, pinned to
+14.0.0-rc.30 in `v14/package.json` and its own lock, so it cannot disturb the 13.6.32 installs; ESM only,
+Node >= 22). `v14/gen.mjs` writes `tests/Ycs.Tests/Fixtures/v14-interop.json` (documents with root and
+nested `Y.Node`s, attributes, formatted text, list content and deletions; client ids above 2^32 and at
+2^53 - 1), which `V14InteropTests` checks without Node; `v14/roundtrip.mjs` feeds Ycs' answers back into
+v14. See `docs/testing.md`.
+
 The same updates are pinned as base64 fixtures in `tests/Ycs.Tests/`, so
 `dotnet test` catches format drift without Node. Re-generate them from the JSON that `run.sh`
 leaves in `$TMPDIR` when bumping the tested Yjs version.
