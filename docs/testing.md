@@ -13,7 +13,7 @@ What each project guards, and how to run, soak and update them. CI
 | `samples/Ycs.AotSample`, `samples/Ycs.WasmSample` | Native AOT and browser-wasm: publish without trim/AOT warnings and run. | see the README |
 | `interop/run.sh`, `interop/corpus/roundtrip.sh`, `interop/v14/roundtrip.sh` | Live round-trips against real Yjs (Node); `run.sh` runs the v14 one too. | see the README |
 | `bench/Ycs.Benchmarks` | Not a test: the editing-trace benchmark behind the README's numbers; `limits`, what updates at the default `UpdateLimits` cost (the table in [api.md](api.md#untrusted-input)). | `bench/Ycs.Benchmarks/get-trace.sh`, then `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`; `... -- limits` |
-| `bench/Ycs.Compare` | Not a test, not in `Ycs.sln` and not run by CI (it depends on YDotNet and its native library): ycs against YDotNet (yrs) on the same workloads, results checked equal and cross-applied; Native AOT, wasm and hostile-input probes. Results in its [README](../bench/Ycs.Compare/README.md). | `bench/Ycs.Compare/run.sh` |
+| `bench/Ycs.Compare` | Not a test: CI builds it with the solution and does not run it (it depends on YDotNet and its native library): ycs against YDotNet (yrs) on the same workloads, results checked equal and cross-applied; Native AOT, wasm and hostile-input probes. Results in its [README](../bench/Ycs.Compare/README.md). | `bench/Ycs.Compare/run.sh` |
 
 ## Differential traces (`TraceReplayTests`)
 

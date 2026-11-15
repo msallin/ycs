@@ -15,8 +15,9 @@ dotnet run -c Release --project bench/Ycs.Compare -- list   # the workloads and 
 Release, runs the suite, then `aot/measure.sh` and `wasm/probe.sh`. The raw results (`results.json`, every run of
 every process, with the load average) and the rendered tables are in [`results/2026-11-15/`](results/2026-11-15/).
 
-The project is not in `Ycs.sln`: it is the only place YDotNet (`YDotNet` and `YDotNet.Native`, exactly `[0.7.0]`) is
-referenced, so neither the solution, CI nor `bench/Ycs.Benchmarks` depends on a native library.
+The project is in `Ycs.sln`, so CI builds it and it cannot stop compiling unnoticed; CI does not run it. It is the
+only place YDotNet (`YDotNet` and `YDotNet.Native`, exactly `[0.7.0]`) is referenced: neither `src`, the tests nor
+`bench/Ycs.Benchmarks` depends on a native library.
 
 ## Method
 
