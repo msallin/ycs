@@ -84,7 +84,7 @@ internal sealed record GenOptions
     /// <summary>Restrict to these kinds (null: the full mix).</summary>
     public IReadOnlyList<string> Kinds { get; init; }
     public double NetworkShare { get; init; } = 0.4;
-    /// <summary>Subdocuments as values (off by default: a pinned bug, subdocument-options, shows in every such script).</summary>
+    /// <summary>Subdocuments as values (in one seed of ten: the pinned subdocs-event-removed-instead-of-loaded shows in nearly every such script).</summary>
     public bool Subdocs { get; init; }
 }
 
@@ -166,6 +166,15 @@ internal sealed class Generator
             }
         }
 
+        // And every snapshot taken, as a document.
+        for (var c = 0; c < g._run.Clients.Count; c++)
+        {
+            foreach (var id in g._run.Snapshots(c).ToList())
+            {
+                g.Emit(Obj(("op", "docFromSnap"), ("c", (long)c), ("id", id)));
+            }
+        }
+
         g.FullSync();
         return g._script;
     }
@@ -177,7 +186,7 @@ internal sealed class Generator
         var clients = new List<object>();
         while (clients.Count < n)
         {
-            long id = _rng.Chance(0.5) ? _rng.Range(1, 20) : _rng.Chance(0.5) ? _rng.Range(1000, 1_000_000) : int.MaxValue - _rng.Int(1000);
+            long id = _rng.Chance(0.5) ? _rng.Range(1, 20) : _rng.Chance(0.5) ? _rng.Range(1000, 1_000_000) : _rng.Chance(0.5) ? int.MaxValue - _rng.Int(1000) : uint.MaxValue - (long)_rng.Int(1000);
             if (ids.Add(id))
             {
                 clients.Add(Obj(("id", new JsonNumber(id.ToString(System.Globalization.CultureInfo.InvariantCulture))), ("gc", _rng.Chance(0.7))));
@@ -302,8 +311,7 @@ internal sealed class Generator
         else if (roll < 8)
         {
             var from = _rng.Int(_run.Clients.Count);
-            // Not from a client with pending content: pending-left-out-of-encodings (documented) would decide the outcome.
-            if (from != to && !_run.Clients[from].Replica.HasPending)
+            if (from != to)
             {
                 Sync(from, to);
             }
@@ -365,7 +373,7 @@ internal sealed class Generator
             return;
         }
 
-        if (_rng.Chance(0.3) && _run.Clients.All(c => !c.Replica.HasPending))
+        if (_rng.Chance(0.3))
         {
             // Through client 0, by state vector sync.
             for (var c = 1; c < clients; c++)
@@ -626,7 +634,7 @@ internal sealed class Generator
                         return _run.Clients[c].Replica.Gc ? null : Obj(("op", "snap"), ("id", "s" + _ids++));
                     }
 
-                    if (_rng.Chance(0.2))
+                    if (_rng.Chance(0.35))
                     {
                         return Obj(("op", "docFromSnap"), ("id", _rng.Pick(snaps)));
                     }

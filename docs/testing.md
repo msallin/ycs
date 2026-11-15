@@ -100,6 +100,26 @@ real Yjs (pinned to 13.6.32, as the corpus), `tests/Ycs.Properties/Adapter.cs` (
 project that touches the Ycs API) runs it against Ycs. Both print, after every step, the same
 canonical JSON observation, and the two are compared character for character.
 
+### How it relates to the other differential suites
+
+`TraceReplayTests` (`interop/traces`), `EventTraceTests`, `PendingTraceTests` (in `tests/Ycs.Tests`)
+and `UndoDifferentialTests` (`tests/Ycs.Corpus`, `interop/corpus/undo-gen.mjs`) each replay sessions
+of one area recorded from Yjs on **one** Ycs document, with Yjs' own updates as the remote changes:
+shared types and their events, nested maps and arrays, out-of-order delivery, the UndoManager. This
+engine does not repeat them; it differs in kind:
+
+* every client is a Ycs document that makes its own updates (so Ycs' updates, cleanups, undo
+  transactions and their bytes are compared, not only how Ycs reads Yjs' bytes), and the network
+  steps (deliver in any format, y-protocols sync, merge, diff, conversion) are part of the script;
+* one language covers all areas at once, so interactions between them (an undo of a format in an XML
+  text a remote peer moved, a relative position in a nested type after a merged update) are generated;
+* scripts are generated and shrunk live (`soak.sh`), pairwise fixtures cover every pair of
+  operation kinds, and the properties and the structure-aware fuzzer need no recording at all.
+
+What the area suites check in more depth (every observer of every type in `EventTraceTests`, long
+undo sessions with `captureTransaction` and `ignoreRemoteMapChanges` in `UndoDifferentialTests`,
+long traces) stays theirs: add an operation here when it needs the cross-area or multi-client view.
+
 ### What each layer proves, and what it does not
 
 | Layer | Proves | Does not prove |
@@ -205,8 +225,9 @@ minimal script, its severity and why. An entry may carry:
 
 * `Matches`: recognizes a mismatch it causes (the soak, the fuzzer and the recorder use it);
 * `Normalize`: rewrites both sides' observations so that a divergence that shows in nearly every
-  script (`ToDelta` opening a transaction, `stack-item-updated`, pending structs left out of the
-  encodings) does not hide the others;
+  script does not hide the others (none is needed today: the ones the first runs needed, for
+  `ToDelta` opening a transaction, the missing `stack-item-updated` and pending structs left out of
+  the encodings, went with their fixes in `modernize`);
 * `Property`: the signature of a property violation it explains;
 * `Documented`: not a bug of Ycs (a documented difference, or a Yjs bug); `DebugOnly`.
 

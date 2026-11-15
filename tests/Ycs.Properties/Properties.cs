@@ -22,7 +22,7 @@ internal static class Properties
     [
         new("convergence", "every client, and a fresh observer, ends in the same state after receiving every update in a random order, with duplicates and some withheld until last",
             ConvergenceScript, Convergence),
-        new("encode-roundtrip", "ApplyUpdate(EncodeStateAsUpdate(doc)) into a fresh document reproduces the content, the state vector and (without pending structs) the bytes, in v1 and v2",
+        new("encode-roundtrip", "ApplyUpdate(EncodeStateAsUpdate(doc)) into a fresh document reproduces the content and the state vector, and its encoding is then a fixpoint, in v1 and v2",
             seed => Generator.Generate(seed, NoLoneSurrogates), EncodeRoundTrip),
         new("merge-partition", "MergeUpdates of any partition of a document's updates (and of the merged parts) gives the document's state, in v1 and v2",
             seed => Generator.Generate(seed, BmpOnly), MergePartition),
@@ -261,17 +261,21 @@ internal static class Properties
             v1.ApplyV1(r.EncodeV1());
             var v2 = Fresh(run, r.Gc);
             v2.ApplyV2(r.EncodeV2());
-            // Bytes: into a document without gc, which keeps what it reads as it is (one with gc would
-            // collect deleted items that an UndoManager kept in the original).
+            // Bytes: a document read from the bytes may merge structs the original kept apart (an
+            // UndoManager's keep flag), in Yjs as in Ycs; from then on the encoding is a fixpoint.
             var b1 = Fresh(run, gc: false);
             b1.ApplyV1(r.EncodeV1());
             var b2 = Fresh(run, gc: false);
             b2.ApplyV2(r.EncodeV2());
+            var c1 = Fresh(run, gc: false);
+            c1.ApplyV1(b1.EncodeV1());
+            var c2 = Fresh(run, gc: false);
+            c2.ApplyV2(b2.EncodeV2());
             var v = Differs("encode-roundtrip", "content v1", Content(r), Content(v1))
                 ?? Differs("encode-roundtrip", "content v2", Content(r), Content(v2))
                 ?? Differs("encode-roundtrip", "sv", Sv(r), Sv(v1))
-                ?? (r.HasPending ? null : Differs("encode-roundtrip", "bytes v1", Convert.ToBase64String(r.EncodeV1()), Convert.ToBase64String(b1.EncodeV1())))
-                ?? (r.HasPending ? null : Differs("encode-roundtrip", "bytes v2", Convert.ToBase64String(r.EncodeV2()), Convert.ToBase64String(b2.EncodeV2())));
+                ?? (r.HasPending ? null : Differs("encode-roundtrip", "bytes v1", Convert.ToBase64String(b1.EncodeV1()), Convert.ToBase64String(c1.EncodeV1())))
+                ?? (r.HasPending ? null : Differs("encode-roundtrip", "bytes v2", Convert.ToBase64String(b2.EncodeV2()), Convert.ToBase64String(c2.EncodeV2())));
             if (v != null)
             {
                 return v;

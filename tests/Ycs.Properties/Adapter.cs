@@ -433,7 +433,7 @@ namespace Ycs.Properties
         {
             _run = run;
             Index = index;
-            Replica = new Replica((int)spec.Int("id"), spec.Get("gc") is not false, run.Roots);
+            Replica = new Replica(spec.Int("id"), spec.Get("gc") is not false, run.Roots);
             var doc = Replica.Doc;
             foreach (var (name, _) in run.Roots)
             {
@@ -556,7 +556,7 @@ namespace Ycs.Properties
                             default: um.Clear(); break;
                         }
 
-                        return Obj(("r", r), ("u", um.CanUndo()), ("d", um.CanRedo()), ("n", (long)um.Count));
+                        return Obj(("r", r), ("u", um.CanUndo()), ("d", um.CanRedo()), ("n", (long)um.UndoStack.Count));
                     }
                 case "snap":
                     {
@@ -849,11 +849,18 @@ namespace Ycs.Properties
             }
 
             var origins = s.List("origins") is { } list ? new HashSet<object>(list) : null;
-            var um = new UndoManager(scope, s.Str("timeout") == "inf" ? int.MaxValue : 0, null, origins);
+            var options = new UndoManagerOptions { CaptureTimeout = s.Str("timeout") == "inf" ? int.MaxValue : 0 };
+            if (origins != null)
+            {
+                options.TrackedOrigins = origins;
+            }
+
+            var um = new UndoManager(scope, options);
             var id = $"{Index}.{ScriptRun.IdText(s.Get("id"))}";
             _run.UndoIds[um] = id;
             UndoManagers[ScriptRun.IdText(s.Get("id"))] = um;
             um.StackItemAdded += (_, e) => Push(Obj(("w", "um+"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
+            um.StackItemUpdated += (_, e) => Push(Obj(("w", "um~"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
             um.StackItemPopped += (_, e) => Push(Obj(("w", "um-"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
             um.StackCleared += (_, e) => Push(Obj(("w", "umclear"), ("id", id), ("u", e.UndoStackCleared), ("r", e.RedoStackCleared)));
             return Missing.Value;
@@ -1001,7 +1008,7 @@ namespace Ycs.Properties
         internal readonly YDoc Doc;
         private readonly List<(string Name, string Kind)> _roots;
 
-        public Replica(int? clientId, bool gc, IEnumerable<(string Name, string Kind)> roots)
+        public Replica(long? clientId, bool gc, IEnumerable<(string Name, string Kind)> roots)
         {
             Doc = new YDoc(new YDocOptions { Gc = gc, ClientId = clientId });
             _roots = roots.ToList();

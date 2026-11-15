@@ -9,7 +9,7 @@ namespace Ycs.Properties;
 internal static class Shrinker
 {
     // Keys whose values name things (or are names); changing them makes noise, not progress.
-    private static readonly HashSet<string> Fixed = new(StringComparer.Ordinal) { "op", "c", "to", "from", "path", "id", "prev", "name", "kind", "clients", "$t", "$doc", "$f", "$n", "$i", "n", "g", "timeout", "via", "key" };
+    private static readonly HashSet<string> Fixed = new(StringComparer.Ordinal) { "op", "c", "to", "from", "path", "id", "prev", "name", "kind", "clients", "$t", "$doc", "$f", "$n", "$i", "n", "g", "timeout", "via", "key", "u" };
 
     // Keys that may be left out altogether.
     private static readonly string[] Optional = ["attrs", "sanitize", "origins", "prev", "assoc", "origin", "diff", "compact", "a", "v", "s"];

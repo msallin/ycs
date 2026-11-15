@@ -107,7 +107,7 @@ public sealed class RecordedTests
         }
 
         var pairs = Fixtures.All.Values.Count(f => f.Kind == "pair");
-        Assert.IsEmpty(ops.Except(seen).ToList(), "operations no recorded script uses");
+        Assert.IsEmpty(ops.Except(seen).ToList(), "operations no recorded script uses: " + string.Join(", ", ops.Except(seen)));
         Assert.IsEmpty(new[] { "deliver:v1", "deliver:v2", "deliver:v1to2", "deliver:v2to1", "sync:v1", "sync:v2", "merged:v1", "merged:v2", "merged:v1:diff", "merged:v2:diff" }.Except(vias).ToList(), "delivery formats no recorded script uses");
         Assert.AreEqual(OpKinds.Paired.Length * (OpKinds.Paired.Length + 1) / 2, pairs, "pairwise fixtures");
     }

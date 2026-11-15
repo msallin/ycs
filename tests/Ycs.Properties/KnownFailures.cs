@@ -36,64 +36,6 @@ internal static class KnownFailures
 {
     public static readonly IReadOnlyList<KnownFailure> All =
     [
-        new("merge-structs-merges-gc-with-item", "high",
-            "UpdateOperations.MergeStructs (MergeUpdates, DiffUpdate, ConvertUpdateFormat*) merges a GC struct with the " +
-            "Item that follows it: GC.MergeWith asserts 'right is GC' (Debug) or swallows the item into the GC (Release), so " +
-            "valid updates throw or lose content (here: the second array element) when merged or converted. Yjs only merges " +
-            "structs of the same kind.",
-            """{"clients":[{"gc":true,"id":5},{"gc":false,"id":20},{"gc":false,"id":2147482910}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":2,"op":"push","path":["a"],"values":[{"$t":"array"},false]},{"from":2,"op":"sync","to":0,"via":"v1"},{"c":0,"op":"transact","ops":[{"at":0,"op":"ains","path":["a",0],"values":[0]},{"at":0,"len":1,"op":"delete","path":["a"]}]},{"c":0,"op":"push","path":["a"],"values":[{"$b":"29g="}]},{"from":[[2,1],[2,0],[0,1],[0,0],[0,2]],"op":"merged","to":1,"via":"v1"}]}""")
-        {
-            Matches = (m, script) => m.Op == "merged" || (m.Op == "deliver" && Step(script, m).Str("via") is "v1to2" or "v2to1"),
-        },
-        new("text-event-delta-repeats-inserts", "high",
-            "YTextEvent.Delta: an insert that follows another insert with different attributes (or an embed) repeats what " +
-            "came before it: inserting \"a\" then \"a\" {color: 0} reports [a][aa {color: 0}] (three characters for two), an " +
-            "embed followed by \"a\" reports \"System.Collections.Generic.Dictionary`2[...]a\". Bindings that apply the " +
-            "event's delta corrupt the editor; the document itself is right.",
-            """{"clients":[{"gc":false,"id":2147483332}],"roots":[{"kind":"text","name":"t"}],"steps":[{"c":0,"delta":[{"insert":"a"},{"attrs":{"color":0},"insert":"a"}],"op":"delta","path":["t"]}]}""")
-        {
-            Matches = (m, _) => m.Differences.Any(RepeatedInsert),
-        },
-        new("relative-position-end-of-nested-type", "high",
-            "RelativePosition.FromTypeIndex at the end of a nested type (an empty Y.XmlText in a fragment, the end of a " +
-            "Y.Text in an array) stores the type's own item as the position's item instead of as its type, so it resolves to " +
-            "index 0 of the parent (['x'], 0) instead of the end of the nested type (['x', 0], 2); Yjs encodes " +
-            "{type: id, assoc}. Cursors at the end of a paragraph jump.",
-            """{"clients":[{"gc":false,"id":491458}],"roots":[{"kind":"xml","name":"x"}],"steps":[{"at":0,"c":0,"op":"ains","path":["x"],"values":[{"$t":"xmlt"}]},{"at":0,"c":0,"id":"r1","op":"rpos","path":["x",0]},{"at":0,"c":0,"op":"insert","path":["x",0],"text":"ab"},{"c":0,"id":"r1","op":"rres"}]}""")
-        {
-            Matches = (m, _) => m.Op is "rpos" or "rres" && m.Primary == "r",
-        },
-        new("undo-redo-nested-type-not-copied", "high",
-            "Undoing the deletion of a nested shared type, or redoing its insertion, throws NotImplementedException from " +
-            "AbstractType.InternalCopy (ContentType.Copy in Transaction.RedoItem): YText, YArray, YMap, ... do not " +
-            "implement it. The undo/redo transaction ends half done; Yjs re-creates the type with its content (_copy).",
-            """{"clients":[{"gc":false,"id":9}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":0,"id":"u0","op":"um","scope":[["a"]],"timeout":"inf"},{"at":0,"c":0,"op":"ains","path":["a"],"values":[{"$t":"text"}]},{"c":0,"id":"u0","op":"undo"},{"c":0,"id":"u0","op":"redo"}]}""")
-        {
-            Matches = (m, script) => m.Op is "undo" or "redo" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal),
-        },
-        new("undo-property-nested-type", "high",
-            "The undo-all-restores and undo-redo-pair properties fail for the same reason as undo-redo-nested-type-not-copied.",
-            """{"clients":[{"gc":false,"id":5}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":0,"id":"all","op":"um","scope":[["a"]],"timeout":"0"},{"at":0,"c":0,"op":"ains","path":["a"],"values":[{"$t":"text"}]},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"redo"}]}""")
-        {
-            Property = "undo-",
-        },
-        new("undo-reverts-untracked-remote-change", "high",
-            "An UndoManager with the default tracked origins (null) reverts changes it does not track along with the one it " +
-            "does: a remote insertion (origin \"net\") into a nested Y.XmlText, or a local insertion with origin \"o\" " +
-            "(here: undoing a tracked delete also deletes the untracked map); Yjs leaves them alone.",
-            """{"clients":[{"gc":false,"id":2},{"gc":false,"id":4}],"roots":[{"kind":"text","name":"t"},{"kind":"xml","name":"x"}],"steps":[{"c":1,"id":"u0","op":"um","scope":[["x"],["t"]],"timeout":"inf"},{"at":0,"c":0,"op":"ains","path":["x"],"values":[{"$t":"xmlt"},{"$t":"xmlt"}]},{"from":0,"k":0,"op":"deliver","to":1,"via":"v1"},{"at":0,"c":1,"op":"insert","path":["x",0],"text":"a"},{"at":0,"c":0,"op":"insert","path":["x",1],"text":"a"},{"from":0,"k":1,"op":"deliver","to":1,"via":"v2"},{"at":0,"c":1,"op":"insert","path":["t"],"text":"a"},{"c":1,"id":"u0","op":"undo"}]}""")
-        {
-            Matches = (m, _) => m.Op == "undo" && m.Differences.Any(d => Regex.IsMatch(d, @"^\.ev\[\d+\]\.es\[\d+\]: yjs ""\(missing\)"" \| ycs \{")
-                || (d.Contains(".roots.", StringComparison.Ordinal) && d.EndsWith("| ycs \"(missing)\"", StringComparison.Ordinal))),
-        },
-        new("remote-overwritten-entry-dropped", "medium",
-            "Applying a remote update from a gc'd client in which a map entry holding a nested type was overwritten: Ycs " +
-            "leaves the overwritten entry's struct out (its transaction's Changed lacks the key, its update and its state " +
-            "lack the struct); Yjs integrates it as a deleted item. The visible content agrees.",
-            """{"clients":[{"gc":false,"id":5},{"gc":false,"id":2147482848},{"gc":true,"id":2147482834}],"roots":[{"kind":"array","name":"a"},{"kind":"map","name":"m"}],"steps":[{"c":2,"key":"b","op":"set","path":["m"],"value":0},{"from":2,"k":0,"op":"deliver","to":0,"via":"v2"},{"at":0,"c":2,"op":"ains","path":["a"],"values":[{"$t":"text"}]},{"at":0,"c":2,"op":"insert","path":["a",0],"text":"a"},{"at":0,"c":2,"len":1,"op":"delete","path":["a"]},{"c":1,"key":"k1","op":"set","path":["m"],"value":{"$t":"array"}},{"c":2,"op":"transact","ops":[{"key":"k2","op":"set","path":["m"],"value":{"$t":"array","v":[{}]}},{"op":"clear","path":["m"]}]},{"from":1,"op":"sync","to":0,"via":"v1"},{"c":2,"key":"k1","op":"set","path":["m"],"value":{"$t":"xmle","n":"span"}},{"from":2,"k":4,"op":"deliver","to":0,"via":"v1"},{"from":2,"k":5,"op":"deliver","to":0,"via":"v2to1"},{"from":2,"k":2,"op":"deliver","to":0,"via":"v2to1"},{"from":2,"k":1,"op":"deliver","to":0,"via":"v1"}]}""")
-        {
-            Matches = (m, _) => m.Differences.Any(d => Regex.IsMatch(d, @"^\.ev\[\d+\]\.changed\[")),
-        },
         new("convert-v1-to-v2-overlapping-delete-set", "low",
             "UpdateOperations.ConvertUpdateFormatV1ToV2 of a valid v1 update whose delete set is not sorted, or has " +
             "overlapping or repeated ranges (Yjs' v1 decoder takes them), writes a v2 delete set that Ycs' own v2 decoder rejects ('A " +
@@ -102,22 +44,6 @@ internal static class KnownFailures
             """{"clients":[{"gc":false,"id":1}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AgGsAgIEAKwCAQN4w6kC8KIECoesAgEGx/CiBAqsAgEDA2RpdgILAgADAAKsAgEBAg==","via":"v1to2"}]}""")
         {
             Matches = (m, script) => m.Op is "raw" or "deliver" && Step(script, m).Str("via") == "v1to2" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal),
-        },
-        new("text-todelta-omits-nested-types", "medium",
-            "YText.ToDelta (and the text's view) leaves out a shared type embedded in the text (ContentType, as a peer " +
-            "inserts it with insertEmbed(index, new Y.Text())): Yjs' delta has {insert: <the type>} where Ycs has nothing.",
-            """{"clients":[{"gc":false,"id":2}],"roots":[{"kind":"text","name":"t"}],"steps":[{"op":"raw","to":0,"u":"AwWsAgAHAQF4BgMBAWEDAQIDBACsAgAD5LithqwCAgRib2xkBHRydWXGrAICrAIDBml0YWxpYwR0cnVlAgsACAEBYQJ9R3s/+AAAAAAAAMQKAAoAA3jDqQEKAAcBAXQCAA==","via":"v1"}]}""")
-        {
-            Matches = (m, _) => m.Differences.Any(d => Regex.IsMatch(d, @"(\.insert: yjs \{""\$t"":|: yjs \{""insert"":\{""\$t"":|\.insert\.\$t: yjs ""|yjs \{.*""insert"":\{""\$t"":.*\| ycs ""\(missing\)"")")),
-        },
-        new("odd-origins-integrate-elsewhere", "medium",
-            "A valid update whose items have origins in other parents (an origin on a deleted item of a nested array, " +
-            "origin equal to right origin), as the structure-aware fuzzer writes them: Ycs integrates an item into a " +
-            "different parent than Yjs (the deep event is on x where Yjs' is on a), although docs/api.md says such " +
-            "updates are integrated as Yjs integrates them.",
-            """{"clients":[{"gc":false,"id":2}],"roots":[{"kind":"array","name":"a"},{"kind":"xml","name":"x"}],"steps":[{"op":"raw","to":0,"u":"AwXwogQABAEBdAFhBwEBYQAHAQF4BgEA8KIEAQEHAQF4BgKsAgAGAPCiBAQGaXRhbGljATHI8KIEA/CiBAMBeAMMAMfwogQC8KIEAgYoAQFtAWwCdwFzdwFzBAAMAAFhAvCiBAEDAQwBAAM=","via":"v1"},{"op":"raw","to":0,"u":"AQKsAgKH8KIEBwYBAPCiBAIBAvj6//8HAQIC8KIEAgMCBwM=","via":"v1to2"},{"op":"raw","to":0,"u":"AgHwogQFxPCiBADwogQAAmJjA/j6//8HAIjwogQDAncBc3cBcyIBAW0BbQIBMQMiaiKHDAADAXAA","via":"v1to2"},{"op":"raw","to":0,"u":"AQHwogQHBwD4+v//BwQGBPCiBAEAAqwCAQAC+Pr//wcBBAIMAQMC","via":"v1"}]}""")
-        {
-            Matches = (m, _) => m.Op == "raw" && m.Differences.Any(d => Regex.IsMatch(d, @"^\.ev\[\d+\]\.w: yjs ""deep:")),
         },
         new("gc-cleanup-throws-on-crafted-update", "medium",
             "Two valid-looking updates (a nested type whose items are deleted while children of it arrive with parentSubs) " +
@@ -128,121 +54,55 @@ internal static class KnownFailures
         {
             Property = "rejects-cleanly: threw InvalidOperationException",
         },
-        new("observer-order-across-types", "low",
-            "When one remote transaction changes several types, Ycs calls their observers in another order than Yjs " +
-            "(Yjs: each changed type's observers in the order the types were changed, then the deep observers; here Ycs " +
-            "calls a's deep observer before t's observer).",
-            """{"clients":[{"gc":false,"id":378036},{"gc":true,"id":12}],"roots":[{"kind":"text","name":"t"},{"kind":"array","name":"a"}],"steps":[{"c":1,"op":"unshift","path":["a"],"values":[{"$t":"text"}]},{"at":0,"c":1,"op":"insert","path":["a",0],"text":"a"},{"c":1,"op":"transact","ops":[{"at":0,"attrs":{"size":0},"len":1,"op":"format","path":["a",0]},{"at":0,"len":1,"op":"delete","path":["a"]}]},{"at":0,"c":1,"op":"insert","path":["t"],"text":"a"},{"from":1,"k":2,"op":"deliver","to":0,"via":"v2"},{"from":1,"k":3,"op":"deliver","to":0,"via":"v1"},{"from":1,"k":1,"op":"deliver","to":0,"via":"v1"},{"from":1,"k":0,"op":"deliver","to":0,"via":"v2"}]}""")
+        new("pending-integration-events", "medium",
+            "Fuzzed updates applied out of order: when a later update lets waiting structs integrate (an XmlText into a " +
+            "fragment, a map entry under a type that arrived later), Ycs raises observer events, afterTransaction and an " +
+            "update for them; Yjs, on the same step, raises none (both documents end equal).",
+            """{"clients":[{"gc":true,"id":1}],"roots":[{"kind":"xml","name":"x"}],"steps":[{"op":"raw","to":0,"u":"AgMKAAIBAWECATEDImoiBwEBYQEKAQKsAgAEAQF0A+S4rQMBAWEDAQIDAQoBAAI=","via":"v1"},{"op":"raw","to":0,"u":"AwH4+v//BwAjAAoCAWsDAQIDBAwAIQAKAgFtAicBAW0BbQEnAAwCAWsABwAMAwECrAICiAwEAnUCfQF3AXh7P/gAAAAAAADDrAICrAIDAwECAwA=","via":"v1"},{"op":"raw","to":0,"u":"AQILACcACgIBbAQiAAwEAW0CATEDImoiAwsBAgEKAQEHDAECAg==","via":"v1"},{"op":"raw","to":0,"u":"AQIMBSgBAW0BawJ3AXN1An0BdwF4BwEBeAYA","via":"v1"}]}""")
         {
-            Matches = (m, _) => m.Differences.Any(d => Regex.IsMatch(d, @"^\.ev\[\d+\]\.w: yjs ""(obs|deep):[^""]*"" \| ycs ""(obs|deep):")),
+            Matches = (m, _) => m.Op == "raw" && m.Primary is "ev:obs" or "ev:deep" && m.Differences.All(d => d.Contains("yjs \"(missing)\"", StringComparison.Ordinal)),
         },
-        new("push-after-deleted-tail", "medium",
-            "YArray.Push (and YXmlFragment.Push) inserts at index Length, i.e. before the deleted items at the end, with the " +
-            "first of them as right origin; Yjs' push appends after the last item, deleted or not (it is the left origin). " +
-            "The updates differ, and so does how a concurrent insert next to the deleted tail is ordered.",
-            """{"clients":[{"gc":false,"id":16}],"roots":[{"kind":"array","name":"a"}],"steps":[{"at":0,"c":0,"op":"ains","path":["a"],"values":[1]},{"at":0,"c":0,"len":1,"op":"delete","path":["a"]},{"c":0,"op":"push","path":["a"],"values":["s"]}]}""")
+        new("huge-clock-gc-encoding", "low",
+            "A client whose history starts with a GC struct reaching close to the clock limit (clock 2^31 - 65), followed " +
+            "by items, a Skip and pending structs: after integration Ycs' EncodeStateAsUpdate (and the transaction's update) " +
+            "splits that client's structs differently from Yjs (5 structs where Yjs writes 6); the content agrees.",
+            """{"clients":[{"gc":false,"id":2}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI=","via":"v1"},{"op":"raw","to":0,"u":"AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC","via":"v1"},{"op":"raw","to":0,"u":"AQSsAgAIAQFhA30BdwFzfoisAgEDdQJ9AXcBeH0BdQJ9AXcBeAQBAXQD5LitBwEBeAYA","via":"v1"}]}""")
         {
-            Matches = (m, script) => m.Differences.Any(d => Regex.IsMatch(d, @"\.u: |\.v1: "))
-                && (m.Op == "push" || (m.Op == "transact" && Step(script, m).List("ops").Cast<Dictionary<string, object>>().Any(o => o.Str("op") == "push"))),
+            Matches = (m, _) => m.Op == "raw" && m.Primary is "ev:update" or "v1" or "v2" && !m.Differences.Any(d => d.Contains(".roots.", StringComparison.Ordinal)),
         },
-        new("deep-event-path-drops-steps", "medium",
-            "YEvent.Path for an event of a nested type delivered to an ancestor's deep observer leaves out steps: a change " +
-            "of m.k1 (a map in a map) has path [] instead of ['k1'], one of m.k2[0] has [0] instead of ['k2', 0].",
-            """{"clients":[{"gc":false,"id":2147483157},{"gc":false,"id":10}],"roots":[{"kind":"map","name":"m"}],"steps":[{"c":0,"key":"k1","op":"set","path":["m"],"value":{"$t":"map"}},{"from":0,"op":"sync","to":1,"via":"v1"},{"c":1,"op":"transact","ops":[{"key":"b","op":"set","path":["m"],"value":{"$t":"array"}},{"key":"c","op":"set","path":["m","k1"],"value":{"$t":"array"}}]}]}""")
+        new("empty-remote-transaction", "low",
+            "Applying a fuzzed update that, at that point, changes nothing (its structs are known or still wait): Ycs runs " +
+            "an empty transaction (afterTransaction fires, origin \"net\"); Yjs runs none.",
+            """{"clients":[{"gc":true,"id":1}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AwT4+v//BwAnAQFtAWsBhKwCAgN4w6kIAQFhA30BeH1HBwEBeAMDZGl2BPCiBAAhAQFtAWsCIgD4+v//BwABawIBMQMiaiLI+Pr//wcE+Pr//wcEAnh7P/gAAAAAAACErAICAWECDAAoAPj6//8HAAFsAnh7P/gAAAAAAACH+Pr//wcEAAIMAQID8KIEAQEH","via":"v1"},{"op":"raw","to":0,"u":"AQULACcA+Pr//wcGAW0Gh/j6//8HBgYnAPj6//8HBgFsAwNkaXYHAPj6//8HBgMBcCMA+Pr//wcAAWsDAQIDAvj6//8HAQIIDAEBAw==","via":"v1"},{"op":"raw","to":0,"u":"AgQKAIfwogQJBiEBAW0BbAIHAAsDAwNkaXaHCgAGBPj6//8HBygACwYBbQJ+dQJ9AXcBeMELCQsHAoSsAgED5LitCgEC+Pr//wcBAALwogQCAQIJAw==","via":"v1"},{"op":"raw","to":0,"u":"AwQKBYjwogQEAXgHAAsAAMf4+v//BwT4+v//BwQCKAEBbQFrAXUCfQF3AXgErAIDKAEBbQFsAn1HfUcnAAsFAWsGBwEBeAMDZGl2xAsICwgCYmMEDAOH+Pr//wcGBojwogQFAXUCfQF3AXjI+Pr//wcEDAQDfQF7P/gAAAAAAAB4BwD4+v//BwYGAA==","via":"v1"}]}""")
         {
-            Matches = (m, _) => m.Differences.Any(d => Regex.IsMatch(d, @"^\.ev\[\d+\]\.es\[\d+\]\.p\b")),
+            Matches = (m, _) => m.Op == "raw" && m.Primary == "ev:atx" && m.Differences.All(d => d.Contains("yjs \"(missing)\"", StringComparison.Ordinal)),
         },
-        new("subdocument-options", "medium",
-            "A subdocument's ContentDoc is written with options {gc, guid, autoLoad} where guid is a new random GUID " +
-            "(YDocOptions' default), not the subdocument's; Yjs writes only what differs from the defaults ({gc: false}, " +
-            "{autoLoad: true}, meta) and, reading Ycs' bytes, takes the random guid as the subdocument's guid.",
+        new("snapshot-read-corrupts-text", "medium",
+            "A read with a snapshot (here ToArraySnapshot of an XML element) splits the document's items at the snapshot " +
+            "(splitSnapshotAffectedStructs, in the transaction snapshot-array-read-opens-a-transaction describes); where " +
+            "the split falls after a lone high surrogate, the split replaces it and the next character (\"a\", inserted " +
+            "after the snapshot) with U+FFFD: the read changes the content (\"c\\ud800a\" becomes \"c\\ufffd\\ufffd\") " +
+            "and the encoding. Yjs' typeListToArraySnapshot reads without splitting.",
+            """{"clients":[{"gc":false,"id":4294967149},{"gc":false,"id":452169}],"roots":[{"kind":"xml","name":"x"}],"steps":[{"c":0,"op":"xafter","path":["x"],"ref":null,"values":[{"$t":"xmle","n":"div"}]},{"from":0,"k":0,"op":"deliver","to":1,"via":"v2"},{"c":1,"op":"xafter","path":["x",0],"ref":null,"values":[{"$t":"xmle","n":"span","v":[{"$t":"xmle","n":"div"}]}]},{"from":1,"k":0,"op":"deliver","to":0,"via":"v1"},{"at":0,"c":1,"op":"ains","path":["x",0,0],"values":[{"$t":"xmle","n":"span","v":[{"$t":"xmle","n":"span"}]}]},{"from":[[1,1],[0,0]],"op":"merged","to":0,"via":"v2"},{"c":0,"op":"xafter","path":["x",0,0,0,0],"ref":null,"values":[{"$t":"xmlt","s":"c\ud800"}]},{"c":0,"id":"s0","op":"snap"},{"at":2,"c":0,"op":"insert","path":["x",0,0,0,0,0],"text":"a"},{"c":0,"id":"s0","op":"readSnap","path":["x",0,0,1]}]}""")
+        {
+            Matches = (m, _) => m.Op == "readSnap" && m.Primary == "roots",
+        },
+        new("pending-deletes-split-surrogate-pair", "low",
+            "Two deletions that arrive before the insertion they delete (one character each, the two halves of a surrogate " +
+            "pair): Ycs applies the waiting ranges one by one, splitting the deleted item between the halves, so its encoding " +
+            "holds U+FFFD U+FFFD; Yjs merges the pending ranges first and keeps the pair. The visible content agrees.",
+            """{"clients":[{"gc":false,"id":818522},{"gc":false,"id":10}],"roots":[{"kind":"text","name":"t"}],"steps":[{"at":0,"c":0,"op":"insert","path":["t"],"text":"\ud83d\udc4d"},{"c":0,"delta":[{"delete":1}],"op":"delta","path":["t"]},{"c":0,"delta":[{"delete":1}],"op":"delta","path":["t"]},{"from":0,"k":2,"op":"deliver","to":1,"via":"v1"},{"from":0,"k":1,"op":"deliver","to":1,"via":"v1"},{"from":0,"k":0,"op":"deliver","to":1,"via":"v2"}]}""")
+        {
+            Matches = (m, _) => m.Op is "deliver" or "merged" or "sync" or "raw" && m.Primary is "ev:update" or "v1" or "v2"
+                && m.Differences.Any(HasTwoReplacementCharacters),
+        },
+        new("subdocs-event-removed-instead-of-loaded", "medium",
+            "Inserting a new subdocument: Yjs' 'subdocs' event lists it as added and loaded (a new Y.Doc has shouldLoad " +
+            "true); Ycs' SubdocsChanged lists it as added and removed. (The options Ycs wrote for a subdocument, a random " +
+            "guid among them, were fixed in modernize; this is what remains.)",
             """{"clients":[{"gc":false,"id":2147483114}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":0,"op":"push","path":["a"],"values":[{"$doc":{"autoLoad":false,"g":"doc-1"}}]}]}""")
         {
-            Matches = (_, script) => Json.Canonical(script).Contains("\"$doc\"", StringComparison.Ordinal),
-        },
-        new("formatting-cleanup-deletes-more", "medium",
-            "After a remote change, Ycs' formatting cleanup deletes a format item that Yjs' cleanupYTextAfterTransaction " +
-            "keeps (here the one after \"a\"): the visible text and attributes agree, but the cleanup's update, the delete " +
-            "set and the encoded state differ from a Yjs peer's.",
-            """{"clients":[{"gc":false,"id":4},{"gc":false,"id":18}],"roots":[{"kind":"text","name":"t"}],"steps":[{"c":0,"delta":[{"insert":"😀"}],"op":"delta","path":["t"]},{"from":0,"k":0,"op":"deliver","to":1,"via":"v1to2"},{"c":1,"delta":[{"insert":"a"},{"attrs":{"bold":null,"color":0},"retain":0}],"op":"delta","path":["t"]},{"at":0,"c":0,"len":1,"op":"delete","path":["t"]},{"from":0,"op":"sync","to":1,"via":"v1"}]}""")
-        {
-            // The cleanup's deletions differ: other delete sets or update bytes, the same visible content.
-            Matches = (m, _) => !m.Differences.Any(d => Regex.IsMatch(d, @"\.roots\.[^.]+\.(j|v)\b"))
-                && (m.Differences.Any(d => d.Contains(".ds.", StringComparison.Ordinal)) || m.Differences.Any(d => Regex.IsMatch(d, @"^\.ev\[\d+\]\.u: "))),
-        },
-        new("format-event-spurious-removal", "medium",
-            "YTextEvent.Delta of a Format reports a removal ({retain: 2, attributes: {size: null}}) of an attribute the " +
-            "characters after the range never had; Yjs' event ends with the formatted range.",
-            """{"clients":[{"gc":false,"id":606426}],"roots":[{"kind":"text","name":"t"}],"steps":[{"at":0,"c":0,"op":"insert","path":["t"],"text":"👍🏽"},{"at":1,"attrs":{"size":true},"c":0,"len":1,"op":"format","path":["t"]},{"at":0,"attrs":{"color":0,"size":true},"c":0,"len":1,"op":"format","path":["t"]}]}""")
-        {
-            Matches = (m, _) => m.Differences.Any(d => Regex.IsMatch(d, @"\.d\[\d+\]: yjs ""\(missing\)"" \| ycs \{""attributes""") || Regex.IsMatch(d, @"\.d\[\d+\]\.attributes: yjs null \| ycs \{")),
-        },
-        new("delete-event-misses-attribute-change", "medium",
-            "YTextEvent.Delta of a Delete that removes the format items around the deleted range leaves out the change of " +
-            "attributes of the character after it ({retain: 1, attributes: {italic: ...}} in Yjs' event); the document agrees.",
-            """{"clients":[{"gc":false,"id":2147482983},{"gc":false,"id":722003}],"roots":[{"kind":"text","name":"t"}],"steps":[{"at":0,"c":0,"op":"insert","path":["t"],"text":"ba"},{"from":0,"k":0,"op":"deliver","to":1,"via":"v2"},{"c":1,"delta":[{"attrs":{"italic":"#"},"retain":2},{"attrs":{"italic":{"family":"s","w":0}},"retain":2}],"op":"delta","path":["t"]},{"at":0,"c":1,"op":"insert","path":["t"],"text":"👍🏽a中文"},{"at":6,"c":1,"len":4,"op":"delete","path":["t"]}]}""")
-        {
-            Matches = (m, _) => m.Differences.Any(d => Regex.IsMatch(d, @"\.d\[\d+\]: yjs \{(""attributes""|""retain"").* \| ycs ""\(missing\)""") || Regex.IsMatch(d, @"\.d\[\d+\]\.attributes(\.\w+)?: yjs .* \| ycs null$")),
-        },
-        new("embed-shared-type-rejected", "medium",
-            "YText.InsertEmbed (and ApplyDelta) with a shared type (here a YXmlFragment) throws NotSupportedException " +
-            "('cannot be stored in a Yjs document'): Ycs wraps every embed in ContentEmbed; Yjs inserts a shared type as " +
-            "ContentType.",
-            """{"clients":[{"gc":false,"id":13}],"roots":[{"kind":"text","name":"t"}],"steps":[{"at":0,"c":0,"op":"embed","path":["t"],"value":{"$t":"xmlf"}}]}""")
-        {
-            Matches = (m, _) => m.Op is "embed" or "delta" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal),
-        },
-        new("undo-without-effect-returns-item", "low",
-            "UndoManager.Undo returns the stack item (and raises StackItemPopped) when undoing it changes nothing because " +
-            "its target was overwritten; Yjs' undo pops such items and returns null.",
-            """{"clients":[{"gc":false,"id":18}],"roots":[{"kind":"map","name":"m"}],"steps":[{"c":0,"key":"c","op":"set","path":["m"],"value":{"$t":"array","v":[0]}},{"c":0,"id":"u1","op":"um","origins":["o1"],"scope":[["m"]],"timeout":"inf"},{"c":0,"op":"transact","ops":[{"at":0,"len":1,"op":"delete","path":["m","c"]}],"origin":"o1"},{"c":0,"key":"c","op":"set","path":["m"],"value":0},{"c":0,"id":"u1","op":"undo"}]}""")
-        {
-            Matches = (m, _) => m.Op is "undo" or "redo" && m.Differences.Any(d => d.StartsWith(".r.r: yjs false | ycs true", StringComparison.Ordinal)),
-        },
-        new("undo-stack-item-updated", "low",
-            "A change the UndoManager merges into its last stack item (within captureTimeout) raises StackItemAdded again; " +
-            "Yjs raises 'stack-item-updated', which Ycs does not have.",
-            """{"clients":[{"gc":false,"id":4}],"roots":[{"kind":"text","name":"t"}],"steps":[{"c":0,"id":"u0","op":"um","scope":[["t"]],"timeout":"inf"},{"at":0,"c":0,"op":"insert","path":["t"],"text":"a"},{"at":1,"c":0,"op":"insert","path":["t"],"text":"b"}]}""")
-        {
-            // Yjs' 'stack-item-updated' (um~) where Ycs raises StackItemAdded (um+).
-            Normalize = obs =>
-            {
-                foreach (var e in obs.List("ev")?.OfType<Dictionary<string, object>>() ?? [])
-                {
-                    if (e.Str("w") == "um~")
-                    {
-                        e["w"] = "um+";
-                    }
-                }
-            },
-        },
-        new("stack-cleared-after-transaction", "low",
-            "UndoManager.Clear raises StackCleared after its transaction ended; Yjs emits 'stack-cleared' inside it, before " +
-            "the transaction's afterTransaction.",
-            """{"clients":[{"gc":false,"id":17},{"gc":false,"id":8}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":1,"id":"u0","op":"um","scope":[["a"]],"timeout":"inf"},{"at":0,"c":0,"op":"ains","path":["a"],"values":[{"$t":"array"}]},{"from":[[0,0]],"op":"merged","to":1,"via":"v2"},{"at":0,"c":1,"len":1,"op":"delete","path":["a"]},{"c":1,"id":"u0","op":"umclear"}]}""")
-        {
-            Matches = (m, _) => m.Op == "umclear" && m.Primary == "ev:um",
-        },
-        new("gc-structs-not-merged", "low",
-            "After garbage collection, adjacent GC structs (and deleted items) of one client are not merged as Yjs' " +
-            "tryMergeDeleteSet/tryGc merge them, so EncodeStateAsUpdate(V2) is not byte-identical to Yjs' (same content).",
-            """{"clients":[{"gc":true,"id":2147483286}],"roots":[{"kind":"map","name":"m"}],"steps":[{"c":0,"key":"k1","op":"set","path":["m"],"value":{"$t":"map"}},{"c":0,"key":"c","op":"set","path":["m","k1"],"value":{"$t":"map","v":[["a",null]]}},{"c":0,"key":"c","op":"set","path":["m","k1"],"value":{"$t":"array"}},{"c":0,"key":"k1","op":"mdel","path":["m"]}]}""")
-        {
-            Matches = (m, _) => m.Primary is "v1" or "v2",
-        },
-        new("merge-property", "high",
-            "The merge-partition property fails for the same reason as merge-structs-merges-gc-with-item (a GC struct " +
-            "merged with the item after it; DebugAssertException 'right is GC' in Debug builds).",
-            """{"clients":[{"gc":true,"id":19},{"gc":true,"id":3},{"gc":false,"id":530752}],"roots":[{"kind":"text","name":"t"},{"kind":"array","name":"a"},{"kind":"map","name":"m"}],"steps":[{"c":1,"op":"push","path":["a"],"values":[{"$i":"-2147483649"},{"$t":"xmlf","v":[{"$t":"xmle","a":[["class","c"]],"n":"span"}]}]},{"from":1,"k":0,"op":"deliver","to":1,"via":"v1"},{"from":1,"k":0,"op":"deliver","to":0,"via":"v1"},{"at":0,"c":0,"len":1,"op":"delete","path":["a",1]},{"from":2,"op":"sync","to":1,"via":"v1"},{"c":1,"key":"b","op":"set","path":["m"],"value":{"$t":"array","v":[{"$t":"text","s":"c"},"s7"]}},{"from":1,"k":2,"op":"deliver","to":2,"via":"v1to2"}]}""")
-        {
-            Property = "merge-partition",
-        },
-        new("event-replay-property", "high",
-            "The event-replay property fails on text roots for the reasons of text-event-delta-repeats-inserts, " +
-            "format-event-spurious-removal and delete-event-misses-attribute-change (it holds for Yjs: EventReplay_HoldsForYjs).",
-            """{"clients":[{"gc":false,"id":2147483412}],"roots":[{"kind":"text","name":"t"}],"steps":[{"c":0,"delta":[{"insert":"a"},{"attrs":{"font":"#"},"insert":"a"}],"op":"delta","path":["t"]}]}""")
-        {
-            Property = "event-replay: text",
+            Matches = (m, _) => m.Primary == "ev:subdocs",
         },
         new("snapshot-array-read-merged-items", "documented",
             "Not a Ycs bug: Yjs' typeListToArraySnapshot returns values pushed after the snapshot when they were merged " +
@@ -270,19 +130,6 @@ internal static class KnownFailures
             DebugOnly = true,
             Property = "rejects-cleanly: threw DebugAssertException",
         },
-        new("todelta-opens-a-transaction", "low",
-            "YText.ToDelta() always runs in a transaction (origin \"splitSnapshotAffectedStructs\"), so reading a text " +
-            "raises BeforeTransaction/AfterTransaction (and, inside an observer, starts a nested transaction); Yjs' toDelta " +
-            "opens one only when given a snapshot, with origin 'cleanup'.",
-            """{"clients":[{"id":1}],"roots":[{"name":"t","kind":"text"}],"steps":[{"op":"insert","c":0,"path":["t"],"at":0,"text":"a"}]}""")
-        {
-            // Drops the empty transactions both libraries open to read a text (Yjs only for snapshots).
-            Normalize = obs =>
-            {
-                obs.List("ev")?.RemoveAll(e => e is Dictionary<string, object> r && r.Str("w") == "atx" && r.List("changed") is { Count: 0 }
-                    && r.Str("origin") is "splitSnapshotAffectedStructs" or "cleanup");
-            },
-        },
         new("snapshot-array-read-opens-a-transaction", "low",
             "YArrayBase.ToArraySnapshot runs in a transaction (origin null), which raises AfterTransaction on a read; Yjs' " +
             "typeListToArraySnapshot does not.",
@@ -290,39 +137,24 @@ internal static class KnownFailures
         {
             Matches = (m, _) => m.Op == "readSnap" && m.Primary == "ev:atx",
         },
-        new("xml-tostring-non-string-values", "low",
-            "YXmlElement/YXmlText.ToString render attribute and embed values with .NET's ToString (\"False\", " +
-            "\"System.Collections.Generic.Dictionary`2[...]\"), and a formatting attribute whose value is an object or list " +
-            "as a bare tag; Yjs uses JavaScript's String() (\"false\", \"[object Object]\") and renders the value's own keys " +
-            "as attributes (<color 0=\"a\">).",
-            """{"clients":[{"gc":false,"id":9}],"roots":[{"kind":"xml","name":"x"}],"steps":[{"at":0,"c":0,"op":"ains","path":["x"],"values":[{"$t":"xmle","n":"span"},{"$t":"xmle","n":"div","v":[{"$t":"xmlt","s":"a"}]}]},{"c":0,"key":"href","op":"setAttr","path":["x",0],"value":false},{"at":0,"attrs":{"bold":true,"color":["a"]},"c":0,"len":1,"op":"format","path":["x",1,0]}]}""")
-        {
-            Matches = (m, _) => m.Differences.All(d => Regex.IsMatch(d, @"^\.st\.\d+\.roots\.[^.]+\.j\b") && !d.Contains("$err", StringComparison.Ordinal)),
-        },
-        new("pending-left-out-of-encodings", "documented",
-            "EncodeStateAsUpdate(V2) leaves out the structs and deletions that wait for a missing update (docs/api.md, " +
-            "HasPending); Yjs 13.6 merges store.pendingStructs and store.pendingDs into encodeStateAsUpdate, so a Yjs peer " +
-            "relays them and a Ycs peer does not.",
-            """{"clients":[{"gc":false,"id":7},{"gc":false,"id":6}],"roots":[{"kind":"map","name":"m"}],"steps":[{"c":0,"key":"c","op":"set","path":["m"],"value":[]},{"c":0,"key":"a","op":"set","path":["m"],"value":{"$t":"array"}},{"from":0,"k":1,"op":"deliver","to":1,"via":"v1"}]}""")
+        new("yjs-redo-recreated-type", "documented",
+            "Not a Ycs bug: undoing everything and redoing everything does not restore a nested type that was created and " +
+            "then edited (redo re-creates the type, and the edits inside it are not all redone); Yjs ends with the same " +
+            "content as Ycs on this script (the differential agrees), so the property is stronger than Yjs' UndoManager.",
+            """{"clients":[{"gc":false,"id":4294966611}],"roots":[{"kind":"map","name":"m"}],"steps":[{"c":0,"id":"all","op":"um","scope":[["m"]],"timeout":"0"},{"c":0,"key":"a","op":"set","path":["m"],"value":{"$t":"xmle","n":"div","v":[{"$t":"xmlt","s":"\u4e2d\u6587 b"}]}},{"at":0,"attrs":{"italic":null},"c":0,"len":5,"op":"format","path":["m","a",0]},{"at":0,"c":0,"op":"insert","path":["m","a",0],"text":"a"},{"at":4,"c":0,"len":1,"op":"delete","path":["m","a",0]},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"undo"},{"c":0,"id":"all","op":"redo"},{"c":0,"id":"all","op":"redo"},{"c":0,"id":"all","op":"redo"},{"c":0,"id":"all","op":"redo"}]}""")
         {
             Documented = true,
-            // A state with pending content: its encodings and delete set are not compared.
-            Normalize = obs =>
-            {
-                if (obs.Get("st") is Dictionary<string, object> st)
-                {
-                    foreach (var state in st.Values.OfType<Dictionary<string, object>>())
-                    {
-                        if (state.Get("pend") is true)
-                        {
-                            state.Remove("v1");
-                            state.Remove("v2");
-                            state.Remove("ds");
-                        }
-                    }
-                }
-            },
-            Matches = (m, _) => m.Op == "sync" && m.Primary == "r",
+            Property = "undo-all-restores: after redoing everything",
+        },
+        new("yjs-throws", "documented",
+            "Not a Ycs bug: Yjs 13.6.32 throws where Ycs does not: an UndoManager whose scope is a list holding the Y.Doc " +
+            "(it takes typeScope[0].doc, undefined for a Doc: 'Cannot read properties of undefined'); XmlFragment.toString " +
+            "on a fragment holding a non-XML value. Ycs accepts both.",
+            """{"clients":[{"id":1}],"roots":[{"name":"t","kind":"text"}],"steps":[{"op":"um","c":0,"id":"u","scope":["$doc"],"timeout":"0"},{"op":"insert","c":0,"path":["t"],"at":0,"text":"a"}]}""")
+        {
+            Documented = true,
+            Matches = (m, _) => m.Signature.EndsWith(" / yjs threw", StringComparison.Ordinal)
+                || m.Differences.Any(d => d.Contains("yjs {\"$err\":\"toJSON\"}", StringComparison.Ordinal) || d.Contains("$err: yjs \"toJSON\"", StringComparison.Ordinal)),
         },
         new("yjs-unsorted-delete-set", "documented",
             "Not a Ycs bug: a delete set whose ranges are not sorted or overlap (valid v1; Yjs never writes one, a fuzzer or another " +
@@ -333,16 +165,6 @@ internal static class KnownFailures
         {
             Documented = true,
             Matches = (m, _) => m.Op == "raw" && m.Primary == "pend",
-        },
-        new("yjs-throws", "documented",
-            "Not a Ycs bug: Yjs throws on the operation (applyDelta([{delete: 0}]) on an empty text dereferences null; a " +
-            "BigInt at the top level of an array insert is 'Unexpected content type'; XmlFragment.toString on a fragment " +
-            "holding a non-XML value dereferences null) and Ycs does not.",
-            """{"clients":[{"id":1}],"roots":[{"name":"t","kind":"text"}],"steps":[{"op":"delta","c":0,"path":["t"],"delta":[{"delete":0}]}]}""")
-        {
-            Documented = true,
-            Matches = (m, _) => m.Signature.EndsWith(" / yjs threw", StringComparison.Ordinal)
-                || m.Differences.Any(d => d.Contains("yjs {\"$err\":\"toJSON\"}", StringComparison.Ordinal)),
         },
     ];
 
@@ -355,6 +177,30 @@ internal static class KnownFailures
         var match = Regex.Match(difference, "\\.d\\[\\d+\\]\\.insert: yjs \"(.*)\" \\| ycs \"(.*)\"$");
         return match.Success && match.Groups[2].Value.Length > match.Groups[1].Value.Length
             && match.Groups[2].Value.EndsWith(match.Groups[1].Value, StringComparison.Ordinal);
+    }
+
+    // The Ycs side of a bytes difference holds U+FFFD U+FFFD (EF BF BD EF BF BD) and the Yjs side does not.
+    private static bool HasTwoReplacementCharacters(string difference)
+    {
+        var match = Regex.Match(difference, "yjs \"([A-Za-z0-9+/=]+)\" \\| ycs \"([A-Za-z0-9+/=]+)\"");
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        static bool Has(string b64)
+        {
+            try
+            {
+                return Convert.ToHexString(Convert.FromBase64String(b64)).Contains("EFBFBDEFBFBD", StringComparison.Ordinal);
+            }
+            catch (FormatException)
+            {
+                return false;
+            }
+        }
+
+        return Has(match.Groups[2].Value) && !Has(match.Groups[1].Value);
     }
 
     public static KnownFailure Named(string name) => All.Single(k => k.Name == name);
