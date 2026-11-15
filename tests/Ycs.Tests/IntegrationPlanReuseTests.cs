@@ -107,6 +107,22 @@ public class IntegrationPlanReuseTests
         Assert.AreEqual("AQEBAAQBAXQE8J+RjQEBAQAC", Convert.ToBase64String(doc.EncodeStateAsUpdateV1()));
     }
 
+    [TestMethod]
+    public void ApplyUpdate_GcUpToNearTheClockLimitThenWaitingDeletions_EncodesAsYjs()
+    {
+        // The property engine's huge-clock-gc-encoding: a GC struct up to clock 2^31 - 65, items, a Skip, pending
+        // structs and waiting deletions. Expected: Yjs 13.6.32's encodeStateAsUpdate after the same three updates.
+        var doc = new YDoc(new YDocOptions { Gc = false, ClientId = 2 });
+
+        doc.ApplyUpdateV1(Convert.FromBase64String("AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI="));
+        doc.ApplyUpdateV1(Convert.FromBase64String("AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC"));
+        doc.ApplyUpdateV1(Convert.FromBase64String("AQSsAgAIAQFhA30BdwFzfoisAgEDdQJ9AXcBeH0BdQJ9AXcBeAQBAXQD5LitBwEBeAYA"));
+
+        Assert.AreEqual(
+            "AwL4+v//BwAAv////wfHrAIFrAIFAgasAgAIAQFhAn0BdwFziKwCAQF+iKwCAQJ1An0BdwF4fQGIrAIEAXUCfQF3AXgEAQF0A+S4rQcBAXgGBAsAhawCBhF7ImltYWdlIjoiaS5wbmcifUSsAgYBYsQLAawCBgFjAQEBYQED+Pr//wcBAL////8HrAIBAggLAgACAwM=",
+            Convert.ToBase64String(doc.EncodeStateAsUpdateV1()));
+    }
+
     /// <summary>A v1 update of client 5: <paramref name="depth"/> arrays, each nested in the one before, the first in root 'a'.</summary>
     private static byte[] NestedArrays(int depth)
     {
