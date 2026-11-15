@@ -344,9 +344,17 @@ public class YjsTypeParityTests
         fragment.Insert(0, new object[] { element });
         var values = new Dictionary<string, object>
         {
-            ["a"] = true, ["b"] = 1.5, ["c"] = null, ["d"] = new Dictionary<string, object> { ["x"] = 1 },
-            ["e"] = new List<object> { 1, null, new List<object> { 2, 3 } }, ["g"] = 1e21, ["h"] = 1e-7,
-            ["i"] = 123456789012345680000d, ["j"] = 0.000001, ["k"] = -1.5, ["l"] = "v",
+            ["a"] = true,
+            ["b"] = 1.5,
+            ["c"] = null,
+            ["d"] = new Dictionary<string, object> { ["x"] = 1 },
+            ["e"] = new List<object> { 1, null, new List<object> { 2, 3 } },
+            ["g"] = 1e21,
+            ["h"] = 1e-7,
+            ["i"] = 123456789012345680000d,
+            ["j"] = 0.000001,
+            ["k"] = -1.5,
+            ["l"] = "v",
         };
         foreach (var (key, value) in values)
         {
@@ -357,7 +365,10 @@ public class YjsTypeParityTests
         fragment.Insert(1, new object[] { text, new YXmlHook("h") });
         text.Insert(0, "ab", new Dictionary<string, object>
         {
-            ["color"] = "red", ["bold"] = true, ["link"] = new Dictionary<string, object> { ["href"] = "u", ["a"] = 1 }, ["l"] = new List<object> { 1, 2 },
+            ["color"] = "red",
+            ["bold"] = true,
+            ["link"] = new Dictionary<string, object> { ["href"] = "u", ["a"] = 1 },
+            ["l"] = new List<object> { 1, 2 },
         });
         text.InsertEmbed(2, new Dictionary<string, object> { ["img"] = 1 });
 
