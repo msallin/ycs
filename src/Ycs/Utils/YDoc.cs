@@ -618,7 +618,7 @@ public partial class YDoc
     internal bool RunHeadIndexDisabledForTests;
 
     /// <summary>How many steps a marker walk takes item by item before it asks the run-head index (the tests lower it to 1).</summary>
-    internal int LiteralWalkSteps = 32;
+    internal int LiteralWalkStepsForTests = 32;
 
     /// <summary>When set, every marker lookup adds the item and index it ends at (the tests compare them).</summary>
     internal List<(ID Item, int Index)> MarkerLookupsForTests;

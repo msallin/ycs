@@ -411,7 +411,7 @@ public partial class YText : YArrayBase
             {
                 // Within a run, the index jumps over what this loop passes and only counts (no live format: the loop
                 // reads those).
-                if (++steps == doc.LiteralWalkSteps && !doc.RunHeadIndexDisabledForTests)
+                if (++steps == doc.LiteralWalkStepsForTests && !doc.RunHeadIndexDisabledForTests)
                 {
                     steps = 0;
                     var before = count;

@@ -361,7 +361,7 @@ public class YXmlFragment : YArrayBase
         var steps = 0;
         for (; n != null; n = n.Right as Item)
         {
-            if (++steps == Doc.LiteralWalkSteps)
+            if (++steps == Doc.LiteralWalkStepsForTests)
             {
                 steps = 0;
                 n = SeekRight(n, ref index);

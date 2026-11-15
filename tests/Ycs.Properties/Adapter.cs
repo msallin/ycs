@@ -1686,7 +1686,7 @@ namespace Ycs.Properties
             RunHeadIndexDisabled(Doc) = walk == "plain";
             if (walk == "eager")
             {
-                LiteralWalkSteps(Doc) = 1;
+                LiteralWalkStepsForTests(Doc) = 1;
             }
 
             MarkerLookups(Doc) = walk == null ? null : [];
@@ -1695,8 +1695,8 @@ namespace Ycs.Properties
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "RunHeadIndexDisabledForTests")]
         private static extern ref bool RunHeadIndexDisabled(YDoc doc);
 
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "LiteralWalkSteps")]
-        private static extern ref int LiteralWalkSteps(YDoc doc);
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "LiteralWalkStepsForTests")]
+        private static extern ref int LiteralWalkStepsForTests(YDoc doc);
 
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "MarkerLookupsForTests")]
         private static extern ref List<(ID Item, int Index)> MarkerLookups(YDoc doc);

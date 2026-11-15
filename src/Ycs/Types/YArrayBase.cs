@@ -331,7 +331,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         var steps = 0;
         for (; n != null; n = n.Right as Item)
         {
-            if (++steps == transaction.Doc.LiteralWalkSteps)
+            if (++steps == transaction.Doc.LiteralWalkStepsForTests)
             {
                 steps = 0;
                 n = SeekRight(n, ref index);
@@ -549,7 +549,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         var steps = 0;
         for (; n != null && index > 0; n = n.Right as Item)
         {
-            if (++steps == transaction.Doc.LiteralWalkSteps)
+            if (++steps == transaction.Doc.LiteralWalkStepsForTests)
             {
                 steps = 0;
                 n = SeekRight(n, ref index);
@@ -752,7 +752,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         var indexed = !Doc.RunHeadIndexDisabledForTests;
         var (start, startIndex) = (p, pIndex);
-        (p, pIndex) = Walk(p, pIndex, index, indexed ? Doc.Store : null, Doc.LiteralWalkSteps);
+        (p, pIndex) = Walk(p, pIndex, index, indexed ? Doc.Store : null, Doc.LiteralWalkStepsForTests);
         Debug.Assert(!indexed || Walk(start, startIndex, index, null, 0) == (p, pIndex), "The run-head index ends the marker walk where Yjs' loops end.");
         Doc.MarkerLookupsForTests?.Add((p.Id, pIndex));
 

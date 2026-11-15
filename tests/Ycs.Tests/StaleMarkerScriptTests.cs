@@ -79,7 +79,7 @@ public class StaleMarkerScriptTests
         var peer = new YDoc(new YDocOptions { ClientId = 2 });
         foreach (var d in new[] { doc, peer })
         {
-            d.LiteralWalkSteps = walk == "eager" ? 1 : d.LiteralWalkSteps;
+            d.LiteralWalkStepsForTests = walk == "eager" ? 1 : d.LiteralWalkStepsForTests;
             d.RunHeadIndexDisabledForTests = walk == "plain";
         }
 
