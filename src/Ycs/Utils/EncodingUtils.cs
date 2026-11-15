@@ -55,7 +55,7 @@ internal static class EncodingUtils
 
     /// <param name="structs">All structs by 'client'.</param>
     /// <param name="clock">Write structs starting with 'ID(client,clock)'.</param>
-    public static void WriteStructs(IUpdateEncoder encoder, List<AbstractStruct> structs, long client, long clock)
+    public static void WriteStructs(IUpdateEncoder encoder, ClientStructs structs, long client, long clock)
     {
         // Write first id.
         clock = Math.Max(clock, structs[0].Id.Clock);

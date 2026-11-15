@@ -303,7 +303,7 @@ public partial class Item : AbstractStruct
         var start = new ID(Id.Client, Id.Clock + Length);
         Length += length;
         ((AbstractType)Parent).Length += length;
-        transaction.Doc.Store.NoteRunExtended();
+        transaction.Doc.Store.NoteRunExtended(this, length);
         transaction.AddChangedTypeToTransaction((AbstractType)Parent, null);
         transaction.RecordRunExtension(start);
     }

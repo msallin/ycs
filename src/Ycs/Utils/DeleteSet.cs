@@ -321,7 +321,7 @@ internal class DeleteSet
     /// right, which appends. The structs, ids, lengths, links, map entries, search markers and the count are the
     /// same as Yjs' order gives (<see cref="TryToMergeWithLeftsPairwise"/>, which the tests compare with).
     /// </remarks>
-    public static int TryToMergeWithLefts(List<AbstractStruct> structs, int pos)
+    public static int TryToMergeWithLefts(ClientStructs structs, int pos)
     {
         var first = pos;
         while (first > 0)
@@ -357,16 +357,16 @@ internal class DeleteSet
             RetargetMapEntry(left, right);
         }
 
-        structs.RemoveRange(first + 1, merged);
+        structs.RemoveMerged(first + 1, merged);
         return merged;
     }
 
-    /// <summary><see cref="TryToMergeWithLefts(List{AbstractStruct}, int)"/>, or the reference when the store asks for it.</summary>
-    internal static int TryToMergeWithLefts(StructStore store, List<AbstractStruct> structs, int pos) =>
+    /// <summary><see cref="TryToMergeWithLefts(ClientStructs, int)"/>, or the reference when the store asks for it.</summary>
+    internal static int TryToMergeWithLefts(StructStore store, ClientStructs structs, int pos) =>
         store.PairwiseMergeForTests ? TryToMergeWithLeftsPairwise(structs, pos) : TryToMergeWithLefts(structs, pos);
 
-    /// <summary>Yjs' order of <see cref="TryToMergeWithLefts(List{AbstractStruct}, int)"/>, pair by pair from the right: the reference the tests compare with.</summary>
-    internal static int TryToMergeWithLeftsPairwise(List<AbstractStruct> structs, int pos)
+    /// <summary>Yjs' order of <see cref="TryToMergeWithLefts(ClientStructs, int)"/>, pair by pair from the right: the reference the tests compare with.</summary>
+    internal static int TryToMergeWithLeftsPairwise(ClientStructs structs, int pos)
     {
         var right = structs[pos];
         var left = structs[pos - 1];
@@ -384,7 +384,7 @@ internal class DeleteSet
         var merged = pos - i;
         if (merged > 0)
         {
-            structs.RemoveRange(pos + 1 - merged, merged);
+            structs.RemoveMerged(pos + 1 - merged, merged);
         }
 
         return merged;
@@ -455,7 +455,7 @@ internal class DeleteSet
     /// Finds the next range of deleted structs at or after index <paramref name="i"/>, and moves
     /// <paramref name="i"/> past it. Neighbouring deleted structs form one range.
     /// </summary>
-    private static bool NextDeletedRange(List<AbstractStruct> structs, ref int i, out long clock, out long length)
+    private static bool NextDeletedRange(ClientStructs structs, ref int i, out long clock, out long length)
     {
         for (; i < structs.Count; i++)
         {

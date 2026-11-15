@@ -1650,7 +1650,17 @@ namespace Ycs.Properties
         private static extern ref bool PairwiseMerge([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
 
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "Clients")]
-        private static extern ref Dictionary<long, List<AbstractStruct>> ClientsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
+        [return: UnsafeAccessorType("System.Collections.Generic.Dictionary`2[[System.Int64, System.Private.CoreLib],[Ycs.ClientStructs, Ycs]], System.Private.CoreLib")]
+        private static extern ref object ClientsField([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
+
+        // The store's struct lists (ClientStructs, internal) by client, read through the list interface they implement.
+        private static IEnumerable<KeyValuePair<long, IReadOnlyList<AbstractStruct>>> ClientsOf(object store)
+        {
+            foreach (System.Collections.DictionaryEntry e in (System.Collections.IDictionary)ClientsField(store))
+            {
+                yield return new((long)e.Key, (IReadOnlyList<AbstractStruct>)e.Value);
+            }
+        }
 
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_map")]
         private static extern ref Dictionary<string, Item> MapOf(AbstractType type);
@@ -1801,7 +1811,7 @@ namespace Ycs.Properties
         /// </summary>
         public string SearchMarkerProblems()
         {
-            foreach (var structs in ClientsOf(StoreOf(Doc)).Values)
+            foreach (var (_, structs) in ClientsOf(StoreOf(Doc)))
             {
                 foreach (var s in structs)
                 {

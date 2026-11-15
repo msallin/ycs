@@ -22,7 +22,7 @@ internal sealed partial class StructStore
     private static readonly Dictionary<long, long> EmptyStateVector = new();
     private static readonly List<AbstractStruct> NoRefs = new();
 
-    /// <summary>Merges at the end of a transaction in Yjs' order, pair by pair (the tests' reference; see <see cref="DeleteSet.TryToMergeWithLefts(List{AbstractStruct}, int)"/>).</summary>
+    /// <summary>Merges at the end of a transaction in Yjs' order, pair by pair (the tests' reference; see <see cref="DeleteSet.TryToMergeWithLefts(ClientStructs, int)"/>).</summary>
     internal bool PairwiseMergeForTests;
 
     /// <summary>
@@ -69,7 +69,7 @@ internal sealed partial class StructStore
     }
 
     // TODO: [alekseyk] To private?
-    public readonly Dictionary<long, List<AbstractStruct>> Clients = new Dictionary<long, List<AbstractStruct>>();
+    public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
 
     // The plan of the last update, kept for the next one (null while one is in use).
     private IntegrationPlan _spare;
@@ -95,9 +95,10 @@ internal sealed partial class StructStore
     /// </summary>
     internal long Version { get; private set; }
 
-    /// <summary>A struct of the store grew in place (<see cref="Item.ExtendRun"/>).</summary>
-    internal void NoteRunExtended()
+    /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="Item.ExtendRun"/>).</summary>
+    internal void NoteRunExtended(Item item, int length)
     {
+        Clients[item.Id.Client].LastExtended(length);
         Version++;
         RunsExtended++;
     }
@@ -122,8 +123,7 @@ internal sealed partial class StructStore
         into.Clear();
         foreach (var kvp in Clients)
         {
-            var str = kvp.Value[kvp.Value.Count - 1];
-            into[kvp.Key] = str.Id.Clock + str.Length;
+            into[kvp.Key] = kvp.Value.End;
         }
     }
 
@@ -131,8 +131,7 @@ internal sealed partial class StructStore
     {
         if (Clients.TryGetValue(clientId, out var structs))
         {
-            var lastStruct = structs[structs.Count - 1];
-            return lastStruct.Id.Clock + lastStruct.Length;
+            return structs.End;
         }
 
         return 0;
@@ -169,13 +168,12 @@ internal sealed partial class StructStore
     {
         if (!Clients.TryGetValue(str.Id.Client, out var structs))
         {
-            structs = _capacityHints != null && _capacityHints.Remove(str.Id.Client, out var capacity) ? new List<AbstractStruct>(capacity) : new List<AbstractStruct>();
+            structs = _capacityHints != null && _capacityHints.Remove(str.Id.Client, out var capacity) ? new ClientStructs(capacity) : new ClientStructs();
             Clients[str.Id.Client] = structs;
         }
         else
         {
-            var lastStruct = structs[structs.Count - 1];
-            if (lastStruct.Id.Clock + lastStruct.Length != str.Id.Clock)
+            if (structs.End != str.Id.Clock)
             {
                 throw new Exception("Unexpected");
             }
@@ -217,141 +215,11 @@ internal sealed partial class StructStore
         return item.SplitItem(transaction, diff);
     }
 
-    /// <summary>
-    /// The index of the struct that holds <paramref name="clock"/>: a binary search on the client's structs, which are
-    /// sorted by clock, after a look at the last one (integrating in clock order mostly asks for it).
-    /// </summary>
-    public static int FindIndexSS(List<AbstractStruct> structs, long clock)
-    {
-        Debug.Assert(structs.Count > 0);
+    /// <inheritdoc cref="ClientStructs.FindIndex(long)"/>
+    public static int FindIndexSS(ClientStructs structs, long clock) => structs.FindIndex(clock);
 
-        var left = 0;
-        var right = structs.Count - 1;
-        var mid = structs[right];
-        var midClock = mid.Id.Clock;
-        var end = midClock + mid.Length;
-        if (clock < 0 || clock >= end)
-        {
-            throw new InvalidOperationException($"Clock {clock} is not in the store (it ends at {end}).");
-        }
-
-        if (midClock <= clock)
-        {
-            return right;
-        }
-
-        // @todo does it even make sense to pivot the search?
-        // If a good split misses, it might actually increase the time to find the correct item.
-        // Currently, the only advantage is that search with pivoting might find the item on the first try.
-        // clock < end and clock != midClock, so end > 1: no division by zero, and the pivot is at most right.
-        int midIndex = (int)((clock * right) / (end - 1));
-        while (left <= right)
-        {
-            mid = structs[midIndex];
-            midClock = mid.Id.Clock;
-
-            if (midClock <= clock)
-            {
-                if (clock < midClock + mid.Length)
-                {
-                    return midIndex;
-                }
-
-                left = midIndex + 1;
-            }
-            else
-            {
-                right = midIndex - 1;
-            }
-
-            midIndex = (left + right) / 2;
-        }
-
-        // Always check state before looking for a struct in StructStore
-        // Therefore the case of not finding a struct is unexpected.
-        throw new InvalidOperationException($"Clock {clock} is not in the store.");
-    }
-
-    /// <summary>
-    /// <see cref="FindIndexSS(List{AbstractStruct}, long)"/> for lookups that move through a list in order (a delete
-    /// set's ranges): an exponential search from <paramref name="hint"/>, the index the last lookup found, so a lookup
-    /// costs the logarithm of how far it moved, not of the list. The hint is set to the index found; any value is valid.
-    /// </summary>
-    public static int FindIndexSS(List<AbstractStruct> structs, long clock, ref int hint)
-    {
-        var count = structs.Count;
-        var last = structs[count - 1];
-        if (clock < 0 || clock >= last.Id.Clock + last.Length)
-        {
-            return hint = FindIndexSS(structs, clock);
-        }
-
-        var i = Math.Clamp(hint, 0, count - 1);
-        int low, high;
-        if (structs[i].Id.Clock <= clock)
-        {
-            // Gallop right: structs[low] starts at or before clock.
-            low = i;
-            var step = 1;
-            while (true)
-            {
-                high = low + step;
-                if (high >= count || structs[high].Id.Clock > clock)
-                {
-                    high = Math.Min(high, count) - 1;
-                    break;
-                }
-
-                low = high;
-                step *= 2;
-            }
-        }
-        else
-        {
-            // Gallop left: structs[high] starts after clock... until one starts at or before it (structs[0] does).
-            high = i - 1;
-            var step = 1;
-            while (true)
-            {
-                low = high - step + 1;
-                if (low <= 0)
-                {
-                    low = 0;
-                    break;
-                }
-
-                if (structs[low].Id.Clock <= clock)
-                {
-                    break;
-                }
-
-                high = low - 1;
-                step *= 2;
-            }
-        }
-
-        // The last struct in [low, high] that starts at or before clock holds it.
-        while (low < high)
-        {
-            var mid = low + ((high - low + 1) / 2);
-            if (structs[mid].Id.Clock <= clock)
-            {
-                low = mid;
-            }
-            else
-            {
-                high = mid - 1;
-            }
-        }
-
-        var found = structs[low];
-        if (clock < found.Id.Clock || clock >= found.Id.Clock + found.Length)
-        {
-            throw new InvalidOperationException($"Clock {clock} is not in the store.");
-        }
-
-        return hint = low;
-    }
+    /// <inheritdoc cref="ClientStructs.FindIndex(long, ref int)"/>
+    public static int FindIndexSS(ClientStructs structs, long clock, ref int hint) => structs.FindIndex(clock, ref hint);
 
     /// <summary>
     /// Expects that id is actually in store. This function throws or is an infinite loop otherwise.
@@ -372,13 +240,13 @@ internal sealed partial class StructStore
         return structs[index];
     }
 
-    public int FindIndexCleanStart(Transaction transaction, List<AbstractStruct> structs, long clock)
+    public int FindIndexCleanStart(Transaction transaction, ClientStructs structs, long clock)
     {
         int index = FindIndexSS(structs, clock);
         var str = structs[index];
         if (str.Id.Clock < clock && str is Item item)
         {
-            structs.Insert(index + 1, SplitItem(transaction, item, (int)(clock - item.Id.Clock)));
+            structs.InsertSplit(index + 1, SplitItem(transaction, item, (int)(clock - item.Id.Clock)));
             return index + 1;
         }
 
@@ -409,7 +277,7 @@ internal sealed partial class StructStore
 
         if ((id.Clock != str.Id.Clock + str.Length - 1) && !(str is GC))
         {
-            structs.Insert(index + 1, SplitItem(transaction, (Item)str, (int)(id.Clock - str.Id.Clock + 1)));
+            structs.InsertSplit(index + 1, SplitItem(transaction, (Item)str, (int)(id.Clock - str.Id.Clock + 1)));
         }
 
         return str;
@@ -423,10 +291,10 @@ internal sealed partial class StructStore
         }
 
         int index = FindIndexSS(structs, oldStruct.Id.Clock);
-        structs[index] = newStruct;
+        structs.Replace(index, newStruct);
     }
 
-    public void IterateStructs(Transaction transaction, List<AbstractStruct> structs, long clockStart, long length, Predicate<AbstractStruct> fun)
+    public void IterateStructs(Transaction transaction, ClientStructs structs, long clockStart, long length, Predicate<AbstractStruct> fun)
     {
         if (length <= 0)
         {
@@ -687,7 +555,7 @@ internal sealed partial class StructStore
                 // Split the first item if necessary.
                 if (!str.Deleted && str.Id.Clock < clock)
                 {
-                    structs.Insert(index + 1, SplitItem(transaction, (Item)str, (int)(clock - str.Id.Clock)));
+                    structs.InsertSplit(index + 1, SplitItem(transaction, (Item)str, (int)(clock - str.Id.Clock)));
 
                     // Increase, we now want to use the next struct.
                     index++;
@@ -705,7 +573,7 @@ internal sealed partial class StructStore
                     {
                         if (clockEnd < str.Id.Clock + str.Length)
                         {
-                            structs.Insert(index, SplitItem(transaction, (Item)str, (int)(clockEnd - str.Id.Clock)));
+                            structs.InsertSplit(index, SplitItem(transaction, (Item)str, (int)(clockEnd - str.Id.Clock)));
                         }
 
                         str.Delete(transaction);
@@ -1003,7 +871,7 @@ internal sealed partial class StructStore
                 {
                     // Decrement because we weren't able to apply previous operation.
                     inapplicableItems.NextReadOperation--;
-                    Rest.Clients[client] = inapplicableItems.Refs.GetRange(inapplicableItems.NextReadOperation, inapplicableItems.Refs.Count - inapplicableItems.NextReadOperation);
+                    Rest.Clients[client] = new ClientStructs(inapplicableItems.Refs, inapplicableItems.NextReadOperation, inapplicableItems.Refs.Count - inapplicableItems.NextReadOperation);
                     _clientsStructRefs.Remove(client);
 
                     // The plan may still read it as its current target: it is empty now.
@@ -1014,7 +882,9 @@ internal sealed partial class StructStore
                 else
                 {
                     // Item was the last item on clientsStructRefs and the field was already cleared. Add item to restStructs and continue.
-                    Rest.Clients[client] = new List<AbstractStruct> { item };
+                    var single = new ClientStructs(1);
+                    single.Add(item);
+                    Rest.Clients[client] = single;
                 }
 
                 // Remove client from clientsStructRefsIds to prevent users from applying the same update again.
@@ -1635,7 +1505,7 @@ internal sealed partial class StructStore
                 _plannedHint = 0;
             }
 
-            return list[FindIndexSS(list, id.Clock, ref _plannedHint)];
+            return list[ClientStructs.FindIndex(new ClientStructs.Decoded(list), id.Clock, ref _plannedHint)];
         }
     }
 
