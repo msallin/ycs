@@ -8,6 +8,7 @@
 
 using System.Buffers;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Ycs;
 
@@ -82,7 +83,10 @@ public class YTextEvent : YEvent
                     ChangeType? action = null;
                     var attributes = new Dictionary<string, object>();
 
-                    object insert = string.Empty;
+                    // An embed, or null while the text inserted so far is in insertText: appending to a string is
+                    // quadratic in the run's length.
+                    object insert = null;
+                    var insertText = new StringBuilder();
                     int retain = 0;
                     int deleteLen = 0;
 
@@ -103,9 +107,10 @@ public class YTextEvent : YEvent
                                     deleteLen = 0;
                                     break;
                                 case ChangeType.Insert:
-                                    if (insert is not string pending || pending.Length > 0)
+                                    var inserted = insert ?? insertText.ToString();
+                                    if (inserted is not string pending || pending.Length > 0)
                                     {
-                                        op = new Delta { Insert = insert };
+                                        op = new Delta { Insert = inserted };
                                         if (currentAttributes.Count > 0)
                                         {
                                             op.Attributes = new Dictionary<string, object>();
@@ -119,7 +124,8 @@ public class YTextEvent : YEvent
                                         }
                                     }
 
-                                    insert = string.Empty;
+                                    insert = null;
+                                    insertText.Clear();
                                     break;
                                 case ChangeType.Retain:
                                     if (retain > 0)
@@ -192,7 +198,7 @@ public class YTextEvent : YEvent
                                             action = ChangeType.Insert;
                                         }
 
-                                        insert += (item.Content as ContentString).GetString();
+                                        insertText.Append((item.Content as ContentString).GetString());
                                     }
                                 }
                                 else if (Deletes(item))
@@ -607,7 +613,8 @@ public partial class YText : YArrayBase
         var ops = new List<Delta>();
         var currentAttributes = new Dictionary<string, object>();
         var doc = Doc;
-        var str = string.Empty;
+        // Appending to a string is quadratic in the run's length.
+        var str = new StringBuilder();
 
         var n = _start;
 
@@ -625,14 +632,14 @@ public partial class YText : YArrayBase
                     attributes[kvp.Key] = kvp.Value;
                 }
 
-                var op = new Delta { Insert = str };
+                var op = new Delta { Insert = str.ToString() };
                 if (addAttributes)
                 {
                     op.Attributes = attributes;
                 }
 
                 ops.Add(op);
-                str = string.Empty;
+                str.Clear();
             }
         }
 
@@ -674,7 +681,7 @@ public partial class YText : YArrayBase
                                 currentAttributes.Remove(ChangeKey);
                             }
 
-                            str += cs.GetString();
+                            str.Append(cs.GetString());
                             break;
                         case ContentType:
                         case ContentEmbed:
