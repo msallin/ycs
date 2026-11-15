@@ -75,6 +75,8 @@ public sealed class SoakTests
         var knownCounts = new ConcurrentDictionary<string, int>();
         var next = (long)firstSeed - 1;
         var done = 0L;
+        var (steps, extending) = (Interlocked.Read(ref ScriptRun.ExecutedSteps), Interlocked.Read(ref ScriptRun.ExecutedStepsExtending));
+        var (scripts, scriptsExtending) = (Interlocked.Read(ref ScriptRun.ExecutedScripts), Interlocked.Read(ref ScriptRun.ExecutedScriptsExtending));
         var stopwatch = Stopwatch.StartNew();
         var last = Stopwatch.StartNew();
         var threads = Enumerable.Range(0, workers).Select(_ => new Thread(() =>
@@ -137,6 +139,11 @@ public sealed class SoakTests
         var list = new List<Failure>();
         var summary = new StringBuilder();
         summary.AppendLine(CultureInfo.InvariantCulture, $"{done} scripts (seeds {firstSeed}..{firstSeed + (ulong)total - 1}), {failures.Count} distinct mismatches, {stopwatch.Elapsed:hh\\:mm\\:ss}");
+        steps = Interlocked.Read(ref ScriptRun.ExecutedSteps) - steps;
+        extending = Interlocked.Read(ref ScriptRun.ExecutedStepsExtending) - extending;
+        scripts = Interlocked.Read(ref ScriptRun.ExecutedScripts) - scripts;
+        scriptsExtending = Interlocked.Read(ref ScriptRun.ExecutedScriptsExtending) - scriptsExtending;
+        summary.AppendLine(CultureInfo.InvariantCulture, $"  {extending} of {steps} steps ({100.0 * extending / Math.Max(1, steps):0.0}%) and {scriptsExtending} of {scripts} scripts ({100.0 * scriptsExtending / Math.Max(1, scripts):0.0}%) extended a run in place (shrinking included)");
         foreach (var (signature, (seed, script, mismatch, n)) in failures.OrderBy(f => Array.IndexOf(Differential.Severity, f.Value.Mismatch.Primary)))
         {
             var file = Path.Combine(dir, $"{Slug(signature)}.json");
@@ -156,16 +163,17 @@ public sealed class SoakTests
     }
 
     /// <summary>The operation mix by seed: most scripts use everything; some concentrate on one area.</summary>
+    // Every script has quiet clients (GenOptions.Windows), where Ycs extends runs.
     internal static GenOptions OptionsFor(ulong seed) => (seed % 10) switch
     {
-        0 => new GenOptions { Kinds = [OpKinds.TextInsert, OpKinds.TextDelete, OpKinds.TextFormat, OpKinds.TextEmbed, OpKinds.TextDelta, OpKinds.TextAttr], MaxSteps = 50 },
-        1 => new GenOptions { Kinds = [OpKinds.ArrayInsert, OpKinds.ArrayDelete, OpKinds.MapSet, OpKinds.MapDelete, OpKinds.Nested, OpKinds.Transact] },
-        2 => new GenOptions { Kinds = [OpKinds.XmlInsert, OpKinds.XmlDelete, OpKinds.XmlAttr, OpKinds.XmlText, OpKinds.Observe] },
-        3 => new GenOptions { Kinds = [OpKinds.Undo, OpKinds.TextInsert, OpKinds.TextDelete, OpKinds.TextFormat, OpKinds.ArrayInsert, OpKinds.ArrayDelete, OpKinds.MapSet, OpKinds.Transact], MaxSteps = 50 },
-        4 => new GenOptions { Kinds = [OpKinds.Snapshot, OpKinds.RelPos, OpKinds.TextInsert, OpKinds.TextDelete, OpKinds.ArrayInsert, OpKinds.ArrayDelete, OpKinds.XmlInsert] },
-        5 => new GenOptions { NetworkShare = 0.6, MaxSteps = 60 },
-        9 => new GenOptions { Subdocs = true },
-        _ => new GenOptions(),
+        0 => new GenOptions { Windows = true, Kinds = [OpKinds.TextInsert, OpKinds.TextDelete, OpKinds.TextFormat, OpKinds.TextEmbed, OpKinds.TextDelta, OpKinds.TextAttr, OpKinds.Typing, OpKinds.Typing, OpKinds.Typing], MaxSteps = 50 },
+        1 => new GenOptions { Windows = true, Kinds = [OpKinds.ArrayInsert, OpKinds.ArrayDelete, OpKinds.MapSet, OpKinds.MapDelete, OpKinds.Nested, OpKinds.Transact, OpKinds.Typing, OpKinds.Typing, OpKinds.React] },
+        2 => new GenOptions { Windows = true, Kinds = [OpKinds.XmlInsert, OpKinds.XmlDelete, OpKinds.XmlAttr, OpKinds.XmlText, OpKinds.Observe, OpKinds.Typing] },
+        3 => new GenOptions { Windows = true, Kinds = [OpKinds.Undo, OpKinds.TextInsert, OpKinds.TextDelete, OpKinds.TextFormat, OpKinds.ArrayInsert, OpKinds.ArrayDelete, OpKinds.MapSet, OpKinds.Transact, OpKinds.Typing], MaxSteps = 50 },
+        4 => new GenOptions { Windows = true, Kinds = [OpKinds.Snapshot, OpKinds.RelPos, OpKinds.TextInsert, OpKinds.TextDelete, OpKinds.ArrayInsert, OpKinds.ArrayDelete, OpKinds.XmlInsert, OpKinds.Typing] },
+        5 => new GenOptions { Windows = true, NetworkShare = 0.6, MaxSteps = 60 },
+        9 => new GenOptions { Windows = true, Subdocs = true },
+        _ => new GenOptions { Windows = true },
     };
 
     internal static Dictionary<string, object> Shrink(Oracle oracle, Dictionary<string, object> script, Mismatch original) =>

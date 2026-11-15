@@ -1,0 +1,9 @@
+{
+  "name": "ycs-markers",
+  "private": true,
+  "type": "module",
+  "description": "Scripts run in real Yjs where its search markers are stale (tests/Ycs.Tests/StaleMarkerScriptTests.cs).",
+  "dependencies": {
+    "yjs": "13.6.32"
+  }
+}

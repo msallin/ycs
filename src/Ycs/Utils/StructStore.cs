@@ -96,7 +96,14 @@ internal sealed partial class StructStore
     internal long Version { get; private set; }
 
     /// <summary>A struct of the store grew in place (<see cref="Item.ExtendRun"/>).</summary>
-    internal void NoteRunExtended() => Version++;
+    internal void NoteRunExtended()
+    {
+        Version++;
+        RunsExtended++;
+    }
+
+    /// <summary>How many inserts extended a run in place (the tests count how often the comparisons with Yjs see one).</summary>
+    internal long RunsExtended { get; private set; }
 
     /// <summary>
     /// Return the states as a Map<int,int>.

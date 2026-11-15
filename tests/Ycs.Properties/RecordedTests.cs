@@ -14,7 +14,7 @@ internal sealed record Fixture(string Kind, string Name, Dictionary<string, obje
 /// <summary>interop/properties/fixtures/*.jsonl, one fixture per line, recorded by <see cref="RecordedTests.RecordFixtures"/>.</summary>
 internal static class Fixtures
 {
-    public static readonly string[] Files = ["pairs", "random", "fuzz", "pinned", "fixed", "laws"];
+    public static readonly string[] Files = ["pairs", "random", "windows", "fuzz", "pinned", "fixed", "laws"];
 
     private static readonly Lazy<Dictionary<string, Fixture>> LazyAll = new(() =>
     {
@@ -53,7 +53,7 @@ public sealed class RecordedTests
 {
     public TestContext TestContext { get; set; }
 
-    public static IEnumerable<object[]> Recorded => Fixtures.Of("pair", "random", "fuzz", "fixed", "law");
+    public static IEnumerable<object[]> Recorded => Fixtures.Of("pair", "random", "windows", "fuzz", "fixed", "law");
 
     [TestMethod]
     [DynamicData(nameof(Recorded))]
@@ -97,7 +97,7 @@ public sealed class RecordedTests
         [
             "insert", "delete", "format", "embed", "delta", "setAttr", "rmAttr", "ains", "push", "unshift", "xafter", "set",
             "mdel", "clear", "transact", "um", "undo", "redo", "stop", "umclear", "snap", "readSnap", "docFromSnap", "rpos",
-            "rres", "observe", "deliver", "sync", "merged",
+            "rres", "observe", "react", "deliver", "sync", "merged",
         ];
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var vias = new HashSet<string>(StringComparer.Ordinal);
@@ -177,6 +177,21 @@ public sealed class RecordedTests
             random.Add(Line("random", seed.ToString(CultureInfo.InvariantCulture), Generator.Generate(seed, options)));
         }
 
+        // Where a run extended in place could differ from Yjs' items (GenOptions.Windows), and long lists typed on with
+        // updates applied in the middle of transactions.
+        var windows = new List<string>();
+        for (ulong seed = 1; seed <= 150; seed++)
+        {
+            windows.Add(Line("windows", seed.ToString(CultureInfo.InvariantCulture), Generator.Generate(50_000 + seed, new GenOptions { Windows = true, Compact = true, MaxSteps = 30 })));
+        }
+
+        for (ulong seed = 1; seed <= 20; seed++)
+        {
+            var script = ListScripts.Generate((2 * seed) - 1, windows: true);
+            script["compact"] = true;
+            windows.Add(Line("windows", "lists-" + seed.ToString(CultureInfo.InvariantCulture), script));
+        }
+
         var fuzz = new List<string>();
         for (ulong seed = 1; seed <= 80; seed++)
         {
@@ -189,11 +204,12 @@ public sealed class RecordedTests
 
         File.WriteAllLines(Path.Combine(dir, "pairs.jsonl"), pairs);
         File.WriteAllLines(Path.Combine(dir, "random.jsonl"), random);
+        File.WriteAllLines(Path.Combine(dir, "windows.jsonl"), windows);
         File.WriteAllLines(Path.Combine(dir, "fuzz.jsonl"), fuzz);
         File.WriteAllLines(Path.Combine(dir, "pinned.jsonl"), pinned);
         File.WriteAllLines(Path.Combine(dir, "fixed.jsonl"), fixedScripts);
         File.WriteAllLines(Path.Combine(dir, "laws.jsonl"), laws);
-        TestContext.WriteLine($"{pairs.Count} pairs, {random.Count} random, {fuzz.Count} fuzz, {pinned.Count} pinned, {fixedScripts.Count} fixed, {laws.Count} law fixtures in {dir}");
+        TestContext.WriteLine($"{pairs.Count} pairs, {random.Count} random, {windows.Count} windows, {fuzz.Count} fuzz, {pinned.Count} pinned, {fixedScripts.Count} fixed, {laws.Count} law fixtures in {dir}");
         Assert.IsEmpty(unexplained, "mismatches no known failure explains; pin them (KnownFailures) and record again:" + Environment.NewLine + string.Join(Environment.NewLine, unexplained));
     }
 }

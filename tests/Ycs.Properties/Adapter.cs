@@ -70,16 +70,61 @@ namespace Ycs.Properties
             }
 
             result.Add(run.End());
+            Interlocked.Add(ref ExecutedSteps, run._stepIndex);
+            Interlocked.Add(ref ExecutedStepsExtending, run._stepsExtending);
+            Interlocked.Increment(ref ExecutedScripts);
+            if (run._stepsExtending > 0)
+            {
+                Interlocked.Increment(ref ExecutedScriptsExtending);
+            }
             return result;
         }
 
         /// <summary>The exception the last step that failed threw (the observation records only "err").</summary>
         public Exception LastException { get; private set; }
 
+        /// <summary>Steps and scripts <see cref="Execute"/> ran (all of the process), and of them those in which some client extended a run in place.</summary>
+        internal static long ExecutedSteps, ExecutedStepsExtending, ExecutedScripts, ExecutedScriptsExtending;
+
+        private int _stepsExtending;
+
+        private long RunsExtended()
+        {
+            long n = 0;
+            foreach (var c in Clients)
+            {
+                n += c.Replica.RunsExtended;
+            }
+
+            return n;
+        }
+
+        private long _renamed;
+
+        /// <summary>
+        /// A client whose own clock a non-local transaction moved (local edits in a transaction an update was applied
+        /// in) drew a random client id (Yjs' "Changed the client-id"): both interpreters replace it with the next of
+        /// 5,000,000,000, 5,000,000,001, ..., in the transaction's update handler (the first thing called after the
+        /// change that is not an observer) and before every step (oracle.mjs' fixClientIds).
+        /// </summary>
+        internal void FixClientIds()
+        {
+            foreach (var c in Clients)
+            {
+                if (c.Doc.ClientId != c.Id)
+                {
+                    c.Id = 5_000_000_000 + _renamed++;
+                    Replica.SetClientId(c.Doc, c.Id);
+                }
+            }
+        }
+
         public Dictionary<string, object> Step(Dictionary<string, object> step)
         {
+            FixClientIds();
             Events = new List<object>();
             var obs = Obj(("i", (long)_stepIndex++), ("op", step.Str("op")));
+            var extendedBefore = RunsExtended();
             try
             {
                 var r = Dispatch(step);
@@ -93,6 +138,11 @@ namespace Ycs.Properties
                 obs["err"] = true;
                 LastException = e;
                 Debug(e);
+            }
+
+            if (RunsExtended() != extendedBefore)
+            {
+                _stepsExtending++;
             }
 
             var touched = step.Has("c") ? new[] { step.Int("c") } : step.Has("to") ? new[] { step.Int("to") } : [];
@@ -177,7 +227,8 @@ namespace Ycs.Properties
                             {
                                 try
                                 {
-                                    var r = c.Local(op);
+                                    // An update applied inside the transaction (to this client).
+                                    var r = op.Str("op") == "deliver" ? Deliver(op, c) : c.Local(op);
                                     results.Add(r is Missing ? null : r);
                                 }
                                 catch (Exception e)
@@ -447,16 +498,33 @@ namespace Ycs.Properties
 
         internal YDoc Doc => Replica.Doc;
 
+        /// <summary>The client id the script gave the document, or the one <see cref="ScriptRun"/> replaced a random one with.</summary>
+        internal long Id;
+
         public Client(ScriptRun run, int index, Dictionary<string, object> spec)
         {
             _run = run;
             Index = index;
-            Replica = new Replica(spec.Int("id"), spec.Get("gc") is not false, run.Roots);
+            // "gcf": a garbage collection filter that keeps every item whose clock is a multiple of it, and records each call.
+            Predicate<Item> gcFilter = null;
+            if (spec.Has("gcf"))
+            {
+                var keepEvery = spec.Int("gcf");
+                gcFilter = item =>
+                {
+                    Push(Obj(("w", "gcf"), ("id", $"{item.Id.Client}:{item.Id.Clock}"), ("n", (long)item.Length)));
+                    return item.Id.Clock % keepEvery != 0;
+                };
+            }
+
+            Replica = new Replica(spec.Int("id"), spec.Get("gc") is not false, run.Roots, gcFilter);
+            Id = Replica.ClientId;
             var doc = Replica.Doc;
             Replica.UseReferences(markers: run.Script.Get("markers") is not false, pairwiseMerge: run.Script.Get("merge") is "pairwise", extendRuns: run.Script.Get("extend") is not false);
-            // "quiet": no observers and no transaction handlers (only the update handlers the log needs), so that
-            // nothing makes the document split runs it extended in place (run-extension property).
-            var quiet = run.Script.Get("quiet") is true;
+            // "quiet" (the client's, as oracle.mjs reads it, or the script's, which only Ycs reads): no observers and no
+            // transaction handlers (only the update handlers the log needs), so that nothing makes the document split
+            // the runs it extended in place.
+            var quiet = spec.Get("quiet") is true || run.Script.Get("quiet") is true;
             foreach (var (name, _) in run.Roots)
             {
                 if (quiet)
@@ -483,6 +551,7 @@ namespace Ycs.Properties
 
             doc.Update += (_, e) =>
             {
+                run.FixClientIds();
                 Push(Obj(("w", "u1"), ("u", ScriptRun.B64(e.Item1)), ("origin", run.OriginLabel(e.Item2)), ("local", e.Item3.Local)));
                 _pendingV1 = e.Item3.Local ? e.Item1 : null;
             };
@@ -816,6 +885,49 @@ namespace Ycs.Properties
                         target.ObserveDeep((_, e) => Event("deep" + label, e.Events, e.Transaction));
                         return Missing.Value;
                     }
+                case "react":
+                    {
+                        // The first time the type changes, its observer makes the operations (in a transaction of their
+                        // own with "txn"; else each in its own), also during another transaction's cleanup.
+                        var fired = false;
+                        target.Observe((_, e) =>
+                        {
+                            if (fired)
+                            {
+                                return;
+                            }
+
+                            fired = true;
+                            var results = new List<object>();
+                            void Each()
+                            {
+                                foreach (Dictionary<string, object> op in s.List("ops"))
+                                {
+                                    try
+                                    {
+                                        var r = Local(op);
+                                        results.Add(r is Missing ? null : r);
+                                    }
+                                    catch (Exception)
+                                    {
+                                        results.Add(Obj(("err", true)));
+                                    }
+                                }
+                            }
+
+                            if (s.Bool("txn"))
+                            {
+                                Doc.Transact(_ => Each());
+                            }
+                            else
+                            {
+                                Each();
+                            }
+
+                            Push(Obj(("w", "react"), ("id", s.Get("id")), ("local", e.Transaction.Local), ("r", results)));
+                        });
+                        return Missing.Value;
+                    }
                 case "readSnap":
                     {
                         if (!Snapshots.TryGetValue(ScriptRun.IdText(s.Get("id")), out var snap))
@@ -1051,9 +1163,15 @@ namespace Ycs.Properties
         internal readonly YDoc Doc;
         private readonly List<(string Name, string Kind)> _roots;
 
-        public Replica(long? clientId, bool gc, IEnumerable<(string Name, string Kind)> roots)
+        public Replica(long? clientId, bool gc, IEnumerable<(string Name, string Kind)> roots, Predicate<Item> gcFilter = null)
         {
-            Doc = new YDoc(new YDocOptions { Gc = gc, ClientId = clientId });
+            var options = new YDocOptions { Gc = gc, ClientId = clientId };
+            if (gcFilter != null)
+            {
+                options.GcFilter = gcFilter;
+            }
+
+            Doc = new YDoc(options);
             _roots = roots.ToList();
             foreach (var (name, kind) in _roots)
             {
@@ -1548,6 +1666,15 @@ namespace Ycs.Properties
 
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "RunExtensionsDisabledForTests")]
         private static extern ref bool RunExtensionsDisabled(YDoc doc);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "set_ClientId")]
+        internal static extern void SetClientId(YDoc doc, long id);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_RunsExtended")]
+        private static extern long RunsExtendedOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
+
+        /// <summary>How many inserts extended a run in place in this document.</summary>
+        internal long RunsExtended => RunsExtendedOf(StoreOf(Doc));
 
         internal void UseReferences(bool markers, bool pairwiseMerge, bool extendRuns)
         {

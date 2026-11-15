@@ -53,9 +53,9 @@ internal static class Properties
         new("markers-invisible", "search markers change no observation (content, encodings, results, events) against the same script with them off, and after every step every marker points at an item of its list with the right index",
             ListsOrGeneral, MarkersInvisible),
         new("merge-order", "merging a run at the end of a transaction in one pass leaves the same structs (ids, lengths, content, links, origins, parents, map entries, search markers) as Yjs' pair-by-pair order, after every step",
-            ListsOrGeneral, MergeOrder),
-        new("run-extension", "inserts that continue a run in place (with the one-pass merge) leave the same structs (as merge-order, without the search markers) and observations as Yjs' items, one per insert, merged pair by pair, after every step",
-            ListsOrGeneral, RunExtension),
+            ListsOrWindows, MergeOrder),
+        new("run-extension", "inserts that continue a run in place (with the one-pass merge) leave the same structs (as merge-order, search markers included) and observations as Yjs' items, one per insert, merged pair by pair, after every step",
+            ListsOrWindows, RunExtension),
         new("event-replay", "replaying the deltas and key changes the root observers saw onto a shadow copy reproduces each root (text, array, xml, map) after every step",
             seed => Generator.Generate(seed, BmpOnly), EventReplay),
     ];
@@ -973,6 +973,14 @@ internal static class Properties
     /// <summary>Every other seed a script of long lists (ListScripts), the others the full mix.</summary>
     private static Dictionary<string, object> ListsOrGeneral(ulong seed) => seed % 2 == 1 ? ListScripts.Generate(seed) : Generator.Generate(seed);
 
+    /// <summary>
+    /// As <see cref="ListsOrGeneral"/>, with the windows in which a run extended in place could show (updates applied
+    /// in the middle of transactions, garbage collection filters, snapshots read within transactions, observers
+    /// editing; <see cref="GenOptions.Windows"/>): Yjs leaves search markers stale there, so markers on and off differ.
+    /// </summary>
+    private static Dictionary<string, object> ListsOrWindows(ulong seed) =>
+        seed % 2 == 1 ? ListScripts.Generate(seed, windows: true) : Generator.Generate(seed, new GenOptions { Windows = true });
+
     /// <summary>The script with an option of Adapter.cs set (markers: false, merge: "pairwise"), which only Ycs reads.</summary>
     private static Dictionary<string, object> With(Dictionary<string, object> script, string key, object value)
     {
@@ -1020,12 +1028,13 @@ internal static class Properties
     private static Violation MergeOrder(Dictionary<string, object> script) =>
         SameStores("merge-order", With(script, "extend", false), With(With(script, "extend", false), "merge", "pairwise"), markers: true);
 
-    // Search markers are left out: where a marker lands depends on the items a lookup walks, not on the document.
-    // Observed (every root and the transactions, as the adapter does: the runs are split before the observers) and
-    // quiet (nothing observes: the runs stay extended).
+    // The search markers too: between steps every marker sits where Yjs' would (Yjs' lookup walks back to the start
+    // of a run, and a marker moved off a deleted item lands on Yjs' item: YArrayBase.UpdateMarkerChanges).
+    // As the script has it (quiet clients extend runs, the observed ones split them before the observers) and with
+    // every client quiet.
     private static Violation RunExtension(Dictionary<string, object> script) =>
-        SameStores("run-extension", script, With(With(script, "extend", false), "merge", "pairwise"), markers: false)
-        ?? SameStores("run-extension", With(script, "quiet", true), With(With(With(script, "quiet", true), "extend", false), "merge", "pairwise"), markers: false);
+        SameStores("run-extension", script, With(With(script, "extend", false), "merge", "pairwise"), markers: true)
+        ?? SameStores("run-extension", With(script, "quiet", true), With(With(With(script, "quiet", true), "extend", false), "merge", "pairwise"), markers: true);
 
     private static Violation SameStores(string property, Dictionary<string, object> candidate, Dictionary<string, object> reference, bool markers) =>
         Lockstep(property, candidate, reference, (a, obsA, b, obsB) =>

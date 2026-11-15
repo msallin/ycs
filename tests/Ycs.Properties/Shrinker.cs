@@ -131,6 +131,17 @@ internal static class Shrinker
                 Shift(step, "from", k);
             }
 
+            // An update delivered inside a transaction: dropped with its sender, else shifted as the steps are.
+            if (step.Get("ops") is List<object> ops)
+            {
+                ops.RemoveAll(o => o is Dictionary<string, object> op && op.Str("op") == "deliver" && Refers(op, "from", k));
+                foreach (var op in ops.OfType<Dictionary<string, object>>().Where(o => o.Str("op") == "deliver"))
+                {
+                    Shift(op, "from", k);
+                    Shift(op, "to", k);
+                }
+            }
+
             steps.Add(step);
         }
 

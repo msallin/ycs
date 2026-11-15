@@ -57,6 +57,12 @@ internal static class OpKinds
     public const string RelPos = "relpos";
     public const string Observe = "observe";
 
+    /// <summary>An observer that makes operations when its type first changes (<see cref="GenOptions.Windows"/>).</summary>
+    public const string React = "react";
+
+    /// <summary>A transaction typing (or pushing) on at one place, with an update applied or a snapshot read in between (<see cref="GenOptions.Windows"/>).</summary>
+    public const string Typing = "typing";
+
     /// <summary>The kinds the pairwise fixtures interleave (every unordered pair, and each with itself).</summary>
     public static readonly string[] Paired =
     [
@@ -86,6 +92,15 @@ internal sealed record GenOptions
     public double NetworkShare { get; init; } = 0.4;
     /// <summary>Subdocuments as values (in one seed of ten: the pinned subdocs-event-removed-instead-of-loaded shows in nearly every such script).</summary>
     public bool Subdocs { get; init; }
+
+    /// <summary>
+    /// The windows in which a run Ycs extended in place could differ from Yjs' items: quiet clients (no observers, no
+    /// transaction handlers, at least one per script: there runs are extended), garbage collection filters, typing
+    /// runs with an update applied or a snapshot taken and read in the middle of the transaction, and observers that
+    /// edit (in a transaction of their own, or during another transaction's cleanup). Search markers can then be stale,
+    /// as in Yjs, so the markers-invisible property does not use it.
+    /// </summary>
+    public bool Windows { get; init; }
 }
 
 /// <summary>
@@ -101,6 +116,10 @@ internal sealed class Generator
     private static readonly string[] Keys = ["a", "b", "c", "k1", "k2"];
     private static readonly string[] AttrKeys = ["bold", "italic", "color", "size", "font"];
     private static readonly string[] Origins = ["o1", "o2"];
+
+    // With GenOptions.Windows: the full mix, typing runs eight times as often as another kind, and reacting observers.
+    private static readonly string[] WindowKinds =
+        [.. OpKinds.Paired, OpKinds.Observe, OpKinds.React, .. Enumerable.Repeat(OpKinds.Typing, 8)];
 
     private readonly Rng _rng;
     private readonly GenOptions _options;
@@ -189,8 +208,27 @@ internal sealed class Generator
             long id = _rng.Chance(0.5) ? _rng.Range(1, 20) : _rng.Chance(0.5) ? _rng.Range(1000, 1_000_000) : _rng.Chance(0.5) ? int.MaxValue - _rng.Int(1000) : uint.MaxValue - (long)_rng.Int(1000);
             if (ids.Add(id))
             {
-                clients.Add(Obj(("id", new JsonNumber(id.ToString(System.Globalization.CultureInfo.InvariantCulture))), ("gc", _rng.Chance(0.7))));
+                var client = Obj(("id", new JsonNumber(id.ToString(System.Globalization.CultureInfo.InvariantCulture))), ("gc", _rng.Chance(0.7)));
+                if (_options.Windows)
+                {
+                    if (_rng.Chance(0.6))
+                    {
+                        client["quiet"] = true;
+                    }
+
+                    if (client["gc"] is true && _rng.Chance(0.25))
+                    {
+                        client["gcf"] = (long)_rng.Range(2, 4);
+                    }
+                }
+
+                clients.Add(client);
             }
+        }
+
+        if (_options.Windows && !clients.Cast<Dictionary<string, object>>().Any(cl => cl.ContainsKey("quiet")))
+        {
+            ((Dictionary<string, object>)clients[0])["quiet"] = true;
         }
 
         var roots = new List<object>();
@@ -251,7 +289,7 @@ internal sealed class Generator
             return;
         }
 
-        var kinds = _options.Kinds ?? OpKinds.Paired.Append(OpKinds.Observe).ToArray();
+        var kinds = _options.Kinds ?? (_options.Windows ? WindowKinds : OpKinds.Paired.Append(OpKinds.Observe).ToArray());
         LocalStep(_rng.Int(clients), _rng.Pick(kinds));
     }
 
@@ -669,9 +707,95 @@ internal sealed class Generator
                     var nested = _run.Targets(c).Where(t => t.Path.Count > 1).ToList();
                     return nested.Count == 0 ? null : Obj(("op", "observe"), ("path", _rng.Pick(nested).Path));
                 }
+            case OpKinds.React:
+                {
+                    if (!allowCompound)
+                    {
+                        return null;
+                    }
+
+                    var ops = new List<object>();
+                    for (var i = _rng.Range(1, 4); i > 0; i--)
+                    {
+                        if (LocalOp(c, _rng.Pick(new[] { OpKinds.TextInsert, OpKinds.TextInsert, OpKinds.TextDelete, OpKinds.ArrayInsert, OpKinds.ArrayDelete, OpKinds.MapSet }), allowCompound: false) is { } op)
+                        {
+                            ops.Add(op);
+                        }
+                    }
+
+                    var targets = _run.Targets(c).Where(t => t.Kind != "hook").ToList();
+                    return ops.Count == 0 || targets.Count == 0 ? null : Obj(("op", "react"), ("id", "x" + _ids++), ("path", _rng.Pick(targets).Path), ("txn", _rng.Chance(0.5)), ("ops", ops));
+                }
+            case OpKinds.Typing:
+                return allowCompound ? Typing(c) : null;
             default:
                 throw new ArgumentException($"unknown kind {kind}", nameof(kind));
         }
+    }
+
+    /// <summary>
+    /// A transaction that types characters (or pushes or inserts values) one after the other at one place, with,
+    /// in the middle, an update this client lacks applied, or a snapshot taken and read (without garbage collection).
+    /// </summary>
+    private Dictionary<string, object> Typing(int c)
+    {
+        var lists = TargetsOf(c, "text", "xmlt", "array");
+        if (lists.Count == 0)
+        {
+            return null;
+        }
+
+        var t = _rng.Pick(lists);
+        var at = _rng.Chance(0.5) ? t.Length : _rng.Int(t.Length + 1);
+        var ops = new List<object>();
+        void Run(int n)
+        {
+            for (var i = 0; i < n; i++)
+            {
+                if (t.Kind == "array")
+                {
+                    var values = new List<object> { ArrayValue() };
+                    ops.Add(_rng.Chance(0.3) ? Obj(("op", "push"), ("path", t.Path), ("values", values)) : Obj(("op", "ains"), ("path", t.Path), ("at", (long)at), ("values", values)));
+                }
+                else
+                {
+                    ops.Add(Obj(("op", "insert"), ("path", t.Path), ("at", (long)at), ("text", _rng.Pick(new[] { "a", "b", "c", "x", "é", "😀" }))));
+                }
+
+                at++;
+            }
+        }
+
+        Run(_rng.Range(1, 6));
+        var missing = Missing(c);
+        if (missing.Count > 0 && _rng.Chance(0.5))
+        {
+            var (from, k) = _rng.Pick(missing);
+            ops.Add(Obj(("op", "deliver"), ("from", (long)from), ("k", (long)k), ("to", (long)c), ("via", Via())));
+            _has[c].Add((from, k));
+        }
+        else if (!_run.Clients[c].Replica.Gc && _rng.Chance(0.6))
+        {
+            var id = "s" + _ids++;
+            ops.Add(Obj(("op", "snap"), ("id", id)));
+            Run(_rng.Range(1, 4));
+            var snaps = _run.Snapshots(c).ToList();
+            var read = Obj(("op", "readSnap"), ("id", _rng.Chance(0.5) || snaps.Count == 0 ? id : _rng.Pick(snaps)), ("path", t.Path));
+            if (t.Kind != "array" && snaps.Count > 0 && _rng.Chance(0.5))
+            {
+                read["prev"] = _rng.Chance(0.5) ? id : _rng.Pick(snaps);
+            }
+
+            ops.Add(read);
+        }
+
+        if (_rng.Chance(0.3))
+        {
+            ops.Add(Obj(("op", "delete"), ("path", t.Path), ("at", (long)Math.Max(0, at - _rng.Range(1, 3))), ("len", (long)_rng.Range(1, 2))));
+        }
+
+        Run(_rng.Range(1, 6));
+        return Obj(("op", "transact"), ("origin", _rng.Chance(0.6) ? null : _rng.Pick(Origins)), ("ops", ops));
     }
 
     private Dictionary<string, object> TextOp(Target t, string kind)

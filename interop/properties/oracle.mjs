@@ -210,8 +210,12 @@ export class Client {
   constructor (run, index, spec) {
     this.run = run
     this.index = index
-    const doc = new Y.Doc({ gc: spec.gc !== false })
+    const opts = { gc: spec.gc !== false }
+    // "gcf": a garbage collection filter that keeps every item whose clock is a multiple of it, and records each call.
+    if (spec.gcf !== undefined) opts.gcFilter = item => { this.push({ w: 'gcf', id: `${item.id.client}:${item.id.clock}`, n: item.length }); return item.id.clock % spec.gcf !== 0 }
+    const doc = new Y.Doc(opts)
     doc.clientID = spec.id
+    this.id = spec.id
     this.doc = doc
     this.roots = {}
     this.log = [] // {v1, v2} per local transaction that changed something
@@ -221,16 +225,22 @@ export class Client {
     for (const r of run.script.roots) {
       const t = rootOf(doc, r)
       this.roots[r.name] = t
+      // "quiet": no observers or transaction handlers (Ycs extends runs only in what nobody observes).
+      if (spec.quiet) continue
       t.observe((e, tr) => this.event('obs:' + r.name, [e], tr))
       t.observeDeep((es, tr) => this.event('deep:' + r.name, es, tr))
     }
-    doc.on('afterTransaction', tr => this.push({
-      w: 'atx',
-      origin: run.originLabel(tr.origin),
-      local: tr.local,
-      changed: [...tr.changed.entries()].map(([t, keys]) => [this.pathOf(t), [...keys].map(k => k ?? '').sort()]).sort((a, b) => canon(a) < canon(b) ? -1 : 1),
-    }))
+    if (!spec.quiet) {
+      doc.on('afterTransaction', tr => this.push({
+        w: 'atx',
+        origin: run.originLabel(tr.origin),
+        local: tr.local,
+        changed: [...tr.changed.entries()].map(([t, keys]) => [this.pathOf(t), [...keys].map(k => k ?? '').sort()]).sort((a, b) => canon(a) < canon(b) ? -1 : 1),
+      }))
+    }
     doc.on('update', (u, origin, _d, tr) => {
+      // Right after a client id changed (see fixClientIds), before a later transaction of the batch uses it.
+      run.fixClientIds()
       this.push({ w: 'u1', u: b64(u), origin: run.originLabel(origin), local: tr.local })
       pendingV1 = tr.local ? u : null
     })
@@ -381,6 +391,7 @@ export class Run {
     this.umIds = new Map()
     this.rpos = {}
     this.compact = !!script.compact
+    this.renamed = 0
     this.clients = script.clients.map((spec, i) => new Client(this, i, spec))
   }
 
@@ -391,9 +402,22 @@ export class Run {
     return '?'
   }
 
+  /**
+   * A client whose own clock a non-local transaction moved (local edits in a transaction an update was applied in)
+   * drew a random client id (Yjs' 'Changed the client-id'): both interpreters replace it with the next of
+   * 5,000,000,000, 5,000,000,001, ..., in the transaction's 'update' handler (the first thing called after the
+   * change, which is not an observer: Ycs extends runs where nothing observes) and before every step.
+   */
+  fixClientIds () {
+    for (const c of this.clients) {
+      if (c.doc.clientID !== c.id) c.doc.clientID = c.id = 5000000000 + this.renamed++
+    }
+  }
+
   execute () {
     const out = []
     this.script.steps.forEach((step, i) => {
+      this.fixClientIds()
       this.events = []
       const obs = { i, op: step.op }
       let touched
@@ -426,7 +450,8 @@ export class Run {
         c.doc.transact(() => {
           for (const op of s.ops) {
             try {
-              const r = this.local(c, op)
+              // An update applied inside the transaction (to this client).
+              const r = op.op === 'deliver' ? this.deliver({ ...op, to: c.index }) : this.local(c, op)
               results.push(r === undefined ? null : r)
             } catch (e) {
               results.push({ err: true })
@@ -550,6 +575,29 @@ export class Run {
         const label = 'o:' + s.path.join('/')
         t.observe((e, tr) => c.event(label, [e], tr))
         t.observeDeep((es, tr) => c.event('deep' + label, es, tr))
+        return
+      }
+      case 'react': {
+        // The first time the type changes, its observer makes the operations (in a transaction of their own with
+        // "txn"; else each in its own), also during another transaction's cleanup.
+        let fired = false
+        t.observe((e, tr) => {
+          if (fired) return
+          fired = true
+          const results = []
+          const each = () => {
+            for (const op of s.ops) {
+              try {
+                const r = this.local(c, op)
+                results.push(r === undefined ? null : r)
+              } catch (e) {
+                results.push({ err: true })
+              }
+            }
+          }
+          if (s.txn) c.doc.transact(each); else each()
+          c.push({ w: 'react', id: s.id, local: tr.local, r: results })
+        })
         return
       }
       case 'readSnap': {

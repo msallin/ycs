@@ -7,13 +7,16 @@ namespace Ycs.Properties;
 /// few hundred elements by typing runs, backspacing, random inserts and deletes and pushes, many of them in one
 /// transaction (where a run of new items is merged at the end), with undo, a format now and then (it turns a text's
 /// markers off) and syncs between two clients. The general generator's documents stay too short to make markers.
+/// An UndoManager comes late if at all, on either client (it observes the document, so its client extends no runs).
+/// With <paramref name="windows"/>, updates of the other client are applied in the middle of transactions, where
+/// they leave the search markers stale, as in Yjs.
 /// </summary>
 internal static class ListScripts
 {
     private static readonly List<object> Text = ["t"];
     private static readonly List<object> Array = ["a"];
 
-    public static Dictionary<string, object> Generate(ulong seed)
+    public static Dictionary<string, object> Generate(ulong seed, bool windows = false)
     {
         var rng = new Rng(seed ^ 0x6d61726b657273UL);
         var clients = new List<object>
@@ -27,7 +30,7 @@ internal static class ListScripts
             ("steps", new List<object>()));
         var steps = (List<object>)script["steps"];
         var run = new ScriptRun((Dictionary<string, object>)Parse(Canonical(script)));
-        var undo = new List<string>();
+        var undo = new List<(int Client, string Id)>();
 
         void Emit(Dictionary<string, object> step)
         {
@@ -118,7 +121,14 @@ internal static class ListScripts
             var r = rng.Int(100);
             if (r < 45)
             {
-                Emit(Obj(("op", "transact"), ("c", (long)c), ("origin", null), ("ops", Ops(c, rng.Range(5, 40)))));
+                var ops = Ops(c, rng.Range(5, 40));
+                if (windows && run.LogCount(1 - c) > 0 && rng.Chance(0.4))
+                {
+                    var k = run.LogCount(1 - c) - 1 - rng.Int(Math.Min(3, run.LogCount(1 - c)));
+                    ops.Insert(rng.Int(ops.Count + 1), Obj(("op", "deliver"), ("from", (long)(1 - c)), ("k", (long)k), ("to", (long)c), ("via", rng.Chance(0.5) ? "v1" : "v2")));
+                }
+
+                Emit(Obj(("op", "transact"), ("c", (long)c), ("origin", null), ("ops", ops)));
             }
             else if (r < 75)
             {
@@ -132,15 +142,16 @@ internal static class ListScripts
             {
                 Emit(Obj(("op", "sync"), ("from", (long)c), ("to", (long)(1 - c)), ("via", rng.Chance(0.5) ? "v1" : "v2")));
             }
-            else if (r < 89 || undo.Count == 0)
+            else if (r < 89 && (undo.Count > 0 || s > stepCount / 2))
             {
                 var id = "u" + undo.Count;
-                undo.Add(id);
-                Emit(Obj(("op", "um"), ("c", 0L), ("id", id), ("scope", new List<object> { Text, Array }), ("timeout", rng.Chance(0.5) ? "inf" : "0")));
+                undo.Add((c, id));
+                Emit(Obj(("op", "um"), ("c", (long)c), ("id", id), ("scope", new List<object> { Text, Array }), ("timeout", rng.Chance(0.5) ? "inf" : "0")));
             }
-            else
+            else if (undo.Count > 0)
             {
-                Emit(Obj(("op", rng.Chance(0.6) ? "undo" : rng.Chance(0.7) ? "redo" : "stop"), ("c", 0L), ("id", rng.Pick(undo))));
+                var (owner, id) = rng.Pick(undo);
+                Emit(Obj(("op", rng.Chance(0.6) ? "undo" : rng.Chance(0.7) ? "redo" : "stop"), ("c", (long)owner), ("id", id)));
             }
         }
 
