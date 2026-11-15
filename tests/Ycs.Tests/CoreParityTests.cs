@@ -165,4 +165,32 @@ public class CoreParityTests
 
         Assert.AreEqual("ne twoB", restarted.GetText("t").ToString());
     }
+
+    [TestMethod]
+    public void ApplyUpdate_ItemWithGcOrigin_BecomesGcAsInYjs()
+    {
+        // Client 2's item: origin (1,1) is collected, right origin (1,3) an item of root array 'r'.
+        var doc = new YDoc();
+        doc.ApplyUpdate(B("AQMBACEBAW0BYQEAAQgBAXICdwFMdwFSAQEBAAI="));
+
+        doc.ApplyUpdate(B("AQECAMgBAQEDAXcBWgA="));
+
+        Assert.AreEqual(
+            (2, "AgECAAABAwEAIQEBbQFhAQABCAEBcgJ3AUx3AVICAgEAAQEBAAI="),
+            (doc.GetArray("r").Length, S(doc.EncodeStateAsUpdate())));
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_ItemWithOriginsInTwoParents_TakesTheLeftOriginsParent()
+    {
+        // p = [a], q = [b]; client 2's item has its origin in p and its right origin in q.
+        var doc = new YDoc();
+        doc.ApplyUpdate(B("AQIBAAgBAXABdwFhCAEBcQF3AWIA"));
+
+        doc.ApplyUpdate(B("AQECAMgBAAEBAXcBWgA="));
+
+        Assert.AreEqual(
+            (2, 1, "AgECAMgBAAEBAXcBWgIBAAgBAXABdwFhCAEBcQF3AWIA"),
+            (doc.GetArray("p").Length, doc.GetArray("q").Length, S(doc.EncodeStateAsUpdate())));
+    }
 }

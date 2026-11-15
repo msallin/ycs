@@ -822,7 +822,7 @@ internal sealed partial class StructStore
                     break;
                 }
 
-                var origin = (item.RightOrigin ?? item.LeftOrigin).Value;
+                var origin = (item.LeftOrigin ?? item.RightOrigin).Value;
                 if (origin.Clock < _store.GetState(origin.Client))
                 {
                     depth = _store.Find(origin) is Item { Parent: AbstractType parent } ? parent.Depth : -1;
