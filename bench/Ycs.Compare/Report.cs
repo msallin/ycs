@@ -11,7 +11,7 @@ internal static class Report
     {
         var sb = new StringBuilder();
         var m = results["machine"]!.AsObject();
-        sb.AppendLine(Invariant($"Run {results["date"]}: {results["passes"]} passes, each workload in its own process per library and pass, 3 warm-up + {results["runs"]} timed runs per process (a heavy workload: 1 run, no warm-up); inputs {results["inputs"]}."));
+        sb.AppendLine(Invariant($"Run {results["date"]}: {results["passes"]} passes, each workload in its own process per library and pass, warm-up runs until the last 3 are within 10% of each other (at least 3 runs and 2 s, at most 200 runs or 30 s), then {results["runs"]} timed runs per process (a heavy workload: 1 run, no warm-up); inputs {results["inputs"]}."));
         sb.AppendLine();
         sb.AppendLine(Invariant($"Machine: {m["cpu"]}, {m["logicalCores"]} logical cores, {m["memory"]} RAM, {m["os"]}, {m["runtime"]}, YDotNet {m["ydotnet"]}. Load average at start: {m["loadAtStart"]}."));
         sb.AppendLine();

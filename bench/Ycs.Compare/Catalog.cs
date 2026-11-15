@@ -84,7 +84,7 @@ internal static class Catalog
         new("array-insert-random", "array", "50,000 integers inserted at random positions, one transaction each", "array",
             YcsCases.ArrayInsertRandom, YrsCases.ArrayInsertRandom, _ => ArrayInsertModel()),
         new("array-delete-random", "array", "50,000 single deletes at random positions of a 100,000-element array, one transaction each", "array",
-            YcsCases.ArrayDeleteRandom, YrsCases.ArrayDeleteRandom, _ => ArrayDeleteModel()) { Heavy = true, LightOnYcs = true },
+            YcsCases.ArrayDeleteRandom, YrsCases.ArrayDeleteRandom, _ => ArrayDeleteModel()) { Heavy = true },
 
         new("read-text", "read", "the loaded trace document's text as a string, 100 times", "text",
             YcsCases.ReadText, YrsCases.ReadText, f => $"{100L * f.Trace.EndContent.Length} {f.Trace.EndContent}"),
