@@ -24,7 +24,7 @@ walkthrough below describes the code at 40d7fdb.
 | F15 unstable sort of deep events | fixed in 5727865 |
 | F16 events of deleted targets | fixed in 0701f70 |
 | F17 subdocument's client id | fixed in 7547e92 |
-| F18 exception paths of the cleanup | fixed: Yjs' paths ported, (a) to (d), compared with Yjs in 17 scenarios (`ThrowingObserverTests`, `interop/js/throwing-observers.mjs`); (c) included: as in Yjs, a throwing `Update` or `AfterTransactionCleanup` handler leaves the document's batch unfinished, and no later transaction is cleaned up |
+| F18 exception paths of the cleanup | fixed: Yjs' paths ported, (a), (b) and (d), compared with Yjs in 20 scenarios (`ThrowingObserverTests`, `interop/js/throwing-observers.mjs`); (c) differs on purpose: where a throwing `BeforeAllTransactions`, `BeforeTransaction`, `AfterTransactionCleanup`, `Update`, `UpdateV2` or `SubdocsChanged` handler leaves Yjs' document broken (yjs#799), Ycs finishes the cleanup and rethrows, as the open yjs#803 (api.md, Exceptions of handlers) |
 | F19 unstable sort in `MergeUpdates` | fixed in 5727865 |
 | F20 `ContentJSON` loses `undefined` | fixed in 3d0c9c0 |
 | F21 root type of a pending struct | kept on purpose: no public API lists the root types, so it cannot be observed; the struct reader would need the document |
@@ -127,8 +127,8 @@ subdocument gets a random guid on the wire).
 | `tryGcDeleteSet` | `DeleteSet.TryGcDeleteSet` | identical |
 | `tryMergeDeleteSet` | `DeleteSet.TryMergeDeleteSet` | equivalent |
 | `tryGc` | `DeleteSet.TryGc` | identical |
-| `cleanupTransactions` | `Transaction.CleanupTransactions` / `CleanupTransaction` | **DIFFERS** - F14, F15, F16, F17 (phase order and, since F18, exception paths equal Yjs) |
-| `transact` | `YDoc.Transact` | equivalent |
+| `cleanupTransactions` | `Transaction.CleanupTransactions` / `CleanupTransaction` | **DIFFERS** - F14, F15, F16, F17, F18 (c) on purpose: a throwing handler after the observer calls skips no later step (phase order and the other exception paths equal Yjs) |
+| `transact` | `YDoc.Transact` | **DIFFERS** on purpose - F18 (c): `beforeAllTransactions` and `beforeTransaction` inside the `try`, as yjs#803 |
 
 ### utils/DeleteSet.js
 

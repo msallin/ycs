@@ -10,7 +10,9 @@ namespace Ycs;
 /// <summary>
 /// Observers and document handlers that throw, phase by phase of the cleanup, against what Yjs 13.6.32 does
 /// (Fixtures/throwing-observers.json, interop/js/throwing-observers.mjs): which handlers are called, in which
-/// order, which exception escapes, and what a later change of the document still calls.
+/// order, which exception escapes, and what a later change of the document still calls. Where Yjs leaves the
+/// document broken (a handler of BeforeAllTransactions, BeforeTransaction, AfterTransactionCleanup, Update,
+/// UpdateV2 or SubdocsChanged threw), Ycs deliberately recovers (docs/api.md); those scenarios state both.
 /// </summary>
 [TestClass]
 public class ThrowingObserverTests
@@ -18,10 +20,37 @@ public class ThrowingObserverTests
     private static readonly Lazy<JsonElement> Fixture = new(() =>
         JsonDocument.Parse(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", "throwing-observers.json"))).RootElement.GetProperty("scenarios"));
 
-    public static IEnumerable<object[]> Scenarios => Fixture.Value.EnumerateObject().Select(p => new object[] { p.Name });
+    private const string AllHandlers = "beforeAllTransactions beforeTransaction beforeObserverCalls obs:a obs:a2 obs:m obs:t deep:a deep:m " +
+        "afterTransaction afterTransaction2 afterTransactionCleanup update updateV2 afterAllTransactions";
+
+    private const string Later = "later: beforeAllTransactions beforeTransaction beforeObserverCalls obs:a obs:a2 deep:a afterTransaction " +
+        "afterTransaction2 afterTransactionCleanup update updateV2 afterAllTransactions\nlater escaped: -\n";
+
+    // An empty transaction's cleanup: no observer and no update event.
+    private const string EmptyCleanup = "beforeObserverCalls afterTransaction afterTransaction2 afterTransactionCleanup afterAllTransactions";
+
+    /// <summary>
+    /// The scenarios in which Ycs deliberately differs from Yjs: Yjs' document is broken afterwards (the recorded
+    /// <c>broken</c>), Ycs' finishes the cleanup, still lets the exception escape, and goes on as usual.
+    /// </summary>
+    private static readonly Dictionary<string, string> Recovers = new()
+    {
+        ["afterTransactionCleanup"] = $"log: {AllHandlers}\nescaped: afterTransactionCleanup\n{Later}content: [\"later\",1]\nbroken: False",
+        ["update"] = $"log: {AllHandlers}\nescaped: update\n{Later}content: [\"later\",1]\nbroken: False",
+        ["updateV2"] = $"log: {AllHandlers}\nescaped: updateV2\n{Later}content: [\"later\",1]\nbroken: False",
+        ["beforeAllTransactions"] = $"log: beforeAllTransactions {EmptyCleanup}\nescaped: beforeAllTransactions\n{Later}content: [\"later\"]\nbroken: False",
+        ["beforeTransaction"] = $"log: beforeAllTransactions beforeTransaction {EmptyCleanup}\nescaped: beforeTransaction\n{Later}content: [\"later\"]\nbroken: False",
+        ["subdocs"] = "log: beforeAllTransactions beforeTransaction beforeObserverCalls obs:m deep:m afterTransaction afterTransaction2 " +
+            $"afterTransactionCleanup update updateV2 subdocs afterAllTransactions\nescaped: subdocs\n{Later}content: [\"later\"]\nbroken: False",
+    };
+
+    public static IEnumerable<object[]> ParityScenarios =>
+        Fixture.Value.EnumerateObject().Where(p => !Recovers.ContainsKey(p.Name)).Select(p => new object[] { p.Name });
+
+    public static IEnumerable<object[]> DifferingScenarios => Recovers.Keys.Select(k => new object[] { k });
 
     [TestMethod]
-    [DynamicData(nameof(Scenarios))]
+    [DynamicData(nameof(ParityScenarios))]
     public void Scenario_AsYjs(string name)
     {
         var expected = Fixture.Value.GetProperty(name);
@@ -31,12 +60,32 @@ public class ThrowingObserverTests
         Assert.AreEqual(Render(expected), actual);
     }
 
+    [TestMethod]
+    [DynamicData(nameof(DifferingScenarios))]
+    public void Scenario_YjsBreaksTheDocument_YcsRecovers(string name)
+    {
+        var yjs = Fixture.Value.GetProperty(name);
+
+        var actual = Run(name);
+
+        Assert.AreEqual($"Yjs: document broken\nYcs: recovers\n{Recovers[name]}", $"Yjs: {(yjs.GetProperty("broken").GetBoolean() ? "document broken" : "fine")}\nYcs: recovers\n{actual}");
+    }
+
+    [TestMethod]
+    public void Fixture_EveryDifferenceIsAScenarioOfYjs()
+    {
+        var recorded = Fixture.Value.EnumerateObject().Select(p => p.Name).ToHashSet();
+
+        Assert.IsTrue(Recovers.Keys.All(recorded.Contains));
+    }
+
     private static string Render(JsonElement e) =>
         $"log: {string.Join(" ", e.GetProperty("log").EnumerateArray().Select(x => x.GetString()))}\n" +
         $"escaped: {(e.GetProperty("escaped").ValueKind == JsonValueKind.Null ? "-" : e.GetProperty("escaped").GetString())}\n" +
         $"later: {string.Join(" ", e.GetProperty("later").EnumerateArray().Select(x => x.GetString()))}\n" +
         $"later escaped: {(e.GetProperty("laterEscaped").ValueKind == JsonValueKind.Null ? "-" : e.GetProperty("laterEscaped").GetString())}\n" +
-        $"content: {JsonSerializer.Serialize(e.GetProperty("content"))}";
+        $"content: {JsonSerializer.Serialize(e.GetProperty("content"))}\n" +
+        $"broken: {e.GetProperty("broken").GetBoolean()}";
 
     private static string Run(string name)
     {
@@ -62,12 +111,15 @@ public class ThrowingObserverTests
         t.EventHandler += (_, _) => Maybe("obs:t");
         a.DeepEventHandler += (_, _) => Maybe("deep:a");
         m.DeepEventHandler += (_, _) => Maybe("deep:m");
+        doc.BeforeAllTransactions += (_, _) => Maybe("beforeAllTransactions");
+        doc.BeforeTransaction += (_, _) => Maybe("beforeTransaction");
         doc.BeforeObserverCalls += (_, _) => Maybe("beforeObserverCalls");
         doc.AfterTransaction += (_, _) => Maybe("afterTransaction");
         doc.AfterTransaction += (_, _) => Maybe("afterTransaction2");
         doc.AfterTransactionCleanup += (_, _) => Maybe("afterTransactionCleanup");
         doc.Update += (_, _) => Maybe("update");
         doc.UpdateV2 += (_, _) => Maybe("updateV2");
+        doc.SubdocsChanged += (_, _) => Maybe("subdocs");
         doc.AfterAllTransactions += (_, _) => Maybe("afterAllTransactions");
 
         void Change() => doc.Transact(_ =>
@@ -110,7 +162,13 @@ public class ThrowingObserverTests
             case "update":
             case "updateV2":
             case "afterAllTransactions":
+            case "beforeAllTransactions":
+            case "beforeTransaction":
                 throws.Add(name);
+                break;
+            case "subdocs":
+                throws.Add(name);
+                act = () => doc.Transact(_ => m.Set("sub", new YDoc(new YDocOptions { Guid = "s" })));
                 break;
             case "the function and an observer":
                 throws.Add("obs:m");
@@ -194,7 +252,8 @@ public class ThrowingObserverTests
             laterEscaped = e.Message;
         }
 
+        var broken = doc._transaction != null || doc._transactionCleanups.Count > 0;
         return $"log: {first}\nescaped: {escaped ?? "-"}\nlater: {string.Join(" ", log)}\nlater escaped: {laterEscaped ?? "-"}\n" +
-            $"content: {YJson.Stringify(a.ToJson())}";
+            $"content: {YJson.Stringify(a.ToJson())}\nbroken: {broken}";
     }
 }

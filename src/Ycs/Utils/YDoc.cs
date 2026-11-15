@@ -211,6 +211,9 @@ public partial class YDoc
     /// <summary>
     /// Fires after each transaction that changed the document, with the change as an update in the
     /// original ('v1') format: Yjs' <c>doc.on('update')</c>, what every y-protocols provider sends.
+    /// A handler that throws skips the later handlers, so they miss this update: whoever relied on them must
+    /// resync (send the state, or a diff by state vector). Unlike Yjs, the document still finishes the cleanup and
+    /// stays usable; the exception escapes from the outermost <c>Transact</c> or <c>ApplyUpdate</c> afterwards.
     /// </summary>
     public event EventHandler<(byte[] data, object origin, Transaction transaction)> Update;
 
@@ -267,16 +270,22 @@ public partial class YDoc
             initialCall = true;
             transaction = _transaction = RentTransaction(origin, local);
             _transactionCleanups.Add(transaction);
-            if (_transactionCleanups.Count == 1)
-            {
-                InvokeBeforeAllTransactions();
-            }
-
-            InvokeOnBeforeTransaction(transaction);
         }
 
         try
         {
+            if (initialCall)
+            {
+                // Unlike Yjs, inside the 'try' (as the open yjs#803): a throwing handler skips 'action', and the
+                // transaction is cleaned up as an empty one instead of staying the document's forever.
+                if (_transactionCleanups.Count == 1)
+                {
+                    InvokeBeforeAllTransactions();
+                }
+
+                InvokeOnBeforeTransaction(transaction);
+            }
+
             action(state, transaction);
         }
         finally
@@ -291,7 +300,7 @@ public partial class YDoc
                 if (finishCleanup)
                 {
                     // Observer calls may create new transactions for which we need to call the observers and do
-                    // cleanup. As in Yjs, an exception of the cleanup replaces one of 'action'.
+                    // cleanup. As in Yjs, an exception of the cleanup replaces one of 'action' (or of a handler above).
                     Transaction.CleanupTransactions(this);
                 }
             }

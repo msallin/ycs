@@ -310,7 +310,8 @@ observed variant (`probe/Observed.cs` is a start).
 2. **Exceptions from observers** in each cleanup phase (walkthrough F18 b to d are open): whether `Update`
    still fires, the state of the document and of the UndoManager afterwards, transactions started by a
    handler that then throws. Checked in f0054e7: 17 scenarios against Yjs, 9 differed; Yjs' paths are
-   ported, including the unfinished batch after a throwing `Update` handler.
+   ported; the unfinished batch after a throwing `Update` handler was ported too, and then replaced by a
+   deliberate difference: the document recovers (api.md, Exceptions of handlers; `HandlerRecoveryTests`).
 3. **UndoManager outside the fuzz's shape**: two UndoManagers on one document, `Undo` inside an outer
    transaction (the `_outerTransaction` bookkeeping is port-only), `StackItem.Meta` across undo and redo,
    real capture timeouts (tests use 0 or infinite), an UndoManager created or destroyed inside an observer,

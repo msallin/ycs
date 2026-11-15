@@ -54,7 +54,7 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | `ID.Write(Stream)`, `RelativePosition.Write(Stream)`/`Read(Stream)`, `Snapshot.DecodeSnapshot(Stream)` | internal; use `RelativePosition.ToArray()`/`Read(byte[])`, `Snapshot.DecodeSnapshot(byte[])` | these exposed the internal encoding layer |
 | a new `Transaction` for every transaction, readable forever, and so were an event's lazily computed `Changes`, `Keys`, `Delta`, `Adds`, `Deletes` | the document reuses its transaction objects: a `Transaction` (and its `BeforeState`, `AfterState`, `Changed`, `ChangedParentTypes`, `Meta`, the list `AfterAllTransactions` passes) is valid until the batch's `AfterAllTransactions` handlers return; reading an ended one, or computing an event's changes after its transaction ended, throws `InvalidOperationException`. Every event handed to a handler (a type's, a deep one's, an `UndoManager` stack event's) is in its transaction's `ChangedParentTypes`, and the transaction lets go of them all when it ends, so a kept event never reads the transaction that reuses the object. Compute what you need in the handler and keep that | a transaction allocated about 2 KB of bookkeeping per keystroke; Yjs also throws when an event's changes are computed after its handler. `UndoManager` stack items and its events keep their own data |
 | `Transact(Action<Transaction>, origin, local)` only | also `Transact<TState>(TState state, Action<TState, Transaction> action, object origin = null, bool local = true)` | with a `static` lambda nothing is captured, so no closure is allocated per call |
-| `AfterTransaction` before the deep observers; an observer that threw skipped the observers of the other changed types; two transactions an observer started one after the other were merged into one; `SubdocsChanged` after every transaction | as Yjs 13.6: observers, deep observers, then `AfterTransaction`, each called even if one before threw, and every handler of one type's `EventHandler` or `DeepEventHandler` too (Yjs' `callAll`); the last of their exceptions propagates once the batch of transactions is cleaned up. Also Yjs' other exception paths (walkthrough-core F18): an exception of a `BeforeObserverCalls` handler skips every observer, deep observer, `AfterTransaction` handler and the formatting cleanup of that transaction; one of the handlers of one document event (`AfterTransaction`, `Update`, …) skips that event's later handlers; one of an `AfterTransactionCleanup`, `Update`, `UpdateV2` or `SubdocsChanged` handler escapes at once and leaves the batch unfinished, so **no later transaction of the document is cleaned up** (no observer and no update event any more, as in Yjs: these handlers must not throw); one of the cleanup replaces one of `Transact`'s function; observers in the order the types changed, also after a changed type was deleted; a deep observer's events in a stable order by path length, with `CurrentTarget` and `Path` relative to the observed type, and without events whose target was deleted meanwhile; a transaction started in an observer ends when its `Transact` returns; `SubdocsChanged` only when a subdocument was added, removed or loaded | Yjs' `cleanupTransactions` and `transact` |
+| `AfterTransaction` before the deep observers; an observer that threw skipped the observers of the other changed types; two transactions an observer started one after the other were merged into one; `SubdocsChanged` after every transaction | as Yjs 13.6: observers, deep observers, then `AfterTransaction`, each called even if one before threw, and every handler of one type's `EventHandler` or `DeepEventHandler` too (Yjs' `callAll`); the last of their exceptions propagates once the batch of transactions is cleaned up. Also Yjs' other exception paths (walkthrough-core F18): an exception of a `BeforeObserverCalls` handler skips every observer, deep observer, `AfterTransaction` handler and the formatting cleanup of that transaction; one of the handlers of one document event (`AfterTransaction`, `Update`, …) skips that event's later handlers; one of the cleanup replaces one of `Transact`'s function. **Deliberately unlike Yjs**, a throwing `BeforeAllTransactions`, `BeforeTransaction`, `AfterTransactionCleanup`, `Update`, `UpdateV2` or `SubdocsChanged` handler does not break the document (see [Exceptions of handlers](#exceptions-of-handlers)); observers in the order the types changed, also after a changed type was deleted; a deep observer's events in a stable order by path length, with `CurrentTarget` and `Path` relative to the observed type, and without events whose target was deleted meanwhile; a transaction started in an observer ends when its `Transact` returns; `SubdocsChanged` only when a subdocument was added, removed or loaded | Yjs' `cleanupTransactions` and `transact` |
 | `YMap.Get` of a missing key threw `KeyNotFoundException` | returns null (Yjs: `undefined`); `YMap.TryGet(key, out value)` tells a missing key from a null value | Yjs' `get` |
 | `YText.InsertEmbed` of a shared type threw `NotSupportedException`; a type a Yjs peer embedded was missing from `ToDelta` and the event delta | a shared type is an embed as in Yjs: `InsertEmbed`, `ApplyDelta`, `ToDelta`, `YTextEvent.Delta` | the indexes of a binding were off by one after such an embed |
 | an embed whose value is null (another peer's JSON `null`) was a `Delta` with `Insert`, `Retain` and `Delete` all null, which every consumer reads as nothing | `Insert` is `Delta.NullEmbed`, an insert of length 1; `ApplyDelta` inserts it as that embed | Yjs gives `{ insert: null }`; a binding's indexes were one off until the embed was deleted |
@@ -214,9 +214,50 @@ the one above would be a bug in Ycs and cannot be rolled back. What can still ha
 grows with every update it accepts, and not a process that holds many documents. Structurally odd but
 well-formed updates (an item whose two origins are in different parents, say) are integrated as Yjs
 integrates them. Observers run after the update was applied; an exception from one propagates to the
-caller of `ApplyUpdate` after the other observers ran, and the document stays usable, except after an
-exception of an `AfterTransactionCleanup`, `Update`, `UpdateV2` or `SubdocsChanged` handler (as in Yjs,
-see the table above).
+caller of `ApplyUpdate` after the other observers ran, and the document stays usable, also after an
+exception of a document handler (see [Exceptions of handlers](#exceptions-of-handlers)).
+
+## Exceptions of handlers
+
+An exception of an observer or a document handler is never swallowed: it escapes from the outermost
+`Transact` (or `ApplyUpdate`, or the call that made the change) once the cleanup of the batch of
+transactions is finished. The rules:
+
+- **Every step of the cleanup runs**, also after a handler threw: the observers, the deep observers,
+  `AfterTransaction`, the formatting cleanup (Yjs' `callAll`), then the garbage collection and merging
+  of structs, `AfterTransactionCleanup`, `Update`, `UpdateV2`, the subdocument bookkeeping, `SubdocsChanged`,
+  destroying the removed subdocuments, the cleanup of the transactions queued behind (those observers
+  started), and `AfterAllTransactions`.
+- **Several exceptions: the last one escapes** (in the order above; one of `AfterAllTransactions` last of
+  all), as Yjs' `callAll` and `finally` blocks let the last one through. The others are dropped.
+- **Within one event**, a throwing handler skips that event's later handlers (Yjs' `emit`, and a .NET
+  multicast delegate): they miss that one call. A throwing `BeforeObserverCalls` handler skips every
+  observer, deep observer, `AfterTransaction` handler and the formatting cleanup of that transaction (as
+  Yjs). A throwing `BeforeAllTransactions` handler skips `BeforeTransaction` of that transaction.
+- **A throwing `BeforeAllTransactions` or `BeforeTransaction` handler** stops the transaction before its
+  function runs: the function is not called (for `ApplyUpdate`, the update is not applied), nothing
+  changes, the transaction is cleaned up as an empty one (`AfterTransaction`, `AfterTransactionCleanup`,
+  `AfterAllTransactions` fire; no observer and no update event), and the exception escapes.
+- An exception of an observer or a handler of the cleanup replaces one of `Transact`'s function (as Yjs).
+
+**This differs from Yjs on purpose.** Yjs 13.6 (and 14) emits `afterTransactionCleanup`, `update`,
+`updateV2` and `subdocs` unprotected, before it resets its queue of transactions, and `beforeAllTransactions`
+and `beforeTransaction` before its `try`. A handler that throws there leaves the Yjs document broken for
+good, silently: the transaction stays open or the queue is never cleaned up again, so later changes apply
+but no observer and no update event fires, nothing is collected or merged, and the queue grows
+([yjs#723](https://github.com/yjs/yjs/issues/723), [yjs#799](https://github.com/yjs/yjs/issues/799)).
+The open pull requests [yjs#802](https://github.com/yjs/yjs/pull/802) and
+[yjs#803](https://github.com/yjs/yjs/pull/803) fix it the same way: finish the cleanup, still rethrow;
+Ycs follows #803 (which also skips `BeforeTransaction` after a throwing `BeforeAllTransactions`).
+`ThrowingObserverTests` replays what Yjs 13.6.32 does in each case (`interop/js/throwing-observers.mjs`)
+and states, for these six, "Yjs: document broken; Ycs: recovers"; `HandlerRecoveryTests` checks the
+recovery.
+
+**What the application must still do.** Recovery keeps the document usable, not the update delivered:
+when an `Update` (or `UpdateV2`) handler throws, the handlers after it did not get that update, and a
+provider among them did not send it. Peers that miss it integrate the later updates only once it
+arrives (they wait as pending), so resync them: send the full state, or answer their state vector with
+`EncodeStateAsUpdate(stateVector)` (y-protocols' sync step 2). Better, do not throw from these handlers.
 
 ## Thread safety
 

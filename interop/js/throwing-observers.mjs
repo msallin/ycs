@@ -1,6 +1,8 @@
 // What Yjs does when observers throw, phase by phase (walkthrough-core F18), for
 // tests/Ycs.Tests/ThrowingObserverTests.cs. Each scenario logs the handlers called, in order, the
-// exception that escaped, and what a later, ordinary change of the same document still calls.
+// exception that escaped, and what a later, ordinary change of the same document still calls, and whether the
+// document is left broken (a transaction still open, or transactions never cleaned up). Where Yjs leaves it
+// broken, Ycs deliberately recovers (docs/api.md); the test states both.
 // Usage: node throwing-observers.mjs > ../../tests/Ycs.Tests/Fixtures/throwing-observers.json
 import * as Y from 'yjs13'
 
@@ -21,12 +23,15 @@ function run (name, setup, act) {
   t.observe(() => maybe('obs:t'))
   a.observeDeep(() => maybe('deep:a'))
   m.observeDeep(() => maybe('deep:m'))
+  doc.on('beforeAllTransactions', () => maybe('beforeAllTransactions'))
+  doc.on('beforeTransaction', () => maybe('beforeTransaction'))
   doc.on('beforeObserverCalls', () => maybe('beforeObserverCalls'))
   doc.on('afterTransaction', () => maybe('afterTransaction'))
   doc.on('afterTransaction', () => maybe('afterTransaction2'))
   doc.on('afterTransactionCleanup', () => maybe('afterTransactionCleanup'))
   doc.on('update', () => maybe('update'))
   doc.on('updateV2', () => maybe('updateV2'))
+  doc.on('subdocs', () => maybe('subdocs'))
   doc.on('afterAllTransactions', () => maybe('afterAllTransactions'))
   setup({ doc, a, m, t, throws, log })
   let escaped = null
@@ -44,7 +49,8 @@ function run (name, setup, act) {
   } catch (e) {
     laterEscaped = e.message
   }
-  scenarios[name] = { log: first, escaped, later: log.splice(0), laterEscaped, content: a.toJSON() }
+  const broken = doc._transaction !== null || doc._transactionCleanups.length > 0
+  scenarios[name] = { log: first, escaped, later: log.splice(0), laterEscaped, content: a.toJSON(), broken }
 }
 
 const change = ({ doc, a, m, t }) => doc.transact(() => { a.insert(0, [1]); m.set('k', 1); t.insert(0, 'x') })
@@ -63,6 +69,9 @@ run('afterTransactionCleanup', thrower('afterTransactionCleanup'), change)
 run('update', thrower('update'), change)
 run('updateV2', thrower('updateV2'), change)
 run('afterAllTransactions', thrower('afterAllTransactions'), change)
+run('beforeAllTransactions', thrower('beforeAllTransactions'), change)
+run('beforeTransaction', thrower('beforeTransaction'), change)
+run('subdocs', thrower('subdocs'), ({ doc, m }) => doc.transact(() => { m.set('sub', new Y.Doc({ guid: 's' })) }))
 run('the function and an observer', thrower('obs:m'), ({ doc, a, m }) => doc.transact(() => { a.insert(0, [1]); m.set('k', 1); throw new Error('function') }))
 run('the function', () => {}, ({ doc, a }) => doc.transact(() => { a.insert(0, [1]); throw new Error('function') }))
 run('an observer that changes the document, then one of its transaction', ({ a, m, throws, log }) => {

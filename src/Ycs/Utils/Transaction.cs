@@ -387,17 +387,19 @@ public partial class Transaction
 
     /// <summary>
     /// Cleans up the document's transactions, including those that observers start meanwhile, then
-    /// ends them for reuse; Yjs' <c>cleanupTransactions</c>, with its exception paths:
+    /// ends them for reuse; Yjs' <c>cleanupTransactions</c>, except where a handler throws after the observer calls.
+    /// Every step of every transaction's cleanup runs, also after a handler threw, and of the exceptions the last
+    /// escapes once the batch is finished (<see cref="YDoc.AfterAllTransactions"/>' last of all):
     /// <list type="bullet">
-    /// <item>an exception of a transaction's observer calls (<see cref="YDoc.BeforeObserverCalls"/>, which skips
-    /// them all, the observers, the deep observers, <see cref="YDoc.AfterTransaction"/>, the formatting cleanup)
-    /// is replaced by any later one, and the last is rethrown once the batch is done;</item>
-    /// <item>an exception of what follows them (<see cref="YDoc.AfterTransactionCleanup"/>, <see cref="YDoc.Update"/>,
-    /// <see cref="YDoc.UpdateV2"/>, <see cref="YDoc.SubdocsChanged"/>) escapes at once: the rest of that cleanup and
-    /// of the batch is skipped, and the batch is never finished, so no later transaction of the document is
-    /// cleaned up (no observer, no update event; Yjs leaves <c>doc._transactionCleanups</c> as it is);</item>
-    /// <item>an exception of <see cref="YDoc.AfterAllTransactions"/> escapes after the batch is finished.</item>
+    /// <item>the observer calls (<see cref="YDoc.BeforeObserverCalls"/>, whose exception skips the others of that
+    /// transaction, the observers, the deep observers, <see cref="YDoc.AfterTransaction"/>, the formatting cleanup)
+    /// as Yjs' <c>callAll</c>;</item>
+    /// <item>what follows them (<see cref="YDoc.AfterTransactionCleanup"/>, <see cref="YDoc.Update"/>,
+    /// <see cref="YDoc.UpdateV2"/>, <see cref="YDoc.SubdocsChanged"/>, destroying the removed subdocuments), each step
+    /// even if one before threw. Yjs lets such an exception escape at once and never finishes the batch, so its
+    /// document cleans up no later transaction (yjs#799); Ycs does what the open yjs#803 does.</item>
     /// </list>
+    /// Within one event, a throwing handler skips that event's later handlers (Yjs' <c>emit</c>).
     /// </summary>
     internal static void CleanupTransactions(YDoc doc)
     {
@@ -432,9 +434,9 @@ public partial class Transaction
     }
 
     /// <summary>
-    /// Yjs' 'cleanupTransactions' for one transaction. The observer calls (Yjs' <c>try</c> part) are each called
-    /// even if one before throws (Yjs' <c>callAll</c>), and the last exception is returned; then the structs are
-    /// merged and the update events fired (Yjs' <c>finally</c> part), where an exception escapes.
+    /// Yjs' 'cleanupTransactions' for one transaction: the observer calls (Yjs' <c>try</c> part), then the structs are
+    /// merged and the document's handlers called (Yjs' <c>finally</c> part); every handler step runs even if one
+    /// before threw, and the last exception is returned.
     /// </summary>
     private static ExceptionDispatchInfo CleanupTransaction(Transaction transaction)
     {
@@ -584,7 +586,7 @@ public partial class Transaction
             error = ExceptionDispatchInfo.Capture(e);
         }
 
-        // What follows is Yjs' 'finally' part: an exception of a handler here escapes (see CleanupTransactions).
+        // What follows is Yjs' 'finally' part.
         // Replace deleted items with ItemDeleted / GC.
         // This is where content is actually removed from the Yjs Doc.
         if (doc.Gc)
@@ -659,10 +661,10 @@ public partial class Transaction
         }
 
         // @todo: Merge all the transactions into one and provide send the data as a single update message.
-        doc.InvokeOnAfterTransactionCleanup(transaction);
-
-        doc.InvokeUpdateV1(transaction);
-        doc.InvokeUpdateV2(transaction);
+        // Unlike Yjs, a throwing handler skips none of the later steps, nor the cleanup of the next transaction.
+        Step(static t => t._doc.InvokeOnAfterTransactionCleanup(t), transaction, ref error);
+        Step(static t => t._doc.InvokeUpdateV1(t), transaction, ref error);
+        Step(static t => t._doc.InvokeUpdateV2(t), transaction, ref error);
 
         if (transaction._subdocsAdded?.Count > 0 || transaction._subdocsRemoved?.Count > 0 || transaction._subdocsLoaded?.Count > 0)
         {
@@ -681,15 +683,29 @@ public partial class Transaction
                 doc.Subdocs.Remove(subDoc);
             }
 
-            doc.InvokeSubdocsChanged(transaction.SubdocsLoaded, added, removed);
-
-            foreach (var subDoc in removed)
+            Step(static t => t._doc.InvokeSubdocsChanged(t.SubdocsLoaded, t.SubdocsAdded, t.SubdocsRemoved), transaction, ref error);
+            Step(static t =>
             {
-                subDoc.Destroy();
-            }
+                foreach (var subDoc in t.SubdocsRemoved)
+                {
+                    subDoc.Destroy();
+                }
+            }, transaction, ref error);
         }
 
         return error;
+    }
+
+    private static void Step(Action<Transaction> step, Transaction transaction, ref ExceptionDispatchInfo error)
+    {
+        try
+        {
+            step(transaction);
+        }
+        catch (Exception e)
+        {
+            error = ExceptionDispatchInfo.Capture(e);
+        }
     }
 
     internal static void SplitSnapshotAffectedStructs(Transaction transaction, Snapshot snapshot)
