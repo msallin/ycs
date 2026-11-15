@@ -6,7 +6,9 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -508,4 +510,50 @@ public class UpdateOperationsTests
         Assert.AreEqual(Convert.ToBase64String(fromV1.EncodeStateAsUpdateV1()), Convert.ToBase64String(fromV2.EncodeStateAsUpdateV1()));
     }
 
+    private static readonly Lazy<JsonDocument> MergeConflicts = new(() =>
+        JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "merge-conflicts.json"))));
+
+    public static IEnumerable<object[]> MergeConflictCases =>
+        Enumerable.Range(0, MergeConflicts.Value.RootElement.GetProperty("cases").GetArrayLength()).Select(i => new object[] { i });
+
+    /// <summary>
+    /// Updates that hold a GC struct and an item for one clock range, in every order (Fixtures/merge-conflicts.json,
+    /// recorded from Yjs 13.6.32 by interop/js/merge-conflicts.mjs): the merge keeps the struct Yjs keeps, in v1 and v2.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(MergeConflictCases))]
+    public void MergeUpdates_GcStructAndItemForOneClock_KeepsTheStructYjsKeeps(int index)
+    {
+        var c = MergeConflicts.Value.RootElement.GetProperty("cases")[index];
+        var v1 = c.GetProperty("updates").EnumerateArray().Select(u => Convert.FromHexString(u.GetString())).ToList();
+        var v2 = v1.Select(u => UpdateOperations.ConvertUpdateFormatV1ToV2(u)).ToList();
+
+        var merged = (Hex(UpdateOperations.MergeUpdates(v1)), Hex(UpdateOperations.MergeUpdatesV2(v2)));
+
+        Assert.AreEqual((c.GetProperty("merge").GetString(), c.GetProperty("mergeV2").GetString()), merged, $"{c.GetProperty("name")} {c.GetProperty("order")}");
+    }
+
+    /// <summary>
+    /// The same updates applied to a document that lacks what they need: the state it encodes, of which the pending
+    /// structs are part, is Yjs', which merges every new remainder into what waits.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(MergeConflictCases))]
+    public void ApplyUpdate_GcStructAndItemForOneClockPending_EncodesTheStructYjsKeeps(int index)
+    {
+        var c = MergeConflicts.Value.RootElement.GetProperty("cases")[index];
+        var v1 = c.GetProperty("updates").EnumerateArray().Select(u => Convert.FromHexString(u.GetString())).ToList();
+        var fromV1 = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
+        var fromV2 = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
+
+        foreach (var u in v1)
+        {
+            fromV1.ApplyUpdateV1(u);
+            fromV2.ApplyUpdateV2(UpdateOperations.ConvertUpdateFormatV1ToV2(u));
+        }
+
+        Assert.AreEqual((c.GetProperty("pending").GetString(), c.GetProperty("pendingV2").GetString()), (Hex(fromV1.EncodeStateAsUpdateV1()), Hex(fromV2.EncodeStateAsUpdateV2())), $"{c.GetProperty("name")} {c.GetProperty("order")}");
+    }
+
+    private static string Hex(byte[] bytes) => Convert.ToHexStringLower(bytes);
 }

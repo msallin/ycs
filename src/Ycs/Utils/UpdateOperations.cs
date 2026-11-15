@@ -98,7 +98,8 @@ public static class UpdateOperations
     /// Merges several v1-format updates into one. The result is associative and idempotent:
     /// merging is safe to redo, and to do in any grouping, and it can be fed updates that were
     /// themselves produced by an earlier merge (which may still contain 'Skip' gaps for data
-    /// that update didn't have).
+    /// that update didn't have). As in Yjs, not where one update holds a GC struct and another an item
+    /// for the same clock: the struct kept then depends on the order and the grouping (Yjs under V8's sort).
     /// </summary>
     /// <param name="updates">The updates.</param>
     /// <param name="limits">Bounds each input (<see cref="UpdateLimits.MaxStructsPerUpdate"/>); <see cref="UpdateLimits.Default"/> when null.</param>

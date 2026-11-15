@@ -31,3 +31,8 @@ leaves in `$TMPDIR` when bumping the tested Yjs version.
 
 `traces/gen.mjs` records the differential traces of the shared types and their events that
 `tests/Ycs.Tests/TraceReplayTests.cs` replays (see `docs/testing.md`).
+
+`js/merge-conflicts.mjs` writes `tests/Ycs.Tests/Fixtures/merge-conflicts.json`: updates that hold a GC struct and an
+item for one clock, merged and left pending in every order (which one Yjs keeps depends on the order of V8's sort).
+`js/v8-sort.mjs` writes `tests/Ycs.Tests/Fixtures/v8-sort.json`: the orders V8's `Array.prototype.sort` gives for
+comparisons consistent and not, which `StableSort` must reproduce. Both: `cd js && node <script> > <fixture>`.

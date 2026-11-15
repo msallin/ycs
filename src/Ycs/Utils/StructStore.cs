@@ -31,11 +31,21 @@ internal sealed partial class StructStore
     /// into it, which costs the size of everything pending per update; here the remainders (encoded v2
     /// updates) are kept as they come and merged once, when they are retried or compacted.
     /// <br/>
+    /// That gives Yjs' bytes only while no GC struct of one remainder shares a clock with an item of another: merging
+    /// them is not associative (Yjs' <c>mergeUpdatesV2</c> keeps the struct its sort puts first, and its comparison
+    /// answers "less" for both orders of a GC struct and an item at one clock), so <see cref="Add"/> merges such a
+    /// remainder into what waits at once, as Yjs merges every one.
+    /// <br/>
     /// They are re-read from their encoding when they are retried, so a root type realized in between
     /// (e.g. with <see cref="YDoc.GetText"/>) is resolved then.
     /// </summary>
     internal sealed class PendingStructs
     {
+        // The clocks of the GC structs and of the items of every remainder added; never lowered (a merge can drop one
+        // of a GC struct and an item), which can only make a later Add merge where it need not.
+        private readonly ClockRanges _gcs = new();
+        private readonly ClockRanges _items = new();
+
         public Dictionary<long, long> Missing { get; } = new();
         public List<byte[]> Updates { get; } = new();
         public long Bytes { get; private set; }
@@ -43,11 +53,49 @@ internal sealed partial class StructStore
         /// <summary>How many structs <see cref="Updates"/> hold (Skip structs included), as they were written.</summary>
         public long Structs { get; private set; }
 
-        public void Add(byte[] update, long structs)
+        /// <summary>Adds the remainder <paramref name="update"/>, which holds the structs of <paramref name="rest"/>.</summary>
+        public void Add(byte[] update, long structs, StructStore rest)
         {
-            Updates.Add(update);
-            Bytes += update.Length;
-            Structs += structs;
+            if (SharesAClockOfTheOtherKind(rest))
+            {
+                // Yjs' pending.update = mergeUpdatesV2([pending.update, rest.update]).
+                var merged = new List<byte[]> { Merge(), update };
+                var count = Structs + structs;
+                Replace(UpdateOperations.MergeUpdatesTrusted(merged, ref count), count);
+            }
+            else
+            {
+                Updates.Add(update);
+                Bytes += update.Length;
+                Structs += structs;
+            }
+
+            foreach (var (client, list) in rest.Clients)
+            {
+                for (var i = 0; i < list.Count; i++)
+                {
+                    var str = list[i];
+                    (str is GC ? _gcs : str is Item ? _items : null)?.Add(client, str.Id.Clock, str.Id.Clock + str.Length);
+                }
+            }
+        }
+
+        private bool SharesAClockOfTheOtherKind(StructStore rest)
+        {
+            foreach (var (client, list) in rest.Clients)
+            {
+                for (var i = 0; i < list.Count; i++)
+                {
+                    var str = list[i];
+                    var other = str is GC ? _items : str is Item ? _gcs : null;
+                    if (other != null && other.Overlaps(client, str.Id.Clock, str.Id.Clock + str.Length))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         public byte[] Merge()
@@ -470,7 +518,7 @@ internal sealed partial class StructStore
             }
         }
 
-        var restMerged = !retrying && CheckPendingLimits(limits, retry, restUpdate, restStructs, PendingDs.Growth(ds, plan));
+        var restMerged = !retrying && CheckPendingLimits(limits, retry, restUpdate, restStructs, plan.Rest, PendingDs.Growth(ds, plan));
 
         plan.Execute(transaction);
 
@@ -490,7 +538,7 @@ internal sealed partial class StructStore
 
             if (!restMerged)
             {
-                Pending.Add(restUpdate, restStructs);
+                Pending.Add(restUpdate, restStructs, plan.Rest);
             }
         }
 
@@ -555,7 +603,7 @@ internal sealed partial class StructStore
     /// twice the limits, and the retry's re-read is bounded with it. Returns true when
     /// <paramref name="rest"/> had to be merged into <see cref="Pending"/> to fit (a duplicate).
     /// </summary>
-    private bool CheckPendingLimits(UpdateLimits limits, bool retry, byte[] rest, long restStructs, long deleteGrowth)
+    private bool CheckPendingLimits(UpdateLimits limits, bool retry, byte[] rest, long restStructs, StructStore restStore, long deleteGrowth)
     {
         var restBytes = rest?.Length ?? 0;
         if (restStructs == 0 && restBytes + deleteGrowth <= 0)
@@ -581,13 +629,14 @@ internal sealed partial class StructStore
         if (rest != null && Pending != null)
         {
             var (pending, pendingStructs) = (Pending.Updates[0], Pending.Structs);
-            Pending.Add(rest, restStructs);
+            Pending.Add(rest, restStructs, restStore);
             Pending.Merge();
             if (Fits(0, 0))
             {
                 return true;
             }
 
+            // The remainder's clocks stay recorded: that can only make a later Add merge where it need not.
             Pending.Replace(pending, pendingStructs);
         }
 
