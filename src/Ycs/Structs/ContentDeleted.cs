@@ -22,7 +22,7 @@ internal class ContentDeleted : IContentEx
 
     public int Length { get; private set; }
 
-    public IReadOnlyList<object> GetContent() => throw new NotImplementedException();
+    public IReadOnlyList<object> GetContent() => Array.Empty<object>();
 
     public IContent Copy() => new ContentDeleted(Length);
 

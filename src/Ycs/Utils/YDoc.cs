@@ -379,7 +379,8 @@ public partial class YDoc
         }
 
         // Remote type is realized when this method is called.
-        if (typeof(T) != typeof(AbstractType) && type is not T)
+        // As Yjs' constructor check: a subclass (YXmlElement for YXmlFragment) is another type.
+        if (typeof(T) != typeof(AbstractType) && type.GetType() != typeof(T))
         {
             if (type.GetType() == typeof(AbstractType))
             {
@@ -409,7 +410,7 @@ public partial class YDoc
             }
             else
             {
-                throw new Exception($"Type with the name {name} has already been defined with a different constructor");
+                throw new InvalidOperationException($"Type with the name {name} has already been defined with a different constructor");
             }
         }
 

@@ -413,4 +413,19 @@ public class CoreParityTests
 
         Assert.AreEqual("\uFEFFx", doc.GetText("t").ToString());
     }
+
+    [TestMethod]
+    public void Get_RootDefinedAsASubclass_Throws()
+    {
+        var doc = new YDoc();
+        doc.GetXmlElement("x");
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => doc.GetXmlFragment("x"));
+    }
+
+    [TestMethod]
+    public void GetContent_OfContentDeleted_IsEmpty()
+    {
+        Assert.AreEqual(0, new ContentDeleted(3).GetContent().Count);
+    }
 }
