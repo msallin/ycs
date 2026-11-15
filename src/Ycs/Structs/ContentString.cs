@@ -51,14 +51,17 @@ public class ContentString : IContentEx
         }
     }
 
-    /// <summary>The characters, boxed one by one. Prefer <see cref="GetString"/>.</summary>
+    /// <summary>
+    /// One string per UTF-16 code unit, as Yjs' <c>str.split('')</c> (a surrogate pair gives two). Prefer
+    /// <see cref="GetString"/>.
+    /// </summary>
     public IReadOnlyList<object> GetContent()
     {
         var chars = GetString();
         var result = new object[chars.Length];
         for (int i = 0; i < chars.Length; i++)
         {
-            result[i] = chars[i];
+            result[i] = chars[i].ToString();
         }
 
         return result;
