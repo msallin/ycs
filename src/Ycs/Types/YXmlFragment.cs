@@ -358,8 +358,15 @@ public class YXmlFragment : YArrayBase
             index -= marker.Index;
         }
 
+        var steps = 0;
         for (; n != null; n = n.Right as Item)
         {
+            if (++steps == Doc.LiteralWalkSteps)
+            {
+                steps = 0;
+                n = SeekRight(n, ref index);
+            }
+
             if (!n.Deleted && n.Countable)
             {
                 if (index < n.Length)

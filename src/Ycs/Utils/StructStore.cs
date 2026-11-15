@@ -217,6 +217,23 @@ internal sealed partial class StructStore
         return false;
     }
 
+    /// <summary>
+    /// <paramref name="item"/>, or the item of its run a walk to the right with <paramref name="remaining"/> visible
+    /// elements to go reaches by jumping (<see cref="ClientStructs.SeekRight"/>); <paramref name="remaining"/> is
+    /// lowered by what it jumped over.
+    /// </summary>
+    internal Item SeekRight(Item item, ref int remaining, bool stopAtFormats)
+    {
+        if (remaining <= 0 || !TryFindPosition(item, out var structs, out var position))
+        {
+            return item;
+        }
+
+        var reached = structs.SeekRight(position, remaining, stopAtFormats, out var passed);
+        remaining -= checked((int)passed);
+        return (Item)structs[reached];
+    }
+
     /// <summary>Recounts the struct lists after every transaction and throws on a difference (the tests switch it on).</summary>
     internal static bool CheckAfterTransactionsForTests;
 

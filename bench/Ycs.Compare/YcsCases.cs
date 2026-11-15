@@ -41,6 +41,28 @@ internal static class YcsCases
         }));
     }
 
+    /// <summary>As <see cref="TextAppendOneTxn"/>, with a text observer that counts its events (no run is extended in place).</summary>
+    public static Prepared TextAppendOneTxnObserved(Fixtures f, int n)
+    {
+        var doc = NewDoc();
+        var text = doc.GetText("text");
+        var chars = Inputs.Typing.AsSpan(0, n).ToArray();
+        long seen = 0;
+        text.Observe((_, _) => seen++);
+        return new Prepared(
+            () => doc.Transact(_ =>
+            {
+                for (var i = 0; i < chars.Length; i++)
+                {
+                    text.Insert(i, chars[i]);
+                }
+            }),
+            () => $"{seen} {text}",
+            () => doc.EncodeStateAsUpdateV1(),
+            () => doc.EncodeStateAsUpdateV2(),
+            doc.Destroy);
+    }
+
     public static Prepared EmptyTransactions(Fixtures f)
     {
         var doc = NewDoc();

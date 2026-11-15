@@ -39,8 +39,9 @@ internal sealed partial class ClientStructs
 
     private readonly int _blockShift = BlockShiftForNewLists;
 
-    // The flag values with Break set.
+    // The flag values with Break set, and with Format set.
     private static readonly SearchValues<byte> Breaks = SearchValues.Create([Break, Break | Visible, Break | Format]);
+    private static readonly SearchValues<byte> Formats = SearchValues.Create([Format, Break | Format]);
 
     // A rebuild of the sums after a merge, instead of their update, when more structs than this merged at once.
     private const int MaxIncrementalMerge = 32;
@@ -186,6 +187,81 @@ internal sealed partial class ClientStructs
         Debug.Assert(head >= 0, "Position 0 is a break.");
         passed = VisibleBetween(head, index);
         return head;
+    }
+
+    /// <summary>
+    /// How far a walk to the right that has <paramref name="target"/> visible elements to go can jump from position
+    /// <paramref name="index"/> within its run (the positions after it up to the next break, which the walk reaches
+    /// by <see cref="Item.Right"/> links: a linked position is its predecessor's right): the furthest position k such
+    /// that the positions passed, [index, k), are shorter than <paramref name="target"/> (so every walk that stops at
+    /// the item holding the target, or at the end of one, passes over them), and, with
+    /// <paramref name="stopAtFormats"/>, hold no live format (a text's walk reads those). <paramref name="passed"/>
+    /// is their visible length.
+    /// </summary>
+    internal int SeekRight(int index, long target, bool stopAtFormats, out long passed)
+    {
+        var next = _flags.AsSpan(index + 1, _count - index - 1).IndexOfAny(Breaks);
+        var last = next < 0 ? _count - 1 : index + next;
+        var block = 1 << _blockShift;
+        var sum = 0L;
+        var k = index;
+        while (k < last)
+        {
+            if ((k & (block - 1)) == 0 && k + block <= last && sum + _sums[BlockOf(k)] < target
+                && (!stopAtFormats || !_flags.AsSpan(k, block).ContainsAny(Formats)))
+            {
+                sum += _sums[BlockOf(k)];
+                k += block;
+                continue;
+            }
+
+            var value = Value(k);
+            if (sum + value >= target || (stopAtFormats && (_flags[k] & Format) != 0))
+            {
+                break;
+            }
+
+            sum += value;
+            k++;
+        }
+
+        passed = sum;
+        return k;
+    }
+
+    /// <summary>
+    /// How far Yjs' walk to the left while the index is beyond the target (the middle loop of <c>findMarker</c>) can
+    /// jump from position <paramref name="index"/> within its run, <paramref name="target"/> being how far beyond it
+    /// is: the leftmost position j at or after the run's head such that the positions it steps onto, [j, index), are
+    /// shorter than <paramref name="target"/>. <paramref name="passed"/> is their visible length.
+    /// </summary>
+    internal int SeekLeft(int index, long target, out long passed)
+    {
+        var head = _flags.AsSpan(0, index + 1).LastIndexOfAny(Breaks);
+        var block = 1 << _blockShift;
+        var sum = 0L;
+        var j = index;
+        while (j > head)
+        {
+            if ((j & (block - 1)) == 0 && j - block >= head && sum + _sums[BlockOf(j - 1)] < target)
+            {
+                sum += _sums[BlockOf(j - 1)];
+                j -= block;
+                continue;
+            }
+
+            var value = Value(j - 1);
+            if (sum + value >= target)
+            {
+                break;
+            }
+
+            sum += value;
+            j--;
+        }
+
+        passed = sum;
+        return j;
     }
 
     /// <summary>The visible length of the positions from <paramref name="from"/> up to <paramref name="to"/> (exclusive).</summary>

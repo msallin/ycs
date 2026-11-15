@@ -328,8 +328,15 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
+        var steps = 0;
         for (; n != null; n = n.Right as Item)
         {
+            if (++steps == transaction.Doc.LiteralWalkSteps)
+            {
+                steps = 0;
+                n = SeekRight(n, ref index);
+            }
+
             if (!n.Deleted && n.Countable)
             {
                 if (index <= n.Length)
@@ -391,6 +398,15 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         _pushHint = InsertGenericsAfterReturningLast(transaction, n, content);
     }
+
+    /// <summary>
+    /// For the walks from a marker to an index (the callers of <see cref="FindMarker"/>, which pass over an item when
+    /// the index lies beyond its end and only count): the item of <paramref name="n"/>'s run they reach by jumping
+    /// (<see cref="StructStore.SeekRight"/>), with <paramref name="index"/> lowered by what was passed; or
+    /// <paramref name="n"/> with the reference walk.
+    /// </summary>
+    private protected Item SeekRight(Item n, ref int index) =>
+        Doc.RunHeadIndexDisabledForTests ? n : Doc.Store.SeekRight(n, ref index, stopAtFormats: false);
 
     /// <summary>JavaScript's <c>splice(index, 0, ...content)</c>, on the content of a type not in a document yet.</summary>
     private protected static void PrelimInsert(List<object> list, int index, ICollection<object> content) =>
@@ -530,8 +546,15 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         }
 
         // Compute the first item to be deleted.
+        var steps = 0;
         for (; n != null && index > 0; n = n.Right as Item)
         {
+            if (++steps == transaction.Doc.LiteralWalkSteps)
+            {
+                steps = 0;
+                n = SeekRight(n, ref index);
+            }
+
             if (!n.Deleted && n.Countable)
             {
                 if (index < n.Length)
@@ -750,14 +773,30 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// Yjs' three walks of <c>findMarker</c> from <paramref name="p"/> at <paramref name="pIndex"/> towards
     /// <paramref name="index"/>: right while before it, left while beyond it, then left while the left neighbour has
     /// p's client and ends at p's clock. With <paramref name="store"/>, a walk that goes on for
-    /// <paramref name="literalSteps"/> steps (a lookup in the index costs more than a few) is finished by the run-head
-    /// index (<see cref="ClientStructs.RunHead"/>), which ends where the loop ends; without, item by item (the reference).
+    /// <paramref name="literalSteps"/> steps (a lookup in the index costs more than a few) jumps within the run it is in
+    /// through the run-head index (<see cref="ClientStructs.SeekRight"/>, <see cref="ClientStructs.SeekLeft"/>,
+    /// <see cref="ClientStructs.RunHead"/>), over what the loop would pass; without, item by item (the reference).
     /// </summary>
     private static (Item P, int Index) Walk(Item p, int pIndex, int index, StructStore store, int literalSteps)
     {
-        // Iterate to right if possible.
+        // Iterate to right if possible. Within a run the index jumps over what the loop passes (ClientStructs.SeekRight),
+        // and the loop takes the last steps: when the visible length reaches index exactly at an item's end, it steps
+        // on to that item's right neighbour, whichever it is.
+        var steps = 0;
         while (p.Right != null && pIndex < index)
         {
+            if (store != null && ++steps == literalSteps)
+            {
+                steps = 0;
+                var remaining = index - pIndex;
+                var reached = store.SeekRight(p, ref remaining, stopAtFormats: false);
+                if (reached != p)
+                {
+                    (p, pIndex) = (reached, index - remaining);
+                    continue;
+                }
+            }
+
             if (!p.Deleted && p.Countable)
             {
                 if (index < pIndex + p.Length)
@@ -771,9 +810,21 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             p = p.Right as Item;
         }
 
-        // Iterate to left if necessary (might be that pIndex > index).
+        // Iterate to left if necessary (might be that pIndex > index); within a run the index jumps (ClientStructs.SeekLeft).
+        steps = 0;
         while (p.Left != null && pIndex > index)
         {
+            if (store != null && ++steps == literalSteps && store.TryFindPosition(p, out var run, out var at))
+            {
+                steps = 0;
+                var reached = run.SeekLeft(at, pIndex - index, out var passed);
+                if (reached != at)
+                {
+                    (p, pIndex) = ((Item)run[reached], pIndex - checked((int)passed));
+                    continue;
+                }
+            }
+
             p = p.Left as Item;
             if (p == null)
             {
@@ -790,7 +841,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         // transaction, an observer editing during a remote transaction's cleanup), later lookups start from it. The
         // walk ends at the same item whether a run extended in place (Item.ExtendRun) is one item or Yjs' several:
         // their boundaries continue each other by clock.
-        var steps = 0;
+        steps = 0;
         while (p.Left != null && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
         {
             if (store != null && ++steps == literalSteps && store.TryFindPosition(p, out var structs, out var position))

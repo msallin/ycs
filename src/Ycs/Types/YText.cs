@@ -405,8 +405,26 @@ public partial class YText : YArrayBase
 
         public void FindNextPosition(Transaction transaction, int count)
         {
+            var doc = transaction.Doc;
+            var steps = 0;
             while (Right != null && count > 0)
             {
+                // Within a run, the index jumps over what this loop passes and only counts (no live format: the loop
+                // reads those).
+                if (++steps == doc.LiteralWalkSteps && !doc.RunHeadIndexDisabledForTests)
+                {
+                    steps = 0;
+                    var before = count;
+                    var reached = doc.Store.SeekRight(Right, ref count, stopAtFormats: true);
+                    if (reached != Right)
+                    {
+                        Index += before - count;
+                        Right = reached;
+                        Left = reached.Left as Item;
+                        continue;
+                    }
+                }
+
                 switch (Right.Content)
                 {
                     default:

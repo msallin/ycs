@@ -74,6 +74,32 @@ internal static class YrsCases
         });
     }
 
+    public static Prepared TextAppendOneTxnObserved(Fixtures f, int n)
+    {
+        var doc = NewDoc();
+        var text = doc.Text("text");
+        var chars = Inputs.Typing.AsSpan(0, n).ToArray();
+        long seen = 0;
+        var subscription = text.Observe(_ => seen++);
+        return new Prepared(
+            () =>
+            {
+                using var tx = doc.WriteTransaction();
+                for (var i = 0; i < chars.Length; i++)
+                {
+                    text.Insert(tx, (uint)i, chars[i]);
+                }
+            },
+            () => $"{seen} {Text(doc, text)}",
+            () => StateV1(doc),
+            () => StateV2(doc),
+            () =>
+            {
+                subscription.Dispose();
+                doc.Dispose();
+            });
+    }
+
     public static Prepared EmptyTransactions(Fixtures f)
     {
         var doc = NewDoc();
