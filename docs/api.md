@@ -114,9 +114,17 @@ exception is the conflict-resolution budget below. What is checked before anythi
   so no clock arithmetic overflows;
 * no struct of length 0, no client listed twice, no reference to a later struct of the item's own
   client, no unknown content or type;
-* nesting: 'any' and JSON values, and shared types inside each other, at most 256 levels deep (an
-  insert beyond that throws `ArgumentException` / `InvalidOperationException`), so nothing recurses
-  without bound;
+* nesting: 'any' and JSON values, and shared types inside each other, at most
+  `UpdateLimits.MaxDepth` levels deep (3,000 by default, each counted on its own: about as deep as Yjs'
+  recursive walks go before the JavaScript stack runs out, so no Yjs peer writes a deeper document; a
+  local insert beyond the document's limit throws `ArgumentException` / `InvalidOperationException`).
+  What an update can make Ycs walk, it walks without recursion: decoding and encoding values (binary
+  and JSON), deleting and garbage-collecting nested types, `ToJson`; so a hostile update of any depth
+  is rejected, and with `UpdateLimits.Unlimited` a document of 100,000 levels is applied, read,
+  deleted and encoded, on a thread with a 256 KiB stack. `ToString` of nested XML, `Clone` and the
+  UndoManager's redo of nested deleted types recurse once per level of types and throw
+  `InsufficientExecutionStackException` where the stack runs out (at 3,000 levels a 1 MiB stack is
+  enough for all but `Clone`);
 * size: a collection is never allocated larger than the remaining input can fill, and an update holds
   at most `UpdateLimits.MaxStructsPerUpdate` structs (131,072 by default), in either format: the v2
   format run-length encodes its columns (Yjs writes 20,000 deleted items in 42 bytes; 131,072 deleted

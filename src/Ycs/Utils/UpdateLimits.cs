@@ -18,6 +18,10 @@ public sealed class UpdateLimits
     private readonly long _maxPendingStructs = 1 << 17;
     private readonly long _maxPendingBytes = 16L << 20;
     private readonly long _maxIntegrationSteps = 1 << 24;
+    private readonly int _maxDepth = DefaultMaxDepth;
+
+    /// <summary>The default of <see cref="MaxDepth"/>.</summary>
+    internal const int DefaultMaxDepth = 3_000;
 
     /// <summary>The defaults below.</summary>
     public static UpdateLimits Default { get; } = new();
@@ -29,6 +33,7 @@ public sealed class UpdateLimits
         MaxPendingStructs = long.MaxValue,
         MaxPendingBytes = long.MaxValue,
         MaxIntegrationSteps = long.MaxValue,
+        MaxDepth = int.MaxValue,
     };
 
     /// <summary>
@@ -82,6 +87,21 @@ public sealed class UpdateLimits
     {
         get => _maxIntegrationSteps;
         init => _maxIntegrationSteps = Positive(value);
+    }
+
+    /// <summary>
+    /// How deeply values ('any' and JSON values: lists and objects) and shared types may be nested, each counted on
+    /// its own (a value in a type counts from its own top). Yjs handles about 3,000 levels of values and of types
+    /// before its recursive walks exhaust the JavaScript stack, so no Yjs peer writes a deeper document. Ycs walks
+    /// both without recursion where an update can lead it (decoding, encoding, deleting, garbage collection,
+    /// <see cref="AbstractType.ToJson"/>); the other walks (<c>ToString</c> of XML, <c>Clone</c>, the UndoManager's
+    /// redo) recurse once per level of types and throw <see cref="InsufficientExecutionStackException"/> where the
+    /// stack runs out. Values inserted locally are held to the default. Default 3,000. Positive.
+    /// </summary>
+    public int MaxDepth
+    {
+        get => _maxDepth;
+        init => _maxDepth = (int)Positive(value);
     }
 
     private static long Positive(long value) =>

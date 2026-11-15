@@ -254,6 +254,7 @@ sealed class Ycs.UndoManagerOptions
     int CaptureTimeout { get; set; }
 sealed class Ycs.UpdateLimits
     UpdateLimits()
+    int MaxDepth { get; init; }
     long MaxIntegrationSteps { get; init; }
     long MaxPendingBytes { get; init; }
     long MaxPendingStructs { get; init; }

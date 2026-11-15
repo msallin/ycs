@@ -14,7 +14,6 @@ public class ContentEmbed : IContentEx
 
     internal ContentEmbed(object embed)
     {
-        AnyEncoding.Validate(embed);
         Embed = embed;
     }
 

@@ -359,7 +359,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                     left.Integrate(transaction, 0);
                     break;
                 default:
-                    AnyEncoding.Validate(c);
+                    AnyEncoding.Validate(c, transaction.Doc.Limits.MaxDepth);
                     jsonContent.Add(c);
                     break;
             }

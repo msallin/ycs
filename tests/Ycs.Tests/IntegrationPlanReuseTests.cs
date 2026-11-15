@@ -14,7 +14,7 @@ public class IntegrationPlanReuseTests
     public void ApplyUpdate_AfterARejectedPlan_IntegratesTheNextUpdate()
     {
         var doc = new YDoc();
-        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(NestedArrays(300)));
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(NestedArrays(UpdateLimits.Default.MaxDepth + 1)));
 
         doc.ApplyUpdateV1(NestedArrays(3));
 

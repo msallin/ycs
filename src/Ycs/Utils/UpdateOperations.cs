@@ -83,6 +83,9 @@ public static class UpdateOperations
 {
     private static long MaxStructs(UpdateLimits limits) => (limits ?? UpdateLimits.Default).MaxStructsPerUpdate;
 
+    /// <summary>A reader of <paramref name="update"/> whose values may be nested as deeply as <paramref name="limits"/> allow.</summary>
+    private static Lib0Reader Reader(byte[] update, UpdateLimits limits) => new(update) { MaxDepth = (limits ?? UpdateLimits.Default).MaxDepth };
+
     private sealed class WriteState
     {
         public AbstractStruct Struct;
@@ -103,7 +106,7 @@ public static class UpdateOperations
     {
         ArgumentNullException.ThrowIfNull(updates);
 
-        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: false, MaxStructs(limits), out _));
+        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: false, MaxStructs(limits), (limits ?? UpdateLimits.Default).MaxDepth, out _));
     }
 
     /// <summary>
@@ -114,7 +117,7 @@ public static class UpdateOperations
     {
         ArgumentNullException.ThrowIfNull(updates);
 
-        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: true, MaxStructs(limits), out _));
+        return YUpdateException.Decode(() => MergeUpdatesCore(updates, v2: true, MaxStructs(limits), (limits ?? UpdateLimits.Default).MaxDepth, out _));
     }
 
     /// <summary>
@@ -131,7 +134,7 @@ public static class UpdateOperations
             for (var i = 0; i < updates.Count; i += GroupSize)
             {
                 var group = updates.GetRange(i, Math.Min(GroupSize, updates.Count - i));
-                next.Add(MergeUpdatesCore(group, v2: true, maxStructs: long.MaxValue, out var written));
+                next.Add(MergeUpdatesCore(group, v2: true, maxStructs: long.MaxValue, maxDepth: int.MaxValue, out var written));
 
                 // The last round merges a single group, and that is the result.
                 structs = written >= 0 ? written : structs;
@@ -144,7 +147,7 @@ public static class UpdateOperations
     }
 
     /// <param name="written">How many structs the result holds; -1 when the single update is returned as it is.</param>
-    private static byte[] MergeUpdatesCore(IList<byte[]> updates, bool v2, long maxStructs, out long written)
+    private static byte[] MergeUpdatesCore(IList<byte[]> updates, bool v2, long maxStructs, int maxDepth, out long written)
     {
         written = -1;
         if (updates.Count == 1)
@@ -156,7 +159,8 @@ public static class UpdateOperations
         var lazyStructDecoders = new List<LazyStructReader>(updates.Count);
         foreach (var update in updates)
         {
-            var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(new Lib0Reader(update), maxStructs) : new UpdateDecoderV1(new Lib0Reader(update), maxStructs);
+            var reader = new Lib0Reader(update) { MaxDepth = maxDepth };
+            var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(reader, maxStructs) : new UpdateDecoderV1(reader, maxStructs);
             updateDecoders.Add(decoder);
             lazyStructDecoders.Add(new LazyStructReader(decoder, filterSkips: true));
         }
@@ -379,7 +383,7 @@ public static class UpdateOperations
             var encoder = UpdateEncoderV1.Rent();
             try
             {
-                DiffUpdateCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits)), stateVector, encoder);
+                DiffUpdateCore(new UpdateDecoderV1(Reader(update, limits), MaxStructs(limits)), stateVector, encoder);
                 return encoder.ToArray();
             }
             finally
@@ -401,7 +405,7 @@ public static class UpdateOperations
             var encoder = UpdateEncoderV2.Rent();
             try
             {
-                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits)), stateVector, encoder);
+                DiffUpdateCore(new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits)), stateVector, encoder);
                 return encoder.ToArray();
             }
             finally
@@ -443,7 +447,8 @@ public static class UpdateOperations
             try
             {
                 var pending = store.Pending.Merge();
-                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(pending), store.Pending.Structs), targetStateVector, encoder);
+                // Its values were read under the limits of the updates that brought them.
+                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(pending) { MaxDepth = int.MaxValue }, store.Pending.Structs), targetStateVector, encoder);
                 updates.Add(encoder.ToArray());
             }
             finally
@@ -452,7 +457,7 @@ public static class UpdateOperations
             }
         }
 
-        return MergeUpdatesCore(updates, v2, maxStructs: long.MaxValue, out _);
+        return MergeUpdatesCore(updates, v2, maxStructs: long.MaxValue, maxDepth: int.MaxValue, out _);
     }
 
     private static void DiffUpdateCore(IUpdateDecoder decoder, IDictionary<long, long> state, IUpdateEncoder encoder)
@@ -513,7 +518,7 @@ public static class UpdateOperations
     public static byte[] EncodeStateVectorFromUpdate(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits))));
+        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV1(Reader(update, limits), MaxStructs(limits))));
     }
 
     /// <summary>
@@ -522,7 +527,7 @@ public static class UpdateOperations
     public static byte[] EncodeStateVectorFromUpdateV2(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits))));
+        return YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits))));
     }
 
     private static byte[] EncodeStateVectorFromUpdateCore(IUpdateDecoder decoder)
@@ -593,7 +598,7 @@ public static class UpdateOperations
     public static UpdateMeta ParseUpdateMeta(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits))));
+        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV1(Reader(update, limits), MaxStructs(limits))));
     }
 
     /// <summary>
@@ -602,7 +607,7 @@ public static class UpdateOperations
     public static UpdateMeta ParseUpdateMetaV2(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits))));
+        return YUpdateException.Decode(() => ParseUpdateMetaCore(new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits))));
     }
 
     private static UpdateMeta ParseUpdateMetaCore(IUpdateDecoder decoder)
@@ -659,7 +664,7 @@ public static class UpdateOperations
             var encoder = UpdateEncoderV2.Rent();
             try
             {
-                ConvertUpdateFormatCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits)), encoder);
+                ConvertUpdateFormatCore(new UpdateDecoderV1(Reader(update, limits), MaxStructs(limits)), encoder);
                 return encoder.ToArray();
             }
             finally
@@ -680,7 +685,7 @@ public static class UpdateOperations
             var encoder = UpdateEncoderV1.Rent();
             try
             {
-                ConvertUpdateFormatCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits)), encoder);
+                ConvertUpdateFormatCore(new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits)), encoder);
                 return encoder.ToArray();
             }
             finally
@@ -758,7 +763,7 @@ public static class UpdateOperations
     public static DecodedUpdate DecodeUpdate(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV1(new Lib0Reader(update), MaxStructs(limits))));
+        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV1(Reader(update, limits), MaxStructs(limits))));
     }
 
     /// <summary>
@@ -767,7 +772,7 @@ public static class UpdateOperations
     public static DecodedUpdate DecodeUpdateV2(byte[] update, UpdateLimits limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV2(new Lib0Reader(update), MaxStructs(limits))));
+        return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits))));
     }
 
     private static DecodedUpdate DecodeUpdateCore(IUpdateDecoder decoder)

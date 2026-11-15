@@ -6,6 +6,8 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Runtime.CompilerServices;
+
 namespace Ycs;
 
 /// <summary>
@@ -607,6 +609,8 @@ public class UndoManager
     /// </summary>
     private AbstractStruct RedoItem(Transaction transaction, Item item, HashSet<Item> redoItems, DeleteSet itemsToDelete)
     {
+        // Recurses once per level of deleted parents: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var store = transaction.Doc.Store;
         var ownClientId = transaction.Doc.ClientId;
         if (item.Redone != null)

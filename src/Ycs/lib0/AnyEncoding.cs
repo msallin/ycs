@@ -40,106 +40,180 @@ namespace Ycs;
 internal static class AnyEncoding
 {
 
-    public static void WriteAny(this Lib0Writer writer, object? o) => WriteAny(writer, o, 0);
+    /// <summary>
+    /// How deep <see cref="WriteAny"/> goes before it decides that a value contains itself. What a document
+    /// holds was read or validated under a depth limit (<see cref="UpdateLimits.MaxDepth"/>), but a
+    /// list or dictionary given to it can still be changed by the caller afterwards.
+    /// </summary>
+    private const int CycleDepth = 1 << 20;
 
-    private static void WriteAny(Lib0Writer writer, object? o, int depth)
+    // The walks below are iterative: values come from untrusted input and may be nested as deeply as the
+    // limits allow, which a recursion would pay for with the stack. A frame is one open list or object.
+    private enum Kind : byte
     {
-        if (depth > Limits.MaxDepth)
+        List,
+        Dictionary,
+        ReadOnlyDictionary,
+        LegacyDictionary,
+    }
+
+    private struct Frame(Kind kind, IEnumerator entries)
+    {
+        public readonly Kind Kind = kind;
+        public readonly IEnumerator Entries = entries;
+    }
+
+    public static void WriteAny(this Lib0Writer writer, object? o)
+    {
+        List<Frame>? frames = null;
+        if (!WriteValue(writer, o, ref frames))
         {
-            throw TooDeep();
+            return;
         }
 
+        while (frames!.Count > 0)
+        {
+            var frame = frames[^1];
+            if (!frame.Entries.MoveNext())
+            {
+                frames.RemoveAt(frames.Count - 1);
+                continue;
+            }
+
+            if (frames.Count > CycleDepth)
+            {
+                throw TooDeep(CycleDepth);
+            }
+
+            var value = Entry(frame, out var key);
+            if (key != null)
+            {
+                writer.WriteVarString(key);
+            }
+
+            WriteValue(writer, value, ref frames);
+        }
+    }
+
+    /// <summary>The value of the current entry of <paramref name="frame"/>, and its key for an object.</summary>
+    private static object? Entry(Frame frame, out string? key)
+    {
+        switch (frame.Kind)
+        {
+            case Kind.Dictionary:
+            case Kind.ReadOnlyDictionary:
+                var kvp = (KeyValuePair<string, object?>)frame.Entries.Current!;
+                key = kvp.Key;
+                return kvp.Value;
+            case Kind.LegacyDictionary:
+                var entry = (DictionaryEntry)frame.Entries.Current!;
+                key = entry.Key as string ?? throw NotAStringKey(entry.Key);
+                return entry.Value;
+            default:
+                key = null;
+                return frame.Entries.Current;
+        }
+    }
+
+    /// <summary>Opens a frame for a list or an object (true), or returns false for any other value.</summary>
+    private static bool Open(object? o, ref List<Frame>? frames, out int count)
+    {
+        Frame frame;
+        switch (o)
+        {
+            case IDictionary<string, object?> map:
+                frame = new Frame(Kind.Dictionary, map.GetEnumerator());
+                count = map.Count;
+                break;
+            case IReadOnlyDictionary<string, object?> map:
+                frame = new Frame(Kind.ReadOnlyDictionary, map.GetEnumerator());
+                count = map.Count;
+                break;
+            case IDictionary dict: // e.g. Dictionary<string, string>
+                frame = new Frame(Kind.LegacyDictionary, dict.GetEnumerator());
+                count = dict.Count;
+                break;
+            case IList list when o is not byte[]:
+                frame = new Frame(Kind.List, list.GetEnumerator());
+                count = list.Count;
+                break;
+            default:
+                count = 0;
+                return false;
+        }
+
+        (frames ??= new List<Frame>()).Add(frame);
+        return true;
+    }
+
+    /// <summary>Writes a value; for a list or an object only its header, and opens its frame (true).</summary>
+    private static bool WriteValue(Lib0Writer writer, object? o, ref List<Frame>? frames)
+    {
         switch (o)
         {
             case null: // TYPE 126: null
                 writer.WriteByte(126);
-                break;
+                return false;
             case string str: // TYPE 119: STRING
                 writer.WriteByte(119);
                 writer.WriteVarString(str);
-                break;
+                return false;
             case bool b: // TYPE 120/121: boolean (true/false)
                 writer.WriteByte((byte)(b ? 120 : 121));
-                break;
+                return false;
             case double d:
                 WriteNumber(writer, d);
-                break;
+                return false;
             case float f:
                 WriteNumber(writer, f);
-                break;
+                return false;
             case int i:
                 WriteInteger(writer, i);
-                break;
+                return false;
             case long l:
                 WriteInteger(writer, l);
-                break;
-            case short s:
-                WriteInteger(writer, s);
-                break;
+                return false;
+            case short sh:
+                WriteInteger(writer, sh);
+                return false;
             case sbyte sb:
                 WriteInteger(writer, sb);
-                break;
+                return false;
             case byte ub:
                 WriteInteger(writer, ub);
-                break;
+                return false;
             case ushort us:
                 WriteInteger(writer, us);
-                break;
+                return false;
             case uint ui:
                 WriteInteger(writer, ui);
-                break;
+                return false;
             case ulong ul:
                 WriteInteger(writer, ul <= JsValue.MaxSafeInteger ? (long)ul : throw OutOfRange(ul));
-                break;
+                return false;
             case BigInteger bi: // TYPE 122: BigInt
                 writer.WriteByte(122);
                 writer.WriteBigInt64(ToInt64(bi));
-                break;
+                return false;
             case byte[] ba: // TYPE 116: Uint8Array
                 writer.WriteByte(116);
                 writer.WriteVarUint8Array(ba);
-                break;
-            case IDictionary<string, object?> map: // TYPE 118: object
-                writer.WriteByte(118);
-                writer.WriteVarUint((uint)map.Count);
-                foreach (var kvp in map)
-                {
-                    writer.WriteVarString(kvp.Key);
-                    WriteAny(writer, kvp.Value, depth + 1);
-                }
-                break;
-            case IReadOnlyDictionary<string, object?> map: // TYPE 118: object
-                writer.WriteByte(118);
-                writer.WriteVarUint((uint)map.Count);
-                foreach (var kvp in map)
-                {
-                    writer.WriteVarString(kvp.Key);
-                    WriteAny(writer, kvp.Value, depth + 1);
-                }
-                break;
-            case IDictionary dict: // TYPE 118: object, e.g. Dictionary<string, string>
-                writer.WriteByte(118);
-                writer.WriteVarUint((uint)dict.Count);
-                foreach (DictionaryEntry entry in dict)
-                {
-                    writer.WriteVarString(entry.Key as string ?? throw NotAStringKey(entry.Key));
-                    WriteAny(writer, entry.Value, depth + 1);
-                }
-                break;
-            case IList list: // TYPE 117: Array
-                writer.WriteByte(117);
-                writer.WriteVarUint((uint)list.Count);
-                foreach (var item in list)
-                {
-                    WriteAny(writer, item, depth + 1);
-                }
-                break;
-            default:
-                throw Unsupported(o);
+                return false;
         }
+
+        if (!Open(o, ref frames, out var count))
+        {
+            throw Unsupported(o!);
+        }
+
+        // TYPE 117: Array, TYPE 118: object
+        writer.WriteByte((byte)(frames![^1].Kind == Kind.List ? 117 : 118));
+        writer.WriteVarUint((uint)count);
+        return true;
     }
 
-    public static object? ReadAny(this Lib0Reader reader) => ReadAny(reader, 0);
+    /// <summary>Reads a value as lib0's <c>readAny</c>, nested at most <see cref="Lib0Reader.MaxDepth"/> levels.</summary>
+    public static object? ReadAny(this Lib0Reader reader) => ReadAny(reader, reader.ReadByte(), 0);
 
     /// <summary>
     /// Reads a value as <see cref="ReadAny(Lib0Reader)"/> does, but a member of an object that is
@@ -166,11 +240,67 @@ internal static class AnyEncoding
         return obj;
     }
 
-    private static object? ReadAny(Lib0Reader reader, int depth) => ReadAny(reader, reader.ReadByte(), depth);
-
+    /// <summary>Reads a value of <paramref name="type"/> that is nested <paramref name="depth"/> levels deep already.</summary>
     private static object? ReadAny(Lib0Reader reader, byte type, int depth)
     {
-        Limits.CheckDepth(depth);
+        var maxDepth = reader.MaxDepth;
+        CheckDepth(depth, maxDepth);
+        if (type is not (117 or 118))
+        {
+            return ReadScalar(reader, type);
+        }
+
+        // Each open list or object with the number of its elements still to read.
+        var open = new List<(object Container, long Remaining)>();
+        var root = OpenContainer(reader, type, open);
+        while (open.Count > 0)
+        {
+            var (container, remaining) = open[^1];
+            if (remaining == 0)
+            {
+                open.RemoveAt(open.Count - 1);
+                continue;
+            }
+
+            open[^1] = (container, remaining - 1);
+            var obj = container as Dictionary<string, object?>;
+            var key = obj != null ? reader.ReadVarString() : null;
+            var childType = reader.ReadByte();
+            CheckDepth(depth + open.Count, maxDepth);
+            var child = childType is 117 or 118 ? OpenContainer(reader, childType, open) : ReadScalar(reader, childType);
+            if (obj != null)
+            {
+                obj[key!] = child;
+            }
+            else
+            {
+                ((List<object?>)container).Add(child);
+            }
+        }
+
+        return root;
+    }
+
+    private static void CheckDepth(int depth, int maxDepth)
+    {
+        if (depth > maxDepth)
+        {
+            throw new YUpdateException($"A value is nested deeper than {maxDepth} levels (UpdateLimits.MaxDepth).");
+        }
+    }
+
+    private static object OpenContainer(Lib0Reader reader, byte type, List<(object Container, long Remaining)> open)
+    {
+        var len = reader.ReadVarUint();
+        object container = type == 117
+            ? new List<object?>(Limits.Capacity(len, reader.Remaining))
+            : new Dictionary<string, object?>(Limits.Capacity(len, reader.Remaining / 2));
+        open.Add((container, len));
+        return container;
+    }
+
+    private static object? ReadScalar(Lib0Reader reader, byte type)
+    {
         switch (type)
         {
             case 119: // String
@@ -200,29 +330,6 @@ internal static class AnyEncoding
                 return null;
             case 116: // Uint8Array
                 return reader.ReadVarUint8Array();
-            case 117: // Array<object>
-                {
-                    var len = reader.ReadVarUint();
-                    var arr = new List<object?>(Limits.Capacity(len, reader.Remaining));
-                    for (long i = 0; i < len; i++)
-                    {
-                        arr.Add(ReadAny(reader, depth + 1));
-                    }
-
-                    return arr;
-                }
-            case 118: // object (Dictionary<string, object>)
-                {
-                    var len = reader.ReadVarUint();
-                    var obj = new Dictionary<string, object?>(Limits.Capacity(len, reader.Remaining / 2));
-                    for (long i = 0; i < len; i++)
-                    {
-                        var key = reader.ReadVarString();
-                        obj[key] = ReadAny(reader, depth + 1);
-                    }
-
-                    return obj;
-                }
             default:
                 throw new YUpdateException($"Unknown 'any' type: {type}.");
         }
@@ -230,63 +337,49 @@ internal static class AnyEncoding
 
     /// <summary>
     /// Throws if <paramref name="value"/>, or anything nested in it, is not one of the types
-    /// <see cref="WriteAny"/> accepts. Called when a value enters a document, so a bad value
-    /// fails at the call that inserted it rather than at the next encode.
+    /// <see cref="WriteAny"/> accepts, or is nested deeper than <paramref name="maxDepth"/> levels. Called when a
+    /// value enters a document, so a bad value fails at the call that inserted it rather than at the next encode.
     /// </summary>
-    public static void Validate(object? value) => Validate(value, 0);
-
-    private static void Validate(object? value, int depth)
+    public static void Validate(object? value, int maxDepth = UpdateLimits.DefaultMaxDepth)
     {
-        if (depth > Limits.MaxDepth)
+        List<Frame>? frames = null;
+        if (!ValidateValue(value, ref frames))
         {
-            throw TooDeep();
+            return;
         }
 
+        while (frames!.Count > 0)
+        {
+            var frame = frames[^1];
+            if (!frame.Entries.MoveNext())
+            {
+                frames.RemoveAt(frames.Count - 1);
+                continue;
+            }
+
+            if (frames.Count > maxDepth)
+            {
+                throw TooDeep(maxDepth);
+            }
+
+            ValidateValue(Entry(frame, out _), ref frames);
+        }
+    }
+
+    private static bool ValidateValue(object? value, ref List<Frame>? frames)
+    {
         switch (value)
         {
             case null or string or bool or double or float or int or long or short or sbyte or byte or ushort or uint or byte[]:
-                return;
+                return false;
             case ulong ul:
-                if (ul > JsValue.MaxSafeInteger)
-                {
-                    throw OutOfRange(ul);
-                }
-                return;
+                return ul > JsValue.MaxSafeInteger ? throw OutOfRange(ul) : false;
             case BigInteger bi:
                 ToInt64(bi);
-                return;
-            case IDictionary<string, object?> map:
-                foreach (var kvp in map)
-                {
-                    Validate(kvp.Value, depth + 1);
-                }
-                return;
-            case IReadOnlyDictionary<string, object?> map:
-                foreach (var kvp in map)
-                {
-                    Validate(kvp.Value, depth + 1);
-                }
-                return;
-            case IDictionary dict:
-                foreach (DictionaryEntry entry in dict)
-                {
-                    if (entry.Key is not string)
-                    {
-                        throw NotAStringKey(entry.Key);
-                    }
-
-                    Validate(entry.Value, depth + 1);
-                }
-                return;
-            case IList list:
-                foreach (var item in list)
-                {
-                    Validate(item, depth + 1);
-                }
-                return;
-            default:
-                throw Unsupported(value);
+                return false;
         }
+
+        return Open(value, ref frames, out _) ? true : throw Unsupported(value!);
     }
 
     /// <summary>lib0 <c>writeAny</c> for a JavaScript number.</summary>
@@ -341,8 +434,8 @@ internal static class AnyEncoding
     private static ArgumentException NotAStringKey(object? key) =>
         new($"Object keys must be strings, not '{key?.GetType().Name ?? "null"}'.", "value");
 
-    internal static ArgumentException TooDeep() =>
-        new($"Values nested deeper than {Limits.MaxDepth} levels (or a value that contains itself) cannot be stored in a Yjs document.", "value");
+    internal static ArgumentException TooDeep(int maxDepth) =>
+        new($"Values nested deeper than {maxDepth} levels (or a value that contains itself) cannot be stored in a Yjs document.", "value");
 
     internal static NotSupportedException Unsupported(object value) =>
         new($"Values of type '{value.GetType().Name}' cannot be stored in a Yjs document. Use null, bool, a number, " +

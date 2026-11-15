@@ -37,66 +37,121 @@ public class ContentType : IContentEx
         Type.Integrate(transaction.Doc, item);
     }
 
+    // Deleting and collecting a type walk the types nested in it, as deep as an update may nest them
+    // (UpdateLimits.MaxDepth), so they keep the open types in a list instead of recursing. Both visit the items
+    // in the order of Yjs' recursion: depth first, a type's list from its start, then its keys' values; the order
+    // decides the order of the changed types, and so of the events.
+    private sealed class Open(AbstractType type, Item owner)
+    {
+        public readonly AbstractType Type = type;
+        public readonly Item Owner = owner;
+        public Item Next = type._start;
+        public IEnumerator<Item> Values;
+        public IEnumerator<KeyValuePair<string, Item>> Keys;
+        public Item Value;
+    }
+
     void IContentEx.Delete(Transaction transaction)
     {
-        var item = Type._start;
-
-        while (item != null)
+        var open = new List<Open> { new(Type, null) };
+        while (open.Count > 0)
         {
-            if (!item.Deleted)
+            var frame = open[^1];
+            Item item;
+            if (frame.Values == null && frame.Next != null)
             {
-                item.Delete(transaction);
+                item = frame.Next;
+                frame.Next = item.Right as Item;
+            }
+            else
+            {
+                frame.Values ??= frame.Type._map.Values.GetEnumerator();
+                if (!frame.Values.MoveNext())
+                {
+                    transaction.Changed.Remove(frame.Type);
+                    open.RemoveAt(open.Count - 1);
+                    continue;
+                }
+
+                item = frame.Values.Current;
+            }
+
+            if (item.MarkDeleted(transaction))
+            {
+                if (item.Content is ContentType nested)
+                {
+                    open.Add(new Open(nested.Type, item));
+                }
+                else
+                {
+                    item.Content.Delete(transaction);
+                }
             }
             else if (IsOlderThan(item, transaction))
             {
                 // Collected with the type later, but not in the transaction's delete set: merge it then.
                 transaction._mergeStructs.Add(item);
             }
-
-            item = item.Right as Item;
         }
-
-        foreach (var valueItem in Type._map.Values)
-        {
-            if (!valueItem.Deleted)
-            {
-                valueItem.Delete(transaction);
-            }
-            else if (IsOlderThan(valueItem, transaction))
-            {
-                transaction._mergeStructs.Add(valueItem);
-            }
-        }
-
-        transaction.Changed.Remove(Type);
-
-        static bool IsOlderThan(Item item, Transaction transaction) =>
-            item.Id.Clock < (transaction.BeforeState.TryGetValue(item.Id.Client, out var clock) ? clock : 0);
     }
+
+    private static bool IsOlderThan(Item item, Transaction transaction) =>
+        item.Id.Clock < (transaction.BeforeState.TryGetValue(item.Id.Client, out var clock) ? clock : 0);
 
     void IContentEx.Gc(StructStore store)
     {
-        var item = Type._start;
-        while (item != null)
+        // An item is replaced by a GC struct after the types nested in it were collected, as in Yjs' Item.gc.
+        var open = new List<Open> { new(Type, null) };
+        while (open.Count > 0)
         {
-            item.Gc(store, parentGCd: true);
-            item = item.Right as Item;
-        }
-
-        Type._start = null;
-
-        foreach (var kvp in Type._map)
-        {
-            var valueItem = kvp.Value;
-            while (valueItem != null)
+            var frame = open[^1];
+            Item item;
+            if (frame.Keys == null && frame.Next != null)
             {
-                valueItem.Gc(store, parentGCd: true);
-                valueItem = valueItem.Left as Item;
+                item = frame.Next;
+                frame.Next = item.Right as Item;
+            }
+            else if (frame.Value != null)
+            {
+                item = frame.Value;
+                frame.Value = item.Left as Item;
+            }
+            else
+            {
+                frame.Keys ??= frame.Type._map.GetEnumerator();
+                if (frame.Keys.MoveNext())
+                {
+                    frame.Value = frame.Keys.Current.Value;
+                    continue;
+                }
+
+                frame.Type._start = null;
+                frame.Type._map.Clear();
+                frame.Type._mapCount = 0;
+                open.RemoveAt(open.Count - 1);
+                if (frame.Owner != null)
+                {
+                    store.ReplaceStruct(frame.Owner, new GC(frame.Owner.Id, frame.Owner.Length));
+                }
+
+                continue;
+            }
+
+            if (!item.Deleted)
+            {
+                throw new InvalidOperationException();
+            }
+
+            if (item.Content is ContentType nested)
+            {
+                open.Add(new Open(nested.Type, item));
+            }
+            else
+            {
+                item.Content.Gc(store);
+                store.ReplaceStruct(item, new GC(item.Id, item.Length));
             }
         }
-
-        Type._map.Clear();
-        Type._mapCount = 0;
     }
 
     void IContentEx.Write(IUpdateEncoder encoder, int offset)

@@ -31,23 +31,21 @@ namespace Ycs;
 internal static class YJson
 {
 
-    private static readonly JsonReaderOptions ReaderOptions = new() { MaxDepth = Limits.MaxDepth };
-
     public static string Stringify(object? value)
     {
         var sb = new StringBuilder();
-        Write(sb, value, 0);
+        Write(sb, value);
         return sb.ToString();
     }
 
-    public static object? Parse(string json) => Parse(Encoding.UTF8.GetBytes(json));
+    public static object? Parse(string json, int maxDepth = UpdateLimits.DefaultMaxDepth) => Parse(Encoding.UTF8.GetBytes(json), maxDepth);
 
-    /// <summary>Parses JSON read from an update; malformed JSON is a <see cref="YUpdateException"/>.</summary>
-    public static object? Parse(ReadOnlySpan<byte> utf8Json)
+    /// <summary>Parses JSON read from an update, nested at most <paramref name="maxDepth"/> levels; malformed JSON is a <see cref="YUpdateException"/>.</summary>
+    public static object? Parse(ReadOnlySpan<byte> utf8Json, int maxDepth = UpdateLimits.DefaultMaxDepth)
     {
         try
         {
-            return ParseCore(utf8Json);
+            return ParseCore(utf8Json, maxDepth);
         }
         catch (Exception e) when (e is JsonException or InvalidOperationException or FormatException)
         {
@@ -55,9 +53,11 @@ internal static class YJson
         }
     }
 
-    private static object? ParseCore(ReadOnlySpan<byte> utf8Json)
+    private static object? ParseCore(ReadOnlySpan<byte> utf8Json, int maxDepth)
     {
-        var reader = new Utf8JsonReader(utf8Json, ReaderOptions);
+        // Utf8JsonReader counts the open lists and objects and rejects a deeper one (as a JsonException); a value at
+        // depth maxDepth may itself be a list or an object, as in AnyEncoding.
+        var reader = new Utf8JsonReader(utf8Json, new JsonReaderOptions { MaxDepth = maxDepth == int.MaxValue ? maxDepth : maxDepth + 1 });
         if (!reader.Read())
         {
             throw new JsonException("Empty JSON text.");
@@ -72,53 +72,91 @@ internal static class YJson
         return value;
     }
 
+    /// <summary>The value at the reader, read without recursion (its nesting is bounded only by the reader's MaxDepth).</summary>
     private static object? ReadValue(ref Utf8JsonReader reader)
     {
-        switch (reader.TokenType)
+        var open = new List<object>();
+        object? root = null;
+        string? key = null;
+        while (true)
         {
-            case JsonTokenType.StartObject:
-                {
-                    var dict = new Dictionary<string, object?>();
-                    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
+            object? value;
+            switch (reader.TokenType)
+            {
+                case JsonTokenType.StartObject:
+                    value = new Dictionary<string, object?>();
+                    break;
+                case JsonTokenType.StartArray:
+                    value = new List<object?>();
+                    break;
+                case JsonTokenType.EndObject:
+                case JsonTokenType.EndArray:
+                    open.RemoveAt(open.Count - 1);
+                    if (open.Count == 0)
                     {
-                        var key = GetString(ref reader);
-                        reader.Read();
-                        dict[key] = ReadValue(ref reader); // a repeated key: the last one wins, as in JSON.parse
+                        return root;
                     }
 
-                    return dict;
-                }
-            case JsonTokenType.StartArray:
-                {
-                    var list = new List<object?>();
-                    while (reader.Read() && reader.TokenType != JsonTokenType.EndArray)
+                    reader.Read();
+                    continue;
+                case JsonTokenType.PropertyName:
+                    key = GetString(ref reader);
+                    reader.Read();
+                    continue;
+                case JsonTokenType.String:
+                    value = GetString(ref reader);
+                    break;
+                case JsonTokenType.Number:
                     {
-                        list.Add(ReadValue(ref reader));
-                    }
+                        if (reader.ValueSpan.IndexOfAny((byte)'.', (byte)'e', (byte)'E') < 0
+                            && reader.TryGetInt64(out var l)
+                            && l >= -JsValue.MaxSafeInteger && l <= JsValue.MaxSafeInteger)
+                        {
+                            value = l >= int.MinValue && l <= int.MaxValue ? (object)(int)l : l;
+                        }
+                        else
+                        {
+                            value = reader.GetDouble();
+                        }
 
-                    return list;
-                }
-            case JsonTokenType.String:
-                return GetString(ref reader);
-            case JsonTokenType.Number:
-                {
-                    if (reader.ValueSpan.IndexOfAny((byte)'.', (byte)'e', (byte)'E') < 0
-                        && reader.TryGetInt64(out var l)
-                        && l >= -JsValue.MaxSafeInteger && l <= JsValue.MaxSafeInteger)
-                    {
-                        return l >= int.MinValue && l <= int.MaxValue ? (object)(int)l : l;
+                        break;
                     }
+                case JsonTokenType.True:
+                    value = true;
+                    break;
+                case JsonTokenType.False:
+                    value = false;
+                    break;
+                case JsonTokenType.Null:
+                    value = null;
+                    break;
+                default:
+                    throw new JsonException($"Unexpected JSON token: {reader.TokenType}.");
+            }
 
-                    return reader.GetDouble();
-                }
-            case JsonTokenType.True:
-                return true;
-            case JsonTokenType.False:
-                return false;
-            case JsonTokenType.Null:
-                return null;
-            default:
-                throw new JsonException($"Unexpected JSON token: {reader.TokenType}.");
+            if (open.Count == 0)
+            {
+                root = value;
+            }
+            else if (open[^1] is Dictionary<string, object?> dict)
+            {
+                dict[key!] = value; // a repeated key: the last one wins, as in JSON.parse
+            }
+            else
+            {
+                ((List<object?>)open[^1]).Add(value);
+            }
+
+            if (value is Dictionary<string, object?> or List<object?>)
+            {
+                open.Add(value);
+            }
+            else if (open.Count == 0)
+            {
+                return root;
+            }
+
+            reader.Read();
         }
     }
 
@@ -188,13 +226,57 @@ internal static class YJson
         return sb.ToString();
     }
 
-    private static void Write(StringBuilder sb, object? value, int depth)
-    {
-        if (depth > Limits.MaxDepth)
-        {
-            throw AnyEncoding.TooDeep();
-        }
+    // A value that contains itself: see AnyEncoding.WriteAny.
+    private const int CycleDepth = 1 << 20;
 
+    /// <summary>Writes a value as JSON.stringify, without recursion: one open list or object per frame.</summary>
+    private static void Write(StringBuilder sb, object? value)
+    {
+        // Per open list or object: its entries, whether it is an object (keys written), and whether an entry was written.
+        var open = new List<(IEnumerator Entries, bool Object, bool Any)>();
+        WriteValue(sb, value, open);
+        while (open.Count > 0)
+        {
+            var (entries, isObject, any) = open[^1];
+            if (!entries.MoveNext())
+            {
+                sb.Append(isObject ? '}' : ']');
+                open.RemoveAt(open.Count - 1);
+                continue;
+            }
+
+            if (open.Count > CycleDepth)
+            {
+                throw AnyEncoding.TooDeep(CycleDepth);
+            }
+
+            open[^1] = (entries, isObject, true);
+            if (any)
+            {
+                sb.Append(',');
+            }
+
+            object? entry = entries.Current;
+            if (isObject)
+            {
+                string key;
+                (key, entry) = entry switch
+                {
+                    KeyValuePair<string, object?> kv => (kv.Key, kv.Value),
+                    DictionaryEntry de => (de.Key as string ?? throw new ArgumentException("Object keys must be strings.", nameof(value)), de.Value),
+                    _ => throw new InvalidOperationException(),
+                };
+                WriteString(sb, key);
+                sb.Append(':');
+            }
+
+            WriteValue(sb, entry, open);
+        }
+    }
+
+    /// <summary>Writes a scalar, or the opening bracket of a list or an object and opens its frame.</summary>
+    private static void WriteValue(StringBuilder sb, object? value, List<(IEnumerator Entries, bool Object, bool Any)> open)
+    {
         switch (value)
         {
             case null:
@@ -233,55 +315,24 @@ internal static class YJson
                 sb.Append('}');
                 return;
             case IDictionary<string, object?> map:
-                WriteObject(sb, map, depth);
+                sb.Append('{');
+                open.Add((map.GetEnumerator(), true, false));
                 return;
             case IReadOnlyDictionary<string, object?> map:
-                WriteObject(sb, map, depth);
+                sb.Append('{');
+                open.Add((map.GetEnumerator(), true, false));
                 return;
             case IDictionary map:
-                {
-                    sb.Append('{');
-                    var first = true;
-                    foreach (DictionaryEntry kv in map)
-                    {
-                        if (!first) sb.Append(',');
-                        first = false;
-                        WriteString(sb, kv.Key as string ?? throw new ArgumentException("Object keys must be strings.", nameof(value)));
-                        sb.Append(':');
-                        Write(sb, kv.Value, depth + 1);
-                    }
-                    sb.Append('}');
-                    return;
-                }
+                sb.Append('{');
+                open.Add((map.GetEnumerator(), true, false));
+                return;
             case IList items:
-                {
-                    sb.Append('[');
-                    for (int i = 0; i < items.Count; i++)
-                    {
-                        if (i > 0) sb.Append(',');
-                        Write(sb, items[i], depth + 1);
-                    }
-                    sb.Append(']');
-                    return;
-                }
+                sb.Append('[');
+                open.Add((items.GetEnumerator(), false, false));
+                return;
             default:
                 throw AnyEncoding.Unsupported(value);
         }
-    }
-
-    private static void WriteObject(StringBuilder sb, IEnumerable<KeyValuePair<string, object?>> map, int depth)
-    {
-        sb.Append('{');
-        var first = true;
-        foreach (var kv in map)
-        {
-            if (!first) sb.Append(',');
-            first = false;
-            WriteString(sb, kv.Key);
-            sb.Append(':');
-            Write(sb, kv.Value, depth + 1);
-        }
-        sb.Append('}');
     }
 
     private static void WriteInteger(StringBuilder sb, long l)

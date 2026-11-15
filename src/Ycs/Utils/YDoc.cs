@@ -549,7 +549,7 @@ public partial class YDoc
         UpdateReader.Lease update;
         try
         {
-            update = UpdateReader.Read(buffer, 0, count, v2, limits.MaxStructsPerUpdate);
+            update = UpdateReader.Read(buffer, 0, count, v2, limits.MaxStructsPerUpdate, limits.MaxDepth);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {

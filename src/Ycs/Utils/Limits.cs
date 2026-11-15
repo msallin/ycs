@@ -19,13 +19,6 @@ internal static class Limits
     /// </summary>
     public const long MaxClient = JsValue.MaxSafeInteger;
 
-    /// <summary>
-    /// Nesting depth of 'any' and JSON values, and of shared types inside each other, so that the
-    /// recursive code that walks them (encoding, deleting, garbage collection, ToJson) cannot
-    /// overflow the stack.
-    /// </summary>
-    public const int MaxDepth = 256;
-
     /// <summary>A capacity for a collection of <paramref name="count"/> decoded elements, each taking at least one of the <paramref name="remaining"/> input bytes.</summary>
     public static int Capacity(long count, int remaining) => (int)Math.Clamp(Math.Min(count, remaining), 0, int.MaxValue);
 
@@ -55,14 +48,6 @@ internal static class Limits
         if (length <= 0 || (ulong)clock > MaxClock || length > MaxClock - clock)
         {
             throw new YUpdateException($"A range of length {length} at clock {clock} is empty or ends beyond clock {MaxClock}.");
-        }
-    }
-
-    public static void CheckDepth(int depth)
-    {
-        if (depth > MaxDepth)
-        {
-            throw new YUpdateException($"Values or shared types are nested deeper than {MaxDepth} levels.");
         }
     }
 }

@@ -7,6 +7,7 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Ycs;
@@ -66,6 +67,8 @@ public class YXmlText : YText
 
     internal override AbstractType InternalClone()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var text = new YXmlText();
         text.ApplyDelta(ToDelta());
         return text;
@@ -81,6 +84,8 @@ public class YXmlText : YText
     /// </summary>
     public override string ToString()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var sb = new StringBuilder();
 
         foreach (var delta in ToDelta())

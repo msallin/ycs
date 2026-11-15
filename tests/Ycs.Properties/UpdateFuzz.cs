@@ -621,7 +621,7 @@ internal sealed class UpdateFuzzer
         return merged.Select(r => (r.Clock, r.Len)).ToList();
     }
 
-    /// <summary>A chain of nested arrays <paramref name="depth"/> deep, in one update (nesting is limited to 256 levels, docs/api.md).</summary>
+    /// <summary>A chain of nested arrays <paramref name="depth"/> deep, in one update (nesting is limited, UpdateLimits.MaxDepth).</summary>
     public static FUpdate DeepNesting(int depth)
     {
         var structs = new List<FStruct>();

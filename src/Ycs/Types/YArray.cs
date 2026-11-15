@@ -6,6 +6,8 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Runtime.CompilerServices;
+
 namespace Ycs;
 
 public class YArrayEvent : YEvent
@@ -57,6 +59,8 @@ public partial class YArray : YArrayBase
 
     internal override void Integrate(YDoc doc, Item item)
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         base.Integrate(doc, item);
 
         // Bug fix: `_prelimContent` must be cleared *before* flushing it via Insert(), not after.
@@ -81,6 +85,8 @@ public partial class YArray : YArrayBase
 
     internal override AbstractType InternalClone()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var arr = new YArray();
 
         foreach (var item in EnumerateList())
@@ -243,9 +249,26 @@ public partial class YArray : YArrayBase
     /// Transforms this Shared Type to a JSON-compatible list. Mirrors Yjs' <c>toJSON()</c>
     /// (<c>this.map(c =&gt; c instanceof AbstractType ? c.toJSON() : c)</c>).
     /// </summary>
-    public override object ToJson()
+    public override object ToJson() => JsonTree(this);
+
+    /// <summary>The JSON list of this array with each nested type left null and listed in <paramref name="nested"/>.</summary>
+    internal override object ShallowJson(List<(AbstractType Type, object Container, string Key, int Index)> nested)
     {
-        return Map((c, i, arr) => c is AbstractType at ? at.ToJson() : c);
+        var result = new List<object>();
+        foreach (var c in Map((c, i, arr) => c))
+        {
+            if (c is AbstractType at)
+            {
+                nested.Add((at, result, null, result.Count));
+                result.Add(null);
+            }
+            else
+            {
+                result.Add(c);
+            }
+        }
+
+        return result;
     }
 
     private IEnumerable<object> EnumerateList()

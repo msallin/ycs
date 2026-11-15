@@ -21,6 +21,9 @@ internal sealed class Lib0Reader
     private int _end;
     private int _pos;
 
+    /// <summary>How deeply the values this reader reads may be nested (<see cref="UpdateLimits.MaxDepth"/>).</summary>
+    public int MaxDepth { get; set; } = UpdateLimits.DefaultMaxDepth;
+
     /// <summary>A reader over no input; see <see cref="Reset"/>.</summary>
     public Lib0Reader()
     {

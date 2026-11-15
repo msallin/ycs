@@ -217,25 +217,39 @@ public partial class Item : AbstractStruct
     /// </summary>
     internal override void Delete(Transaction transaction)
     {
-        if (!Deleted)
+        if (MarkDeleted(transaction))
         {
-            var parent = Parent as AbstractType;
-            if (Countable && ParentSub == null)
-            {
-                Debug.Assert(parent != null);
-                parent.Length -= Length;
-            }
-
-            if (ParentSub != null && parent._map.TryGetValue(ParentSub, out var current) && current == this)
-            {
-                parent._mapCount--;
-            }
-
-            MarkDeleted();
-            transaction.DeleteSet.Add(Id.Client, Id.Clock, Length);
-            transaction.AddChangedTypeToTransaction(parent, ParentSub);
             Content.Delete(transaction);
         }
+    }
+
+    /// <summary>
+    /// Marks this item deleted in <paramref name="transaction"/> without deleting its content (what is
+    /// nested in it); false when it was deleted already.
+    /// </summary>
+    internal bool MarkDeleted(Transaction transaction)
+    {
+        if (Deleted)
+        {
+            return false;
+        }
+
+        var parent = Parent as AbstractType;
+        if (Countable && ParentSub == null)
+        {
+            Debug.Assert(parent != null);
+            parent.Length -= Length;
+        }
+
+        if (ParentSub != null && parent._map.TryGetValue(ParentSub, out var current) && current == this)
+        {
+            parent._mapCount--;
+        }
+
+        MarkDeleted();
+        transaction.DeleteSet.Add(Id.Client, Id.Clock, Length);
+        transaction.AddChangedTypeToTransaction(parent, ParentSub);
+        return true;
     }
 
     internal override void Integrate(Transaction transaction, int offset)

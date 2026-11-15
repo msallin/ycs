@@ -19,7 +19,7 @@ walkthrough below describes the code at 40d7fdb.
 | F10 `IterateDeletedStructs` without guards | fixed in a791a61; the snapshot split uses it since the merge 2ab12d4 |
 | F11 `meta` that is not an object | fixed in 7547e92 |
 | F12 `MaxPendingBytes` of 16 MiB | fixed in 928d947 (no limit by default) |
-| F13 nesting deeper than 256 | kept on purpose: bounds the recursion on untrusted input |
+| F13 nesting deeper than 256 | fixed: `UpdateLimits.MaxDepth` (3,000, what Yjs handles), and the walks an update leads to are iterative (docs/api.md, Untrusted input) |
 | F14 deep observers' `CurrentTarget` and `Path` | fixed in 0701f70 |
 | F15 unstable sort of deep events | fixed in 5727865 |
 | F16 events of deleted targets | fixed in 0701f70 |
@@ -209,7 +209,7 @@ subdocument gets a random guid on the wire).
 | `IntegrationPlan` (plan before integrating) | equivalent to integrating directly; the planned state equals the store's state after each step. No valid update found that it changes |
 | `Limits.MaxClock` (2^31 - 1) | no real producer exceeds it (yrs clocks are u32, but a document needs > 2 billion operations of one client) |
 | `Limits.MaxClient` (2^32 - 1), var-uints limited to 32 bits | F9 |
-| `Limits.MaxDepth` (256) | F13 |
+| `UpdateLimits.MaxDepth` (3,000) | F13 |
 | `Limits.MaxStructsPerByteV2` | F6 |
 | zero-length structs rejected | F8 |
 | a client listed twice rejected | Yjs keeps only the last section (`clientRefs.set`), so rejecting is safer; Yjs' writers and `mergeUpdates` on descending input never emit it |

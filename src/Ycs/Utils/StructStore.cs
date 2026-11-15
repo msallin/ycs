@@ -375,12 +375,12 @@ internal sealed partial class StructStore
     /// unchanged). Then the plan is carried out, the delete set applied, and pending structs that can
     /// now integrate are retried, as in Yjs.
     /// </summary>
-    /// <param name="limits">Null for the pending structs themselves, which were admitted when they arrived.</param>
-    internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, UpdateLimits limits)
+    /// <param name="retrying">For the pending structs themselves, which were admitted to pending when they arrived.</param>
+    internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, UpdateLimits limits, bool retrying = false)
     {
         var plan = _spare ?? new IntegrationPlan(this);
         _spare = null;
-        plan.Plan(structs);
+        plan.Plan(structs, limits.MaxDepth);
         if (transaction.Doc.Gc)
         {
             plan.CheckGarbageCollection(transaction.Doc, ds, PendingDs);
@@ -400,7 +400,7 @@ internal sealed partial class StructStore
             }
         }
 
-        var restMerged = limits != null && CheckPendingLimits(limits, retry, restUpdate, restStructs, PendingDs.Growth(ds, plan));
+        var restMerged = !retrying && CheckPendingLimits(limits, retry, restUpdate, restStructs, PendingDs.Growth(ds, plan));
 
         plan.Execute(transaction);
 
@@ -450,8 +450,9 @@ internal sealed partial class StructStore
             var update = Pending.Merge();
             var count = Pending.Structs;
             Pending = null;
-            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, maxStructs: count);
-            ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, limits: null);
+            // Their values were read under the limits of the updates that brought them.
+            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, count, maxDepth: int.MaxValue);
+            ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, limits, retrying: true);
         }
     }
 
@@ -606,6 +607,7 @@ internal sealed partial class StructStore
         // Nesting depth of the types this update creates (by the id of their item), and of the type
         // each item lands in (when it was needed), for the nesting limit.
         private Dictionary<ID, int> _typeDepths;
+        private int _maxDepth;
         private Dictionary<Item, int> _parentDepths;
 
         // The parent and key of the planned items without a parent (by their references), for the garbage collection check.
@@ -693,13 +695,14 @@ internal sealed partial class StructStore
         }
 
         /// <summary>
-        /// Works out how <paramref name="refs"/> integrate. A plan that threw (or was used before) is
-        /// cleared first, so nothing of an earlier update is left in it.
+        /// Works out how <paramref name="refs"/> integrate, with types nested at most <paramref name="maxDepth"/>
+        /// levels. A plan that threw (or was used before) is cleared first, so nothing of an earlier update is left in it.
         /// </summary>
-        public void Plan(Dictionary<long, List<AbstractStruct>> refs)
+        public void Plan(Dictionary<long, List<AbstractStruct>> refs, int maxDepth)
         {
             Clear();
             _refs = refs;
+            _maxDepth = maxDepth;
             var clientsStructRefs = _clientsStructRefs;
             foreach (var (client, list) in refs)
             {
@@ -871,7 +874,7 @@ internal sealed partial class StructStore
         }
 
         /// <summary>
-        /// Rejects a type that would be nested deeper than <see cref="Limits.MaxDepth"/>. The depth of
+        /// Rejects a type that would be nested deeper than <see cref="UpdateLimits.MaxDepth"/>. The depth of
         /// the type an item lands in follows its references as <see cref="Item.ResolveReferences"/> will:
         /// the given parent, else the parent of its left origin, else of its right origin. (When the
         /// other origin is a GC struct the item becomes one too; ignoring that only overestimates.)
@@ -881,7 +884,11 @@ internal sealed partial class StructStore
             var parentDepth = ParentDepth(typeItem);
             if (parentDepth >= 0)
             {
-                Limits.CheckDepth(parentDepth + 1);
+                if (parentDepth + 1 > _maxDepth)
+                {
+                    throw new YUpdateException($"Shared types are nested deeper than {_maxDepth} levels (UpdateLimits.MaxDepth).");
+                }
+
                 (_typeDepths ??= new Dictionary<ID, int>())[typeItem.Id] = parentDepth + 1;
             }
         }

@@ -99,7 +99,7 @@ public class ContentJson : IContentEx
             }
             else
             {
-                content.Add(YJson.Parse(jsonStr));
+                content.Add(YJson.Parse(jsonStr, decoder.Reader.MaxDepth));
             }
         }
 

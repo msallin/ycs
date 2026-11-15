@@ -6,6 +6,8 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Runtime.CompilerServices;
+
 namespace Ycs;
 
 /// <summary>
@@ -59,6 +61,8 @@ public class YXmlElement : YXmlFragment
 
     internal override void Integrate(YDoc doc, Item item)
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         base.Integrate(doc, item);
 
         foreach (var kvp in _prelimAttrs)
@@ -76,6 +80,8 @@ public class YXmlElement : YXmlFragment
 
     internal override AbstractType InternalClone()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var el = new YXmlElement(NodeName);
 
         foreach (var kvp in GetAttributes())
@@ -155,6 +161,8 @@ public class YXmlElement : YXmlFragment
     /// </summary>
     public override string ToString()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var attrs = GetAttributes();
         var keys = attrs.Keys.OrderBy(k => k, StringComparer.Ordinal).ToList();
 

@@ -109,11 +109,12 @@ public sealed class UpdateFuzzTests
         File.WriteAllText(Environment.GetEnvironmentVariable("YCS_PROP_FUZZ_OUT")!, Json.Canonical(UpdateFuzzer.Generate(ulong.Parse(seed, CultureInfo.InvariantCulture)).Script));
     }
 
-    /// <summary>Nesting up to the documented limit (256) applies; beyond it, the update is rejected cleanly.</summary>
+    /// <summary>Nesting up to the documented limit (UpdateLimits.MaxDepth) applies; beyond it, the update is rejected cleanly.</summary>
     [TestMethod]
     public void DeepNesting_AppliesUpToTheLimit_RejectsBeyond()
     {
-        foreach (var (depth, accepted) in new[] { (250, true), (300, false) })
+        var limit = UpdateLimits.Default.MaxDepth;
+        foreach (var (depth, accepted) in new[] { (limit, true), (limit + 1, false) })
         {
             var update = UpdateFuzzer.DeepNesting(depth);
             var script = UpdateFuzzer.ToScript([update], 1);

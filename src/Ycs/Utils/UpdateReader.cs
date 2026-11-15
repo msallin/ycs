@@ -46,14 +46,15 @@ internal sealed class UpdateReader
     /// decoders do; the caller wraps it in a <see cref="YUpdateException"/>), and the reader is released.
     /// </summary>
     /// <param name="maxStructs">The most structs the update may hold (<see cref="UpdateLimits.MaxStructsPerUpdate"/>).</param>
-    public static Lease Read(byte[] buffer, int offset, int count, bool v2, long maxStructs)
+    /// <param name="maxDepth">How deeply values may be nested (<see cref="UpdateLimits.MaxDepth"/>).</param>
+    public static Lease Read(byte[] buffer, int offset, int count, bool v2, long maxStructs, int maxDepth = UpdateLimits.DefaultMaxDepth)
     {
         var reader = t_free ?? new UpdateReader();
         t_free = null;
         var version = reader._version;
         try
         {
-            reader.ReadCore(buffer, offset, count, v2, maxStructs);
+            reader.ReadCore(buffer, offset, count, v2, maxStructs, maxDepth);
         }
         catch
         {
@@ -67,7 +68,7 @@ internal sealed class UpdateReader
     /// <summary>Whether this thread's reader is free, that is no lease of it is open (for tests).</summary>
     internal static bool IsFreeOnCurrentThread => t_free != null;
 
-    private void ReadCore(byte[] buffer, int offset, int count, bool v2, long maxStructs)
+    private void ReadCore(byte[] buffer, int offset, int count, bool v2, long maxStructs, int maxDepth)
     {
         _input.Reset(buffer, offset, count);
 
@@ -92,6 +93,7 @@ internal sealed class UpdateReader
             decoder = _v1;
         }
 
+        _input.MaxDepth = maxDepth;
         EncodingUtils.ReadClientStructRefs(decoder, _structs, _clients, _spareStructLists);
         DeleteSet.ReadInto(decoder, _deleteSet, _spareDeleteLists);
     }

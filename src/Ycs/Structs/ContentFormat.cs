@@ -15,7 +15,6 @@ public class ContentFormat : IContentEx
 
     internal ContentFormat(string key, object value)
     {
-        AnyEncoding.Validate(value);
         Key = key;
         Value = value;
     }

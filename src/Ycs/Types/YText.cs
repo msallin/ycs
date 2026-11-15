@@ -7,6 +7,7 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
 using System.Buffers;
+using System.Runtime.CompilerServices;
 
 namespace Ycs;
 
@@ -998,6 +999,8 @@ public partial class YText : YArrayBase
 
     internal override void Integrate(YDoc doc, Item item)
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         base.Integrate(doc, item);
 
         var pending = _pending;
@@ -1053,6 +1056,8 @@ public partial class YText : YArrayBase
 
     internal override AbstractType InternalClone()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var text = new YText();
         text.ApplyDelta(ToDelta());
         return text;
@@ -1118,6 +1123,7 @@ public partial class YText : YArrayBase
                 // Save negated attribute (set null if currentVal is not set).
                 (negatedAttributes ??= new OrderedDictionary<string, object>())[key] = currentVal;
 
+                AnyEncoding.Validate(value, doc.Limits.MaxDepth);
                 currPos.Right = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Left?.LastId, currPos.Right, currPos.Right?.Id, this, null, new ContentFormat(key, value));
                 currPos.Right.Integrate(transaction, 0);
                 currPos.Forward();
@@ -1155,7 +1161,7 @@ public partial class YText : YArrayBase
         {
             string s => (IContent)new ContentString(s),
             AbstractType type => new ContentType(type),
-            _ => new ContentEmbed(text),
+            _ => new ContentEmbed(Validated(text, doc.Limits.MaxDepth)),
         };
 
         if (_searchMarkers?.Count > 0)
@@ -1529,6 +1535,12 @@ public partial class YText : YArrayBase
     /// same own properties, each compared with <c>===</c>; a list's properties are its indexes, so
     /// <c>[1, 2]</c> equals <c>{ "0": 1, "1": 2 }</c>.
     /// </summary>
+    private static object Validated(object embed, int maxDepth)
+    {
+        AnyEncoding.Validate(embed, maxDepth);
+        return embed;
+    }
+
     internal static bool EqualAttrs(object attr1, object attr2) =>
         JsValue.StrictEquals(attr1, attr2) ||
         (attr1 is IDictionary<string, object> map1 && attr2 is IDictionary<string, object> map2 && EqualFlat(map1, map2)) ||

@@ -7,6 +7,7 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
 using System.Collections;
+using System.Runtime.CompilerServices;
 
 namespace Ycs;
 
@@ -140,13 +141,23 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
     /// <summary>
     /// Transforms this Shared Type to a JSON-compatible <see cref="IDictionary{TKey,TValue}"/>. Mirrors Yjs' <c>toJSON()</c>.
     /// </summary>
-    public override object ToJson()
+    public override object ToJson() => JsonTree(this);
+
+    /// <summary>The JSON object of this map with each nested type left null and listed in <paramref name="nested"/>.</summary>
+    internal override object ShallowJson(List<(AbstractType Type, object Container, string Key, int Index)> nested)
     {
         var result = new Dictionary<string, object>();
-
         foreach (var kvp in TypeMapEnumerateValues())
         {
-            result[kvp.Key] = kvp.Value is AbstractType at ? at.ToJson() : kvp.Value;
+            if (kvp.Value is AbstractType at)
+            {
+                nested.Add((at, result, kvp.Key, 0));
+                result[kvp.Key] = null;
+            }
+            else
+            {
+                result[kvp.Key] = kvp.Value;
+            }
         }
 
         return result;
@@ -161,6 +172,8 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
 
     internal override AbstractType InternalClone()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var map = new YMap();
 
         foreach (var kvp in TypeMapEnumerateValues())
@@ -177,6 +190,8 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
 
     internal override void Integrate(YDoc doc, Item item)
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         base.Integrate(doc, item);
 
         foreach (var kvp in _prelimContent)

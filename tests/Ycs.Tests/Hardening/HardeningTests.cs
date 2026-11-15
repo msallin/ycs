@@ -96,7 +96,7 @@ public class HardeningTests
     public void Set_ValueNestedBeyondLimit_Throws()
     {
         object value = 1;
-        for (var i = 0; i < 300; i++)
+        for (var i = 0; i <= UpdateLimits.Default.MaxDepth; i++)
         {
             value = new List<object> { value };
         }
@@ -152,7 +152,7 @@ public class HardeningTests
     public void ApplyUpdate_TypesNestedBeyondLimit_AreRejected()
     {
         var doc = new YDoc();
-        AssertRejected(doc, () => doc.ApplyUpdateV1(NestedArrays(20000)));
+        AssertRejected(doc, () => doc.ApplyUpdateV1(NestedArrays(UpdateLimits.Default.MaxDepth + 1)));
         doc.ApplyUpdateV1(DeleteFirstOfClient5);
     }
 
@@ -160,7 +160,7 @@ public class HardeningTests
     public void ApplyUpdate_TypesNestedUpToLimit_DeleteAndCollect()
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(NestedArrays(256));
+        doc.ApplyUpdateV1(NestedArrays(UpdateLimits.Default.MaxDepth));
         doc.ApplyUpdateV1(DeleteFirstOfClient5);
         Assert.AreEqual(0, doc.GetArray("a").Length);
     }
@@ -170,7 +170,7 @@ public class HardeningTests
     {
         var doc = new YDoc();
         var array = doc.GetArray("a");
-        for (var i = 0; i < 256; i++)
+        for (var i = 0; i < UpdateLimits.Default.MaxDepth; i++)
         {
             var inner = new YArray();
             array.Insert(0, new object[] { inner });

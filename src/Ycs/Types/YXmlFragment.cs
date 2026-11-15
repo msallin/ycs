@@ -8,6 +8,7 @@
 
 using System.Collections;
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace Ycs;
@@ -179,6 +180,8 @@ public class YXmlFragment : YArrayBase
 
     internal override void Integrate(YDoc doc, Item item)
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         base.Integrate(doc, item);
 
         // Clear '_prelimContent' *before* flushing it: 'Length' falls back to the prelim count
@@ -197,6 +200,8 @@ public class YXmlFragment : YArrayBase
 
     internal override AbstractType InternalClone()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var el = new YXmlFragment();
         var children = new List<object>();
         foreach (var v in ToArray())
@@ -259,6 +264,8 @@ public class YXmlFragment : YArrayBase
     /// </summary>
     public override string ToString()
     {
+        // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var sb = new StringBuilder();
         foreach (var child in EnumerateContent())
         {

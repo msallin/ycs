@@ -51,7 +51,7 @@ public partial class AbstractType
 
     public virtual int Length { get; internal set; }
 
-    /// <summary>How deeply this type is nested in other types: 0 for a root type (see <see cref="Limits.MaxDepth"/>).</summary>
+    /// <summary>How deeply this type is nested in other types: 0 for a root type (see <see cref="UpdateLimits.MaxDepth"/>).</summary>
     internal int Depth { get; private set; }
 
     internal virtual void Integrate(YDoc doc, Item item)
@@ -65,12 +65,13 @@ public partial class AbstractType
         _mapCount = TypeMapCount();
     }
 
-    /// <summary>Throws when a type inserted into this one would be nested deeper than <see cref="Limits.MaxDepth"/>.</summary>
+    /// <summary>Throws when a type inserted into this one would be nested deeper than the document's <see cref="UpdateLimits.MaxDepth"/>.</summary>
     internal void CheckCanNest()
     {
-        if (Depth + 1 > Limits.MaxDepth)
+        var maxDepth = (Doc?.Limits ?? UpdateLimits.Default).MaxDepth;
+        if (Depth + 1 > maxDepth)
         {
-            throw new InvalidOperationException($"Shared types cannot be nested deeper than {Limits.MaxDepth} levels.");
+            throw new InvalidOperationException($"Shared types cannot be nested deeper than {maxDepth} levels (UpdateLimits.MaxDepth).");
         }
     }
 
@@ -84,6 +85,38 @@ public partial class AbstractType
     /// Must be implemented by each concrete type.
     /// </summary>
     public virtual object ToJson() { throw new NotImplementedException(); }
+
+    /// <summary>
+    /// For a type whose JSON holds the JSON of the types nested in it (a map, an array): its JSON without them,
+    /// each listed in <paramref name="nested"/> with where it goes; null for any other type.
+    /// </summary>
+    internal virtual object ShallowJson(List<(AbstractType Type, object Container, string Key, int Index)> nested) => null;
+
+    /// <summary>
+    /// <see cref="ToJson"/> of <paramref name="root"/> and the maps and arrays nested in it, without recursion: they
+    /// may be nested as deep as an update allows (<see cref="UpdateLimits.MaxDepth"/>).
+    /// </summary>
+    internal static object JsonTree(AbstractType root)
+    {
+        var nested = new List<(AbstractType Type, object Container, string Key, int Index)>();
+        var result = root.ShallowJson(nested);
+        while (nested.Count > 0)
+        {
+            var (type, container, key, index) = nested[^1];
+            nested.RemoveAt(nested.Count - 1);
+            var json = type.ShallowJson(nested) ?? type.ToJson();
+            if (container is List<object> list)
+            {
+                list[index] = json;
+            }
+            else
+            {
+                ((Dictionary<string, object>)container)[key] = json;
+            }
+        }
+
+        return result;
+    }
 
     /// <summary>
     /// Observe all events that are created on this type (Yjs' <c>observe(f)</c>). Disposing the
@@ -312,7 +345,7 @@ public partial class AbstractType
                     content = new ContentBinary(ba);
                     break;
                 default:
-                    AnyEncoding.Validate(value);
+                    AnyEncoding.Validate(value, transaction.Doc.Limits.MaxDepth);
                     content = ContentAny.Single(value);
                     break;
             }
