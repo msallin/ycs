@@ -136,7 +136,7 @@ public class YXmlText : YText
                 sb.Append('>');
             }
 
-            sb.Append(JsValue.ToJsString(delta.Insert));
+            sb.Append(JsValue.ToJsString(delta.Insert == Delta.NullEmbed ? null : delta.Insert));
 
             for (int i = nestedNodes.Count - 1; i >= 0; i--)
             {

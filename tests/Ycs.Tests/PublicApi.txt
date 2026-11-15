@@ -112,6 +112,7 @@ class Ycs.Delta
     int? Delete
     int? Retain
     object Insert
+    static readonly object NullEmbed
 class Ycs.GC : AbstractStruct
     override bool Deleted { get; }
 interface Ycs.IContent

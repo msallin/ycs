@@ -574,7 +574,9 @@ public partial class YText : YArrayBase
                         // If we omit this step, clients will see a different number of paragraphs,
                         // but nothing bad will happen.
                         var insertStr = op.Insert as string;
-                        var ins = (!sanitize && insertStr != null && i == delta.Count - 1 && curPos.Right == null && insertStr.EndsWith("\n")) ? insertStr.Substring(0, insertStr.Length - 1) : op.Insert;
+                        var ins = (!sanitize && insertStr != null && i == delta.Count - 1 && curPos.Right == null && insertStr.EndsWith("\n")) ? insertStr.Substring(0, insertStr.Length - 1)
+                            : op.Insert == Delta.NullEmbed ? null
+                            : op.Insert;
                         if (!(ins is string) || ((string)ins).Length > 0)
                         {
                             InsertText(tr, ref curPos, ins, op.Attributes);
@@ -1495,7 +1497,7 @@ public partial class YText : YArrayBase
     }
 
     /// <summary>The value an embed or an embedded shared type stands for in a delta.</summary>
-    internal static object EmbedOf(IContent content) => content is ContentEmbed embed ? embed.Embed : ((ContentType)content).Type;
+    internal static object EmbedOf(IContent content) => content is ContentEmbed embed ? embed.Embed ?? Delta.NullEmbed : ((ContentType)content).Type;
 
     private static OrderedDictionary<string, object> Copy(OrderedDictionary<string, object> attributes) =>
         attributes?.Count > 0 ? new OrderedDictionary<string, object>(attributes) : null;

@@ -18,6 +18,13 @@ public class ChangesCollection
 
 public class Delta
 {
+    /// <summary>
+    /// What <see cref="Insert"/> holds for an embed whose value is null (Yjs' <c>{ insert: null }</c>,
+    /// which only another peer can write), since a null <see cref="Insert"/> means no insert: an embed
+    /// of length 1, as every embed. <see cref="YText.ApplyDelta"/> inserts it as that embed.
+    /// </summary>
+    public static readonly object NullEmbed = new();
+
     public object Insert;
     public int? Delete;
     public int? Retain;
