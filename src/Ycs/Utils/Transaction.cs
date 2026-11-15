@@ -397,7 +397,7 @@ public partial class Transaction
                         {
                             // Sort events by path length so that top-level events are fired first.
                             var sortedEvents = new List<YEvent>(events);
-                            sortedEvents.Sort(ByPathLength);
+                            StableSort.Sort(sortedEvents, ByPathLength);
                             events = sortedEvents;
                         }
 

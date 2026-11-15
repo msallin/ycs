@@ -205,7 +205,7 @@ public static class UpdateOperations
         {
             // Write higher clients first - sort by clientID & clock and remove decoders without content.
             lazyStructDecoders.RemoveAll(static dec => dec.Curr == null);
-            lazyStructDecoders.Sort(static (dec1, dec2) =>
+            StableSort.Sort(lazyStructDecoders, static (dec1, dec2) =>
             {
                 if (dec1.Curr.Id.Client == dec2.Curr.Id.Client)
                 {

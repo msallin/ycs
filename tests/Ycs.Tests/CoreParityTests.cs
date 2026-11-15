@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -304,5 +305,77 @@ public class CoreParityTests
         doc.ApplyUpdate(first);
 
         Assert.AreEqual((17 << 20) + 1, doc.GetText("t").Length);
+    }
+
+    // 24 full states of a growing text of client 30, shuffled: several updates start at the same clock.
+    private static readonly string[] GrowingTextStates =
+        [
+            "AQEeAAQBAXQBYQA=",
+            "AQEeAAQBAXQIYWJjZGVmZ2gA",
+            "AQEeAAQBAXQPYWJjZGVmZ2hpamtsbW5vAA==",
+            "AQEeAAQBAXQWYWJjZGVmZ2hpamtsbW5vcHFyc3R1dgA=",
+            "AQEeAAQBAXQFYWJjZGUA",
+            "AQEeAAQBAXQMYWJjZGVmZ2hpamtsAA==",
+            "AQEeAAQBAXQTYWJjZGVmZ2hpamtsbW5vcHFycwA=",
+            "AQEeAAQBAXQCYWIA",
+            "AQEeAAQBAXQJYWJjZGVmZ2hpAA==",
+            "AQEeAAQBAXQQYWJjZGVmZ2hpamtsbW5vcAA=",
+            "AQEeAAQBAXQXYWJjZGVmZ2hpamtsbW5vcHFyc3R1dncA",
+            "AQEeAAQBAXQGYWJjZGVmAA==",
+            "AQEeAAQBAXQNYWJjZGVmZ2hpamtsbQA=",
+            "AQEeAAQBAXQUYWJjZGVmZ2hpamtsbW5vcHFyc3QA",
+            "AQEeAAQBAXQDYWJjAA==",
+            "AQEeAAQBAXQKYWJjZGVmZ2hpagA=",
+            "AQEeAAQBAXQRYWJjZGVmZ2hpamtsbW5vcHEA",
+            "AQEeAAQBAXQYYWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4AA==",
+            "AQEeAAQBAXQHYWJjZGVmZwA=",
+            "AQEeAAQBAXQOYWJjZGVmZ2hpamtsbW4A",
+            "AQEeAAQBAXQVYWJjZGVmZ2hpamtsbW5vcHFyc3R1AA==",
+            "AQEeAAQBAXQEYWJjZAA=",
+            "AQEeAAQBAXQLYWJjZGVmZ2hpamsA",
+            "AQEeAAQBAXQSYWJjZGVmZ2hpamtsbW5vcHFyAA==",
+        ];
+
+    [TestMethod]
+    public void MergeUpdates_MoreThan16UpdatesWithTies_PicksTheDecodersAsYjs()
+    {
+        var merged = UpdateOperations.MergeUpdates(GrowingTextStates.Select(B).ToList());
+
+        Assert.AreEqual("AQYeAAQBAXQBYYQeAAdiY2RlZmdohB4HB2lqa2xtbm+EHg4HcHFyc3R1doQeFQF3hB4WAXgA", S(merged));
+    }
+
+    [TestMethod]
+    public void MergeUpdatesV2_MoreThan16UpdatesWithTies_PicksTheDecodersAsYjs()
+    {
+        var merged = UpdateOperations.MergeUpdatesV2(GrowingTextStates.Select(u => UpdateOperations.ConvertUpdateFormatV1ToV2(B(u))).ToList());
+
+        Assert.AreEqual("AAACXgQEAA8BAgADBACEIBl0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4QQBHAUEAAQEAAAEGAAA=", S(merged));
+    }
+
+    [TestMethod]
+    public void ObserveDeep_ManyNestedTypesChanged_EventsInTheOrderOfChange()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 4 });
+        var root = doc.GetMap("root");
+        var kids = new List<YMap>();
+        for (var i = 0; i < 40; i++)
+        {
+            var kid = new YMap();
+            root.Set("k" + i, kid);
+            kids.Add(kid);
+        }
+
+        var order = new List<string>();
+        root.ObserveDeep((_, e) => order.AddRange(e.Events.Select(ev => "k" + kids.IndexOf((YMap)ev.Target))));
+
+        doc.Transact(_ =>
+        {
+            for (var i = 39; i >= 0; i--)
+            {
+                kids[i].Set("v", i);
+            }
+        });
+
+        Assert.AreEqual(string.Join(",", Enumerable.Range(0, 40).Reverse().Select(i => "k" + i)), string.Join(",", order));
     }
 }
