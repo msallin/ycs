@@ -37,7 +37,8 @@ public class YDocOptions
     /// The most an applied update may add to what waits for missing structs (structs and deletions
     /// of other clients this document has not received yet), counted as encoded bytes. An update that
     /// would grow it beyond this is rejected with a <see cref="YUpdateException"/> and the document
-    /// is unchanged. Default 16 MiB.
+    /// is unchanged. Default: no limit, as Yjs (a valid update of any size can arrive before the one it
+    /// builds on); a server that applies updates from untrusted peers sets one.
     /// </summary>
     public long MaxPendingBytes
     {
@@ -45,7 +46,7 @@ public class YDocOptions
         set => _maxPendingBytes = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(value), "The limit cannot be negative.");
     }
 
-    private long _maxPendingBytes = 16 * 1024 * 1024;
+    private long _maxPendingBytes = long.MaxValue;
 
     /// <summary>
     /// The most structs an applied v2 update may hold (never fewer than one per byte of the update),

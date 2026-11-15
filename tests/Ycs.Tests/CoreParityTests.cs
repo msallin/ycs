@@ -287,4 +287,22 @@ public class CoreParityTests
 
         Assert.AreEqual(" world", string.Concat(System.Linq.Enumerable.Select(delta, d => d.Insert)));
     }
+
+    [TestMethod]
+    public void ApplyUpdate_LargeUpdateBeforeItsBase_WaitsWithoutALimitByDefault()
+    {
+        var source = new YDoc(new YDocOptions { ClientId = 1 });
+        var text = source.GetText("t");
+        text.Insert(0, "a");
+        var first = source.EncodeStateAsUpdate();
+        var stateVector = source.EncodeStateVector();
+        text.Insert(1, new string('b', 17 << 20));
+        var second = source.EncodeStateAsUpdate(stateVector);
+        var doc = new YDoc();
+
+        doc.ApplyUpdate(second);
+        doc.ApplyUpdate(first);
+
+        Assert.AreEqual((17 << 20) + 1, doc.GetText("t").Length);
+    }
 }
