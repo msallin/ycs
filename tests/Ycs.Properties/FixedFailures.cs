@@ -30,6 +30,15 @@ internal static class FixedFailures
             "Not a bug of Ycs: the adapter read YDoc.SubdocsChanged's (Loaded, Added, Removed) by position as Yjs' " +
             "{ added, removed, loaded }; it reads the named elements now.",
             """{"clients":[{"gc":false,"id":2147483114}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":0,"op":"push","path":["a"],"values":[{"$doc":{"autoLoad":false,"g":"doc-1"}}]}]}"""),
+        new("pending-deletes-split-surrogate-pair",
+            "When an update leaves deletions waiting and some that waited before stay waiting, every client's waiting ranges are " +
+            "sorted and merged, as Yjs' mergeUpdatesV2 of its pendingDs; adjacent ranges deleting the halves of a surrogate pair " +
+            "are then applied as one, without the split that replaced the pair with U+FFFD U+FFFD.",
+            """{"clients":[{"gc":false,"id":818522},{"gc":false,"id":10}],"roots":[{"kind":"text","name":"t"}],"steps":[{"at":0,"c":0,"op":"insert","path":["t"],"text":"\ud83d\udc4d"},{"c":0,"delta":[{"delete":1}],"op":"delta","path":["t"]},{"c":0,"delta":[{"delete":1}],"op":"delta","path":["t"]},{"from":0,"k":2,"op":"deliver","to":1,"via":"v1"},{"from":0,"k":1,"op":"deliver","to":1,"via":"v1"},{"from":0,"k":0,"op":"deliver","to":1,"via":"v2"}]}"""),
+        new("huge-clock-gc-encoding",
+            "The same change as pending-deletes-split-surrogate-pair: the waiting ranges are merged when Yjs merges them, so they " +
+            "split the items where Yjs' do (Yjs wrote 6 structs, Ycs 5). Nothing about the clocks near 2^31.",
+            """{"clients":[{"gc":false,"id":2}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI=","via":"v1"},{"op":"raw","to":0,"u":"AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC","via":"v1"},{"op":"raw","to":0,"u":"AQSsAgAIAQFhA30BdwFzfoisAgEDdQJ9AXcBeH0BdQJ9AXcBeAQBAXQD5LitBwEBeAYA","via":"v1"}]}"""),
         new("gc-cleanup-throws-on-crafted-update",
             "ApplyUpdate rejects, before integrating, an update whose cleanup would garbage-collect a deleted type in which a key " +
             "holds two live items (StructStore.IntegrationPlan.CheckGarbageCollection); it threw InvalidOperationException from " +

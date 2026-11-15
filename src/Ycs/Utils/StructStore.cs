@@ -422,12 +422,23 @@ internal sealed partial class StructStore
         plan.Clear();
         _spare = plan;
 
-        // As in Yjs: the update's deletions first, then those that were waiting.
+        // As in Yjs: the update's deletions first, then those that were waiting. When both leave deletions waiting,
+        // Yjs merges the two (mergeUpdatesV2), which sorts and merges every client's ranges: adjacent ranges are then
+        // applied as one, without a split between them (which would replace a split surrogate pair with U+FFFD).
         var waiting = PendingDs.TakeApplicable(this);
+        var waitingKept = PendingDs.Count > 0;
+        var additions = PendingDs.Additions;
         ApplyDeleteSet(transaction, ds);
+        var updateLeft = PendingDs.Additions != additions;
+        additions = PendingDs.Additions;
         if (waiting != null)
         {
             ApplyDeleteSet(transaction, waiting);
+        }
+
+        if (updateLeft && (waitingKept || PendingDs.Additions != additions))
+        {
+            PendingDs.Compact();
         }
 
         if (retry)
@@ -1411,6 +1422,9 @@ internal sealed partial class StructStore
         /// <summary>The size of the ranges as a v1 delete set would encode them.</summary>
         public long Bytes { get; private set; }
 
+        /// <summary>How many ranges were ever added (it only grows), to tell whether an operation added one.</summary>
+        public long Additions { get; private set; }
+
         public int Count => _clients.Count;
 
         public void Add(long client, long clock, long length)
@@ -1423,6 +1437,7 @@ internal sealed partial class StructStore
             }
 
             entry.Ranges.Add(new DeleteSet.DeleteItem(clock, length));
+            Additions++;
             entry.MinClock = Math.Min(entry.MinClock, clock);
             var size = RangeSize(clock, length);
             entry.Bytes += size;

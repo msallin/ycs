@@ -69,23 +69,6 @@ internal static class KnownFailures
             Documented = true,
             Matches = (m, script) => m.Op == "raw" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal) && RejectedByGcCheck(script, m.Step),
         },
-        new("huge-clock-gc-encoding", "low",
-            "A client whose history starts with a GC struct reaching close to the clock limit (clock 2^31 - 65), followed " +
-            "by items, a Skip and pending structs: after integration Ycs' EncodeStateAsUpdate (and the transaction's update) " +
-            "splits that client's structs differently from Yjs (5 structs where Yjs writes 6); the content agrees.",
-            """{"clients":[{"gc":false,"id":2}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI=","via":"v1"},{"op":"raw","to":0,"u":"AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC","via":"v1"},{"op":"raw","to":0,"u":"AQSsAgAIAQFhA30BdwFzfoisAgEDdQJ9AXcBeH0BdQJ9AXcBeAQBAXQD5LitBwEBeAYA","via":"v1"}]}""")
-        {
-            Matches = (m, _) => m.Op == "raw" && m.Primary is "ev:update" or "v1" or "v2" && !m.Differences.Any(d => d.Contains(".roots.", StringComparison.Ordinal)),
-        },
-        new("pending-deletes-split-surrogate-pair", "low",
-            "Two deletions that arrive before the insertion they delete (one character each, the two halves of a surrogate " +
-            "pair): Ycs applies the waiting ranges one by one, splitting the deleted item between the halves, so its encoding " +
-            "holds U+FFFD U+FFFD; Yjs merges the pending ranges first and keeps the pair. The visible content agrees.",
-            """{"clients":[{"gc":false,"id":818522},{"gc":false,"id":10}],"roots":[{"kind":"text","name":"t"}],"steps":[{"at":0,"c":0,"op":"insert","path":["t"],"text":"\ud83d\udc4d"},{"c":0,"delta":[{"delete":1}],"op":"delta","path":["t"]},{"c":0,"delta":[{"delete":1}],"op":"delta","path":["t"]},{"from":0,"k":2,"op":"deliver","to":1,"via":"v1"},{"from":0,"k":1,"op":"deliver","to":1,"via":"v1"},{"from":0,"k":0,"op":"deliver","to":1,"via":"v2"}]}""")
-        {
-            Matches = (m, _) => m.Op is "deliver" or "merged" or "sync" or "raw" && m.Primary is "ev:update" or "v1" or "v2"
-                && m.Differences.Any(HasTwoReplacementCharacters),
-        },
         new("debug-assert-clock-over-2^30", "low",
             "Debug builds only: a valid update with clocks between 2^30 and 2^31 - 1 (within docs/api.md's limit) fails " +
             "Debug.Assert(value <= Bits.Bits30) in the encoder; Release builds apply and re-encode it as Yjs does.",
@@ -151,38 +134,6 @@ internal static class KnownFailures
 
     private static Dictionary<string, object> Step(Dictionary<string, object> script, Mismatch m) =>
         m.Step >= 0 && m.Step < script.List("steps").Count ? (Dictionary<string, object>)script.List("steps")[m.Step] : new Dictionary<string, object>();
-
-    // ".ev[0].es[0].d[1].insert: yjs "a" | ycs "aa"": Ycs' insert ends with Yjs' and is longer.
-    private static bool RepeatedInsert(string difference)
-    {
-        var match = Regex.Match(difference, "\\.d\\[\\d+\\]\\.insert: yjs \"(.*)\" \\| ycs \"(.*)\"$");
-        return match.Success && match.Groups[2].Value.Length > match.Groups[1].Value.Length
-            && match.Groups[2].Value.EndsWith(match.Groups[1].Value, StringComparison.Ordinal);
-    }
-
-    // The Ycs side of a bytes difference holds U+FFFD U+FFFD (EF BF BD EF BF BD) and the Yjs side does not.
-    private static bool HasTwoReplacementCharacters(string difference)
-    {
-        var match = Regex.Match(difference, "yjs \"([A-Za-z0-9+/=]+)\" \\| ycs \"([A-Za-z0-9+/=]+)\"");
-        if (!match.Success)
-        {
-            return false;
-        }
-
-        static bool Has(string b64)
-        {
-            try
-            {
-                return Convert.ToHexString(Convert.FromBase64String(b64)).Contains("EFBFBDEFBFBD", StringComparison.Ordinal);
-            }
-            catch (FormatException)
-            {
-                return false;
-            }
-        }
-
-        return Has(match.Groups[2].Value) && !Has(match.Groups[1].Value);
-    }
 
     public static KnownFailure Named(string name) => All.Single(k => k.Name == name);
 

@@ -1,3 +1,4 @@
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -82,6 +83,28 @@ public class IntegrationPlanReuseTests
         doc.ApplyUpdateV1([0, 0]);
 
         Assert.AreEqual(2, transactions);
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_DeletionsOfTheHalvesOfASurrogatePairBeforeTheInsert_KeepThePair()
+    {
+        // As Yjs, which merges the waiting ranges [1, 1] and [0, 1] into [0, 2] when the second arrives: the pair is
+        // deleted as one item, not split (a split would replace both halves with U+FFFD).
+        var source = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var text = source.GetText("t");
+        var updates = new System.Collections.Generic.List<byte[]>();
+        source.Update += (_, e) => updates.Add(e.data);
+        text.Insert(0, "\ud83d\udc4d");
+        text.ApplyDelta([new Delta { Delete = 1 }]);
+        text.ApplyDelta([new Delta { Delete = 1 }]);
+        var doc = new YDoc(new YDocOptions { Gc = false });
+
+        doc.ApplyUpdateV1(updates[2]);
+        doc.ApplyUpdateV1(updates[1]);
+        doc.ApplyUpdateV1(updates[0]);
+
+        // Yjs 13.6.32's receiver (the sender, which split the pair itself, writes "AQEBAAQBAXQG77+977+9AQEBAAI=").
+        Assert.AreEqual("AQEBAAQBAXQE8J+RjQEBAQAC", Convert.ToBase64String(doc.EncodeStateAsUpdateV1()));
     }
 
     /// <summary>A v1 update of client 5: <paramref name="depth"/> arrays, each nested in the one before, the first in root 'a'.</summary>
