@@ -1158,35 +1158,33 @@ public partial class YText : YArrayBase
         currPos.MinimizeAttributeChanges(attributes);
         var negatedAttributes = InsertAttributes(transaction, ref currPos, attributes);
 
-        if (text is string run && run.Length > 0 && negatedAttributes == null && currPos.Left is { } left
+        // Insert content (a text's content is made only when no run takes it).
+        var content = text switch
+        {
+            string => null,
+            AbstractType type => (IContent)new ContentType(type),
+            _ => new ContentEmbed(Validated(text, doc.Limits.MaxDepth)),
+        };
+
+        var length = content?.Length ?? ((string)text).Length;
+        if (_searchMarkers?.Count > 0)
+        {
+            _searchMarkers.UpdateMarkerChanges(transaction, currPos.Index, length);
+            currPos.Left = LeftOf(currPos.Left, currPos.Right);
+        }
+
+        if (content == null && length > 0 && negatedAttributes == null && currPos.Left is { } left
             && left.CanExtendRun(transaction, this, currPos.Right, typeof(ContentString), ownClientId))
         {
             // Typing on at the end of this client's run: the run takes the text in place of a new item.
-            if (_searchMarkers?.Count > 0)
-            {
-                _searchMarkers.UpdateMarkerChanges(currPos.Index, run.Length);
-            }
-
-            ((ContentString)left.Content).Append(run);
-            left.ExtendRun(transaction, run.Length);
-            currPos.Index += run.Length;
+            ((ContentString)left.Content).Append((string)text);
+            left.ExtendRun(transaction, length);
+            currPos.Index += length;
             currPos.InsertNegatedAttributes(transaction, this, null);
             return;
         }
 
-        // Insert content.
-        var content = text switch
-        {
-            string s => (IContent)new ContentString(s),
-            AbstractType type => new ContentType(type),
-            _ => new ContentEmbed(Validated(text, doc.Limits.MaxDepth)),
-        };
-
-        if (_searchMarkers?.Count > 0)
-        {
-            _searchMarkers.UpdateMarkerChanges(currPos.Index, content.Length);
-        }
-
+        content ??= new ContentString((string)text);
         currPos.Right = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Left?.LastId, currPos.Right, currPos.Right?.Id, this, null, content);
         currPos.Right.Integrate(transaction, 0);
         currPos.Forward();
@@ -1516,7 +1514,7 @@ public partial class YText : YArrayBase
         var parent = (curPos.Left ?? curPos.Right ?? throw new InvalidOperationException("The text has no content to delete. Nothing was changed.")).Parent as YText;
         if (parent?._searchMarkers?.Count > 0)
         {
-            parent._searchMarkers.UpdateMarkerChanges(curPos.Index, -startLength + length);
+            parent._searchMarkers.UpdateMarkerChanges(transaction, curPos.Index, -startLength + length);
         }
     }
 

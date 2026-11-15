@@ -85,8 +85,26 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         /// Update markers when a change happened.
         /// This should be called before doing a deletion!
         /// </summary>
-        public void UpdateMarkerChanges(int index, int len)
+        /// <remarks>
+        /// An insert moves a marker on a deleted or uncountable item onto the countable item left of it, which in Yjs
+        /// is the last of the items that a run extended in place (<see cref="Item.ExtendRun"/>) stands for: the runs
+        /// of <paramref name="transaction"/> are split back into Yjs' items first. That can split the item left of the
+        /// insert, so the caller takes the item right before its right neighbour again (<see cref="LeftOf"/>).
+        /// </remarks>
+        public void UpdateMarkerChanges(Transaction transaction, int index, int len)
         {
+            if (len > 0 && transaction.HasRunExtensions)
+            {
+                foreach (var m in _searchMarkers)
+                {
+                    if (m.P.Deleted || !m.P.Countable)
+                    {
+                        transaction.MaterializeRunExtensions();
+                        break;
+                    }
+                }
+            }
+
             for (int i = _searchMarkers.Count - 1; i >= 0; i--)
             {
                 var m = _searchMarkers[i];
@@ -131,6 +149,20 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     }
 
     private const int MaxSearchMarkers = 80;
+
+    /// <summary>
+    /// The item right before <paramref name="right"/>, from <paramref name="left"/>, which was right before it until
+    /// <see cref="ArraySearchMarkerCollection.UpdateMarkerChanges"/> perhaps split it.
+    /// </summary>
+    private protected static Item LeftOf(Item left, AbstractStruct right)
+    {
+        while (left != null && left.Right != right)
+        {
+            left = (Item)left.Right;
+        }
+
+        return left;
+    }
 
     /// <summary>
     /// Search markers speed up index lookups, as in Yjs. <c>null</c> means they are disabled:
@@ -271,7 +303,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         {
             if (_searchMarkers?.Count > 0)
             {
-                _searchMarkers.UpdateMarkerChanges(index, content.Count);
+                _searchMarkers.UpdateMarkerChanges(transaction, index, content.Count);
             }
 
             InsertGenericsAfter(transaction, null, content);
@@ -317,7 +349,9 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (_searchMarkers?.Count > 0)
         {
-            _searchMarkers.UpdateMarkerChanges(startIndex, content.Count);
+            var right = n == null ? null : n.Right;
+            _searchMarkers.UpdateMarkerChanges(transaction, startIndex, content.Count);
+            n = LeftOf(n, right);
         }
 
         InsertGenericsAfter(transaction, n, content);
@@ -533,7 +567,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (_searchMarkers?.Count > 0)
         {
-            _searchMarkers.UpdateMarkerChanges(startIndex, -startLength + length /* in case we remove the above exception */);
+            _searchMarkers.UpdateMarkerChanges(transaction, startIndex, -startLength + length /* in case we remove the above exception */);
         }
     }
 
@@ -721,11 +755,23 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
-        // Yjs walks on to the left here while the left neighbour has the same client and the clock before p, so that
-        // a marker does not point into a run that merges at the end of the transaction. Within one transaction every
-        // keystroke continues such a run, which makes the walk, and typing, quadratic. A marker on an item that merges
-        // into its left neighbour is moved there with its index (OnMerge), so the walk is not needed; the markers only
-        // speed up finding an index, and the markers-invisible property checks that they change nothing else.
+        // On to the left while the left neighbour has the same client and the clock right before p (Yjs' findMarker).
+        // Which item a marker sits on is observable: where Yjs leaves markers stale (an update applied within a local
+        // transaction, an observer editing during a remote transaction's cleanup), later lookups start from it. The
+        // walk ends at the same item whether a run extended in place (Item.ExtendRun) is one item or Yjs' several:
+        // their boundaries continue each other by clock.
+        while (p.Left != null && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
+        {
+            p = p.Left as Item;
+            if (p == null)
+            {
+                break;
+            }
+            else if (!p.Deleted && p.Countable)
+            {
+                pIndex -= p.Length;
+            }
+        }
 
         if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as AbstractType).Length / (double)MaxSearchMarkers)
         {
