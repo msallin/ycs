@@ -18,6 +18,8 @@ internal class ContentDeleted : IContentEx
     }
 
     int IContentEx.Ref => _ref;
+
+    bool IContentEx.Mergeable => true;
     public bool Countable => false;
 
     public int Length { get; private set; }

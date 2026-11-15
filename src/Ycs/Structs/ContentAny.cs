@@ -48,6 +48,8 @@ public class ContentAny : IContentEx
 
     int IContentEx.Ref => _ref;
 
+    bool IContentEx.Mergeable => true;
+
     public IReadOnlyList<object> GetContent() => _content.AsReadOnly();
 
     internal object ValueAt(int index) => _content[index];

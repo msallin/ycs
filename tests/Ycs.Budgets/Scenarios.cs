@@ -1,7 +1,10 @@
 namespace Ycs.Budgets;
 
-/// <summary>One measured operation: <see cref="Setup"/> builds the state and returns the operation, called with 0, 1, 2, ...</summary>
-internal sealed record Scenario(string Name, int Iterations, Func<Action<int>> Setup);
+/// <summary>
+/// One measured operation: <see cref="Setup"/> builds the state and returns the operation, called with 0, 1, 2, ...;
+/// <see cref="Warmups"/> calls before the measured ones (null: <see cref="Scenarios.WarmupIterations"/>).
+/// </summary>
+internal sealed record Scenario(string Name, int Iterations, Func<Action<int>> Setup, int? Warmups = null);
 
 /// <summary>The fixed scenario set. Adding one means adding its budget to <see cref="Budgets"/>.</summary>
 internal static class Scenarios
@@ -173,6 +176,24 @@ internal static class Scenarios
             var caret = TextLength / 2;
             return _ => text.Delete(--caret, 1);
         }),
+
+        new("array.push-100k-in-one-transaction", 3, () =>
+        {
+            // One operation is the whole transaction, on a fresh document: the pushes and the merge at its end.
+            var values = new object[] { 1L };
+            return _ =>
+            {
+                var doc = new YDoc(new YDocOptions { ClientId = 1 });
+                var array = doc.GetArray("array");
+                doc.Transact(_ =>
+                {
+                    for (var i = 0; i < 100_000; i++)
+                    {
+                        array.Push(values);
+                    }
+                });
+            };
+        }, Warmups: 2),
 
         new("doc.encode-state-with-pending-100k", 100, () =>
         {

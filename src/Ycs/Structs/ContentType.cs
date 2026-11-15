@@ -19,6 +19,8 @@ public class ContentType : IContentEx
 
     int IContentEx.Ref => _ref;
 
+    bool IContentEx.Mergeable => false;
+
     public bool Countable => true;
     public int Length => 1;
 
@@ -141,6 +143,7 @@ public class ContentType : IContentEx
                 }
 
                 frame.Type._start = null;
+                (frame.Type as YArrayBase)?.ForgetPushHint();
                 frame.Type._map.Clear();
                 frame.Type._mapCount = 0;
                 open.RemoveAt(open.Count - 1);

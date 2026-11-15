@@ -50,6 +50,10 @@ internal static class Properties
             CommutativityScript, Commutativity),
         new("rejects-cleanly", "a structured (fuzzed) update is applied, or rejected with YUpdateException leaving the document as it was; nothing else is thrown",
             seed => UpdateFuzzer.Generate(seed).Script, RejectsCleanly),
+        new("markers-invisible", "search markers change no observation (content, encodings, results, events) against the same script with them off, and after every step every marker points at an item of its list with the right index",
+            ListsOrGeneral, MarkersInvisible),
+        new("merge-order", "merging a run at the end of a transaction in one pass leaves the same structs (ids, lengths, content, links, origins, parents, map entries, search markers) as Yjs' pair-by-pair order, after every step",
+            ListsOrGeneral, MergeOrder),
         new("event-replay", "replaying the deltas and key changes the root observers saw onto a shadow copy reproduces each root (text, array, xml, map) after every step",
             seed => Generator.Generate(seed, BmpOnly), EventReplay),
     ];
@@ -962,6 +966,70 @@ internal static class Properties
             }
 
             return null;
+        });
+
+    /// <summary>Every other seed a script of long lists (ListScripts), the others the full mix.</summary>
+    private static Dictionary<string, object> ListsOrGeneral(ulong seed) => seed % 2 == 1 ? ListScripts.Generate(seed) : Generator.Generate(seed);
+
+    /// <summary>The script with an option of Adapter.cs set (markers: false, merge: "pairwise"), which only Ycs reads.</summary>
+    private static Dictionary<string, object> With(Dictionary<string, object> script, string key, object value)
+    {
+        var copy = (Dictionary<string, object>)Clone(script);
+        copy[key] = value;
+        return copy;
+    }
+
+    /// <summary>Runs two variants of a script step by step and returns the first difference <paramref name="compare"/> finds.</summary>
+    private static Violation Lockstep(string property, Dictionary<string, object> a, Dictionary<string, object> b, Func<ScriptRun, Dictionary<string, object>, ScriptRun, Dictionary<string, object>, string> compare) =>
+        Guard(property, () =>
+        {
+            var runA = new ScriptRun(a);
+            var runB = new ScriptRun(b);
+            var steps = a.List("steps").Cast<Dictionary<string, object>>().ToList();
+            for (var i = 0; i <= steps.Count; i++)
+            {
+                var obsA = i < steps.Count ? runA.Step(steps[i]) : runA.End();
+                var obsB = i < steps.Count ? runB.Step(steps[i]) : runB.End();
+                if (compare(runA, obsA, runB, obsB) is { } detail)
+                {
+                    var at = i < steps.Count ? $"step {i} ({steps[i].Str("op")})" : "end";
+                    return new Violation(property, detail.Split(':')[0], $"after {at}: {detail}");
+                }
+            }
+
+            return null;
+        });
+
+    private static Violation MarkersInvisible(Dictionary<string, object> script) =>
+        Lockstep("markers-invisible", script, With(script, "markers", false), (on, obsOn, _, obsOff) =>
+        {
+            foreach (var c in on.Clients)
+            {
+                if (c.Replica.SearchMarkerProblems() is { } problem)
+                {
+                    return "marker invalid: client " + c.Index + ": " + problem;
+                }
+            }
+
+            var (a, b) = (Canonical(obsOn), Canonical(obsOff));
+            return a == b ? null : $"observation differs: on {Short(a)}{Environment.NewLine}  off {Short(b)}";
+        });
+
+    private static Violation MergeOrder(Dictionary<string, object> script) =>
+        Lockstep("merge-order", script, With(script, "merge", "pairwise"), (onePass, obsA, pairwise, obsB) =>
+        {
+            for (var k = 0; k < onePass.Clients.Count; k++)
+            {
+                var (a, b) = (onePass.Clients[k].Replica.StoreDump(), pairwise.Clients[k].Replica.StoreDump());
+                if (a != b)
+                {
+                    var line = a.Split('\n').Zip(b.Split('\n')).First(p => p.First != p.Second);
+                    return $"store differs: client {k}: one pass {line.First}{Environment.NewLine}  pairwise {line.Second}";
+                }
+            }
+
+            var (x, y) = (Canonical(obsA), Canonical(obsB));
+            return x == y ? null : $"observation differs: one pass {Short(x)}{Environment.NewLine}  pairwise {Short(y)}";
         });
 
     private static Violation NaiveRecompute(Dictionary<string, object> script) =>

@@ -174,42 +174,49 @@ public partial class Item : AbstractStruct
     }
 
     /// <summary>
-    /// Try to merge two items.
+    /// Whether <paramref name="right"/> merges into this item (Yjs' <c>Item#mergeWith</c> conditions; a content of a
+    /// mergeable kind always merges with one of its kind).
     /// </summary>
     /// https://github.com/yjs/yjs/blob/c2f0ca3faef731a93ba28f286ffafe0e1ea1a3aa/src/structs/Item.js#L557
+    internal override bool CanMergeWith(AbstractStruct right) =>
+        right is Item rightItem &&
+        ID.Equals(rightItem.LeftOrigin, LastId) &&
+        Right == right &&
+        ID.Equals(rightItem.RightOrigin, RightOrigin) &&
+        Id.Client == right.Id.Client &&
+        Id.Clock + Length == right.Id.Clock &&
+        Deleted == right.Deleted &&
+        Redone == null &&
+        rightItem.Redone == null &&
+        Content.GetType() == rightItem.Content.GetType() &&
+        Content.Mergeable;
+
+    /// <summary>Try to merge two items.</summary>
     internal override bool MergeWith(AbstractStruct right)
     {
-        var rightItem = right as Item;
-
-        if (ID.Equals(rightItem?.LeftOrigin, LastId) &&
-            Right == right &&
-            ID.Equals(rightItem?.RightOrigin, RightOrigin) &&
-            Id.Client == right.Id.Client &&
-            Id.Clock + Length == right.Id.Clock &&
-            Deleted == right.Deleted &&
-            Redone == null &&
-            rightItem?.Redone == null &&
-            rightItem != null && Content.GetType() == rightItem.Content.GetType() &&
-            Content.MergeWith(rightItem.Content))
+        if (!CanMergeWith(right))
         {
-            (Parent as YArrayBase)?.MoveMarkersOnMerge(this, rightItem);
-
-            if (rightItem.Keep)
-            {
-                Keep = true;
-            }
-
-            Right = rightItem.Right;
-            if (Right is Item)
-            {
-                (Right as Item).Left = this;
-            }
-
-            Length += rightItem.Length;
-            return true;
+            return false;
         }
 
-        return false;
+        var rightItem = (Item)right;
+        var merged = Content.MergeWith(rightItem.Content);
+        Debug.Assert(merged);
+        (Parent as YArrayBase)?.OnMerge(this, rightItem);
+
+        if (rightItem.Keep)
+        {
+            Keep = true;
+        }
+
+        Right = rightItem.Right;
+        if (Right is Item)
+        {
+            (Right as Item).Left = this;
+        }
+
+        Length += rightItem.Length;
+        return true;
     }
 
     /// <summary>

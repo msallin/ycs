@@ -453,6 +453,7 @@ namespace Ycs.Properties
             Index = index;
             Replica = new Replica(spec.Int("id"), spec.Get("gc") is not false, run.Roots);
             var doc = Replica.Doc;
+            Replica.UseReferences(markers: run.Script.Get("markers") is not false, pairwiseMerge: run.Script.Get("merge") is "pairwise");
             foreach (var (name, _) in run.Roots)
             {
                 var t = Replica.Root(name);
@@ -1503,6 +1504,176 @@ namespace Ycs.Properties
                     }
                 }
             }
+        }
+
+
+        // ---- the internals the reference comparisons read and switch (search markers off, Yjs' merge order)
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "SearchMarkersDisabledForTests")]
+        private static extern ref bool SearchMarkersDisabled(YDoc doc);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Store")]
+        [return: UnsafeAccessorType("Ycs.StructStore, Ycs")]
+        private static extern object StoreOf(YDoc doc);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "PairwiseMergeForTests")]
+        private static extern ref bool PairwiseMerge([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "Clients")]
+        private static extern ref Dictionary<long, List<AbstractStruct>> ClientsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_map")]
+        private static extern ref Dictionary<string, Item> MapOf(AbstractType type);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_item")]
+        private static extern ref Item ItemOf(AbstractType type);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DescribeSearchMarkers")]
+        private static extern string DescribeSearchMarkers(YArrayBase type);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "SearchMarkerViolations")]
+        private static extern string SearchMarkerViolations(YArrayBase type);
+
+        internal void UseReferences(bool markers, bool pairwiseMerge)
+        {
+            SearchMarkersDisabled(Doc) = !markers;
+            PairwiseMerge(StoreOf(Doc)) = pairwiseMerge;
+        }
+
+        private static string IdOf(AbstractStruct s) => s == null ? "-" : $"{s.Id.Client}:{s.Id.Clock}";
+
+        private static string IdOf(ID? id) => id is ID i ? $"{i.Client}:{i.Clock}" : "-";
+
+        private string TypeName(AbstractType t)
+        {
+            foreach (var (name, _) in _roots)
+            {
+                if (ReferenceEquals(Root(name), t))
+                {
+                    return "root:" + name;
+                }
+            }
+
+            return ItemOf(t) is { } owner ? "in:" + IdOf(owner) : "detached";
+        }
+
+        /// <summary>
+        /// Every struct of the store, client by client, in clock order: kind, id, length, deletion, content, links
+        /// (left, right, origins, parent, key), keep, redone, marker flag; then every type's map entries and search
+        /// markers. Two documents that went through the same steps give the same text when their structs are the same.
+        /// </summary>
+        public string StoreDump()
+        {
+            var sb = new StringBuilder();
+            var types = new List<AbstractType>();
+            foreach (var (name, _) in _roots)
+            {
+                types.Add(Root(name));
+            }
+
+            foreach (var (client, structs) in ClientsOf(StoreOf(Doc)).OrderBy(kv => kv.Key))
+            {
+                sb.Append("client ").Append(client).Append('\n');
+                foreach (var s in structs)
+                {
+                    sb.Append("  ").Append(s.GetType().Name).Append(' ').Append(IdOf(s)).Append(" len ").Append(s.Length).Append(s.Deleted ? " deleted" : "");
+                    if (s is Item item)
+                    {
+                        var content = ContentOf(item);
+                        sb.Append(" content ").Append(content.GetType().Name).Append(' ').Append(ContentText((IContent)content, types));
+                        sb.Append(" left ").Append(IdOf(item.Left)).Append(" right ").Append(IdOf(item.Right));
+                        sb.Append(" origin ").Append(IdOf(item.LeftOrigin)).Append(" rightOrigin ").Append(IdOf(item.RightOrigin));
+                        sb.Append(" parent ").Append(item.Parent is AbstractType pt ? TypeName(pt) : item.Parent?.ToString() ?? "-");
+                        sb.Append(" sub ").Append(item.ParentSub ?? "-").Append(" keep ").Append(item.Keep).Append(" redone ").Append(IdOf(item.Redone)).Append(" marker ").Append(item.Marker);
+                    }
+
+                    sb.Append('\n');
+                }
+            }
+
+            foreach (var t in types)
+            {
+                sb.Append(TypeName(t)).Append(" map");
+                foreach (var (key, item) in MapOf(t).OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                {
+                    sb.Append(' ').Append(key).Append('=').Append(IdOf(item));
+                }
+
+                if (t is YArrayBase list)
+                {
+                    sb.Append(" markers ").Append(DescribeSearchMarkers(list));
+                }
+
+                sb.Append('\n');
+            }
+
+            return sb.ToString();
+        }
+
+        private static string ContentText(IContent content, List<AbstractType> types)
+        {
+            if (content is ContentString str)
+            {
+                return Canonical(str.GetString());
+            }
+
+            var parts = new List<string>();
+            foreach (var v in content.GetContent())
+            {
+                if (v is AbstractType t)
+                {
+                    types.Add(t);
+                    parts.Add("type " + t.GetType().Name);
+                }
+                else
+                {
+                    parts.Add(v is YDoc d ? "doc " + d.Guid : Canonical(View(v)));
+                }
+            }
+
+            return string.Join(",", parts);
+        }
+
+        private static bool InDeletedType(AbstractType t)
+        {
+            for (var item = ItemOf(t); item != null; item = ItemOf((AbstractType)item.Parent))
+            {
+                if (item.Deleted)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// What is wrong with the search markers of any list in the document (SearchMarkerViolations), or null. Not of a
+        /// deleted type: a remote deletion of a type does not reach its observer, which is where Yjs (and Ycs) clear the
+        /// markers a remote change leaves wrong.
+        /// </summary>
+        public string SearchMarkerProblems()
+        {
+            foreach (var structs in ClientsOf(StoreOf(Doc)).Values)
+            {
+                foreach (var s in structs)
+                {
+                    if (s is Item item && ContentOf(item) is ContentType { Type: YArrayBase nested } && !InDeletedType(nested) && SearchMarkerViolations(nested) is { } v)
+                    {
+                        return IdOf(item) + ": " + v;
+                    }
+                }
+            }
+
+            foreach (var (name, _) in _roots)
+            {
+                if (Root(name) is YArrayBase list && SearchMarkerViolations(list) is { } v)
+                {
+                    return name + ": " + v;
+                }
+            }
+
+            return null;
         }
 
         // ---- the item lists (for ItemListInvariants and the naive recomputations)

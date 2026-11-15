@@ -139,6 +139,10 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// </summary>
     private protected ArraySearchMarkerCollection _searchMarkers;
 
+    // An item of this list (any: a push walks from it to the end), or null. Items leave a list only by merging into
+    // their left neighbour (OnMerge moves the hint there) or when the whole type is collected (ForgetPushHint).
+    private Item _pushHint;
+
     protected YArrayBase(bool useSearchMarkers = true)
     {
         _searchMarkers = useSearchMarkers ? new ArraySearchMarkerCollection() : null;
@@ -166,10 +170,15 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     /// <summary>
     /// Called when <paramref name="right"/> is merged into <paramref name="left"/>: a marker on
-    /// <paramref name="right"/> moves to <paramref name="left"/> (Yjs <c>Item#mergeWith</c>).
+    /// <paramref name="right"/> moves to <paramref name="left"/> (Yjs <c>Item#mergeWith</c>), and so does the push hint.
     /// </summary>
-    internal void MoveMarkersOnMerge(Item left, Item right)
+    internal void OnMerge(Item left, Item right)
     {
+        if (_pushHint == right)
+        {
+            _pushHint = left;
+        }
+
         if (_searchMarkers == null)
         {
             return;
@@ -189,6 +198,52 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 }
             }
         }
+    }
+
+    /// <summary>The type was garbage collected: its list is gone (<see cref="ContentType"/>).</summary>
+    internal void ForgetPushHint() => _pushHint = null;
+
+    /// <summary>The markers in their order, as "client:clock@index" (the tests compare them).</summary>
+    internal string DescribeSearchMarkers() =>
+        _searchMarkers == null ? "off" : string.Join(" ", _searchMarkers._searchMarkers.Select(m => $"{m.P.Id.Client}:{m.P.Id.Clock}@{m.Index}"));
+
+    /// <summary>
+    /// What is wrong with the search markers, or null: each must point at an item of this list (reached from
+    /// <see cref="AbstractType._start"/>) whose index (the countable, undeleted length before it) is the marker's.
+    /// Walks the whole list: for tests and Debug checks.
+    /// </summary>
+    internal string SearchMarkerViolations()
+    {
+        if (_searchMarkers == null || _searchMarkers.Count == 0)
+        {
+            return null;
+        }
+
+        var indexes = new Dictionary<Item, int>(ReferenceEqualityComparer.Instance);
+        var index = 0;
+        for (var n = _start; n != null; n = n.Right as Item)
+        {
+            indexes[n] = index;
+            if (!n.Deleted && n.Countable)
+            {
+                index += n.Length;
+            }
+        }
+
+        foreach (var m in _searchMarkers._searchMarkers)
+        {
+            if (!indexes.TryGetValue(m.P, out var actual))
+            {
+                return $"a marker points at {m.P.Id.Client}:{m.P.Id.Clock}, which is not in the list";
+            }
+
+            if (actual != m.Index)
+            {
+                return $"the marker at {m.P.Id.Client}:{m.P.Id.Clock} says index {m.Index}, the item is at {actual}";
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -271,17 +326,23 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// </summary>
     private protected void PushGenerics(Transaction transaction, ICollection<object> content)
     {
-        // From the marker with the highest index, as Yjs: its reduce starts from { index: 0, p: _start }.
-        var n = _start;
-        var maxIndex = 0;
-        if (_searchMarkers != null)
+        // Yjs walks to the end from the marker with the highest index (its reduce starts from { index: 0, p: _start }),
+        // which is the start when only pushes were made: quadratic in pushes. The walk starts from the item the last
+        // push made instead, when there is one; any item of the list reaches the same end, and markers are not touched.
+        var n = _pushHint;
+        if (n == null)
         {
-            foreach (var marker in _searchMarkers._searchMarkers)
+            n = _start;
+            var maxIndex = 0;
+            if (_searchMarkers != null)
             {
-                if (marker.Index > maxIndex)
+                foreach (var marker in _searchMarkers._searchMarkers)
                 {
-                    maxIndex = marker.Index;
-                    n = marker.P;
+                    if (marker.Index > maxIndex)
+                    {
+                        maxIndex = marker.Index;
+                        n = marker.P;
+                    }
                 }
             }
         }
@@ -291,7 +352,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             n = right;
         }
 
-        InsertGenericsAfter(transaction, n, content);
+        _pushHint = InsertGenericsAfterReturningLast(transaction, n, content);
     }
 
     /// <summary>JavaScript's <c>splice(index, 0, ...content)</c>, on the content of a type not in a document yet.</summary>
@@ -308,7 +369,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     private static int SpliceStart(List<object> list, int index) =>
         index < 0 ? Math.Max(list.Count + index, 0) : Math.Min(index, list.Count);
 
-    protected void InsertGenericsAfter(Transaction transaction, Item referenceItem, ICollection<object> content)
+    protected void InsertGenericsAfter(Transaction transaction, Item referenceItem, ICollection<object> content) =>
+        InsertGenericsAfterReturningLast(transaction, referenceItem, content);
+
+    /// <returns>The last item inserted, or <paramref name="referenceItem"/> when there was no content.</returns>
+    private protected Item InsertGenericsAfterReturningLast(Transaction transaction, Item referenceItem, ICollection<object> content)
     {
         var left = referenceItem;
         var doc = transaction.Doc;
@@ -366,6 +431,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         }
 
         packJsonContent();
+        return left;
     }
 
     protected void Delete(Transaction transaction, int index, int length)
@@ -554,7 +620,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// </summary>
     private protected ArraySearchMarker FindMarker(int index)
     {
-        if (_start == null || index == 0 || _searchMarkers == null)
+        if (_start == null || index == 0 || _searchMarkers == null || Doc.SearchMarkersDisabledForTests)
         {
             return null;
         }

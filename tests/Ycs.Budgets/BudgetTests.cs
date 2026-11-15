@@ -67,6 +67,42 @@ public sealed class BudgetTests
         Assert.IsEmpty(failures, $"{string.Join(Environment.NewLine, failures)}{Environment.NewLine}{table}");
     }
 
+    /// <summary>
+    /// A million pushes in one transaction: what the finished document holds and what was allocated on the way stay
+    /// proportional to the content (before the merge at the end of a transaction was linear, 100,000 of them went
+    /// beyond 8 GiB).
+    /// </summary>
+    [TestMethod]
+    public void MillionPushesInOneTransaction_StayWithinMemoryBounds()
+    {
+#if DEBUG
+        Assert.Inconclusive("The budgets are measured with -c Release; run dotnet test -c Release.");
+#endif
+        const int pushes = 1_000_000;
+        const long heldBound = 64L << 20;
+        const long allocatedBound = 512L << 20;
+        var values = new object[] { 1L };
+        var held0 = System.GC.GetTotalMemory(forceFullCollection: true);
+        var allocated0 = System.GC.GetAllocatedBytesForCurrentThread();
+        var stopwatch = Stopwatch.StartNew();
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var array = doc.GetArray("array");
+        doc.Transact(_ =>
+        {
+            for (var i = 0; i < pushes; i++)
+            {
+                array.Push(values);
+            }
+        });
+        stopwatch.Stop();
+        var allocated = System.GC.GetAllocatedBytesForCurrentThread() - allocated0;
+        var held = System.GC.GetTotalMemory(forceFullCollection: true) - held0;
+        var result = $"{pushes} pushes: {array.Length} elements, {allocated >> 20} MiB allocated (bound {allocatedBound >> 20}), {held >> 20} MiB held (bound {heldBound >> 20}), {stopwatch.ElapsedMilliseconds} ms";
+        System.GC.KeepAlive(doc);
+        TestContext.WriteLine(result);
+        Assert.IsTrue(array.Length == pushes && allocated <= allocatedBound && held <= heldBound, result);
+    }
+
     /// <summary>Today's number plus the headroom, rounded up to a multiple of 8 bytes.</summary>
     private static long Suggest(long bytes) => (long)Math.Ceiling(bytes * Headroom / 8) * 8;
 
@@ -74,7 +110,7 @@ public sealed class BudgetTests
     {
         var operation = scenario.Setup();
         var i = 0;
-        for (; i < Scenarios.WarmupIterations; i++)
+        for (var warmups = scenario.Warmups ?? Scenarios.WarmupIterations; i < warmups; i++)
         {
             operation(i);
         }

@@ -283,7 +283,7 @@ internal class DeleteSet
                 var mostRightIndexToCheck = Math.Min(structs.Count - 1, 1 + StructStore.FindIndexSS(structs, deleteItem.Clock + deleteItem.Length - 1));
                 for (int si = mostRightIndexToCheck; si > 0 && structs[si].Id.Clock >= deleteItem.Clock;)
                 {
-                    si -= 1 + TryToMergeWithLefts(structs, si);
+                    si -= 1 + TryToMergeWithLefts(store, structs, si);
                 }
             }
         }
@@ -293,7 +293,54 @@ internal class DeleteSet
     /// Yjs' <c>tryToMergeWithLefts</c>: merges <c>structs[pos]</c> into its left neighbour, and that
     /// into its left, as long as they merge. Returns how many structs were removed.
     /// </summary>
+    /// <remarks>
+    /// Yjs merges right to left, a pair at a time, so each left neighbour copies the content accumulated to its
+    /// right: quadratic in the run. Whether a pair merges does not depend on whether either struct merged with its
+    /// other neighbour first (an item that took in its right neighbour keeps its start, origins and kind and ends
+    /// where that neighbour ended), so the run is found first and then merged into its leftmost struct from left to
+    /// right, which appends. The structs, ids, lengths, links, map entries, search markers and the count are the
+    /// same as Yjs' order gives (<see cref="TryToMergeWithLeftsPairwise"/>, which the tests compare with).
+    /// </remarks>
     public static int TryToMergeWithLefts(List<AbstractStruct> structs, int pos)
+    {
+        var first = pos;
+        while (first > 0)
+        {
+            var l = structs[first - 1];
+            var r = structs[first];
+            if (l.Deleted != r.Deleted || l.GetType() != r.GetType() || !l.CanMergeWith(r))
+            {
+                break;
+            }
+
+            first--;
+        }
+
+        var merged = pos - first;
+        if (merged == 0)
+        {
+            return 0;
+        }
+
+        var left = structs[first];
+        for (var k = first + 1; k <= pos; k++)
+        {
+            var right = structs[k];
+            var done = left.MergeWith(right);
+            Debug.Assert(done);
+            RetargetMapEntry(left, right);
+        }
+
+        structs.RemoveRange(first + 1, merged);
+        return merged;
+    }
+
+    /// <summary><see cref="TryToMergeWithLefts(List{AbstractStruct}, int)"/>, or the reference when the store asks for it.</summary>
+    internal static int TryToMergeWithLefts(StructStore store, List<AbstractStruct> structs, int pos) =>
+        store.PairwiseMergeForTests ? TryToMergeWithLeftsPairwise(structs, pos) : TryToMergeWithLefts(structs, pos);
+
+    /// <summary>Yjs' order of <see cref="TryToMergeWithLefts(List{AbstractStruct}, int)"/>, pair by pair from the right: the reference the tests compare with.</summary>
+    internal static int TryToMergeWithLeftsPairwise(List<AbstractStruct> structs, int pos)
     {
         var right = structs[pos];
         var left = structs[pos - 1];
@@ -305,14 +352,7 @@ internal class DeleteSet
                 break;
             }
 
-            if (right is Item rightItem && rightItem.ParentSub != null)
-            {
-                var parent = (AbstractType)rightItem.Parent;
-                if (parent._map.TryGetValue(rightItem.ParentSub, out var value) && value == right)
-                {
-                    parent._map[rightItem.ParentSub] = (Item)left;
-                }
-            }
+            RetargetMapEntry(left, right);
         }
 
         var merged = pos - i;
@@ -322,6 +362,18 @@ internal class DeleteSet
         }
 
         return merged;
+    }
+
+    private static void RetargetMapEntry(AbstractStruct left, AbstractStruct right)
+    {
+        if (right is Item rightItem && rightItem.ParentSub != null)
+        {
+            var parent = (AbstractType)rightItem.Parent;
+            if (parent._map.TryGetValue(rightItem.ParentSub, out var value) && value == right)
+            {
+                parent._map[rightItem.ParentSub] = (Item)left;
+            }
+        }
     }
 
     private void MergeDeleteSets(IList<DeleteSet> dss)

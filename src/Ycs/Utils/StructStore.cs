@@ -20,6 +20,9 @@ internal sealed partial class StructStore
     }
 
     private static readonly Dictionary<long, long> EmptyStateVector = new();
+
+    /// <summary>Merges at the end of a transaction in Yjs' order, pair by pair (the tests' reference; see <see cref="DeleteSet.TryToMergeWithLefts(List{AbstractStruct}, int)"/>).</summary>
+    internal bool PairwiseMergeForTests;
     private static readonly List<AbstractStruct> NoRefs = new();
 
     /// <summary>

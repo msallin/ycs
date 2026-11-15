@@ -18,10 +18,12 @@ public partial class GC : AbstractStruct
 
     public override bool Deleted => true;
 
+    // MergeUpdates offers any neighbour, as Yjs does; only a GC extends a GC.
+    internal override bool CanMergeWith(AbstractStruct right) => right is GC;
+
     internal override bool MergeWith(AbstractStruct right)
     {
-        // MergeUpdates offers any neighbour, as Yjs does; only a GC extends a GC.
-        if (right is not GC)
+        if (!CanMergeWith(right))
         {
             return false;
         }

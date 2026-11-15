@@ -20,6 +20,9 @@ internal interface IContentEx : IContent
 {
     int Ref { get; }
 
+    /// <summary>Whether <see cref="IContent.MergeWith"/> merges content of the same kind (it then always does).</summary>
+    bool Mergeable { get; }
+
     void Integrate(Transaction transaction, Item item);
     void Delete(Transaction transaction);
     void Gc(StructStore store);

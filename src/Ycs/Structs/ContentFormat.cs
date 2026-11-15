@@ -21,6 +21,8 @@ public class ContentFormat : IContentEx
 
     int IContentEx.Ref => _ref;
 
+    bool IContentEx.Mergeable => false;
+
     public bool Countable => false;
     public int Length => 1;
 

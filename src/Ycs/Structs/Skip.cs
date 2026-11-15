@@ -35,9 +35,11 @@ public sealed class Skip : AbstractStruct
         Length = length;
     }
 
+    internal override bool CanMergeWith(AbstractStruct right) => right is Skip;
+
     internal override bool MergeWith(AbstractStruct right)
     {
-        if (!(right is Skip))
+        if (!CanMergeWith(right))
         {
             return false;
         }

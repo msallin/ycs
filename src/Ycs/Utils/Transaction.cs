@@ -614,7 +614,7 @@ public partial class Transaction
                 var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
                 for (int j = structs.Count - 1; j >= firstChangePos;)
                 {
-                    j -= 1 + DeleteSet.TryToMergeWithLefts(structs, j);
+                    j -= 1 + DeleteSet.TryToMergeWithLefts(store, structs, j);
                 }
             }
         }
@@ -630,14 +630,14 @@ public partial class Transaction
             var replacedStructPos = StructStore.FindIndexSS(structs, clock);
 
             // Both neighbours merged already when more than one struct went.
-            if (replacedStructPos + 1 < structs.Count && DeleteSet.TryToMergeWithLefts(structs, replacedStructPos + 1) > 1)
+            if (replacedStructPos + 1 < structs.Count && DeleteSet.TryToMergeWithLefts(store, structs, replacedStructPos + 1) > 1)
             {
                 continue;
             }
 
             if (replacedStructPos > 0)
             {
-                DeleteSet.TryToMergeWithLefts(structs, replacedStructPos);
+                DeleteSet.TryToMergeWithLefts(store, structs, replacedStructPos);
             }
         }
 
