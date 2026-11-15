@@ -74,7 +74,7 @@ subdocument gets a random guid on the wire).
 | `Item.getMissing` | `Item.FindMissing` + `Item.ResolveReferences` | **DIFFERS** - F5 |
 | `Item.integrate` (conflict loop, relinking, map value, length, delete-if-parent-deleted) | `Item.Integrate` | equivalent (adds `_mapCount` bookkeeping) |
 | `next`, `prev`, `lastId` | `Next`, `Prev`, `LastId` | identical |
-| `Item.mergeWith` | `Item.MergeWith` + `YArrayBase.MoveMarkersOnMerge` | equivalent |
+| `Item.mergeWith` | `Item.MergeWith` (`CanMergeWith`, then the merge) + `YArrayBase.OnMerge` | equivalent |
 | `Item.delete` | `Item.Delete` | equivalent (`_mapCount`) |
 | `Item.gc` | `Item.Gc` | identical |
 | `Item.write` | `Item.Write` | equivalent |
@@ -474,12 +474,20 @@ first new struct, `_mergeStructs`, client id change for a non-local transaction 
 own clock, `afterTransactionCleanup`, `update`, `updateV2`, subdocuments, and after the last
 transaction `afterAllTransactions` with `_transactionCleanups` replaced first. Equal to Yjs.
 
-**Merging.** The port merges one pair per call and walks `_mergeStructs` forwards; Yjs chains
-(`tryToMergeWithLefts`) and walks backwards. Whether two neighbours merge depends only on the pair
-(ids, origins, `right`, deleted, content class, `redone`), and merging does not change that for
-other pairs, so the order does not matter; every boundary a transaction can have made mergeable
-(new structs, deleted ranges, split halves, children collected with their type) is tried at least
-once in both. Not proven by a run of its own; the corpus compares the resulting encodings.
+**Merging.** `DeleteSet.TryToMergeWithLefts` finds the run that merges leftwards from a struct
+(`AbstractStruct.CanMergeWith`, which changes nothing) and merges it into its leftmost struct from
+left to right; Yjs merges pair by pair from the right, which copies the run's content into every
+left neighbour. Whether two neighbours merge depends only on the pair (ids, origins, `right`,
+deleted, content class, `redone`), and merging does not change that for other pairs, so the order
+does not matter. Yjs' order is kept as `TryToMergeWithLeftsPairwise`, and the `merge-order`
+property compares the struct stores after every step (docs/testing.md, reference comparisons).
+
+**Runs extended in place.** An insert that would be merged into its left neighbour at the end of
+the transaction (`Item.CanExtendRun`) appends to it instead (`Item.ExtendRun`) when nobody
+observes the type; the transaction records where the item would have started and splits there
+(`Transaction.MaterializeRunExtensions`) before anything that could tell the difference: an
+observed cleanup, encoding the store, applying an update, undo. The `run-extension` property
+compares the result with Yjs' items.
 
 **Transaction reuse.** `Begin` sets origin, local and the before-state; `End` clears or replaces
 every collection, resets `_needFormattingCleanup`, the "taken" flags, the subdocument sets, `Meta`,

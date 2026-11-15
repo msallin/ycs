@@ -81,9 +81,9 @@ difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**
 | --- | --- | --- |
 | `ArraySearchMarker`, `refreshMarkerTimestamp`, `overwriteMarker` | `YArrayBase.ArraySearchMarker`, `.Update` | equivalent (per-collection counter: only the order inside one collection is ever compared) |
 | `markPosition` | `ArraySearchMarkerCollection.MarkPosition` | identical (tie rule of `reduce` kept) |
-| `findMarker` | `YArrayBase.FindMarker` | DIFFERS, finding 19 (integer division in the "adjust existing marker" test) |
+| `findMarker` | `YArrayBase.FindMarker` | DIFFERS, finding 19 (integer division in the "adjust existing marker" test); and without the walk to the left over items that might merge (quadratic within a transaction; a marker on a merged item is moved by `OnMerge`): markers only, the `markers-invisible` property |
 | `updateMarkerChanges` | `ArraySearchMarkerCollection.UpdateMarkerChanges` | identical |
-| marker move in `Item#mergeWith` | `YArrayBase.MoveMarkersOnMerge` | identical (runs before the length is added, as in JS) |
+| marker move in `Item#mergeWith` | `YArrayBase.OnMerge` | identical (runs before the length is added, as in JS) |
 | `getTypeChildren` | none | not ported (internal helper) |
 | `callTypeObservers` | `AbstractType.CallTypeObservers` | identical; but only called when observed, finding 16 |
 | `AbstractType` constructor, `_item`, `_map`, `_start`, `_length`, `doc` | fields of `AbstractType` | equivalent (`_mapCount` and `Depth` are port-only) |
@@ -103,7 +103,7 @@ difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**
 | `typeListGet` | `YArray.Get`, `YXmlFragment.Get` | identical (`undefined` is `null`) |
 | `typeListInsertGenericsAfter` | `YArrayBase.InsertGenericsAfter` | equivalent; 20e (a `byte[]` is not copied) |
 | `typeListInsertGenerics` | `YArrayBase.InsertGenerics` | DIFFERS, finding 9 (no "Length exceeded" check) |
-| `typeListPushGenerics` | none; `YArray.Add`/`Push` call `Insert(Length, ...)` | DIFFERS, finding 7 |
+| `typeListPushGenerics` | `YArrayBase.PushGenerics` | DIFFERS, finding 7 (fixed); walks to the end from the item the last push made, not from the highest marker |
 | `typeListDelete` | `YArrayBase.Delete` | identical |
 | `typeMapDelete`, `typeMapSet` | `TypeMapDelete`, `TypeMapSet` | identical (value validation by `AnyEncoding.Validate`) |
 | `typeMapGet`, `typeMapHas` | `TryTypeMapGet`, `YMap.ContainsKey`/`Has` | identical |

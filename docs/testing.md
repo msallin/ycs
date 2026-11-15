@@ -12,7 +12,7 @@ What each project guards, and how to run, soak and update them. CI
 | `tests/Ycs.Budgets` | Allocated bytes and time per operation for a fixed set of scenarios. | `dotnet test tests/Ycs.Budgets -c Release --logger "console;verbosity=detailed"` |
 | `samples/Ycs.AotSample`, `samples/Ycs.WasmSample` | Native AOT and browser-wasm: publish without trim/AOT warnings and run. | see the README |
 | `interop/run.sh`, `interop/corpus/roundtrip.sh`, `interop/v14/roundtrip.sh` | Live round-trips against real Yjs (Node); `run.sh` runs the v14 one too. | see the README |
-| `bench/Ycs.Benchmarks` | Not a test: the editing-trace benchmark behind the README's numbers; `limits`, what updates at the default `UpdateLimits` cost (the table in [api.md](api.md#untrusted-input)). | `bench/Ycs.Benchmarks/get-trace.sh`, then `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`; `... -- limits` |
+| `bench/Ycs.Benchmarks` | Not a test: the editing-trace benchmark behind the README's numbers; `limits`, what updates at the default `UpdateLimits` cost (the table in [api.md](api.md#untrusted-input)); `sizes`, what one item holds and costs by kind; `loop`, one operation repeated on the trace's document (time and bytes per operation, what to attach a profiler to). | `bench/Ycs.Benchmarks/get-trace.sh`, then `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`; `... -- limits`; `... -- sizes`; `... -- loop <trace.json.gz> encode-v1 2000` |
 | `bench/Ycs.Compare` | Not a test: CI builds it with the solution and does not run it (it depends on YDotNet and its native library): ycs against YDotNet (yrs) on the same workloads, results checked equal and cross-applied; Native AOT, wasm and hostile-input probes. Results in its [README](../bench/Ycs.Compare/README.md). | `bench/Ycs.Compare/run.sh` |
 
 ## Differential traces (`TraceReplayTests`)
@@ -145,6 +145,11 @@ the project so that no tier-up lands in a measurement.
   `Budgets.cs` in the same change, so the gain is kept.
 * A new scenario fails with `no budget; suggest N` until its budget is added.
 
+Three scenarios are a whole transaction each (a fresh document, two warm-ups, three measured): 100,000 pushes,
+100,000 keystrokes, and single deletes at random places of one run, which went quadratic before. A test of its own
+pushes a million values in one transaction and requires at most 512 MiB allocated and 64 MiB held by the document
+(about a second).
+
 ## Model-based differential testing (`tests/Ycs.Properties`)
 
 One operation language, two interpreters: `interop/properties/oracle.mjs` runs a script against
@@ -178,7 +183,7 @@ long traces) stays theirs: add an operation here when it needs the cross-area or
 | --- | --- | --- |
 | Recorded fixtures (`RecordedTests`, `interop/properties/fixtures/*.jsonl`) | On 190 pairwise scripts (every unordered pair of the 19 operation kinds, and each with itself, made concurrently by two or three clients, then exchanged in random order with duplicates and mixed formats), 150 random scripts, 80 fuzzed ones and the scripts of the fixed known failures (`FixedFailures.cs`), every step's observation equals Yjs'. Needs no Node. | Anything outside these scripts. Intermediate steps are stored as hashes (`he`, `hs`), so a failure says which step differs; `YCS_PROP_EXPLAIN` (with Node) says how. |
 | Live soak (`SoakTests.LiveSoak_ScriptsAgreeWithYjs`, `interop/properties/soak.sh`) | The same on any number of fresh scripts (seeded, deterministic); each distinct mismatch is shrunk to a minimal script. | Behaviour the generator does not produce (see the coverage table); timing-dependent behaviour (an UndoManager's capture timeout is 0 or effectively infinite). |
-| Properties (`PropertyTests`, `Properties.cs`) | Laws that need no oracle, on generated scripts: convergence, encode round trip, merge of any partition, diff, v1/v2 conversion, undo/redo, snapshot stability, relative positions, GC invisibility, naive recomputation, the Lean item-list invariants, idempotence, commutativity, event replay, clean rejection of fuzzed updates. | That the laws match Yjs: where Yjs itself breaks one the property's generator leaves that out, or the property is stated as Yjs satisfies it (see [laws Yjs breaks](#laws-yjs-breaks)). `EventReplay_HoldsForYjs` checks the event-replay property on Yjs. |
+| Properties (`PropertyTests`, `Properties.cs`) | Laws that need no oracle, on generated scripts: convergence, encode round trip, merge of any partition, diff, v1/v2 conversion, undo/redo, snapshot stability, relative positions, GC invisibility, naive recomputation, the Lean item-list invariants, idempotence, commutativity, event replay, clean rejection of fuzzed updates; and three comparisons with a reference inside Ycs (see [below](#reference-comparisons)). | That the laws match Yjs: where Yjs itself breaks one the property's generator leaves that out, or the property is stated as Yjs satisfies it (see [laws Yjs breaks](#laws-yjs-breaks)). `EventReplay_HoldsForYjs` checks the event-replay property on Yjs. |
 | Structure-aware fuzzer (`UpdateFuzz.cs`, `UpdateFuzzTests`) | Updates encoded by the tests' own v1 encoder from a model (several synthetic clients in any order, runs split where Yjs merges, origins inside other runs and inside map values, parents that arrive later, Skip and GC structs, overlapping/repeated/unsorted delete sets, a map value's tail deleted with its map, clocks near 2^31 - 1, nesting at the limit (`UpdateLimits.MaxDepth`), clients with no structs) are applied, or rejected with `YUpdateException` and the document unchanged; with Node, as Yjs applies them. | Byte-level damage (that is `tests/Ycs.Fuzz`); v2 input other than Ycs' and Yjs' own conversions of the model's v1. |
 
 A divergence that is a bug in Ycs is pinned in `KnownFailures.cs` (see [pinning](#from-a-minimal-script-to-a-pinned-test)).
@@ -254,7 +259,7 @@ subdocument's guid is given); Yjs' warnings on the console; `PermanentUserData`,
 ### Running
 
 ```bash
-dotnet test tests/Ycs.Properties -c Release                       # recorded, properties (2,000 scripts each), fuzz rejection: about 45 s
+dotnet test tests/Ycs.Properties -c Release                       # recorded, properties (2,000 scripts each), fuzz rejection: about 2 minutes
 (cd interop/properties && npm ci)                                 # once, for everything below
 interop/properties/soak.sh 200000 1 8                             # live soak: scripts, first seed, Node workers
 YCS_PROP_SEEDS=30000 dotnet test tests/Ycs.Properties -c Release --filter "FullyQualifiedName~PropertyTests"
@@ -270,6 +275,23 @@ the most severe difference, which side threw) with its minimal script, written t
 It fails if a mismatch is not known. Debug builds make the library's `Debug.Assert`s live (they turn
 up as failures of their own); the soak and the fixtures use Release. Set `YCS_PROP_DEBUG=1` to print
 the exceptions the operations threw.
+
+### Reference comparisons
+
+Three properties compare Ycs with itself, run step by step on the same script with an internal switch flipped
+(set through `Adapter.cs`' accessors; script options only Ycs reads): every other seed is a script of the general
+generator, the others one of `ListScripts.cs` (a text and an array grown to a few hundred elements by typing runs,
+backspaces, random inserts, deletes and pushes, most of them in one transaction, with undo, formats and syncs: the
+general scripts stay too short to make search markers).
+
+| Property | Candidate | Reference | Compared after every step |
+| --- | --- | --- | --- |
+| `markers-invisible` | search markers on | off (`YDoc.SearchMarkersDisabledForTests`, option `markers: false`) | every observation (content, encodings, results, events); and every marker of a live type points at an item of its list with the right index (`YArrayBase.SearchMarkerViolations`, usable from a Debug session too) |
+| `merge-order` | the end of a transaction merges a run in one pass | Yjs' pair-by-pair order (`StructStore.PairwiseMergeForTests`, option `merge: "pairwise"`), inserts as items of their own in both | the struct store of every client (`Replica.StoreDump`: kind, id, length, deletion, content, left/right, origins, parent, key, keep, redone, marker flag; each type's map entries and markers) and the observations |
+| `run-extension` | inserts that continue a run extend it in place | every insert an item of its own (`YDoc.RunExtensionsDisabledForTests`, option `extend: false`), merged pair by pair | the store as above without the search markers (where a lookup leaves one depends on the items it walks), and the observations; once observed as the adapter observes, once with nothing observing (option `quiet`: no observers or transaction handlers, so the runs are not split before the end of the transaction) |
+
+Each fails on a sabotaged change (a marker index off by one in a merge, a map entry not moved to the struct a
+run merges into, the split before the observers left out, the surrogate condition of the run extension dropped).
 
 ### Laws Yjs breaks
 
