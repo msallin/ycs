@@ -34,7 +34,7 @@ internal static class Properties
             seed => UndoScript(seed, pairs: false), UndoAll),
         new("undo-redo-pair", "an undo followed at once by a redo restores the content before the undo",
             seed => UndoScript(seed, pairs: true), UndoRedoPairs),
-        new("snapshot-stable", "with gc off, reading a snapshot (ToDelta, ToArraySnapshot, GetAllSnapshot, CreateDocFromSnapshot) gives the same at the end as when it was taken, and CreateDocFromSnapshot then equals the content",
+        new("snapshot-stable", "with gc off, reading a snapshot (ToDelta, CreateDocFromSnapshot) gives the same at the end as when it was taken, and CreateDocFromSnapshot then equals the content",
             SnapshotScript, SnapshotStable),
         new("relpos-stable", "a relative position on a character resolves, on every replica after a full sync, to the same index, which holds that character",
             RelPosScript, RelPosStable),
@@ -551,7 +551,9 @@ internal static class Properties
         var steps = script.List("steps");
         var c = (long)rng.Int(script.List("clients").Count);
         var reads = new List<object> { Normalized(Obj(("op", "docFromSnap"), ("c", c), ("id", "p"))) };
-        foreach (Dictionary<string, object> root in script.List("roots"))
+        // Only texts: Yjs' ToArraySnapshot and GetAllSnapshot (as Ycs') do not split at the snapshot, so they read an item
+        // merged across it whole, values added after the snapshot included (Yjs breaks the property there).
+        foreach (Dictionary<string, object> root in script.List("roots").Cast<Dictionary<string, object>>().Where(r => r.Str("kind") == "text"))
         {
             reads.Add(Normalized(Obj(("op", "readSnap"), ("c", c), ("id", "p"), ("path", new List<object> { root["name"] }))));
         }

@@ -234,14 +234,49 @@ public class SnapshotParityTests
 
         var snap = doc.CreateSnapshot();
 
-        // 'w' lands right after 'z' and, being from the same client, would otherwise get merged
-        // into one struct with 'y'/'z' by transaction cleanup - a regression test that
-        // ToArraySnapshot correctly excludes content added after the snapshot even when it ends up
-        // struct-merged with content that predates it.
+        // 'w' is merged into the item of 'y', 'z' by the cleanup; as Yjs' typeListToArraySnapshot,
+        // the read does not split, so the merged item is visible whole (Yjs: x, y, z, w).
         array.Insert(3, new object[] { "w" });
         array.Delete(0);
 
-        CollectionAssert.AreEqual(new object[] { "x", "y", "z" }, ((IList<object>)array.ToArraySnapshot(snap)).ToArray());
+        CollectionAssert.AreEqual(new object[] { "x", "y", "z", "w" }, ((IList<object>)array.ToArraySnapshot(snap)).ToArray());
         CollectionAssert.AreEqual(new object[] { "y", "z", "w" }, array.ToArray().ToArray());
+    }
+
+    [TestMethod]
+    public void SnapshotReads_ItemMergedAcrossTheSnapshotAfterALoneHighSurrogate_LeaveTheDocumentUnchanged()
+    {
+        var doc = new YDoc(new YDocOptions { Gc = false });
+        var text = doc.GetText("text");
+        var array = doc.GetArray("array");
+        var map = doc.GetMap("map");
+        text.Insert(0, "c\ud800");
+        var snap = doc.CreateSnapshot();
+        text.Insert(2, "a");
+        var before = doc.EncodeStateAsUpdate();
+        var transactions = 0;
+        doc.AfterTransaction += (_, _) => transactions++;
+
+        array.ToArraySnapshot(snap);
+        map.GetAllSnapshot(snap);
+        map.GetSnapshot("k", snap);
+
+        Assert.AreEqual(("c\ud800a", 0, Convert.ToBase64String(before)), (text.ToString(), transactions, Convert.ToBase64String(doc.EncodeStateAsUpdate())));
+    }
+
+    [TestMethod]
+    public void ToDelta_SnapshotSplitsAfterALoneHighSurrogate_ReplacesBothSidesAsYjs()
+    {
+        // Yjs 13.6.32: toDelta(snapshot) splits at the snapshot, and ContentString.splice replaces the
+        // high surrogate and the next character with U+FFFD (yjs#248): [{insert: 'c\ufffd'}], 'c\ufffd\ufffd'.
+        var doc = new YDoc(new YDocOptions { Gc = false });
+        var text = doc.GetText("text");
+        text.Insert(0, "c\ud800");
+        var snap = doc.CreateSnapshot();
+        text.Insert(2, "a");
+
+        var delta = text.ToDelta(snap);
+
+        Assert.AreEqual(("c\ufffd", "c\ufffd\ufffd"), ((string)delta.Single().Insert, text.ToString()));
     }
 }

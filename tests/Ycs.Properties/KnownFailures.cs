@@ -77,16 +77,6 @@ internal static class KnownFailures
         {
             Matches = (m, _) => m.Op == "raw" && m.Primary == "ev:atx" && m.Differences.All(d => d.Contains("yjs \"(missing)\"", StringComparison.Ordinal)),
         },
-        new("snapshot-read-corrupts-text", "medium",
-            "A read with a snapshot (here ToArraySnapshot of an XML element) splits the document's items at the snapshot " +
-            "(splitSnapshotAffectedStructs, in the transaction snapshot-array-read-opens-a-transaction describes); where " +
-            "the split falls after a lone high surrogate, the split replaces it and the next character (\"a\", inserted " +
-            "after the snapshot) with U+FFFD: the read changes the content (\"c\\ud800a\" becomes \"c\\ufffd\\ufffd\") " +
-            "and the encoding. Yjs' typeListToArraySnapshot reads without splitting.",
-            """{"clients":[{"gc":false,"id":4294967149},{"gc":false,"id":452169}],"roots":[{"kind":"xml","name":"x"}],"steps":[{"c":0,"op":"xafter","path":["x"],"ref":null,"values":[{"$t":"xmle","n":"div"}]},{"from":0,"k":0,"op":"deliver","to":1,"via":"v2"},{"c":1,"op":"xafter","path":["x",0],"ref":null,"values":[{"$t":"xmle","n":"span","v":[{"$t":"xmle","n":"div"}]}]},{"from":1,"k":0,"op":"deliver","to":0,"via":"v1"},{"at":0,"c":1,"op":"ains","path":["x",0,0],"values":[{"$t":"xmle","n":"span","v":[{"$t":"xmle","n":"span"}]}]},{"from":[[1,1],[0,0]],"op":"merged","to":0,"via":"v2"},{"c":0,"op":"xafter","path":["x",0,0,0,0],"ref":null,"values":[{"$t":"xmlt","s":"c\ud800"}]},{"c":0,"id":"s0","op":"snap"},{"at":2,"c":0,"op":"insert","path":["x",0,0,0,0,0],"text":"a"},{"c":0,"id":"s0","op":"readSnap","path":["x",0,0,1]}]}""")
-        {
-            Matches = (m, _) => m.Op == "readSnap" && m.Primary == "roots",
-        },
         new("pending-deletes-split-surrogate-pair", "low",
             "Two deletions that arrive before the insertion they delete (one character each, the two halves of a surrogate " +
             "pair): Ycs applies the waiting ranges one by one, splitting the deleted item between the halves, so its encoding " +
@@ -104,15 +94,6 @@ internal static class KnownFailures
         {
             Matches = (m, _) => m.Primary == "ev:subdocs",
         },
-        new("snapshot-array-read-merged-items", "documented",
-            "Not a Ycs bug: Yjs' typeListToArraySnapshot returns values pushed after the snapshot when they were merged " +
-            "into an item that existed before it (Yjs does not split the item at the snapshot); Ycs splits and returns " +
-            "only the values the snapshot saw.",
-            """{"clients":[{"gc":false,"id":3}],"roots":[{"kind":"array","name":"a"}],"steps":[{"at":0,"c":0,"op":"ains","path":["a"],"values":[1]},{"c":0,"id":"s3","op":"snap"},{"c":0,"op":"push","path":["a"],"values":[0]},{"c":0,"id":"s3","op":"readSnap","path":["a"]}]}""")
-        {
-            Documented = true,
-            Matches = (m, _) => m.Op == "readSnap" && m.Differences.Any(d => Regex.IsMatch(d, @"^\.r\[\d+\]: yjs .* \| ycs ""\(missing\)""")),
-        },
         new("debug-assert-clock-over-2^30", "low",
             "Debug builds only: a valid update with clocks between 2^30 and 2^31 - 1 (within docs/api.md's limit) fails " +
             "Debug.Assert(value <= Bits.Bits30) in the encoder; Release builds apply and re-encode it as Yjs does.",
@@ -129,13 +110,6 @@ internal static class KnownFailures
         {
             DebugOnly = true,
             Property = "rejects-cleanly: threw DebugAssertException",
-        },
-        new("snapshot-array-read-opens-a-transaction", "low",
-            "YArrayBase.ToArraySnapshot runs in a transaction (origin null), which raises AfterTransaction on a read; Yjs' " +
-            "typeListToArraySnapshot does not.",
-            """{"clients":[{"gc":false,"id":2147483431}],"roots":[{"kind":"array","name":"a"}],"steps":[{"c":0,"id":"s0","op":"snap"},{"c":0,"id":"s0","op":"readSnap","path":["a"]}]}""")
-        {
-            Matches = (m, _) => m.Op == "readSnap" && m.Primary == "ev:atx",
         },
         new("yjs-redo-recreated-type", "documented",
             "Not a Ycs bug: undoing everything and redoing everything does not restore a nested type that was created and " +

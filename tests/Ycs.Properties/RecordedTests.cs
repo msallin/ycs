@@ -14,7 +14,7 @@ internal sealed record Fixture(string Kind, string Name, Dictionary<string, obje
 /// <summary>interop/properties/fixtures/*.jsonl, one fixture per line, recorded by <see cref="RecordedTests.RecordFixtures"/>.</summary>
 internal static class Fixtures
 {
-    public static readonly string[] Files = ["pairs", "random", "fuzz", "pinned"];
+    public static readonly string[] Files = ["pairs", "random", "fuzz", "pinned", "fixed"];
 
     private static readonly Lazy<Dictionary<string, Fixture>> LazyAll = new(() =>
     {
@@ -53,7 +53,7 @@ public sealed class RecordedTests
 {
     public TestContext TestContext { get; set; }
 
-    public static IEnumerable<object[]> Recorded => Fixtures.Of("pair", "random", "fuzz");
+    public static IEnumerable<object[]> Recorded => Fixtures.Of("pair", "random", "fuzz", "fixed");
 
     [TestMethod]
     [DynamicData(nameof(Recorded))]
@@ -75,6 +75,18 @@ public sealed class RecordedTests
         }
 
         Assert.Fail($"{mismatch.Describe()}(he/hs: the step's events/states differ; YCS_PROP_EXPLAIN shows how){Environment.NewLine}script: {Json.Canonical(f.Script)}");
+    }
+
+    /// <summary>Every fixed property violation's script: the property holds.</summary>
+    [TestMethod]
+    public void FixedProperties_Hold()
+    {
+        var violations = FixedFailures.All.Where(f => f.Property != null)
+            .Select(f => (f.Name, Violation: Properties.Named(f.Property).Check((Dictionary<string, object>)Json.Parse(f.Script))))
+            .Where(x => x.Violation != null)
+            .Select(x => $"{x.Name}: {x.Violation.Detail}")
+            .ToList();
+        Assert.IsEmpty(violations, string.Join(Environment.NewLine, violations));
     }
 
     /// <summary>Every operation of the language, every delivery format and every pair of kinds is in the recorded scripts.</summary>
@@ -172,12 +184,14 @@ public sealed class RecordedTests
         }
 
         var pinned = KnownFailures.All.Where(k => k.Property == null).Select(k => Line("pinned", k.Name, (Dictionary<string, object>)Json.Parse(k.Script))).ToList();
+        var fixedScripts = FixedFailures.All.Where(f => f.Property == null).Select(f => Line("fixed", f.Name, (Dictionary<string, object>)Json.Parse(f.Script))).ToList();
 
         File.WriteAllLines(Path.Combine(dir, "pairs.jsonl"), pairs);
         File.WriteAllLines(Path.Combine(dir, "random.jsonl"), random);
         File.WriteAllLines(Path.Combine(dir, "fuzz.jsonl"), fuzz);
         File.WriteAllLines(Path.Combine(dir, "pinned.jsonl"), pinned);
-        TestContext.WriteLine($"{pairs.Count} pairs, {random.Count} random, {fuzz.Count} fuzz, {pinned.Count} pinned fixtures in {dir}");
+        File.WriteAllLines(Path.Combine(dir, "fixed.jsonl"), fixedScripts);
+        TestContext.WriteLine($"{pairs.Count} pairs, {random.Count} random, {fuzz.Count} fuzz, {pinned.Count} pinned, {fixedScripts.Count} fixed fixtures in {dir}");
         Assert.IsEmpty(unexplained, "mismatches no known failure explains; pin them (KnownFailures) and record again:" + Environment.NewLine + string.Join(Environment.NewLine, unexplained));
     }
 }
