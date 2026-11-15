@@ -20,10 +20,10 @@ internal sealed partial class StructStore
     }
 
     private static readonly Dictionary<long, long> EmptyStateVector = new();
+    private static readonly List<AbstractStruct> NoRefs = new();
 
     /// <summary>Merges at the end of a transaction in Yjs' order, pair by pair (the tests' reference; see <see cref="DeleteSet.TryToMergeWithLefts(List{AbstractStruct}, int)"/>).</summary>
     internal bool PairwiseMergeForTests;
-    private static readonly List<AbstractStruct> NoRefs = new();
 
     /// <summary>
     /// Structs that could not be integrated yet (Yjs' <c>store.pendingStructs</c>), and per client the
@@ -515,6 +515,9 @@ internal sealed partial class StructStore
         var restMerged = !retrying && CheckPendingLimits(limits, retry, restUpdate, restStructs, PendingDs.Growth(ds, plan));
 
         plan.Execute(transaction);
+
+        // Clients whose structs all went pending got no list.
+        ForgetReservations();
 
         if (restUpdate != null)
         {

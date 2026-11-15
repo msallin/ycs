@@ -35,10 +35,14 @@ internal sealed class Lib0Writer
     private byte[] _buffer = Array.Empty<byte>();
     private int _length;
 
-    // How much the pooled writer held when it was last reset: its first buffer is rented that large, so a writer
-    // that encodes documents of about the same size again and again (a pooled encoder) does not grow and copy from
-    // the initial capacity each time.
+    // How much the pooled writer held when it was last reset, up to MaxRememberedLength: its first buffer is rented
+    // that large, so a writer that encodes documents of about the same size again and again (a pooled encoder) does
+    // not grow and copy from the initial capacity each time.
     private int _lastLength;
+
+    // Above it the doubling's copies cost less than writing the bytes did; it bounds what a small encode after a
+    // large one takes from the pool.
+    private const int MaxRememberedLength = 1 << 20;
 
     private IBufferWriter<byte>? _destination;
     private Memory<byte> _chunk;
@@ -94,7 +98,7 @@ internal sealed class Lib0Writer
     {
         if (_pooled && _buffer.Length > 0)
         {
-            _lastLength = _length;
+            _lastLength = Math.Min(_length, MaxRememberedLength);
             BufferPool<byte>.Return(_buffer);
             _buffer = Array.Empty<byte>();
         }

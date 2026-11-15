@@ -5,6 +5,7 @@
 // ------------------------------------------------------------------------------
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 
 namespace Ycs;
@@ -144,16 +145,7 @@ public class ContentString : IContentEx
                 return true;
             }
 
-            var length = _length + other.Length;
-            if (length <= BuilderThreshold)
-            {
-                _string = string.Concat(Slice, other.GetString());
-                _start = 0;
-                _length = _string.Length;
-                return true;
-            }
-
-            if (other._builder != null)
+            if (other._builder != null && _length + other.Length > BuilderThreshold)
             {
                 // A short run merging into a long one in front of it (deleting backwards, or undoing
                 // typing): the long run's builder is taken over and this one inserted at its front,
@@ -166,12 +158,13 @@ public class ContentString : IContentEx
                 other._length = 0;
                 return true;
             }
-
-            _builder = new StringBuilder(Math.Max(2 * length, 2 * BuilderThreshold)).Append(Slice);
-            _string = null;
         }
 
-        if (other._builder != null)
+        if (AppendsToString(other.Length))
+        {
+            SetString(string.Concat(Slice, other.GetString()));
+        }
+        else if (other._builder != null)
         {
             _builder.Append(other._builder);
         }
@@ -188,22 +181,44 @@ public class ContentString : IContentEx
     /// <summary>Appends <paramref name="text"/>, as <see cref="MergeWith"/> appends a content of it.</summary>
     internal void Append(string text)
     {
-        if (_builder == null)
+        if (AppendsToString(text.Length))
         {
-            var length = _length + text.Length;
-            if (length <= BuilderThreshold)
-            {
-                _string = string.Concat(Slice, text);
-                _start = 0;
-                _length = _string.Length;
-                return;
-            }
+            SetString(string.Concat(Slice, text));
+        }
+        else
+        {
+            _builder.Append(text);
+        }
+    }
 
-            _builder = new StringBuilder(Math.Max(2 * length, 2 * BuilderThreshold)).Append(Slice);
-            _string = null;
+    /// <summary>
+    /// Whether <paramref name="added"/> more characters keep this content a string; if not, they go to the builder,
+    /// which this makes (with room to grow) when there is none yet.
+    /// </summary>
+    [MemberNotNullWhen(false, nameof(_builder))]
+    private bool AppendsToString(int added)
+    {
+        if (_builder != null)
+        {
+            return false;
         }
 
-        _builder.Append(text);
+        var length = _length + added;
+        if (length <= BuilderThreshold)
+        {
+            return true;
+        }
+
+        _builder = new StringBuilder(Math.Max(2 * length, 2 * BuilderThreshold)).Append(Slice);
+        _string = null;
+        return false;
+    }
+
+    private void SetString(string value)
+    {
+        _string = value;
+        _start = 0;
+        _length = value.Length;
     }
 
     void IContentEx.Integrate(Transaction transaction, Item item)

@@ -608,13 +608,13 @@ public partial class YDoc
         }
     }
 
-    /// <summary>The root type named <paramref name="name"/>, if it was defined (without defining it).</summary>
     /// <summary>No search markers are made or used in this document (the tests' reference: markers must not change any output).</summary>
     internal bool SearchMarkersDisabledForTests;
 
     /// <summary>Every insert integrates an item of its own, as in Yjs (the tests' reference for <see cref="Item.ExtendRun"/>).</summary>
     internal bool RunExtensionsDisabledForTests;
 
+    /// <summary>The root type named <paramref name="name"/>, if it was defined (without defining it).</summary>
     internal bool TryGetRoot(string name, out AbstractType type) => _share.TryGetValue(name, out type);
 
     internal void InvokeSubdocsChanged(ISet<YDoc> loaded, ISet<YDoc> added, ISet<YDoc> removed)
