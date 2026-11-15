@@ -204,6 +204,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     protected void InsertGenerics(Transaction transaction, int index, ICollection<object> content)
     {
+        if (index > Length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"Length exceeded: the index is beyond the length ({Length}). Nothing was inserted.");
+        }
+
         if (index == 0)
         {
             if (_searchMarkers?.Count > 0)
@@ -259,6 +264,49 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         InsertGenericsAfter(transaction, n, content);
     }
+
+    /// <summary>
+    /// Appends after the last item, deleted ones included (Yjs' <c>typeListPushGenerics</c>): the new
+    /// item has no right origin, unlike an insert at <see cref="AbstractType.Length"/>.
+    /// </summary>
+    private protected void PushGenerics(Transaction transaction, ICollection<object> content)
+    {
+        // From the marker with the highest index, as Yjs: its reduce starts from { index: 0, p: _start }.
+        var n = _start;
+        var maxIndex = 0;
+        if (_searchMarkers != null)
+        {
+            foreach (var marker in _searchMarkers._searchMarkers)
+            {
+                if (marker.Index > maxIndex)
+                {
+                    maxIndex = marker.Index;
+                    n = marker.P;
+                }
+            }
+        }
+
+        while (n?.Right is Item right)
+        {
+            n = right;
+        }
+
+        InsertGenericsAfter(transaction, n, content);
+    }
+
+    /// <summary>JavaScript's <c>splice(index, 0, ...content)</c>, on the content of a type not in a document yet.</summary>
+    private protected static void PrelimInsert(List<object> list, int index, ICollection<object> content) =>
+        list.InsertRange(SpliceStart(list, index), content);
+
+    /// <summary>JavaScript's <c>splice(index, length)</c>, on the content of a type not in a document yet.</summary>
+    private protected static void PrelimDelete(List<object> list, int index, int length)
+    {
+        var start = SpliceStart(list, index);
+        list.RemoveRange(start, Math.Clamp(length, 0, list.Count - start));
+    }
+
+    private static int SpliceStart(List<object> list, int index) =>
+        index < 0 ? Math.Max(list.Count + index, 0) : Math.Min(index, list.Count);
 
     protected void InsertGenericsAfter(Transaction transaction, Item referenceItem, ICollection<object> content)
     {

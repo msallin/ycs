@@ -131,19 +131,27 @@ public partial class YArray : YArrayBase
         }
         else
         {
-            _prelimContent.InsertRange(index, content);
+            PrelimInsert(_prelimContent, index, content);
         }
     }
 
+    /// <summary>
+    /// Appends content after the last item, deleted ones included, as Yjs' <c>push</c> (which is not
+    /// an insert at <see cref="Length"/>: the bytes and the place among concurrent appends differ).
+    /// </summary>
     public void Add(ICollection<object> content)
     {
-        Insert(Length, content);
+        if (Doc != null)
+        {
+            Doc.Transact((self: this, content), static (s, tr) => s.self.PushGenerics(tr, s.content));
+        }
+        else
+        {
+            _prelimContent.AddRange(content);
+        }
     }
 
-    /// <summary>
-    /// Appends content to this YArray. Mirrors Yjs' <c>push(content)</c>; identical to
-    /// <see cref="Add"/>, provided under both names for parity.
-    /// </summary>
+    /// <summary>Yjs' <c>push(content)</c>; the same as <see cref="Add"/>.</summary>
     public void Push(ICollection<object> content) => Add(content);
 
     public void Unshift(ICollection<object> content)
@@ -159,7 +167,7 @@ public partial class YArray : YArrayBase
         }
         else
         {
-            _prelimContent.RemoveRange(index, length);
+            PrelimDelete(_prelimContent, index, length);
         }
     }
 

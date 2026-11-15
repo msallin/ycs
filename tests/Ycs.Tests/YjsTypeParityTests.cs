@@ -184,4 +184,44 @@ public class YjsTypeParityTests
 
         Assert.AreEqual("[] '' []", result);
     }
+
+    [TestMethod]
+    public void ArrayPush_AfterDeletedTail_AppendsAfterTheDeletedItemAsYjs()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var array = doc.GetArray("a");
+        array.Insert(0, new object[] { 1, 2 });
+        array.Delete(1, 1);
+
+        array.Push(new object[] { 3 });
+
+        // Yjs: origin (1,1), no right origin.
+        Assert.AreEqual("AQMBAAgBAWEBfQGBAQABiAEBAX0DAQEBAQE=", System.Convert.ToBase64String(doc.EncodeStateAsUpdate()));
+    }
+
+    [TestMethod]
+    public void ArrayInsert_BeyondTheLength_ThrowsAndChangesNothing()
+    {
+        var doc = new YDoc();
+        var array = doc.GetArray("a");
+        array.Insert(0, new object[] { 1, 2 });
+
+        Assert.ThrowsExactly<System.ArgumentOutOfRangeException>(() => array.Insert(5, new object[] { 9 }));
+
+        Assert.AreEqual("[1,2]", Json(array.ToArray()));
+    }
+
+    [TestMethod]
+    public void ArrayNotInADocument_InsertAndDeleteOutOfRange_SpliceAsJavaScript()
+    {
+        var doc = new YDoc();
+        var array = new YArray();
+        array.Insert(3, new object[] { 1 });
+        array.Insert(-1, new object[] { 0 });
+        array.Delete(5, 3);
+
+        doc.GetMap("m").Set("a", array);
+
+        Assert.AreEqual("[0,1]", Json(array.ToArray()));
+    }
 }

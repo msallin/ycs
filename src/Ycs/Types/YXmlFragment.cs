@@ -280,7 +280,7 @@ public class YXmlFragment : YArrayBase
         }
         else
         {
-            _prelimContent.InsertRange(index, content);
+            PrelimInsert(_prelimContent, index, content);
         }
     }
 
@@ -324,7 +324,7 @@ public class YXmlFragment : YArrayBase
         }
         else
         {
-            _prelimContent.RemoveRange(index, length);
+            PrelimDelete(_prelimContent, index, length);
         }
     }
 
