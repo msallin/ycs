@@ -145,11 +145,11 @@ class Ycs.Item : AbstractStruct
     string ParentSub { get; }
 sealed class Ycs.PermanentUserData
     PermanentUserData(YDoc doc, YMap storeType = null)
-    readonly YDoc Doc
-    readonly YMap YUsers
-    string GetUserByClientId(int clientId)
+    YDoc Doc { get; }
+    YMap YUsers { get; }
+    string GetUserByClientId(long clientId)
     string GetUserByDeletedId(ID id)
-    void SetUserMapping(YDoc doc, int clientId, string userDescription, System.Func<Transaction, bool> filter = null)
+    void SetUserMapping(YDoc doc, long clientId, string userDescription, System.Func<Transaction, bool> filter = null)
 class Ycs.RelativePosition : System.IEquatable<RelativePosition>
     RelativePosition(AbstractType type, ID? item, int assoc = 0)
     System.Collections.Generic.IDictionary<string, object> RelativePositionToJSON()

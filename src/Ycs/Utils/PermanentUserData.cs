@@ -9,156 +9,140 @@
 namespace Ycs;
 
 /// <summary>
-/// Ports Yjs 13.6.32's <c>PermanentUserData</c> (src/utils/PermanentUserData.js): a durable
-/// clientId-to-user-description mapping, stored as shared state inside the document itself (so it
-/// survives reconnects/reloads the way ephemeral awareness state does not), plus a per-user record
-/// of everything that clientId ever deleted. This is what "who wrote this" attribution (e.g.
-/// y-prosemirror's change-tracking) is built on: given the <see cref="ID"/> of a deleted item,
-/// <see cref="GetUserByDeletedId"/> answers which user deleted it.
+/// Yjs 13.6.32's <c>PermanentUserData</c>: which user each client id belongs to, and what each user
+/// deleted, stored in the document (a map of user description to <c>{ ids, ds }</c>), so that
+/// <see cref="GetUserByDeletedId"/> can say who deleted an item.
 /// <br/>
-/// Deviations from Yjs, both forced by this port's existing (and, per the file-ownership rules for
-/// this task, un-editable) internal/public split:
-/// <list type="bullet">
-/// <item>
-/// Yjs stores everything in a <c>Map&lt;number, string&gt;</c> (<c>clients</c>) and
-/// <c>Map&lt;string, DeleteSet&gt;</c> (<c>dss</c>) that are plain public fields on the instance.
-/// Here <see cref="Ycs.DeleteSet"/> is `internal` (matching <see cref="Snapshot"/>'s own `internal`
-/// delete-set field), so the per-user delete-set map is kept as an internal field instead
-/// (test code in this assembly can still see it via `InternalsVisibleTo`); only the two accessor
-/// methods Yjs exposes (<see cref="GetUserByClientId"/>, <see cref="GetUserByDeletedId"/>) are
-/// public, exactly as in Yjs.
-/// </item>
-/// <item>
-/// Yjs's <c>setUserMapping</c> takes a <c>filter(transaction, deleteSet)</c> callback. A public
-/// method cannot have a `DeleteSet`-shaped parameter for the same reason above (and `Transaction`'s
-/// own `DeleteSet` property is internal too, so an outside caller could not use that argument even
-/// if it were exposed), so the filter here is `Func&lt;Transaction, bool&gt;` - everything about
-/// the transaction except its raw delete set, which is what real-world filters (e.g. "only record
-/// deletions performed by a human, not by the undo manager") key off anyway.
-/// </item>
-/// <item>
-/// Yjs defers the `ds`/`ids` bookkeeping in <c>setUserMapping</c> with `setTimeout(fn, 0)`, and
-/// defers `users.observe`'s "user overwritten" handling the same way - both are JS-runtime-loop
-/// conveniences (coalescing bursts of changes onto the next microtask; sidestepping mutating a
-/// YMap from inside its own synchronous observer callback) rather than something the algorithm
-/// depends on for correctness. This port has no directly equivalent runtime hook and no async test
-/// harness to match one against, so both run synchronously - `YDoc.Transact` already queues and
-/// drains nested transactions started from inside an `AfterTransaction` handler (by the time that
-/// event fires, `doc._transaction` has already been cleared - see `Transaction.CleanupTransactions`
-/// in Utils/Transaction.cs), so a synchronous `user.Get("ds")`-array push from that handler behaves
-/// the same as Yjs' deferred one, just without the extra tick.
-/// </item>
-/// </list>
+/// The map is written by other peers too: entries of another shape are ignored, and
+/// <see cref="SetUserMapping"/> replaces one for its own user. Yjs defers its two writes (a user's new
+/// deletions, and the data of a user whose entry another peer replaced) with <c>setTimeout</c>; here they
+/// run once the batch of transactions that caused them has ended (after its <c>Update</c> events), each
+/// in a transaction of its own. The filter of <see cref="SetUserMapping"/> gets the transaction only
+/// (the delete set is internal).
 /// </summary>
 public sealed class PermanentUserData
 {
-    public readonly YDoc Doc;
-    public readonly YMap YUsers;
+    // JavaScript's safe integers: the client ids a Yjs peer can write.
+    private const double MaxSafeInteger = (1L << 53) - 1;
 
-    /// <summary>Maps clientId -&gt; user description. Yjs parity: <c>this.clients</c>.</summary>
-    internal readonly IDictionary<int, string> Clients;
+    public YDoc Doc { get; }
 
-    /// <summary>Maps user description -&gt; everything that user ever deleted. Yjs parity: <c>this.dss</c>.</summary>
-    internal readonly IDictionary<string, DeleteSet> Dss;
+    public YMap YUsers { get; }
+
+    /// <summary>Client id to user description; Yjs' <c>clients</c>.</summary>
+    internal readonly Dictionary<long, string> Clients = new Dictionary<long, string>();
+
+    /// <summary>User description to what that user deleted; Yjs' <c>dss</c>.</summary>
+    internal readonly Dictionary<string, DeleteSet> Dss = new Dictionary<string, DeleteSet>();
+
+    // The writes Yjs runs in a later task, in order; Flush runs them after the current batch.
+    private readonly List<Action> _deferred = new List<Action>();
 
     public PermanentUserData(YDoc doc, YMap storeType = null)
     {
-        storeType = storeType ?? doc.GetMap("users");
-
+        ArgumentNullException.ThrowIfNull(doc);
+        storeType ??= doc.GetMap("users");
         Doc = doc;
         YUsers = storeType;
-        Clients = new Dictionary<int, string>();
-        Dss = new Dictionary<string, DeleteSet>();
+        doc.AfterAllTransactions += Flush;
 
-        void InitUser(YMap user, string userDescription)
-        {
-            // Written by other peers: entries of an unexpected shape are ignored.
-            if (user.Get("ds") is not YArray ds || user.Get("ids") is not YArray ids)
-            {
-                return;
-            }
-
-            void AddClientId(object clientIdValue)
-            {
-                if (clientIdValue is int or long or double && Convert.ToDouble(clientIdValue, System.Globalization.CultureInfo.InvariantCulture) is var d
-                    && d >= 0 && d <= int.MaxValue && Math.Floor(d) == d)
-                {
-                    Clients[(int)d] = userDescription;
-                }
-            }
-
-            ds.EventHandler += (s, e) =>
-            {
-                foreach (var item in e.Event.Changes.Added)
-                {
-                    foreach (var content in item.Content.GetContent())
-                    {
-                        if (content is byte[] encodedDs && TryDecodeDeleteSet(encodedDs) is DeleteSet decoded)
-                        {
-                            var existing = Dss.TryGetValue(userDescription, out var prev) ? prev : new DeleteSet();
-                            Dss[userDescription] = new DeleteSet(new List<DeleteSet> { existing, decoded });
-                        }
-                    }
-                }
-            };
-
-            Dss[userDescription] = new DeleteSet(ds.OfType<byte[]>().Select(TryDecodeDeleteSet).Where(d => d != null).ToList());
-
-            ids.EventHandler += (s, e) =>
-            {
-                foreach (var item in e.Event.Changes.Added)
-                {
-                    foreach (var content in item.Content.GetContent())
-                    {
-                        AddClientId(content);
-                    }
-                }
-            };
-
-            foreach (var id in ids)
-            {
-                AddClientId(id);
-            }
-        }
-
-        // Observe users.
         storeType.EventHandler += (s, e) =>
         {
-            var mapEvent = (YMapEvent)e.Event;
-            foreach (var userDescription in mapEvent.KeysChanged)
+            foreach (var userDescription in ((YMapEvent)e.Event).KeysChanged)
             {
-                if (storeType.ContainsKey(userDescription))
+                if (UserOf(storeType, userDescription) is YMap user)
                 {
-                    if (storeType.Get(userDescription) is YMap user)
-                    {
-                        InitUser(user, userDescription);
-                    }
+                    InitUser(user, userDescription);
                 }
             }
         };
 
-        // Add initial data.
         foreach (var kvp in storeType)
         {
-            if (kvp.Value is YMap user)
+            if (UserOf(storeType, kvp.Key) is YMap user)
             {
                 InitUser(user, kvp.Key);
             }
         }
     }
 
-    /// <summary>
-    /// Yjs parity: <c>setUserMapping(doc, clientid, userDescription, { filter })</c>. See the
-    /// class-level remarks for why <paramref name="filter"/> only receives the
-    /// <see cref="Transaction"/>, not its delete set.
-    /// </summary>
-    public void SetUserMapping(YDoc doc, int clientId, string userDescription, Func<Transaction, bool> filter = null)
+    private void InitUser(YMap user, string userDescription)
     {
-        filter = filter ?? (_ => true);
+        var ds = (YArray)user.Get("ds");
+        var ids = (YArray)user.Get("ids");
+
+        ds.EventHandler += (s, e) =>
+        {
+            foreach (var item in e.Event.Changes.Added)
+            {
+                foreach (var content in item.Content.GetContent())
+                {
+                    if (content is byte[] encodedDs && TryDecodeDeleteSet(encodedDs) is DeleteSet decoded)
+                    {
+                        var existing = Dss.TryGetValue(userDescription, out var prev) ? prev : new DeleteSet();
+                        Dss[userDescription] = new DeleteSet(new List<DeleteSet> { existing, decoded });
+                    }
+                }
+            }
+        };
+
+        Dss[userDescription] = new DeleteSet(ds.OfType<byte[]>().Select(TryDecodeDeleteSet).Where(d => d != null).ToList());
+
+        ids.EventHandler += (s, e) =>
+        {
+            foreach (var item in e.Event.Changes.Added)
+            {
+                foreach (var content in item.Content.GetContent())
+                {
+                    AddClientId(content, userDescription);
+                }
+            }
+        };
+
+        foreach (var id in ids)
+        {
+            AddClientId(id, userDescription);
+        }
+    }
+
+    private void AddClientId(object clientIdValue, string userDescription)
+    {
+        // Written by other peers: anything but a client id is ignored.
+        double? id = clientIdValue switch
+        {
+            int i => i,
+            long l => l,
+            double d => d,
+            _ => null,
+        };
+
+        if (id is double value && value >= 0 && value <= MaxSafeInteger && Math.Floor(value) == value)
+        {
+            Clients[(long)value] = userDescription;
+        }
+    }
+
+    /// <summary>The user map of <paramref name="userDescription"/>, or null when there is none of the expected shape.</summary>
+    private static YMap UserOf(YMap users, string userDescription) =>
+        users.ContainsKey(userDescription) && users.Get(userDescription) is YMap user && ArrayOf(user, "ids") != null && ArrayOf(user, "ds") != null
+            ? user
+            : null;
+
+    private static YArray ArrayOf(YMap user, string key) => user.ContainsKey(key) ? user.Get(key) as YArray : null;
+
+    /// <summary>
+    /// Yjs parity: <c>setUserMapping(doc, clientid, userDescription, { filter })</c>: records that
+    /// <paramref name="clientId"/> belongs to <paramref name="userDescription"/>, and from now on every local
+    /// transaction of <paramref name="doc"/> that deletes something (and passes <paramref name="filter"/>)
+    /// adds its deletions to that user.
+    /// </summary>
+    public void SetUserMapping(YDoc doc, long clientId, string userDescription, Func<Transaction, bool> filter = null)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        filter ??= _ => true;
 
         var users = YUsers;
-        var user = users.ContainsKey(userDescription) ? (YMap)users.Get(userDescription) : null;
-
+        var user = UserOf(users, userDescription);
         if (user == null)
         {
             user = new YMap();
@@ -167,51 +151,70 @@ public sealed class PermanentUserData
             users.Set(userDescription, user);
         }
 
-        ((YArray)user.Get("ids")).Add(new object[] { clientId });
+        ArrayOf(user, "ids").Add(new object[] { clientId });
 
-        // If another writer replaces this user's entry (e.g. a concurrent 'setUserMapping' for the
-        // same description under a different id), fold what we already know about this client and
-        // its deletions into the new object so nothing is lost. Yjs parity: the 'users.observe'
-        // handler inside 'setUserMapping'.
-        var currentUser = user;
-        users.EventHandler += (s, e) =>
+        // When another peer replaces this user's entry, the client ids and deletions known so far are
+        // copied into the new one.
+        users.EventHandler += (s, e) => _deferred.Add(() =>
         {
-            var overwrite = users.ContainsKey(userDescription) ? (YMap)users.Get(userDescription) : null;
-            if (overwrite == null || ReferenceEquals(overwrite, currentUser))
+            var overwrite = UserOf(users, userDescription);
+            if (overwrite == null || ReferenceEquals(overwrite, user))
             {
                 return;
             }
 
-            currentUser = overwrite;
-
-            foreach (var kvp in Clients)
+            user = overwrite;
+            foreach (var (id, description) in Clients)
             {
-                if (kvp.Value == userDescription)
+                if (description == userDescription)
                 {
-                    ((YArray)currentUser.Get("ids")).Add(new object[] { kvp.Key });
+                    ArrayOf(user, "ids")?.Add(new object[] { id });
                 }
             }
 
-            if (Dss.TryGetValue(userDescription, out var ds))
+            if (Dss.TryGetValue(userDescription, out var known))
             {
-                ((YArray)currentUser.Get("ds")).Add(new object[] { EncodeDeleteSet(ds) });
+                ArrayOf(user, "ds")?.Add(new object[] { EncodeDeleteSet(known) });
             }
-        };
+        });
+
+        if (doc != Doc)
+        {
+            doc.AfterAllTransactions -= Flush;
+            doc.AfterAllTransactions += Flush;
+        }
 
         doc.AfterTransaction += (s, tr) =>
         {
+            // The transaction is reused once its batch has ended: what the write needs is read now.
             var ds = tr.DeleteSet;
             if (tr.Local && ds.Clients.Count > 0 && filter(tr))
             {
-                ((YArray)currentUser.Get("ds")).Add(new object[] { EncodeDeleteSet(ds) });
+                var encoded = EncodeDeleteSet(ds);
+                _deferred.Add(() => ArrayOf(user, "ds")?.Add(new object[] { encoded }));
             }
         };
+    }
+
+    private void Flush(object sender, IList<Transaction> transactions)
+    {
+        if (_deferred.Count == 0)
+        {
+            return;
+        }
+
+        var writes = _deferred.ToArray();
+        _deferred.Clear();
+        foreach (var write in writes)
+        {
+            write();
+        }
     }
 
     /// <summary>
     /// Yjs parity: <c>getUserByClientId(clientid)</c>.
     /// </summary>
-    public string GetUserByClientId(int clientId) => Clients.TryGetValue(clientId, out var v) ? v : null;
+    public string GetUserByClientId(long clientId) => Clients.TryGetValue(clientId, out var v) ? v : null;
 
     /// <summary>
     /// Yjs parity: <c>getUserByDeletedId(id)</c>.
