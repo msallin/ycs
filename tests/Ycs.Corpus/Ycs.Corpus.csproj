@@ -21,6 +21,7 @@
   <!-- The corpus recorded from real Yjs by interop/corpus/gen.mjs. -->
   <ItemGroup>
     <None Include="..\..\interop\corpus\cases\*.json" Link="cases\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\interop\corpus\undo\*.json.gz" Link="undo\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

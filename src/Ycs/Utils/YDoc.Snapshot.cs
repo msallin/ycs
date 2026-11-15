@@ -12,6 +12,7 @@ public partial class YDoc
 {
     /// <summary>
     /// Yjs parity: <c>createDocFromSnapshot(originDoc, snapshot, newDoc)</c> (src/utils/Snapshot.js).
+    /// A snapshot that holds a client or clock this document does not have throws <see cref="YUpdateException"/>.
     /// </summary>
     /// <example>
     ///   var doc = new YDoc(new YDocOptions { Gc = false });
