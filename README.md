@@ -136,8 +136,21 @@ median of 5 runs on the same machine, before = upstream PRs merged, after = this
 | decode the final document, v1, 10× | 217 ms, 87.7 MiB | 65 ms, 36.6 MiB |
 | decode the final document, v2, 10× | 258 ms, 89.6 MiB | 68 ms, 38.6 MiB |
 
+The same benchmark on 2026-11-15 (a busier machine: load average 6 to 7), the commit before branch `perf-r1`
+(38fcba1) and after it, median of 5 runs, two interleaved rounds (the range is both rounds' medians):
+
+| | 38fcba1 | perf-r1 |
+| --- | --- | --- |
+| replay the trace locally, one transaction per edit | 447–456 ms, 100.0 MiB | 359–384 ms, 58.0 MiB |
+| apply the 260k v1 updates to a fresh document | 251–261 ms, 67.4 MiB | 254–273 ms, 55.0 MiB |
+| encode the final document, v1, 10× | 5.7–5.8 ms, 2.8 MiB | 5.2–5.7 ms, 2.8 MiB |
+| encode the final document, v2, 10× | 7.8–8.0 ms, 1.5 MiB | 7.2–7.6 ms, 1.5 MiB |
+| decode the final document, v1, 10× | 74–88 ms, 39.5 MiB | 57–64 ms, 32.0 MiB |
+| decode the final document, v2, 10× | 74–79 ms, 41.5 MiB | 63–65 ms, 34.0 MiB |
+
 Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
-`dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`.
+`dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`; `-- sizes` prints what one item holds
+by kind, `-- loop <trace.json.gz> <phase> <n>` repeats one operation (for a profiler).
 
 A comparison with YDotNet (yrs) on the same workloads, with Native AOT, wasm and hostile-input findings, is in [`bench/Ycs.Compare`](bench/Ycs.Compare/README.md).
 
