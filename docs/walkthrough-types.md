@@ -81,8 +81,8 @@ difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**
 | --- | --- | --- |
 | `ArraySearchMarker`, `refreshMarkerTimestamp`, `overwriteMarker` | `YArrayBase.ArraySearchMarker`, `.Update` | equivalent (per-collection counter: only the order inside one collection is ever compared) |
 | `markPosition` | `ArraySearchMarkerCollection.MarkPosition` | identical (tie rule of `reduce` kept) |
-| `findMarker` | `YArrayBase.FindMarker` | DIFFERS, finding 19 (integer division in the "adjust existing marker" test); and without the walk to the left over items that might merge (quadratic within a transaction; a marker on a merged item is moved by `OnMerge`): markers only, the `markers-invisible` property |
-| `updateMarkerChanges` | `ArraySearchMarkerCollection.UpdateMarkerChanges` | identical |
+| `findMarker` | `YArrayBase.FindMarker` | DIFFERS, finding 19 (integer division in the "adjust existing marker" test); the walk to the left over items that continue each other by clock is Yjs' (where Yjs leaves markers stale, the item a marker sits on decides where an edit lands), and ends at the same item over a run extended in place as over Yjs' items |
+| `updateMarkerChanges` | `ArraySearchMarkerCollection.UpdateMarkerChanges` | identical; a marker an insert moves off a deleted or uncountable item lands on Yjs' item: the transaction's runs extended in place are split back first, and the caller takes the item left of its insert again (`LeftOf`) |
 | marker move in `Item#mergeWith` | `YArrayBase.OnMerge` | identical (runs before the length is added, as in JS) |
 | `getTypeChildren` | none | not ported (internal helper) |
 | `callTypeObservers` | `AbstractType.CallTypeObservers` | identical; but only called when observed, finding 16 |

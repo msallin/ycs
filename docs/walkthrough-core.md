@@ -483,11 +483,24 @@ does not matter. Yjs' order is kept as `TryToMergeWithLeftsPairwise`, and the `m
 property compares the struct stores after every step (docs/testing.md, reference comparisons).
 
 **Runs extended in place.** An insert that would be merged into its left neighbour at the end of
-the transaction (`Item.CanExtendRun`) appends to it instead (`Item.ExtendRun`) when nobody
-observes the type; the transaction records where the item would have started and splits there
-(`Transaction.MaterializeRunExtensions`) before anything that could tell the difference: an
-observed cleanup, encoding the store, applying an update, undo. The `run-extension` property
-compares the result with Yjs' items.
+the transaction (`Item.CanExtendRun`: the same client and the next clock, the neighbour as its origin,
+the same right origin and parent, undeleted, not kept or redone, a text that does not end in the first
+half of a surrogate pair) appends to it instead (`Item.ExtendRun`) when the transaction is local and
+the only one of its batch (one an observer starts runs before the other one's merge, which Yjs then
+does on its own terms) and nobody observes the type: no handler on it, no deep handler on it or an
+ancestor, no `AfterTransaction`, `AfterTransactionCleanup`, `AfterAllTransactions` or
+`BeforeObserverCalls` handler on the document (`AbstractType.IsObserved`; an UndoManager is an
+`AfterTransaction` handler). The transaction records where the item would have started and splits
+there (`Transaction.MaterializeRunExtensions`) before anything that could tell the difference: the
+cleanup when someone is called with the transaction or its events before the merge (a handler attached
+within the transaction counts), or when a garbage collection filter other than the default one will be
+called on its deletions; encoding the store, applying an update, undo; a snapshot read (`ToArraySnapshot`,
+`ToDelta` with a snapshot), whose visibility is decided per item; and an insert that moves a search
+marker off a deleted or uncountable item, which in Yjs lands on the last of the run's items. Where
+none of these happens the runs are what the merge makes of Yjs' items. Against the reference (every
+insert an item of its own, merged pair by pair) `run-extension` compares the stores, markers included,
+after every step; against Yjs the live soak's quiet clients and `StaleMarkerScriptTests` do (see
+docs/testing.md).
 
 **Transaction reuse.** `Begin` sets origin, local and the before-state; `End` clears or replaces
 every collection, resets `_needFormattingCleanup`, the "taken" flags, the subdocument sets, `Meta`,

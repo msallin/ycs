@@ -5,7 +5,7 @@ What each project guards, and how to run, soak and update them. CI
 
 | Project | Guards | Run |
 | --- | --- | --- |
-| `tests/Ycs.Tests` | Behaviour: unit tests, updates written by real Yjs (byte-identical re-encoding), 40 randomized concurrent sessions replayed from Yjs, 1,425 differential traces of the shared types and their events (see below), and the public API baseline (`PublicApi.txt`). | `dotnet test tests/Ycs.Tests` |
+| `tests/Ycs.Tests` | Behaviour: unit tests, updates written by real Yjs (byte-identical re-encoding), 40 randomized concurrent sessions replayed from Yjs, 1,425 differential traces of the shared types and their events (see below), the windows of the run extension and the search markers against Yjs and against a reference (see [below](#runs-extended-in-place-and-search-markers)), and the public API baseline (`PublicApi.txt`). | `dotnet test tests/Ycs.Tests` |
 | `tests/Ycs.Corpus` | Convergence with Yjs on a recorded corpus of Yjs 13.6.32 sessions (`interop/corpus/`): the observer's state byte for byte, and for the scripted sessions (concurrent formatting) every client's, replayed with a Ycs document per client (`ClientReplayTests`); and the UndoManager, step by step, on random sessions run in Yjs (`UndoDifferentialTests`, `interop/corpus/undo-gen.mjs`). | `dotnet test tests/Ycs.Corpus` |
 | `tests/Ycs.Fuzz` | Robustness of `ApplyUpdate`/`ApplyUpdateV2` against damaged input. | `dotnet test tests/Ycs.Fuzz -c Release` |
 | `tests/Ycs.Properties` | Differential testing against real Yjs over the whole API (texts, arrays, maps, XML, nested types, subdocuments, transactions, undo, snapshots, relative positions, events, every network path and encoding), on recorded scripts (no Node) and in a live soak; properties that need no oracle; a structure-aware update fuzzer. See [below](#model-based-differential-testing-testsycsproperties). | `dotnet test tests/Ycs.Properties -c Release` |
@@ -14,6 +14,28 @@ What each project guards, and how to run, soak and update them. CI
 | `interop/run.sh`, `interop/corpus/roundtrip.sh`, `interop/v14/roundtrip.sh` | Live round-trips against real Yjs (Node); `run.sh` runs the v14 one too. | see the README |
 | `bench/Ycs.Benchmarks` | Not a test: the editing-trace benchmark behind the README's numbers; `limits`, what updates at the default `UpdateLimits` cost (the table in [api.md](api.md#untrusted-input)); `sizes`, what one item holds and costs by kind; `loop`, one operation repeated on the trace's document (time and bytes per operation, what to attach a profiler to). | `bench/Ycs.Benchmarks/get-trace.sh`, then `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`; `... -- limits`; `... -- sizes`; `... -- loop <trace.json.gz> encode-v1 2000` |
 | `bench/Ycs.Compare` | Not a test: CI builds it with the solution and does not run it (it depends on YDotNet and its native library): ycs against YDotNet (yrs) on the same workloads, results checked equal and cross-applied; Native AOT, wasm and hostile-input probes. Results in its [README](../bench/Ycs.Compare/README.md). | `bench/Ycs.Compare/run.sh` |
+
+## Runs extended in place and search markers
+
+An insert that continues its client's run extends that item in place (`Item.ExtendRun`) where nobody
+observes the type, and the transaction splits the run back into Yjs' items before anything could tell
+the two apart (docs/walkthrough-core.md, "Runs extended in place"). Search markers are where Yjs has
+them after every operation: where Yjs leaves them stale, the item a marker sits on decides where an
+edit lands. What proves both:
+
+| Test | Compared with | What |
+| --- | --- | --- |
+| `RunExtensionYjsTests` | Yjs 13.6.32 (values recorded by `interop/markers/blockers.mjs`) | the four windows a review found: an update applied between index edits in one transaction, an observer editing during a remote transaction's cleanup, a marker an insert moves off a deleted item; a garbage collection filter (its calls, the updates and states); snapshot reads within a transaction; a transaction started from an observer (the inner and the outer events) |
+| `StaleMarkerScriptTests` | Yjs (`interop/markers/gen.mjs`: modes `apply`, `small`, `observer`) | the content after every step and the final state of scripts in which Yjs' markers are stale when an edit looks them up. `Fixtures/stale-markers.jsonl.gz`: seeds 1 to 300 of each mode, and every script a refused version failed; `interop/markers/soak.sh <scripts per mode> <first seed> [modes]` generates and replays more |
+| `RunExtensionScenarioTests` | the reference (`ReferenceRun`: `YDoc.RunExtensionsDisabledForTests`, `StructStore.PairwiseMergeForTests`) | 36 hand-written scenarios (observers and handlers attached within a transaction, throwing bodies and handlers, updates applied and encodings made within a transaction, undo, surrogates, snapshots, relative positions, prelim types, a parent deleted while typing, filters, transactions started from observers): their logs (events with the items they added and deleted, updates, states, every struct with its marker flag) |
+| `RunExtensionFuzzTests` | the reference | random scenarios mixing all of that with peer syncs, a map observer that edits the lists during remote cleanups and an update handler that types; the search markers of both lists after every step. 300 seeds; `YCS_EXTENSION_FUZZ=first:count` for more |
+| `run-extension`, `merge-order` (`tests/Ycs.Properties`) | the reference | see [reference comparisons](#reference-comparisons) |
+| the live soak, `fixtures/windows.jsonl` (`tests/Ycs.Properties`) | Yjs | scripts with quiet clients, filters, typing runs with an update applied or a snapshot read in the middle, reacting observers (`GenOptions.Windows`); the soak reports how many steps and scripts extended a run |
+
+"Observed" (`AbstractType.IsObserved`): a handler on the type, a deep handler on it or an ancestor, or
+an `AfterTransaction`, `AfterTransactionCleanup` or `AfterAllTransactions` handler on the document; with
+a `BeforeObserverCalls` handler nothing extends either. Update handlers do not count. An observed type,
+and every type of a document with an UndoManager (an `AfterTransaction` handler), makes Yjs' items.
 
 ## Differential traces (`TraceReplayTests`)
 
@@ -181,7 +203,7 @@ long traces) stays theirs: add an operation here when it needs the cross-area or
 
 | Layer | Proves | Does not prove |
 | --- | --- | --- |
-| Recorded fixtures (`RecordedTests`, `interop/properties/fixtures/*.jsonl`) | On 190 pairwise scripts (every unordered pair of the 19 operation kinds, and each with itself, made concurrently by two or three clients, then exchanged in random order with duplicates and mixed formats), 150 random scripts, 80 fuzzed ones and the scripts of the fixed known failures (`FixedFailures.cs`), every step's observation equals Yjs'. Needs no Node. | Anything outside these scripts. Intermediate steps are stored as hashes (`he`, `hs`), so a failure says which step differs; `YCS_PROP_EXPLAIN` (with Node) says how. |
+| Recorded fixtures (`RecordedTests`, `interop/properties/fixtures/*.jsonl`) | On 190 pairwise scripts (every unordered pair of the 19 operation kinds, and each with itself, made concurrently by two or three clients, then exchanged in random order with duplicates and mixed formats), 150 random scripts, 170 scripts with the windows of the run extension (`windows.jsonl`: 150 of the generator, 20 long lists), 80 fuzzed ones and the scripts of the fixed known failures (`FixedFailures.cs`), every step's observation equals Yjs'. Needs no Node. | Anything outside these scripts. Intermediate steps are stored as hashes (`he`, `hs`), so a failure says which step differs; `YCS_PROP_EXPLAIN` (with Node) says how. |
 | Live soak (`SoakTests.LiveSoak_ScriptsAgreeWithYjs`, `interop/properties/soak.sh`) | The same on any number of fresh scripts (seeded, deterministic); each distinct mismatch is shrunk to a minimal script. | Behaviour the generator does not produce (see the coverage table); timing-dependent behaviour (an UndoManager's capture timeout is 0 or effectively infinite). |
 | Properties (`PropertyTests`, `Properties.cs`) | Laws that need no oracle, on generated scripts: convergence, encode round trip, merge of any partition, diff, v1/v2 conversion, undo/redo, snapshot stability, relative positions, GC invisibility, naive recomputation, the Lean item-list invariants, idempotence, commutativity, event replay, clean rejection of fuzzed updates; and three comparisons with a reference inside Ycs (see [below](#reference-comparisons)). | That the laws match Yjs: where Yjs itself breaks one the property's generator leaves that out, or the property is stated as Yjs satisfies it (see [laws Yjs breaks](#laws-yjs-breaks)). `EventReplay_HoldsForYjs` checks the event-replay property on Yjs. |
 | Structure-aware fuzzer (`UpdateFuzz.cs`, `UpdateFuzzTests`) | Updates encoded by the tests' own v1 encoder from a model (several synthetic clients in any order, runs split where Yjs merges, origins inside other runs and inside map values, parents that arrive later, Skip and GC structs, overlapping/repeated/unsorted delete sets, a map value's tail deleted with its map, clocks near 2^31 - 1, nesting at the limit (`UpdateLimits.MaxDepth`), clients with no structs) are applied, or rejected with `YUpdateException` and the document unchanged; with Node, as Yjs applies them. | Byte-level damage (that is `tests/Ycs.Fuzz`); v2 input other than Ycs' and Yjs' own conversions of the model's v1. |
@@ -190,9 +212,16 @@ A divergence that is a bug in Ycs is pinned in `KnownFailures.cs` (see [pinning]
 
 ### The language
 
-A script is `{"clients": [{"id", "gc"}...], "roots": [{"name", "kind": "text"|"array"|"map"|"xml"}...], "steps": [...], "compact"?}`.
+A script is `{"clients": [{"id", "gc", "quiet"?, "gcf"?}...], "roots": [{"name", "kind": "text"|"array"|"map"|"xml"}...], "steps": [...], "compact"?}`.
 Client ids are fixed (conflicts resolve the same on both sides); every client has every root,
-observed by a shallow and a deep observer. Every operation is total: indexes are clamped, a path
+observed by a shallow and a deep observer and an `afterTransaction` handler, unless it is `quiet`
+(none: Ycs extends runs there; what such a client observes later, with `observe` or an UndoManager,
+is compared). With `gcf: k` a client's garbage collection filter keeps the items whose clock is a
+multiple of k, and each call is an event (`gcf`, id and length). A client whose own clock moved in a
+non-local transaction (local edits in a transaction an update was applied in: Yjs makes it non-local)
+draws a random client id, as in Yjs; both interpreters replace it with the next of 5,000,000,000 + n
+in that transaction's `update` handler (the first thing called after the change that is not an
+observer, before a later transaction of the batch uses the id) and before every step. Every operation is total: indexes are clamped, a path
 that does not resolve to a type of the right kind makes the step a recorded no-op (`"r": "skip"`),
 an exception is observed as `"err": true`. So a script stays valid when steps are removed, which is
 what makes shrinking work.
@@ -206,11 +235,12 @@ XML children and map keys):
 | `setAttr`, `rmAttr` | `key`, `value` | `YText`/`YXmlElement` `SetAttribute`, `RemoveAttribute` |
 | `ains`, `push`, `unshift`, `delete`, `xafter` | `at`, `values`, `ref` | `YArray`/`YXmlFragment` `Insert`, `Push`, `Unshift`, `Delete`, `InsertAfter` |
 | `set`, `mdel`, `clear` | `key`, `value` | `YMap` `Set`, `Delete`, `Clear` |
-| `transact` | `origin`, `ops` (local steps without `c`) | `YDoc.Transact` |
+| `transact` | `origin`, `ops` (local steps without `c`, and `deliver`s to this client: an update applied inside the transaction) | `YDoc.Transact` |
 | `um`, `undo`, `redo`, `stop`, `umclear` | `id`, `scope` (paths or `"$doc"`), `timeout` (`"0"` or `"inf"`), `origins` | `UndoManager` |
 | `snap`, `readSnap`, `docFromSnap` | `id`, `prev` | `CreateSnapshot`, `ToDelta(snapshot, prev)`, `ToArraySnapshot`, `GetAllSnapshot`, `CreateDocFromSnapshot`, `EncodeSnapshot(V2)` |
 | `rpos`, `rres` | `id`, `at`, `assoc` (`rres` on any client) | `RelativePosition.FromTypeIndex`, `EncodeRelativePosition`, `RelativePositionToJSON`, `DecodeRelativePosition`, `AbsolutePosition.TryCreateFromRelativePosition` |
 | `observe` | | `Observe`/`ObserveDeep` on a nested type |
+| `react` | `id`, `ops`, `txn` | `Observe` on any type: the first time it changes, the handler makes `ops` (in one `Transact` with `txn`, else each in its own), also during another transaction's cleanup; the results are an event (`react`) |
 
 Network steps: `deliver` (`from`, `k`: the k-th update `from` made, `to`, `via`: `v1`, `v2`,
 `v1to2`, `v2to1`), `sync` (`from`, `to`, `via`; y-protocols' step 1 / step 2 through
@@ -263,6 +293,7 @@ dotnet test tests/Ycs.Properties -c Release                       # recorded, pr
 (cd interop/properties && npm ci)                                 # once, for everything below
 interop/properties/soak.sh 200000 1 8                             # live soak: scripts, first seed, Node workers
 YCS_PROP_SEEDS=30000 dotnet test tests/Ycs.Properties -c Release --filter "FullyQualifiedName~PropertyTests"
+YCS_PROP_ONLY=run-extension,merge-order YCS_PROP_SEEDS=30000 dotnet test tests/Ycs.Properties -c Release --filter "FullyQualifiedName~Property_HoldsOnGeneratedScripts"
 YCS_PROP_FUZZ=5000 dotnet test tests/Ycs.Properties -c Release --filter Name=StructuredUpdates_AgreeWithYjs
 YCS_PROP_EXPLAIN=interop/properties/failures/x.json dotnet test tests/Ycs.Properties -c Release \
   --filter Name=Explain_PrintsBothObservations --logger "console;verbosity=detailed"   # one script, both sides, every difference
@@ -281,17 +312,20 @@ the exceptions the operations threw.
 Three properties compare Ycs with itself, run step by step on the same script with an internal switch flipped
 (set through `Adapter.cs`' accessors; script options only Ycs reads): every other seed is a script of the general
 generator, the others one of `ListScripts.cs` (a text and an array grown to a few hundred elements by typing runs,
-backspaces, random inserts, deletes and pushes, most of them in one transaction, with undo, formats and syncs: the
-general scripts stay too short to make search markers).
+backspaces, random inserts, deletes and pushes, most of them in one transaction, with a late UndoManager, formats
+and syncs: the general scripts stay too short to make search markers). `merge-order` and `run-extension` take them
+with the windows of the run extension (`GenOptions.Windows`; in `ListScripts`, updates applied in the middle of
+transactions); `markers-invisible` without (where Yjs leaves markers stale, markers on and off differ in Yjs too).
 
 | Property | Candidate | Reference | Compared after every step |
 | --- | --- | --- | --- |
 | `markers-invisible` | search markers on | off (`YDoc.SearchMarkersDisabledForTests`, option `markers: false`) | every observation (content, encodings, results, events); and every marker of a live type points at an item of its list with the right index (`YArrayBase.SearchMarkerViolations`, usable from a Debug session too) |
 | `merge-order` | the end of a transaction merges a run in one pass | Yjs' pair-by-pair order (`StructStore.PairwiseMergeForTests`, option `merge: "pairwise"`), inserts as items of their own in both | the struct store of every client (`Replica.StoreDump`: kind, id, length, deletion, content, left/right, origins, parent, key, keep, redone, marker flag; each type's map entries and markers) and the observations |
-| `run-extension` | inserts that continue a run extend it in place | every insert an item of its own (`YDoc.RunExtensionsDisabledForTests`, option `extend: false`), merged pair by pair | the store as above without the search markers (where a lookup leaves one depends on the items it walks), and the observations; once observed as the adapter observes, once with nothing observing (option `quiet`: no observers or transaction handlers, so the runs are not split before the end of the transaction) |
+| `run-extension` | inserts that continue a run extend it in place | every insert an item of its own (`YDoc.RunExtensionsDisabledForTests`, option `extend: false`), merged pair by pair | the store as above, search markers included (between steps every marker sits where Yjs' would), and the observations; once as the script has it (quiet clients extend runs), once with every client quiet (script option `quiet`) |
 
 Each fails on a sabotaged change (a marker index off by one in a merge, a map entry not moved to the struct a
-run merges into, the split before the observers left out, the surrogate condition of the run extension dropped).
+run merges into, the split before the observers left out, the surrogate condition of the run extension dropped);
+`run-extension` also on the version of the run extension the review refused (f857189).
 
 ### Laws Yjs breaks
 
