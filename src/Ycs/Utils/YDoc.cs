@@ -275,11 +275,9 @@ public partial class YDoc
             InvokeOnBeforeTransaction(transaction);
         }
 
-        var completed = false;
         try
         {
             action(state, transaction);
-            completed = true;
         }
         finally
         {
@@ -292,23 +290,9 @@ public partial class YDoc
 
                 if (finishCleanup)
                 {
-                    // Observer calls may create new transactions for which we need to call the observers and do cleanup.
-                    // Also we need to ensure that all cleanups are called, even if the observers throw errors.
-                    if (completed)
-                    {
-                        Transaction.CleanupTransactions(this);
-                    }
-                    else
-                    {
-                        try
-                        {
-                            Transaction.CleanupTransactions(this);
-                        }
-                        catch (Exception)
-                        {
-                            // The exception of 'action' propagates; one from an observer would hide it.
-                        }
-                    }
+                    // Observer calls may create new transactions for which we need to call the observers and do
+                    // cleanup. As in Yjs, an exception of the cleanup replaces one of 'action'.
+                    Transaction.CleanupTransactions(this);
                 }
             }
         }

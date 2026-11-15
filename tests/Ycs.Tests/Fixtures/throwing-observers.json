@@ -1,0 +1,566 @@
+{
+ "yjs": "13.6.32",
+ "scenarios": {
+  "nothing throws": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": null,
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "an observer": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "obs:a",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "two observers of one type": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "obs:a2",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "observers of two types": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "obs:m",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "beforeObserverCalls": {
+   "log": [
+    "beforeObserverCalls",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "beforeObserverCalls",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "a deep observer": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "deep:a",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "a deep observer and an observer": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "deep:a",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "afterTransaction": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "afterTransaction",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "afterTransaction and an observer": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "afterTransaction",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "afterTransactionCleanup": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup"
+   ],
+   "escaped": "afterTransactionCleanup",
+   "later": [],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "update": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update"
+   ],
+   "escaped": "update",
+   "later": [],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "updateV2": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2"
+   ],
+   "escaped": "updateV2",
+   "later": [],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "afterAllTransactions": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "afterAllTransactions",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "the function and an observer": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "obs:m",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "the function": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "function",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "an observer that changes the document, then one of its transaction": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:a changes m",
+    "obs:m",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "beforeObserverCalls",
+    "obs:m",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "obs:m",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  },
+  "an observer of a nested transaction and of the first": {
+   "log": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "obs:m",
+    "obs:m nested",
+    "obs:t",
+    "deep:a",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "beforeObserverCalls",
+    "obs:m",
+    "obs:m nested",
+    "deep:m",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "escaped": "obs:m nested",
+   "later": [
+    "beforeObserverCalls",
+    "obs:a",
+    "obs:a2",
+    "deep:a",
+    "afterTransaction",
+    "afterTransaction2",
+    "afterTransactionCleanup",
+    "update",
+    "updateV2",
+    "afterAllTransactions"
+   ],
+   "laterEscaped": null,
+   "content": [
+    "later",
+    1
+   ]
+  }
+ }
+}

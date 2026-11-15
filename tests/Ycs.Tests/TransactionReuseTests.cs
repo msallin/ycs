@@ -210,19 +210,20 @@ public class TransactionReuseTests
     }
 
     [TestMethod]
-    public void Transact_ActionAndObserverThrow_TheActionsExceptionPropagates()
+    public void Transact_ActionAndObserverThrow_TheObserversExceptionPropagates()
     {
+        // As Yjs' transact: the cleanup runs in a 'finally', and its exception replaces the action's.
         var doc = new YDoc();
         var text = doc.GetText("t");
         text.EventHandler += (_, _) => throw new ArgumentException("observer");
 
-        var e = Assert.ThrowsExactly<InvalidOperationException>(() => doc.Transact(_ =>
+        var e = Assert.ThrowsExactly<ArgumentException>(() => doc.Transact(_ =>
         {
             text.Insert(0, "a");
             throw new InvalidOperationException("action");
         }));
 
-        Assert.AreEqual("action", e.Message);
+        Assert.AreEqual("observer", e.Message);
     }
 
     [TestMethod]

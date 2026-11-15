@@ -24,7 +24,7 @@ walkthrough below describes the code at 40d7fdb.
 | F15 unstable sort of deep events | fixed in 5727865 |
 | F16 events of deleted targets | fixed in 0701f70 |
 | F17 subdocument's client id | fixed in 7547e92 |
-| F18 exception paths of the cleanup | partly: the handlers of one event run as `callAll` and the last exception propagates (0701f70); across the phases the first exception is rethrown, and (b) to (d) are open |
+| F18 exception paths of the cleanup | fixed: Yjs' paths ported, (a) to (d), compared with Yjs in 17 scenarios (`ThrowingObserverTests`, `interop/js/throwing-observers.mjs`); (c) included: as in Yjs, a throwing `Update` or `AfterTransactionCleanup` handler leaves the document's batch unfinished, and no later transaction is cleaned up |
 | F19 unstable sort in `MergeUpdates` | fixed in 5727865 |
 | F20 `ContentJSON` loses `undefined` | fixed in 3d0c9c0 |
 | F21 root type of a pending struct | kept on purpose: no public API lists the root types, so it cannot be observed; the struct reader would need the document |

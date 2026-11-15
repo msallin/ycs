@@ -387,45 +387,38 @@ public partial class Transaction
 
     /// <summary>
     /// Cleans up the document's transactions, including those that observers start meanwhile, then
-    /// ends them for reuse. Whatever throws (an observer, or a bug), every transaction is cleaned up
-    /// and the document is left ready for the next one; the first exception is rethrown at the end.
+    /// ends them for reuse; Yjs' <c>cleanupTransactions</c>, with its exception paths:
+    /// <list type="bullet">
+    /// <item>an exception of a transaction's observer calls (<see cref="YDoc.BeforeObserverCalls"/>, which skips
+    /// them all, the observers, the deep observers, <see cref="YDoc.AfterTransaction"/>, the formatting cleanup)
+    /// is replaced by any later one, and the last is rethrown once the batch is done;</item>
+    /// <item>an exception of what follows them (<see cref="YDoc.AfterTransactionCleanup"/>, <see cref="YDoc.Update"/>,
+    /// <see cref="YDoc.UpdateV2"/>, <see cref="YDoc.SubdocsChanged"/>) escapes at once: the rest of that cleanup and
+    /// of the batch is skipped, and the batch is never finished, so no later transaction of the document is
+    /// cleaned up (no observer, no update event; Yjs leaves <c>doc._transactionCleanups</c> as it is);</item>
+    /// <item>an exception of <see cref="YDoc.AfterAllTransactions"/> escapes after the batch is finished.</item>
+    /// </list>
     /// </summary>
     internal static void CleanupTransactions(YDoc doc)
     {
         var transactionCleanups = doc._transactionCleanups;
         ExceptionDispatchInfo error = null;
+        for (var i = 0; i < transactionCleanups.Count; i++)
+        {
+            error = CleanupTransaction(transactionCleanups[i]) ?? error;
+        }
 
+        // A transaction that an 'AfterAllTransactions' handler starts is a new batch, in the
+        // other list (as Yjs replaces 'doc._transactionCleanups').
+        doc._transaction = null;
+        doc._transactionCleanups = doc._spareTransactionCleanups ?? new List<Transaction>();
+        doc._spareTransactionCleanups = null;
         try
         {
-            for (var i = 0; i < transactionCleanups.Count; i++)
-            {
-                try
-                {
-                    CleanupTransaction(transactionCleanups[i]);
-                }
-                catch (Exception e)
-                {
-                    error ??= ExceptionDispatchInfo.Capture(e);
-                }
-            }
+            doc.InvokeAfterAllTransactions(transactionCleanups);
         }
         finally
         {
-            // A transaction that an 'AfterAllTransactions' handler starts is a new batch, in the
-            // other list (as Yjs replaces 'doc._transactionCleanups').
-            doc._transaction = null;
-            doc._transactionCleanups = doc._spareTransactionCleanups ?? new List<Transaction>();
-            doc._spareTransactionCleanups = null;
-
-            try
-            {
-                doc.InvokeAfterAllTransactions(transactionCleanups);
-            }
-            catch (Exception e)
-            {
-                error ??= ExceptionDispatchInfo.Capture(e);
-            }
-
             for (var i = 0; i < transactionCleanups.Count; i++)
             {
                 doc.ReturnTransaction(transactionCleanups[i]);
@@ -439,11 +432,11 @@ public partial class Transaction
     }
 
     /// <summary>
-    /// Yjs' 'cleanupTransactions' for one transaction: the observers, deep observers and
-    /// 'AfterTransaction' are each called even if one before throws; the first exception is
-    /// rethrown after the structs are merged and the update events are fired.
+    /// Yjs' 'cleanupTransactions' for one transaction. The observer calls (Yjs' <c>try</c> part) are each called
+    /// even if one before throws (Yjs' <c>callAll</c>), and the last exception is returned; then the structs are
+    /// merged and the update events fired (Yjs' <c>finally</c> part), where an exception escapes.
     /// </summary>
-    private static void CleanupTransaction(Transaction transaction)
+    private static ExceptionDispatchInfo CleanupTransaction(Transaction transaction)
     {
         var doc = transaction._doc;
         var store = doc.Store;
@@ -458,14 +451,8 @@ public partial class Transaction
             ds.SortAndMergeDeleteSet();
             store.GetStateVector(transaction._afterState);
 
-            try
-            {
-                doc.InvokeOnBeforeObserverCalls(transaction);
-            }
-            catch (Exception e)
-            {
-                error ??= ExceptionDispatchInfo.Capture(e);
-            }
+            // An exception here skips every observer call, as in Yjs.
+            doc.InvokeOnBeforeObserverCalls(transaction);
 
             try
             {
@@ -480,14 +467,14 @@ public partial class Transaction
                         }
                         catch (Exception e)
                         {
-                            error ??= ExceptionDispatchInfo.Capture(e);
+                            error = ExceptionDispatchInfo.Capture(e);
                         }
                     }
                 }
             }
             catch (Exception e)
             {
-                error ??= ExceptionDispatchInfo.Capture(e);
+                error = ExceptionDispatchInfo.Capture(e);
             }
 
             try
@@ -496,7 +483,7 @@ public partial class Transaction
             }
             catch (Exception e)
             {
-                error ??= ExceptionDispatchInfo.Capture(e);
+                error = ExceptionDispatchInfo.Capture(e);
             }
 
             // Deep observe events: every event gets its current target first, then the observers
@@ -556,7 +543,7 @@ public partial class Transaction
             }
             catch (Exception e)
             {
-                error ??= ExceptionDispatchInfo.Capture(e);
+                error = ExceptionDispatchInfo.Capture(e);
             }
 
             for (var i = 0; i < deepCalls.Count; i++)
@@ -567,7 +554,7 @@ public partial class Transaction
                 }
                 catch (Exception e)
                 {
-                    error ??= ExceptionDispatchInfo.Capture(e);
+                    error = ExceptionDispatchInfo.Capture(e);
                 }
             }
 
@@ -577,7 +564,7 @@ public partial class Transaction
             }
             catch (Exception e)
             {
-                error ??= ExceptionDispatchInfo.Capture(e);
+                error = ExceptionDispatchInfo.Capture(e);
             }
 
             try
@@ -589,117 +576,120 @@ public partial class Transaction
             }
             catch (Exception e)
             {
-                error ??= ExceptionDispatchInfo.Capture(e);
+                error = ExceptionDispatchInfo.Capture(e);
             }
         }
-        finally
+        catch (Exception e)
         {
-            // Replace deleted items with ItemDeleted / GC.
-            // This is where content is actually removed from the Yjs Doc.
-            if (doc.Gc)
+            error = ExceptionDispatchInfo.Capture(e);
+        }
+
+        // What follows is Yjs' 'finally' part: an exception of a handler here escapes (see CleanupTransactions).
+        // Replace deleted items with ItemDeleted / GC.
+        // This is where content is actually removed from the Yjs Doc.
+        if (doc.Gc)
+        {
+            ds.TryGcDeleteSet(store, doc.GcFilter);
+        }
+
+        ds.TryMergeDeleteSet(store);
+
+        // On all affected store.clients props, try to merge.
+        var beforeState = transaction._beforeState;
+        foreach (var kvp in transaction._afterState)
+        {
+            var client = kvp.Key;
+            var clock = kvp.Value;
+
+            if (!beforeState.TryGetValue(client, out var beforeClock))
             {
-                ds.TryGcDeleteSet(store, doc.GcFilter);
+                beforeClock = 0;
             }
 
-            ds.TryMergeDeleteSet(store);
-
-            // On all affected store.clients props, try to merge.
-            var beforeState = transaction._beforeState;
-            foreach (var kvp in transaction._afterState)
+            if (beforeClock != clock)
             {
-                var client = kvp.Key;
-                var clock = kvp.Value;
-
-                if (!beforeState.TryGetValue(client, out var beforeClock))
-                {
-                    beforeClock = 0;
-                }
-
-                if (beforeClock != clock)
-                {
-                    var structs = store.Clients[client];
-                    var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
-                    for (int j = structs.Count - 1; j >= firstChangePos;)
-                    {
-                        j -= 1 + DeleteSet.TryToMergeWithLefts(structs, j);
-                    }
-                }
-            }
-
-            // Try to merge mergeStructs.
-            // TODO: It makes more sense to transform mergeStructs to a DS, sort it, and merge from right to left
-            //       but at the moment DS does not handle duplicates.
-            for (int j = mergeStructs.Count - 1; j >= 0; j--)
-            {
-                var client = mergeStructs[j].Id.Client;
-                var clock = mergeStructs[j].Id.Clock;
                 var structs = store.Clients[client];
-                var replacedStructPos = StructStore.FindIndexSS(structs, clock);
-
-                // Both neighbours merged already when more than one struct went.
-                if (replacedStructPos + 1 < structs.Count && DeleteSet.TryToMergeWithLefts(structs, replacedStructPos + 1) > 1)
+                var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
+                for (int j = structs.Count - 1; j >= firstChangePos;)
                 {
-                    continue;
-                }
-
-                if (replacedStructPos > 0)
-                {
-                    DeleteSet.TryToMergeWithLefts(structs, replacedStructPos);
-                }
-            }
-
-            if (!transaction._local)
-            {
-                if (!transaction._afterState.TryGetValue(doc.ClientId, out var afterClock))
-                {
-                    afterClock = -1;
-                }
-
-                if (!beforeState.TryGetValue(doc.ClientId, out var beforeClock))
-                {
-                    beforeClock = -1;
-                }
-
-                if (afterClock != beforeClock)
-                {
-                    doc.ClientId = YDoc.GenerateNewClientId();
-                    // Debug.WriteLine($"{nameof(Transaction)}: Changed the client-id because another client seems to be using it.");
-                }
-            }
-
-            // @todo: Merge all the transactions into one and provide send the data as a single update message.
-            doc.InvokeOnAfterTransactionCleanup(transaction);
-
-            doc.InvokeUpdateV1(transaction);
-            doc.InvokeUpdateV2(transaction);
-
-            if (transaction._subdocsAdded?.Count > 0 || transaction._subdocsRemoved?.Count > 0 || transaction._subdocsLoaded?.Count > 0)
-            {
-                var added = transaction.SubdocsAdded;
-                var removed = transaction.SubdocsRemoved;
-
-                foreach (var subDoc in added)
-                {
-                    subDoc.ClientId = doc.ClientId;
-                    subDoc.CollectionId ??= doc.CollectionId;
-                    doc.Subdocs.Add(subDoc);
-                }
-
-                foreach (var subDoc in removed)
-                {
-                    doc.Subdocs.Remove(subDoc);
-                }
-
-                doc.InvokeSubdocsChanged(transaction.SubdocsLoaded, added, removed);
-
-                foreach (var subDoc in removed)
-                {
-                    subDoc.Destroy();
+                    j -= 1 + DeleteSet.TryToMergeWithLefts(structs, j);
                 }
             }
         }
 
-        error?.Throw();
+        // Try to merge mergeStructs.
+        // TODO: It makes more sense to transform mergeStructs to a DS, sort it, and merge from right to left
+        //       but at the moment DS does not handle duplicates.
+        for (int j = mergeStructs.Count - 1; j >= 0; j--)
+        {
+            var client = mergeStructs[j].Id.Client;
+            var clock = mergeStructs[j].Id.Clock;
+            var structs = store.Clients[client];
+            var replacedStructPos = StructStore.FindIndexSS(structs, clock);
+
+            // Both neighbours merged already when more than one struct went.
+            if (replacedStructPos + 1 < structs.Count && DeleteSet.TryToMergeWithLefts(structs, replacedStructPos + 1) > 1)
+            {
+                continue;
+            }
+
+            if (replacedStructPos > 0)
+            {
+                DeleteSet.TryToMergeWithLefts(structs, replacedStructPos);
+            }
+        }
+
+        if (!transaction._local)
+        {
+            if (!transaction._afterState.TryGetValue(doc.ClientId, out var afterClock))
+            {
+                afterClock = -1;
+            }
+
+            if (!beforeState.TryGetValue(doc.ClientId, out var beforeClock))
+            {
+                beforeClock = -1;
+            }
+
+            if (afterClock != beforeClock)
+            {
+                doc.ClientId = YDoc.GenerateNewClientId();
+                // Debug.WriteLine($"{nameof(Transaction)}: Changed the client-id because another client seems to be using it.");
+            }
+        }
+
+        // @todo: Merge all the transactions into one and provide send the data as a single update message.
+        doc.InvokeOnAfterTransactionCleanup(transaction);
+
+        doc.InvokeUpdateV1(transaction);
+        doc.InvokeUpdateV2(transaction);
+
+        if (transaction._subdocsAdded?.Count > 0 || transaction._subdocsRemoved?.Count > 0 || transaction._subdocsLoaded?.Count > 0)
+        {
+            var added = transaction.SubdocsAdded;
+            var removed = transaction.SubdocsRemoved;
+
+            foreach (var subDoc in added)
+            {
+                subDoc.ClientId = doc.ClientId;
+                subDoc.CollectionId ??= doc.CollectionId;
+                doc.Subdocs.Add(subDoc);
+            }
+
+            foreach (var subDoc in removed)
+            {
+                doc.Subdocs.Remove(subDoc);
+            }
+
+            doc.InvokeSubdocsChanged(transaction.SubdocsLoaded, added, removed);
+
+            foreach (var subDoc in removed)
+            {
+                subDoc.Destroy();
+            }
+        }
+
+        return error;
     }
 
     internal static void SplitSnapshotAffectedStructs(Transaction transaction, Snapshot snapshot)
