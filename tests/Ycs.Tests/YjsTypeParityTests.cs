@@ -283,4 +283,38 @@ public class YjsTypeParityTests
 
         Assert.AreEqual("k Update null", keys);
     }
+
+    [TestMethod]
+    public void TextFormat_ListEqualToObjectWithIndexKeys_AddsNoFormat()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var text = doc.GetText("t");
+        text.Insert(0, "abc", new Dictionary<string, object> { ["l"] = new Dictionary<string, object> { ["0"] = 1, ["1"] = 2 } });
+
+        text.Format(0, 3, new Dictionary<string, object> { ["l"] = new List<object> { 1, 2 } });
+
+        Assert.AreEqual("AQMBAAYBAXQBbA17IjAiOjEsIjEiOjJ9hAEAA2FiY4YBAwFsBG51bGwA", System.Convert.ToBase64String(doc.EncodeStateAsUpdate()));
+    }
+
+    [TestMethod]
+    public void TextInsert_AttributeKeysThatAreIndexes_FormatsInJavaScriptKeyOrder()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+
+        doc.GetText("t").Insert(0, "abc", new Dictionary<string, object> { ["b"] = true, ["1"] = "x", ["0"] = "y" });
+
+        Assert.AreEqual("AQcBAAYBAXQBMAMieSKGAQABMQMieCKGAQEBYgR0cnVlhAECA2FiY4YBBQEwBG51bGyGAQYBMQRudWxshgEHAWIEbnVsbAA=", System.Convert.ToBase64String(doc.EncodeStateAsUpdate()));
+    }
+
+    [TestMethod]
+    public void ArrayInsert_ByteArrayChangedAfterwards_DocumentKeepsTheInsertedBytes()
+    {
+        var array = new YDoc().GetArray("a");
+        var bytes = new byte[] { 1, 2 };
+        array.Insert(0, new object[] { bytes });
+
+        bytes[0] = 9;
+
+        Assert.AreEqual("[1,2]", Json(((byte[])array.Get(0)).Select(b => (object)(int)b)));
+    }
 }

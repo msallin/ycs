@@ -343,7 +343,9 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             {
                 case byte[] arr:
                     packJsonContent();
-                    left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, new ContentBinary(arr));
+
+                    // A copy, as Yjs: the caller's array must not change the document later.
+                    left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, new ContentBinary((byte[])arr.Clone()));
                     left.Integrate(transaction, 0);
                     break;
                 case YDoc d:

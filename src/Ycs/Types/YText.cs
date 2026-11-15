@@ -1103,7 +1103,7 @@ public partial class YText : YArrayBase
         OrderedDictionary<string, object> negatedAttributes = null;
 
         // Insert format-start items.
-        foreach (var kvp in attributes)
+        foreach (var kvp in InJavaScriptKeyOrder(attributes))
         {
             var key = kvp.Key;
             var value = kvp.Value;
@@ -1527,13 +1527,16 @@ public partial class YText : YArrayBase
     public static int CleanupYTextFormatting(YText type) => type.CleanupFormatting();
 
     /// <summary>
-    /// Yjs' <c>equalAttrs</c>: <c>a === b</c>, or two objects (a map or a list) with the same own
-    /// properties, each compared with <c>===</c>.
+    /// Yjs' <c>equalAttrs</c>: <c>a === b</c>, or two objects (a map, a list or a byte array) with the
+    /// same own properties, each compared with <c>===</c>; a list's properties are its indexes, so
+    /// <c>[1, 2]</c> equals <c>{ "0": 1, "1": 2 }</c>.
     /// </summary>
     internal static bool EqualAttrs(object attr1, object attr2) =>
         StrictEquals(attr1, attr2) ||
         (attr1 is IDictionary<string, object> map1 && attr2 is IDictionary<string, object> map2 && EqualFlat(map1, map2)) ||
-        (attr1 is System.Collections.IList list1 && attr2 is System.Collections.IList list2 && EqualFlat(list1, list2));
+        (attr1 is System.Collections.IList list1 && attr2 is System.Collections.IList list2 && EqualFlat(list1, list2)) ||
+        (attr1 is IDictionary<string, object> map && attr2 is System.Collections.IList list && EqualFlat(map, list)) ||
+        (attr1 is System.Collections.IList list3 && attr2 is IDictionary<string, object> map3 && EqualFlat(map3, list3));
 
     private static bool EqualFlat(IDictionary<string, object> a, IDictionary<string, object> b)
     {
@@ -1569,6 +1572,71 @@ public partial class YText : YArrayBase
         }
 
         return true;
+    }
+
+    private static bool EqualFlat(IDictionary<string, object> map, System.Collections.IList list)
+    {
+        if (map.Count != list.Count)
+        {
+            return false;
+        }
+
+        foreach (var (key, value) in map)
+        {
+            if (!IsArrayIndex(key, out var index) || index >= list.Count || !StrictEquals(value, list[(int)index]))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>Whether <paramref name="key"/> is a JavaScript array index: a canonical integer below 2^32 - 1.</summary>
+    private static bool IsArrayIndex(string key, out uint index)
+    {
+        index = 0;
+        if (key.Length == 0 || key.Length > 10 || (key[0] == '0' && key.Length > 1))
+        {
+            return false;
+        }
+
+        ulong value = 0;
+        foreach (var c in key)
+        {
+            if (c < '0' || c > '9')
+            {
+                return false;
+            }
+
+            value = (value * 10) + (ulong)(c - '0');
+        }
+
+        if (value >= uint.MaxValue)
+        {
+            return false;
+        }
+
+        index = (uint)value;
+        return true;
+    }
+
+    /// <summary>
+    /// The keys of <paramref name="attributes"/> in the order of JavaScript's <c>for..in</c>: array
+    /// indexes first, ascending, then the others in insertion order. The dictionary itself when it
+    /// has no array index (nothing is allocated).
+    /// </summary>
+    private static IEnumerable<KeyValuePair<string, object>> InJavaScriptKeyOrder(IDictionary<string, object> attributes)
+    {
+        foreach (var key in attributes.Keys)
+        {
+            if (IsArrayIndex(key, out _))
+            {
+                return attributes.OrderBy(kvp => IsArrayIndex(kvp.Key, out var i) ? i : uint.MaxValue).ToList();
+            }
+        }
+
+        return attributes;
     }
 
     /// <summary>
@@ -1607,6 +1675,10 @@ public partial class YText : YArrayBase
                 case short s: number = s; return true;
                 case uint u: number = u; return true;
                 case ulong ul: number = ul; return true;
+                case byte b: number = b; return true;
+                case sbyte sb: number = sb; return true;
+                case ushort us: number = us; return true;
+                case decimal m: number = (double)m; return true;
                 default: number = 0; return false;
             }
         }
