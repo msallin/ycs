@@ -214,10 +214,10 @@ public abstract partial class YType
 
         while (true)
         {
-            if (!transaction.ChangedParentTypes.TryGetValue(type, out var values))
+            if (!transaction._changedParentTypes.TryGetValue(type, out var values))
             {
                 values = new List<YEvent>();
-                transaction.ChangedParentTypes[type] = values;
+                transaction._changedParentTypes[type] = values;
             }
 
             values.Add(evt);

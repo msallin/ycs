@@ -199,11 +199,11 @@ public class TransactionReuseTests
         string changed = null;
         doc.AfterTransaction += (_, tr) => changed = string.Join(",", tr.Changed.Keys.Select(k => k == text ? "text" : "map"));
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => doc.Transact(_ =>
+        Assert.ThrowsExactly<InvalidOperationException>(() => doc.Transact((Action<Transaction>)(_ =>
         {
             text.Insert(0, "a");
             throw new InvalidOperationException("action");
-        }, origin: "failed"));
+        }), origin: "failed"));
         doc.GetMap("m").Set("k", 1);
 
         Assert.AreEqual("failed,|map|a", string.Join(",", updates) + "|" + changed + "|" + text);
@@ -217,11 +217,11 @@ public class TransactionReuseTests
         var text = doc.GetText("t");
         text.Observe(_ => throw new ArgumentException("observer"));
 
-        var e = Assert.ThrowsExactly<ArgumentException>(() => doc.Transact(_ =>
+        var e = Assert.ThrowsExactly<ArgumentException>(() => doc.Transact((Action<Transaction>)(_ =>
         {
             text.Insert(0, "a");
             throw new InvalidOperationException("action");
-        }));
+        })));
 
         Assert.AreEqual("observer", e.Message);
     }

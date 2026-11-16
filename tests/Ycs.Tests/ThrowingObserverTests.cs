@@ -172,19 +172,19 @@ public class ThrowingObserverTests
                 break;
             case "the function and an observer":
                 throws.Add("obs:m");
-                act = () => doc.Transact(_ =>
+                act = () => doc.Transact((Action<Transaction>)(_ =>
                 {
                     a.Insert(0, [1]);
                     m.Set("k", 1);
                     throw new InvalidOperationException("function");
-                });
+                }));
                 break;
             case "the function":
-                act = () => doc.Transact(_ =>
+                act = () => doc.Transact((Action<Transaction>)(_ =>
                 {
                     a.Insert(0, [1]);
                     throw new InvalidOperationException("function");
-                });
+                }));
                 break;
             case "an observer that changes the document, then one of its transaction":
                 {

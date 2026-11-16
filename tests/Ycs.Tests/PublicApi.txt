@@ -201,18 +201,18 @@ static class Ycs.SyncProtocol
     static void WriteSyncStep1(System.Buffers.IBufferWriter<byte> destination, YDoc doc)
     static void WriteSyncStep2(System.Buffers.IBufferWriter<byte> destination, YDoc doc, System.ReadOnlySpan<byte> encodedStateVector, UpdateFormat format = 0)
     static void WriteUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update)
-class Ycs.Transaction
-    System.Collections.Generic.IDictionary<YType, System.Collections.Generic.IList<YEvent>> ChangedParentTypes { get; }
-    System.Collections.Generic.IDictionary<YType, System.Collections.Generic.ISet<string>> Changed { get; }
-    System.Collections.Generic.IDictionary<long, long> AfterState { get; }
-    System.Collections.Generic.IDictionary<long, long> BeforeState { get; }
-    System.Collections.Generic.IDictionary<string, object> Meta { get; }
-    System.Collections.Generic.ISet<YDoc> SubdocsAdded { get; }
-    System.Collections.Generic.ISet<YDoc> SubdocsLoaded { get; }
-    System.Collections.Generic.ISet<YDoc> SubdocsRemoved { get; }
+sealed class Ycs.Transaction
+    System.Collections.Generic.IDictionary<string, object?> Meta { get; }
+    System.Collections.Generic.IReadOnlyDictionary<YType, System.Collections.Generic.IReadOnlyList<YEvent>> ChangedParentTypes { get; }
+    System.Collections.Generic.IReadOnlyDictionary<YType, System.Collections.Generic.IReadOnlySet<string?>> Changed { get; }
+    System.Collections.Generic.IReadOnlyDictionary<long, long> AfterState { get; }
+    System.Collections.Generic.IReadOnlyDictionary<long, long> BeforeState { get; }
+    System.Collections.Generic.IReadOnlySet<YDoc> SubdocsAdded { get; }
+    System.Collections.Generic.IReadOnlySet<YDoc> SubdocsLoaded { get; }
+    System.Collections.Generic.IReadOnlySet<YDoc> SubdocsRemoved { get; }
     YDoc Doc { get; }
     bool Local { get; }
-    object Origin { get; }
+    object? Origin { get; }
 class Ycs.UndoManager
     StackItem CurrentStackItem { get; }
     StackItem Redo()
@@ -335,6 +335,8 @@ class Ycs.YDoc
     Snapshot CreateSnapshot()
     System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
     System.Predicate<ItemView> GcFilter { get; }
+    System.Threading.Tasks.Task<TResult?> Transact<TResult>(System.Func<Transaction, System.Threading.Tasks.Task<TResult?>> _, object? origin = null, bool local = true)
+    TResult? Transact<TResult>(System.Func<Transaction, TResult?> func, object? origin = null, bool local = true)
     UpdateLimits Limits { get; }
     YArray GetArray(string name = "")
     YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc? newDoc = null)
@@ -371,8 +373,10 @@ class Ycs.YDoc
     void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     void EncodeStateVector(System.Buffers.IBufferWriter<byte> destination)
     void Load()
-    void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
-    void Transact<TState>(TState state, System.Action<TState, Transaction> action, object origin = null, bool local = true)
+    void Transact(System.Action<Transaction> action, object? origin = null, bool local = true)
+    void Transact(System.Func<Transaction, System.Threading.Tasks.Task> _, object? origin = null, bool local = true)
+    void Transact<TState>(TState? state, System.Action<TState?, Transaction> action, object? origin = null, bool local = true)
+    void Transact<TState>(TState? state, System.Func<TState?, Transaction, System.Threading.Tasks.Task> _, object? origin = null, bool local = true)
 class Ycs.YDocOptions
     System.Predicate<ItemView> GcFilter { get; set; }
     UpdateLimits Limits { get; set; }

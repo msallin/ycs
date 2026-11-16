@@ -71,23 +71,23 @@ internal class ContentDoc : IContentEx
 
         // This needs to be reflected in doc.destroy as well.
         Doc.SetItem(item);
-        transaction.SubdocsAdded.Add(Doc);
+        transaction.AddedSubdocs.Add(Doc);
 
         if (Doc.ShouldLoad)
         {
-            transaction.SubdocsLoaded.Add(Doc);
+            transaction.LoadedSubdocs.Add(Doc);
         }
     }
 
     void IContentEx.Delete(Transaction transaction)
     {
-        if (transaction.SubdocsAdded.Contains(Doc))
+        if (transaction.AddedSubdocs.Contains(Doc))
         {
-            transaction.SubdocsAdded.Remove(Doc);
+            transaction.AddedSubdocs.Remove(Doc);
         }
         else
         {
-            transaction.SubdocsRemoved.Add(Doc);
+            transaction.RemovedSubdocs.Add(Doc);
         }
     }
 
