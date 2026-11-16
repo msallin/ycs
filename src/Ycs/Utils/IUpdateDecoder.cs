@@ -25,6 +25,13 @@ internal interface IUpdateDecoder : IDSDecoder
     long ReadClient();
     byte ReadInfo();
     string ReadString();
+
+    /// <summary>
+    /// <see cref="ReadString"/> without the allocation: the same characters, the same exceptions at the same
+    /// position. The span is valid until the next call on this decoder (any read, <c>ReadString</c> included) and
+    /// must be copied before; it is never kept past the decoder's lease.
+    /// </summary>
+    ReadOnlySpan<char> ReadStringSpan();
     bool ReadParentInfo();
     uint ReadTypeRef();
     int ReadLength();

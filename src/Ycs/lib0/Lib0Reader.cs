@@ -208,6 +208,37 @@ internal sealed class Lib0Reader
         }
     }
 
+    /// <summary>
+    /// <see cref="ReadVarString"/> into <paramref name="buffer"/>, which grows when too small; the result
+    /// is a prefix of it. Same position and same exceptions as <see cref="ReadVarString"/>.
+    /// </summary>
+    public ReadOnlySpan<char> ReadVarStringSpan(ref char[] buffer)
+    {
+        var length = (int)ReadVarUint();
+        if (length == 0)
+        {
+            return default;
+        }
+
+        var bytes = ReadBytes(length);
+
+        // UTF-16 code units never outnumber the UTF-8 bytes.
+        if (buffer.Length < length)
+        {
+            buffer = new char[Math.Max(length, buffer.Length * 2)];
+        }
+
+        try
+        {
+            var count = StrictUtf8.GetChars(bytes, buffer);
+            return buffer.AsSpan(0, count);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw new YUpdateException("A string is not valid UTF-8.");
+        }
+    }
+
     /// <summary>Length-prefixed byte array (lib0 <c>readVarUint8Array</c>), as a span over the input.</summary>
     public ReadOnlySpan<byte> ReadVarUint8ArraySpan() => ReadBytes((int)ReadVarUint());
 
