@@ -27,6 +27,9 @@ jobs:
       - name: Yjs corpus
         run: dotnet test tests/Ycs.Corpus -c Release --no-build
 
+      - name: Sync server
+        run: dotnet test tests/Ycs.Server.Tests -c Release --no-build
+
       - name: Fuzz the decoders
         run: dotnet test tests/Ycs.Fuzz -c Release --no-build
 

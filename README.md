@@ -180,11 +180,7 @@ to accept a public API change and how to update the budgets.
 Demo
 -------
 
-`samples/YcsSample` is a SignalR server with a React/Monaco client. The server targets .NET 11 and
-starts; the client (`ClientApp`, 2021 dependencies built with yarn) was not updated or tested.
-
-Client: [`Yjs`](https://github.com/yjs/yjs), [`MonacoEditor`](https://github.com/microsoft/monaco-editor), [`SignalR`](https://github.com/dotnet/aspnetcore/tree/master/src/SignalR).
-
-Server: `Ycs`, `SignalR`, [`AspNetCore`](https://github.com/dotnet/aspnetcore).
+`samples/Ycs.Server` is a Yjs sync server (y-protocols over WebSocket and SignalR) with one Ycs
+document per room, built as a test bed: [`docs/plan-server.md`](docs/plan-server.md).
 
 ![img](https://github.com/yjs/ycs/blob/main/docs/ycs.gif)
