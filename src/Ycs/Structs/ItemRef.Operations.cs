@@ -81,10 +81,9 @@ internal readonly partial struct ItemRef
 
     public bool MergeWith(ItemRef right) => IsItem ? MergeItemWith(right) : _struct.MergeWith(right._struct);
 
-    // An item whose parent is not a type is a decoded one (the rest store holds them); it writes itself.
     public void Write(IUpdateEncoder encoder, int offset)
     {
-        if (IsItem && ItemObject.Parent is AbstractType)
+        if (IsItem)
         {
             WriteItem(encoder, offset);
         }
