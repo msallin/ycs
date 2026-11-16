@@ -254,28 +254,32 @@ internal static class YcsCases
                 {
                     sink += doc.EncodeStateAsUpdateV1().Length;
                 }
-            },
+            }
+            ,
             "v2" => () =>
             {
                 for (var i = 0; i < 10; i++)
                 {
                     sink += doc.EncodeStateAsUpdateV2().Length;
                 }
-            },
+            }
+            ,
             "sv" => () =>
             {
                 for (var i = 0; i < 1000; i++)
                 {
                     sink += doc.EncodeStateVector().Length;
                 }
-            },
+            }
+            ,
             "diff" => () =>
             {
                 for (var i = 0; i < 10; i++)
                 {
                     sink += doc.EncodeStateAsUpdateV1(halfVector).Length;
                 }
-            },
+            }
+            ,
             _ => throw new ArgumentException(what),
         };
         return new Prepared(body, () => text.ToString(), () => doc.EncodeStateAsUpdateV1(), () => doc.EncodeStateAsUpdateV2(), doc.Destroy);

@@ -579,11 +579,14 @@ export class Run {
       }
       case 'react': {
         // The first time the type changes, its observer makes the operations (in a transaction of their own with
-        // "txn"; else each in its own), also during another transaction's cleanup.
+        // "txn"; else each in its own), also during another transaction's cleanup. With "on" the trigger is the
+        // document's handler instead: the first transaction's "cleanup" (after its merge pass), "update" or "after"
+        // (afterTransaction), whatever type it changed.
         let fired = false
-        t.observe((e, tr) => {
+        const fire = local => {
           if (fired) return
           fired = true
+          if (s.on) this.fixClientIds()
           const results = []
           const each = () => {
             for (const op of s.ops) {
@@ -596,8 +599,12 @@ export class Run {
             }
           }
           if (s.txn) c.doc.transact(each); else each()
-          c.push({ w: 'react', id: s.id, local: tr.local, r: results })
-        })
+          c.push({ w: 'react', id: s.id, local, r: results })
+        }
+        if (s.on === 'cleanup') c.doc.on('afterTransactionCleanup', tr => fire(tr.local))
+        else if (s.on === 'update') c.doc.on('update', (_u, _o, _d, tr) => fire(tr.local))
+        else if (s.on === 'after') c.doc.on('afterTransaction', tr => fire(tr.local))
+        else t.observe((e, tr) => fire(tr.local))
         return
       }
       case 'readSnap': {

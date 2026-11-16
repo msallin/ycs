@@ -62,17 +62,29 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
 {
     private readonly Func<AbstractType, bool> _filter;
     private readonly AbstractType _root;
-    // ItemRef lifetime (docs/design-item-layout.md, 3.1): held across the caller's code between two nodes, which can
-    // end transactions that merge it away or collect the type; to become an id with a hint.
+    // The current node, held across the caller's code between two nodes: _currentNode is valid while
+    // StructStore.Departures is still _departures, else the node is looked up by _currentId.
     private ItemRef _currentNode;
+    private ID _currentId;
+    private int _departures;
     private bool _firstCall;
 
     internal YXmlTreeWalker(AbstractType root, Func<AbstractType, bool> filter = null)
     {
         _root = root;
         _filter = filter ?? (_ => true);
-        _currentNode = root._start;
         _firstCall = true;
+        Hold(root._start);
+    }
+
+    private void Hold(ItemRef node)
+    {
+        _currentNode = node;
+        if (!node.IsNull)
+        {
+            _currentId = node.Id;
+            _departures = _root.Doc.Store.Departures;
+        }
     }
 
     public AbstractType Current { get; private set; }
@@ -85,6 +97,12 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
     public bool MoveNext()
     {
         var n = _currentNode;
+        if (!n.IsNull && _departures != _root.Doc.Store.Departures)
+        {
+            // Nodes are not merged, but the type of a node can have been collected: its struct is a GC struct then.
+            n = _root.Doc.Store.Find(_currentId).AsItem;
+        }
+
         var type = YXmlNodeHelpers.ContentTypeOf(n);
 
         if (!n.IsNull && (!_firstCall || n.Deleted || !_filter(type)))
@@ -124,7 +142,7 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
         }
 
         _firstCall = false;
-        _currentNode = n;
+        Hold(n);
 
         if (n.IsNull)
         {
@@ -394,7 +412,7 @@ public class YXmlFragment : YArrayBase
 
     public IReadOnlyList<object> Slice(int start, int end) => InternalSlice(start, end);
 
-    public void ForEach(Action<object, int, YXmlFragment> f) => ForEach((c, i, self) => f(c, i, (YXmlFragment)self));
+    public void ForEach(Action<object, int, YXmlFragment> f) => base.ForEach((c, i, self) => f(c, i, (YXmlFragment)self));
 
     internal override void Write(IUpdateEncoder encoder)
     {

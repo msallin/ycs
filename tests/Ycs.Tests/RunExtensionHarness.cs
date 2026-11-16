@@ -168,29 +168,28 @@ internal sealed class ReferenceRun
         foreach (var (client, structs) in doc.Store.Clients.OrderBy(kv => kv.Key))
         {
             sb.Append("  c").Append(client).Append(':');
-            foreach (var reference in structs)
+            foreach (var s in structs)
             {
-                var s = reference.ToStruct();
-                sb.Append(' ').Append(s is Item ? "I" : s.GetType().Name).Append(s.Id.Clock).Append('+').Append(s.Length);
+                sb.Append(' ').Append(s.IsItem ? "I" : StructStore.KindNameForTests(s)).Append(s.Id.Clock).Append('+').Append(s.Length);
                 if (s.Deleted)
                 {
                     sb.Append('d');
                 }
 
-                if (s is Item it)
+                if (s.IsItem)
                 {
-                    sb.Append(it.Content is ContentString cs ? "\"" + Esc(cs.GetString()) + "\"" : it.Content.GetType().Name.Replace("Content", "", StringComparison.Ordinal));
-                    if (it.Keep)
+                    sb.Append(s.Content is ContentString cs ? "\"" + Esc(cs.GetString()) + "\"" : StructStore.ContentKindNameForTests(s.Content).Replace("Content", "", StringComparison.Ordinal));
+                    if (s.Keep)
                     {
                         sb.Append('k');
                     }
 
-                    if (it.Marker)
+                    if (s.Marker)
                     {
                         sb.Append('m');
                     }
 
-                    sb.Append('<').Append(it.LeftOrigin is ID lo ? lo.Client + ":" + lo.Clock : "-").Append('|').Append(it.RightOrigin is ID ro ? ro.Client + ":" + ro.Clock : "-").Append('>');
+                    sb.Append('<').Append(s.LeftOrigin is ID lo ? lo.Client + ":" + lo.Clock : "-").Append('|').Append(s.RightOrigin is ID ro ? ro.Client + ":" + ro.Clock : "-").Append('>');
                 }
             }
 

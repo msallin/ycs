@@ -291,14 +291,14 @@ internal static class YrsCases
                     Check(tx.ApplyV1(u));
                 }
             }
-            : () =>
+        : () =>
+        {
+            foreach (var u in updates)
             {
-                foreach (var u in updates)
-                {
-                    using var tx = doc.WriteTransaction();
-                    Check(tx.ApplyV1(u));
-                }
-            });
+                using var tx = doc.WriteTransaction();
+                Check(tx.ApplyV1(u));
+            }
+        });
     }
 
     private static (Doc Doc, Text Text) Loaded(Fixtures f)
@@ -324,7 +324,8 @@ internal static class YrsCases
                     using var tx = doc.ReadTransaction();
                     sink += tx.StateDiffV1(null).Length;
                 }
-            },
+            }
+            ,
             "v2" => () =>
             {
                 for (var i = 0; i < 10; i++)
@@ -332,7 +333,8 @@ internal static class YrsCases
                     using var tx = doc.ReadTransaction();
                     sink += tx.StateDiffV2(null).Length;
                 }
-            },
+            }
+            ,
             "sv" => () =>
             {
                 for (var i = 0; i < 1000; i++)
@@ -340,7 +342,8 @@ internal static class YrsCases
                     using var tx = doc.ReadTransaction();
                     sink += tx.StateVectorV1().Length;
                 }
-            },
+            }
+            ,
             "diff" => () =>
             {
                 for (var i = 0; i < 10; i++)
@@ -348,7 +351,8 @@ internal static class YrsCases
                     using var tx = doc.ReadTransaction();
                     sink += tx.StateDiffV1(halfVector).Length;
                 }
-            },
+            }
+            ,
             _ => throw new ArgumentException(what),
         };
         return TextResult(doc, text, body);
@@ -389,15 +393,15 @@ internal static class YrsCases
                     map.Insert(tx, keys[i], input);
                 }
             }
-            : () =>
+        : () =>
+        {
+            for (var i = 0; i < keys.Length; i++)
             {
-                for (var i = 0; i < keys.Length; i++)
-                {
-                    using var tx = doc.WriteTransaction();
-                    using var input = Input.Double(i);
-                    map.Insert(tx, keys[i], input);
-                }
-            });
+                using var tx = doc.WriteTransaction();
+                using var input = Input.Double(i);
+                map.Insert(tx, keys[i], input);
+            }
+        });
     }
 
     public static Prepared MapSetSame(Fixtures f)
@@ -432,15 +436,15 @@ internal static class YrsCases
                     array.InsertRange(tx, (uint)i, input);
                 }
             }
-            : () =>
+        : () =>
+        {
+            for (var i = 0; i < n; i++)
             {
-                for (var i = 0; i < n; i++)
-                {
-                    using var tx = doc.WriteTransaction();
-                    using var input = Input.Double(i);
-                    array.InsertRange(tx, (uint)i, input);
-                }
-            });
+                using var tx = doc.WriteTransaction();
+                using var input = Input.Double(i);
+                array.InsertRange(tx, (uint)i, input);
+            }
+        });
     }
 
     public static Prepared ArrayInsertRandom(Fixtures f)

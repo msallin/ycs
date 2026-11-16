@@ -81,10 +81,9 @@ internal readonly partial struct ItemRef
 
     public bool MergeWith(ItemRef right) => IsItem ? MergeItemWith(right) : _struct.MergeWith(right._struct);
 
-    // An item whose parent is not a type is a decoded one (the rest store holds them); it writes itself.
     public void Write(IUpdateEncoder encoder, int offset)
     {
-        if (IsItem && ItemObject.Parent is AbstractType)
+        if (IsItem)
         {
             WriteItem(encoder, offset);
         }
@@ -131,6 +130,7 @@ internal readonly partial struct ItemRef
                 "Ycs). Nothing was changed.");
         }
 
+        (Parent as AbstractType)?.Doc?.Store.NoteDeparture();
         (Parent as YArrayBase)?.OnMerge(this, right);
 
         if (right.Keep)
@@ -146,7 +146,21 @@ internal readonly partial struct ItemRef
         }
 
         Length += right.Length;
+        right.MarkDetached();
         return true;
+    }
+
+    /// <summary>Marks the struct as out of every list (merged away, or replaced by a GC struct).</summary>
+    public void MarkDetached()
+    {
+        if (_struct is Item item)
+        {
+            item.MarkDetached();
+        }
+        else
+        {
+            ((GC)_struct).MarkDetached();
+        }
     }
 
     /// <summary>
@@ -517,7 +531,7 @@ internal readonly partial struct ItemRef
         }
 
         // Right is more specific.
-        transaction._mergeStructs.Add(rightItem);
+        transaction._mergeStructs.Add(rightItem.Id);
 
         // Update parent._map.
         if (rightItem.ParentSub != null && rightItem.Right.IsNull)

@@ -136,7 +136,7 @@ public class YTextTests : YTestBase
         delta = null;
 
         // Check that there are no duplicate markers inserted.
-        Assert.AreEqual("b", ((((text0._start.ToItem().Right as Item)?.Right as Item)?.Right as Item)?.Content as ContentString)?.GetString());
+        Assert.AreEqual("b", (text0._start.Right.Right.Right.Content as ContentString)?.GetString());
 
         text0.Insert(0, "y");
         Assert.AreEqual("yzb", text0.ToString());
@@ -689,11 +689,9 @@ public class YTextTests : YTestBase
     {
         int result = 0;
 
-        var s = type._start.ToItem();
-        while (s != null)
+        for (var s = type._start; s.IsItem; s = s.Right)
         {
             result++;
-            s = s.Right as Item;
         }
 
         return result;

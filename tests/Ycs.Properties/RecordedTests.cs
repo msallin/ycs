@@ -14,7 +14,7 @@ internal sealed record Fixture(string Kind, string Name, Dictionary<string, obje
 /// <summary>interop/properties/fixtures/*.jsonl, one fixture per line, recorded by <see cref="RecordedTests.RecordFixtures"/>.</summary>
 internal static class Fixtures
 {
-    public static readonly string[] Files = ["pairs", "random", "windows", "fuzz", "pinned", "fixed", "laws"];
+    public static readonly string[] Files = ["pairs", "random", "windows", "hooks", "fuzz", "pinned", "fixed", "laws"];
 
     private static readonly Lazy<Dictionary<string, Fixture>> LazyAll = new(() =>
     {
@@ -53,7 +53,7 @@ public sealed class RecordedTests
 {
     public TestContext TestContext { get; set; }
 
-    public static IEnumerable<object[]> Recorded => Fixtures.Of("pair", "random", "windows", "fuzz", "fixed", "law");
+    public static IEnumerable<object[]> Recorded => Fixtures.Of("pair", "random", "windows", "hooks", "fuzz", "fixed", "law");
 
     [TestMethod]
     [DynamicData(nameof(Recorded))]
@@ -124,6 +124,18 @@ public sealed class RecordedTests
         Assert.AreEqual(OpKinds.Paired.Length * (OpKinds.Paired.Length + 1) / 2, pairs, "pairwise fixtures");
     }
 
+    /// <summary>The scripts of the hooks fixtures put reacting handlers on the document's cleanup, update and afterTransaction.</summary>
+    [TestMethod]
+    public void Fixtures_HookScriptsReactOnEveryDocumentHandler()
+    {
+        var reacting = Fixtures.All.Values.Where(f => f.Kind == "hooks")
+            .SelectMany(f => f.Script.List("steps").Cast<Dictionary<string, object>>())
+            .Where(step => step.Str("op") == "react")
+            .GroupBy(step => step.Str("on") ?? "type")
+            .ToDictionary(g => g.Key, g => g.Count());
+        Assert.IsTrue(new[] { "cleanup", "update", "after", "type" }.All(on => reacting.GetValueOrDefault(on) >= 20), string.Join(", ", reacting.Select(kv => kv.Key + "=" + kv.Value)));
+    }
+
     /// <summary>
     /// YCS_PROP_RECORD=1: regenerates interop/properties/fixtures/*.jsonl from the generator and real
     /// Yjs (Node, interop/properties: npm ci). Deterministic: the same files every time.
@@ -192,6 +204,13 @@ public sealed class RecordedTests
             windows.Add(Line("windows", "lists-" + seed.ToString(CultureInfo.InvariantCulture), script));
         }
 
+        // Handlers on the document that make operations, nested transactions among them (GenOptions.Hooks).
+        var hooks = new List<string>();
+        for (ulong seed = 1; seed <= 150; seed++)
+        {
+            hooks.Add(Line("hooks", seed.ToString(CultureInfo.InvariantCulture), Generator.Generate(70_000 + seed, new GenOptions { Windows = true, Hooks = true, Compact = true, MaxSteps = 30 })));
+        }
+
         var fuzz = new List<string>();
         for (ulong seed = 1; seed <= 80; seed++)
         {
@@ -205,11 +224,12 @@ public sealed class RecordedTests
         File.WriteAllLines(Path.Combine(dir, "pairs.jsonl"), pairs);
         File.WriteAllLines(Path.Combine(dir, "random.jsonl"), random);
         File.WriteAllLines(Path.Combine(dir, "windows.jsonl"), windows);
+        File.WriteAllLines(Path.Combine(dir, "hooks.jsonl"), hooks);
         File.WriteAllLines(Path.Combine(dir, "fuzz.jsonl"), fuzz);
         File.WriteAllLines(Path.Combine(dir, "pinned.jsonl"), pinned);
         File.WriteAllLines(Path.Combine(dir, "fixed.jsonl"), fixedScripts);
         File.WriteAllLines(Path.Combine(dir, "laws.jsonl"), laws);
-        TestContext.WriteLine($"{pairs.Count} pairs, {random.Count} random, {windows.Count} windows, {fuzz.Count} fuzz, {pinned.Count} pinned, {fixedScripts.Count} fixed, {laws.Count} law fixtures in {dir}");
+        TestContext.WriteLine($"{pairs.Count} pairs, {random.Count} random, {windows.Count} windows, {hooks.Count} hooks, {fuzz.Count} fuzz, {pinned.Count} pinned, {fixedScripts.Count} fixed, {laws.Count} law fixtures in {dir}");
         Assert.IsEmpty(unexplained, "mismatches no known failure explains; pin them (KnownFailures) and record again:" + Environment.NewLine + string.Join(Environment.NewLine, unexplained));
     }
 }

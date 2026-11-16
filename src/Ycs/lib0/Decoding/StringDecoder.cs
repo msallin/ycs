@@ -44,10 +44,17 @@ internal sealed class StringDecoder : IDecoder<string>
 
     public string Read()
     {
+        var chars = ReadSpan();
+        return chars.Length == 0 ? string.Empty : chars.ToString();
+    }
+
+    /// <summary>The next value as a slice of the column's string, without allocating; same exceptions as <see cref="Read"/>.</summary>
+    public ReadOnlySpan<char> ReadSpan()
+    {
         var length = _lengthDecoder.Read();
         if (length == 0)
         {
-            return string.Empty;
+            return default;
         }
 
         if (_value == null || length > (uint)(_value.Length - _pos))
@@ -55,7 +62,7 @@ internal sealed class StringDecoder : IDecoder<string>
             throw new YUpdateException("A string in a v2 update is longer than the string column.");
         }
 
-        var result = _value.Substring(_pos, (int)length);
+        var result = _value.AsSpan(_pos, (int)length);
         _pos += (int)length;
 
         // No need to keep the string in memory anymore.

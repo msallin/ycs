@@ -152,7 +152,12 @@ public class ClientStructsTests
         }
 
         // From clock 10: clocks far below the first start, as well as just below it.
-        var rest = new ClientStructs(doc.Store.Clients[doc.ClientId].Select(s => s.ToStruct()).ToList(), 10, 2 * leaves);
+        var rest = new ClientStructs(2 * leaves);
+        foreach (var str in doc.Store.Clients[doc.ClientId].Skip(10).Take(2 * leaves))
+        {
+            rest.Add(str);
+        }
+
         var hint = 1;
 
         var outcome = (Message(() => rest.FindIndex(9)), Message(() => rest.FindIndex(0)), Message(() => rest.FindIndex(0, ref hint)));

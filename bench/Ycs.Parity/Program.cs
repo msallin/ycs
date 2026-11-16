@@ -8,6 +8,20 @@ var outPath = args[0];
 var seeds = int.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture);
 var lines = new List<string>();
 
+// Rejecting an input is a YUpdateException; any other exception type (an InvalidOperationException from the cleanup, say)
+// is a bug, listed with the prefix UNEXPECTED and counted.
+var unexpected = 0;
+var current = "";
+
+void Note(Exception e)
+{
+    if (e is not YUpdateException)
+    {
+        unexpected++;
+        lines.Add($"UNEXPECTED {current} {e.GetType().Name}");
+    }
+}
+
 string H(Func<byte[]> f)
 {
     try
@@ -16,13 +30,15 @@ string H(Func<byte[]> f)
     }
     catch (Exception e)
     {
+        Note(e);
         return "EX:" + e.GetType().Name;
     }
 }
 
 void Do(string label, IList<byte[]> v1)
 {
-    var v2 = v1.Select(u => { try { return UpdateOperations.ConvertUpdateFormatV1ToV2(u); } catch (Exception) { return null; } }).ToList();
+    current = label;
+    var v2 = v1.Select(u => { try { return UpdateOperations.ConvertUpdateFormatV1ToV2(u); } catch (Exception e) { Note(e); return null; } }).ToList();
     for (var i = 0; i < v1.Count; i++)
     {
         var u = v1[i];
@@ -50,7 +66,7 @@ void Do(string label, IList<byte[]> v1)
     }
 
     byte[] merged = null;
-    try { merged = UpdateOperations.MergeUpdates(v1); } catch (Exception) { }
+    try { merged = UpdateOperations.MergeUpdates(v1); } catch (Exception e) { Note(e); }
 
     // State vectors of every prefix, applied in order and reversed (the reversed ones leave structs pending).
     var svs = new List<byte[]> { new byte[] { 0 } };
@@ -59,7 +75,7 @@ void Do(string label, IList<byte[]> v1)
         for (var k = 1; k <= order.Count; k++)
         {
             var d = new YDoc();
-            try { foreach (var u in order.Take(k)) { d.ApplyUpdate(u); } } catch (Exception) { continue; }
+            try { foreach (var u in order.Take(k)) { d.ApplyUpdate(u); } } catch (Exception e) { Note(e); continue; }
             svs.Add(d.EncodeStateVector());
         }
     }
@@ -71,7 +87,7 @@ void Do(string label, IList<byte[]> v1)
         {
             lines.Add($"{label} diff[{s}] {H(() => UpdateOperations.DiffUpdate(merged, sv))}");
             byte[] m2;
-            try { m2 = UpdateOperations.ConvertUpdateFormatV1ToV2(merged); } catch (Exception) { continue; }
+            try { m2 = UpdateOperations.ConvertUpdateFormatV1ToV2(merged); } catch (Exception e) { Note(e); continue; }
             lines.Add($"{label} diff2[{s}] {H(() => UpdateOperations.DiffUpdateV2(m2, sv))}");
         }
 
@@ -94,7 +110,7 @@ void Do(string label, IList<byte[]> v1)
     for (var o = 0; o < orders.Count; o++)
     {
         var d = new YDoc();
-        try { foreach (var u in orders[o]) { d.ApplyUpdate(u); } } catch (Exception) { lines.Add($"{label} rest[{o}] applyEX"); continue; }
+        try { foreach (var u in orders[o]) { d.ApplyUpdate(u); } } catch (Exception e) { Note(e); lines.Add($"{label} rest[{o}] applyEX"); continue; }
         lines.Add($"{label} rest[{o}] v1 {H(() => d.EncodeStateAsUpdateV1())}");
         lines.Add($"{label} rest[{o}] v2 {H(() => d.EncodeStateAsUpdateV2())}");
         foreach (var (x, i) in svs.Take(6).Select((x, i) => (x, i)))
@@ -109,8 +125,9 @@ void Do(string label, IList<byte[]> v1)
             foreach (var u in orders[o]) { d2.ApplyUpdateV2(UpdateOperations.ConvertUpdateFormatV1ToV2(u)); }
             lines.Add($"{label} rest[{o}] via2 {H(() => d2.EncodeStateAsUpdateV1())}");
         }
-        catch (Exception)
+        catch (Exception e)
         {
+            Note(e);
         }
     }
 }
@@ -131,4 +148,5 @@ foreach (var f in Directory.GetFiles(args[2], "*.json").OrderBy(x => x, StringCo
 }
 
 File.WriteAllLines(outPath, lines);
-Console.WriteLine($"corpus cases {corpus}, fuzzer seeds {seeds}, lines {lines.Count}");
+Console.WriteLine($"corpus cases {corpus}, fuzzer seeds {seeds}, lines {lines.Count}, unexpected exceptions {unexpected}");
+return unexpected == 0 ? 0 : 1;

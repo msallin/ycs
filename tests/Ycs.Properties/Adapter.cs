@@ -895,9 +895,11 @@ namespace Ycs.Properties
                 case "react":
                     {
                         // The first time the type changes, its observer makes the operations (in a transaction of their
-                        // own with "txn"; else each in its own), also during another transaction's cleanup.
+                        // own with "txn"; else each in its own), also during another transaction's cleanup. With "on" the
+                        // trigger is the document's handler instead: the first transaction's "cleanup" (after its merge
+                        // pass), "update" or "after" (afterTransaction), whatever type it changed.
                         var fired = false;
-                        target.Observe((_, e) =>
+                        void Fire(bool local)
                         {
                             if (fired)
                             {
@@ -905,6 +907,11 @@ namespace Ycs.Properties
                             }
 
                             fired = true;
+                            if (s.Has("on"))
+                            {
+                                _run.FixClientIds();
+                            }
+
                             var results = new List<object>();
                             void Each()
                             {
@@ -931,8 +938,25 @@ namespace Ycs.Properties
                                 Each();
                             }
 
-                            Push(Obj(("w", "react"), ("id", s.Get("id")), ("local", e.Transaction.Local), ("r", results)));
-                        });
+                            Push(Obj(("w", "react"), ("id", s.Get("id")), ("local", local), ("r", results)));
+                        }
+
+                        switch (s.Get("on") as string)
+                        {
+                            case "cleanup":
+                                Doc.AfterTransactionCleanup += (_, tr) => Fire(tr.Local);
+                                break;
+                            case "update":
+                                Doc.Update += (_, e) => Fire(e.Item3.Local);
+                                break;
+                            case "after":
+                                Doc.AfterTransaction += (_, tr) => Fire(tr.Local);
+                                break;
+                            default:
+                                target.Observe((_, e) => Fire(e.Transaction.Local));
+                                break;
+                        }
+
                         return Missing.Value;
                     }
                 case "readSnap":
@@ -1656,14 +1680,26 @@ namespace Ycs.Properties
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "PairwiseMergeForTests")]
         private static extern ref bool PairwiseMerge([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
 
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "StructListsForTests")]
-        private static extern IEnumerable<KeyValuePair<long, IReadOnlyList<AbstractStruct>>> ClientsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DumpForTests")]
+        private static extern void DumpOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store, StringBuilder sb, bool markers, Func<object, string> parentText, Func<string, IReadOnlyList<object>, string> contentText);
 
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "MapForTests")]
-        private static extern IEnumerable<KeyValuePair<string, Item>> MapOf(AbstractType type);
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "NestedListsForTests")]
+        private static extern IEnumerable<(ID Item, YArrayBase List)> NestedListsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
 
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_ItemForTests")]
-        private static extern Item ItemOf(AbstractType type);
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "MapIdsForTests")]
+        private static extern IEnumerable<KeyValuePair<string, ID>> MapIdsOf(AbstractType type);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_OwnerIdForTests")]
+        private static extern ID? OwnerIdOf(AbstractType type);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "InDeletedTypeForTests")]
+        private static extern bool InDeletedTypeOf(AbstractType type);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "CountedForTests")]
+        private static extern (int Length, string Text) CountedOf(AbstractType type);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "ListForTests")]
+        private static extern List<(long Client, long Clock, int Length, ID? LeftOrigin, ID? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DescribeSearchMarkers")]
         private static extern string DescribeSearchMarkers(YArrayBase type);
@@ -1722,8 +1758,6 @@ namespace Ycs.Properties
             return text;
         }
 
-        private static string IdOf(AbstractStruct s) => s == null ? "-" : $"{s.Id.Client}:{s.Id.Clock}";
-
         private static string IdOf(ID? id) => id is ID i ? $"{i.Client}:{i.Clock}" : "-";
 
         private string TypeName(AbstractType t)
@@ -1736,7 +1770,7 @@ namespace Ycs.Properties
                 }
             }
 
-            return ItemOf(t) is { } owner ? "in:" + IdOf(owner) : "detached";
+            return OwnerIdOf(t) is { } owner ? "in:" + IdOf(owner) : "detached";
         }
 
         /// <summary>
@@ -1753,34 +1787,17 @@ namespace Ycs.Properties
                 types.Add(Root(name));
             }
 
-            foreach (var (client, structs) in ClientsOf(StoreOf(Doc)).OrderBy(kv => kv.Key))
-            {
-                sb.Append("client ").Append(client).Append('\n');
-                foreach (var s in structs)
-                {
-                    sb.Append("  ").Append(s.GetType().Name).Append(' ').Append(IdOf(s)).Append(" len ").Append(s.Length).Append(s.Deleted ? " deleted" : "");
-                    if (s is Item item)
-                    {
-                        var content = ContentOf(item);
-                        sb.Append(" content ").Append(content.GetType().Name).Append(' ').Append(ContentText((IContent)content, types));
-                        sb.Append(" left ").Append(IdOf(item.Left)).Append(" right ").Append(IdOf(item.Right));
-                        sb.Append(" origin ").Append(IdOf(item.LeftOrigin)).Append(" rightOrigin ").Append(IdOf(item.RightOrigin));
-                        sb.Append(" parent ").Append(item.Parent is AbstractType pt ? TypeName(pt) : item.Parent?.ToString() ?? "-");
-                        sb.Append(" sub ").Append(item.ParentSub ?? "-").Append(" keep ").Append(item.Keep).Append(" redone ").Append(IdOf(item.Redone));
-                        if (markers)
-                        {
-                            sb.Append(" marker ").Append(item.Marker);
-                        }
-                    }
-
-                    sb.Append('\n');
-                }
-            }
+            DumpOf(
+                StoreOf(Doc),
+                sb,
+                markers,
+                parent => parent is AbstractType pt ? TypeName(pt) : parent?.ToString() ?? "-",
+                (kind, values) => ContentText(kind, values, types));
 
             foreach (var t in types)
             {
                 sb.Append(TypeName(t)).Append(" map");
-                foreach (var (key, item) in MapOf(t).OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                foreach (var (key, item) in MapIdsOf(t).OrderBy(kv => kv.Key, StringComparer.Ordinal))
                 {
                     sb.Append(' ').Append(key).Append('=').Append(IdOf(item));
                 }
@@ -1796,15 +1813,15 @@ namespace Ycs.Properties
             return sb.ToString();
         }
 
-        private static string ContentText(IContent content, List<AbstractType> types)
+        private static string ContentText(string kind, IReadOnlyList<object> values, List<AbstractType> types)
         {
-            if (content is ContentString str)
+            if (kind == "ContentString")
             {
-                return Canonical(str.GetString());
+                return Canonical((string)values[0]);
             }
 
             var parts = new List<string>();
-            foreach (var v in content.GetContent())
+            foreach (var v in values)
             {
                 if (v is AbstractType t)
                 {
@@ -1820,19 +1837,6 @@ namespace Ycs.Properties
             return string.Join(",", parts);
         }
 
-        private static bool InDeletedType(AbstractType t)
-        {
-            for (var item = ItemOf(t); item != null; item = ItemOf((AbstractType)item.Parent))
-            {
-                if (item.Deleted)
-                {
-                    return true;
-                }
-            }
-
-            return false;
-        }
-
         /// <summary>
         /// What is wrong with the search markers of any list in the document (SearchMarkerViolations), or null. Not of a
         /// deleted type: a remote deletion of a type does not reach its observer, which is where Yjs (and Ycs) clear the
@@ -1840,14 +1844,11 @@ namespace Ycs.Properties
         /// </summary>
         public string SearchMarkerProblems()
         {
-            foreach (var (_, structs) in ClientsOf(StoreOf(Doc)))
+            foreach (var (item, nested) in NestedListsOf(StoreOf(Doc)))
             {
-                foreach (var s in structs)
+                if (!InDeletedTypeOf(nested) && SearchMarkerViolations(nested) is { } v)
                 {
-                    if (s is Item item && ContentOf(item) is ContentType { Type: YArrayBase nested } && !InDeletedType(nested) && SearchMarkerViolations(nested) is { } v)
-                    {
-                        return IdOf(item) + ": " + v;
-                    }
+                    return IdOf(item) + ": " + v;
                 }
             }
 
@@ -1863,13 +1864,6 @@ namespace Ycs.Properties
         }
 
         // ---- the item lists (for ItemListInvariants and the naive recomputations)
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_StartForTests")]
-        private static extern Item StartOf(AbstractType type);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Content")]
-        [return: UnsafeAccessorType("Ycs.IContentEx, Ycs")]
-        private static extern object ContentOf(Item item);
 
         /// <summary>The item list of every sequence reachable by visible content from the roots, keyed by path.</summary>
         public Dictionary<string, IReadOnlyList<ItemRun>> Sequences()
@@ -1888,35 +1882,17 @@ namespace Ycs.Properties
             return result;
         }
 
-        private static List<ItemRun> ItemsOf(AbstractType type)
-        {
-            var runs = new List<ItemRun>();
-            AbstractStruct previous = null;
-            AbstractStruct s = StartOf(type);
-            while (s != null)
-            {
-                if (s is not Item item)
-                {
-                    runs.Add(new ItemRun(s.Id.Client, s.Id.Clock, s.Length, null, null, s.Deleted, s.GetType().Name, LinkedBack: true, InParent: false));
-                    break;
-                }
-
-                runs.Add(new ItemRun(
-                    item.Id.Client,
-                    item.Id.Clock,
-                    item.Length,
-                    item.LeftOrigin is ID o ? (o.Client, o.Clock) : null,
-                    item.RightOrigin is ID r ? (r.Client, r.Clock) : null,
-                    item.Deleted,
-                    ItemRun.ItemKind,
-                    LinkedBack: ReferenceEquals(item.Left, previous),
-                    InParent: ReferenceEquals(item.Parent, type) && item.ParentSub == null));
-                previous = item;
-                s = item.Right;
-            }
-
-            return runs;
-        }
+        private static List<ItemRun> ItemsOf(AbstractType type) =>
+            [.. ListOf(type).Select(r => new ItemRun(
+                r.Client,
+                r.Clock,
+                r.Length,
+                r.LeftOrigin is ID o ? (o.Client, o.Clock) : null,
+                r.RightOrigin is ID ro ? (ro.Client, ro.Clock) : null,
+                r.Deleted,
+                r.Kind,
+                r.LinkedBack,
+                r.InParent))];
 
         /// <summary>
         /// Every sequence's and map's ToString/Length/Count recomputed naively by walking the items,
@@ -1940,30 +1916,16 @@ namespace Ycs.Properties
                     continue;
                 }
 
-                var length = 0;
-                var text = new StringBuilder();
-                for (var s = StartOf(t); s != null; s = s.Right as Item)
-                {
-                    if (s.Deleted || !s.Countable)
-                    {
-                        continue;
-                    }
-
-                    length += s.Length;
-                    if (ContentOf(s) is ContentString cs)
-                    {
-                        text.Append(cs.GetString());
-                    }
-                }
+                var (length, text) = CountedOf(t);
 
                 if (t.Length != length)
                 {
                     differences.Add($"{where}: Length {t.Length}, items count {length}");
                 }
 
-                if (t is YText yt and not YXmlText && yt.ToString() != text.ToString())
+                if (t is YText yt and not YXmlText && yt.ToString() != text)
                 {
-                    differences.Add($"{where}: ToString {Canonical(yt.ToString())}, items say {Canonical(text.ToString())}");
+                    differences.Add($"{where}: ToString {Canonical(yt.ToString())}, items say {Canonical(text)}");
                 }
             }
 

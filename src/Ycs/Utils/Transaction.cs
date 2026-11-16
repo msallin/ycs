@@ -69,9 +69,10 @@ public partial class Transaction
     // cleared (SortEventsByOrderOfChange re-adds them).
     internal readonly Dictionary<AbstractType, IList<YEvent>> _changedParentTypes = new();
 
-    // ItemRef lifetime (docs/design-item-layout.md, 3.1): the cleanup's merge pass reads an entry after it merged the
-    // entries after it, which can have merged this one's struct away; these must become ids before slots are reused.
-    internal readonly List<ItemRef> _mergeStructs = new();
+    // Ids, not structs: the cleanup's merge pass reads an entry after it merged the entries after it, which can have
+    // merged that entry's struct away, and a nested transaction can have split or merged more. The lookup finds the
+    // struct that holds the id now.
+    internal readonly List<ID> _mergeStructs = new();
 
     // Where an insert continued the run of the item before it in place (Item.ExtendRun) instead of integrating an
     // item of its own, in clock order: the clock at which that item would have started, as runs of equal steps
@@ -704,10 +705,8 @@ public partial class Transaction
         //       but at the moment DS does not handle duplicates.
         for (int j = mergeStructs.Count - 1; j >= 0; j--)
         {
-            var client = mergeStructs[j].Id.Client;
-            var clock = mergeStructs[j].Id.Clock;
-            var structs = store.Clients[client];
-            var replacedStructPos = StructStore.FindIndexSS(structs, clock);
+            var structs = store.Clients[mergeStructs[j].Client];
+            var replacedStructPos = StructStore.FindIndexSS(structs, mergeStructs[j].Clock);
 
             // Both neighbours merged already when more than one struct went.
             if (replacedStructPos + 1 < structs.Count && DeleteSet.TryToMergeWithLefts(store, structs, replacedStructPos + 1) > 1)
