@@ -4,6 +4,7 @@ import { EditorView, basicSetup } from 'codemirror';
 import { EditorState } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { yCollab } from 'y-codemirror.next';
+import { SignalRProvider } from './signalr-provider.mjs';
 
 const words = ['amber', 'birch', 'cedar', 'dune', 'ember', 'fjord', 'grove', 'heron', 'iris', 'juniper', 'koi', 'lark', 'maple', 'nectar', 'otter', 'pine'];
 const colors = ['#d9480f', '#1971c2', '#2f9e44', '#9c36b5', '#c2255c', '#0c8599', '#e8590c', '#5f3dc4'];
@@ -12,6 +13,9 @@ const transports = {
   websocket(room, doc) {
     const scheme = location.protocol === 'https:' ? 'wss://' : 'ws://';
     return new WebsocketProvider(`${scheme}${location.host}/ws`, room, doc);
+  },
+  signalr(room, doc) {
+    return new SignalRProvider(`${location.origin}/hub`, room, doc);
   },
 };
 
@@ -76,6 +80,10 @@ new EditorView({
 });
 
 const status = $('status');
+const other = Object.keys(transports).find((n) => n !== transport.name);
+$('transport').textContent = transport.name;
+$('switch').textContent = `use ${other}`;
+$('switch').href = `?transport=${other}${location.hash}`;
 const toggle = $('toggle');
 function show(state) {
   status.textContent = state;

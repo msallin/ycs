@@ -9,4 +9,8 @@ Rebuild after changing `src/main.js` or a package:
 
 The bundle starts with a comment listing the bundled packages and their licenses.
 
-`?transport=websocket` (the default) selects the transport; `src/main.js` reads it in one place, `selectTransport`.
+`?transport=websocket` (the default) or `?transport=signalr` selects the transport; `src/main.js` reads it in one
+place, `selectTransport`. The status line shows the transport and a link to the other one.
+
+`src/signalr-provider.mjs` is a copy of `interop/signalr/provider.mjs` (the demo bundles from its own folder); keep
+the two files identical.
