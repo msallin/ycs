@@ -21,7 +21,7 @@ public class EventDispatchParityTests
         var leaf = new YArray();
         mid.Set("leaf", leaf);
         var log = new List<string>();
-        mid.ObserveDeep((_, e) => log.AddRange(e.Events.Select(ev => (ev.CurrentTarget == mid ? "mid" : "other") + PathOf(ev))));
+        mid.ObserveDeep((deepEvents, _) => log.AddRange(deepEvents.Select(ev => (ev.CurrentTarget == mid ? "mid" : "other") + PathOf(ev))));
 
         leaf.Add(new object[] { 1 });
 
@@ -59,7 +59,7 @@ public class EventDispatchParityTests
         var child = new YMap();
         root.Set("c", child);
         var log = new List<string>();
-        root.ObserveDeep((_, e) => log.AddRange(e.Events.Select(ev => (ev.Target == root ? "root" : "child") + (ev.CurrentTarget == root ? " root" : " other") + PathOf(ev))));
+        root.ObserveDeep((deepEvents, _) => log.AddRange(deepEvents.Select(ev => (ev.Target == root ? "root" : "child") + (ev.CurrentTarget == root ? " root" : " other") + PathOf(ev))));
 
         doc.Transact(_ =>
         {
@@ -80,10 +80,10 @@ public class EventDispatchParityTests
         var b = new YArray();
         p.Set("b", b);
         var log = new List<string>();
-        a.Observe((_, _) => log.Add("A"));
-        p.Observe((_, _) => log.Add("P"));
-        c.Observe((_, _) => log.Add("C"));
-        b.Observe((_, _) => log.Add("B"));
+        a.Observe(_ => log.Add("A"));
+        p.Observe(_ => log.Add("P"));
+        c.Observe(_ => log.Add("C"));
+        b.Observe(_ => log.Add("B"));
 
         doc.Transact(_ =>
         {
@@ -102,12 +102,12 @@ public class EventDispatchParityTests
         var doc = new YDoc();
         var a = doc.GetArray("a");
         var log = new List<string>();
-        a.Observe((_, _) =>
+        a.Observe(_ =>
         {
             log.Add("1");
             throw new InvalidOperationException("first");
         });
-        a.Observe((_, _) => log.Add("2"));
+        a.Observe(_ => log.Add("2"));
 
         Assert.ThrowsExactly<InvalidOperationException>(() => a.Add(new object[] { 1 }));
 
@@ -141,9 +141,9 @@ public class EventDispatchParityTests
         var y = new YArray();
         root.Set("x", x);
         root.Set("y", y);
-        x.Observe((_, _) => root.Delete("y"));
+        x.Observe(_ => root.Delete("y"));
         var log = new List<string>();
-        root.ObserveDeep((_, e) => log.Add(string.Join(",", e.Events.Select(ev => ev.Target == x ? "x" : ev.Target == y ? "y" : "other"))));
+        root.ObserveDeep((deepEvents, _) => log.Add(string.Join(",", deepEvents.Select(ev => ev.Target == x ? "x" : ev.Target == y ? "y" : "other"))));
 
         doc.Transact(_ =>
         {
@@ -165,12 +165,12 @@ public class EventDispatchParityTests
         root.Set("y", y);
         var log = new List<string>();
         var attached = false;
-        y.Observe((_, _) =>
+        y.Observe(_ =>
         {
             if (!attached)
             {
                 attached = true;
-                root.ObserveDeep((_, e) => log.Add(string.Join(",", e.Events.Select(ev => ev.Target == x ? "x" : ev.Target == y ? "y" : "other"))));
+                root.ObserveDeep((deepEvents, _) => log.Add(string.Join(",", deepEvents.Select(ev => ev.Target == x ? "x" : ev.Target == y ? "y" : "other"))));
             }
         });
 

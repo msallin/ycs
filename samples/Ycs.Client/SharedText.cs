@@ -26,14 +26,14 @@ internal sealed class SharedText
         this.doc = doc;
         text = doc.GetText(Name);
         Text = text.ToString();
-        text.EventHandler += (_, e) =>
+        text.Observe(e =>
         {
             // The delta is computed now: ycs reuses the event once the handler returns.
             if (e.Transaction.Origin != typing)
             {
-                TextDiff.FromDelta(e.Event.Delta, unshown);
+                TextDiff.FromDelta(e.Delta, unshown);
             }
-        };
+        });
     }
 
     /// <summary>
@@ -99,7 +99,7 @@ internal sealed class SharedText
     {
         if (diff.Removed > 0)
         {
-            text.Delete(diff.Start, diff.Removed);
+            text.Remove(diff.Start, diff.Removed);
         }
 
         if (diff.Inserted.Length > 0)
@@ -117,7 +117,7 @@ internal sealed class SharedText
         {
             if (value[i] == '\r')
             {
-                text.Delete(i, 1);
+                text.Remove(i, 1);
             }
         }
     }

@@ -62,13 +62,12 @@ internal sealed class ReferenceRun
 
     public YDoc NewDoc(long client, bool gc = true, Predicate<ItemView> gcFilter = null)
     {
-        var options = new YDocOptions { ClientId = client, Gc = gc };
-        if (gcFilter != null)
+        var doc = new YDoc(new YDocOptions
         {
-            options.GcFilter = gcFilter;
-        }
-
-        var doc = new YDoc(options);
+            ClientId = client,
+            GarbageCollection = gc,
+            GarbageCollectionFilter = gcFilter == null ? null : item => gcFilter(item),
+        });
         if (Reference)
         {
             doc.RunExtensionsDisabledForTests = true;
@@ -93,29 +92,27 @@ internal sealed class ReferenceRun
 
     public static string Hex(byte[] bytes) => bytes.Length <= 48 ? Convert.ToHexString(bytes) : bytes.Length + ":" + Convert.ToHexString(SHA1.HashData(bytes), 0, 8);
 
-    public static string D(IList<Delta> delta)
+    public static string D(IEnumerable<Delta> delta)
     {
         var sb = new StringBuilder("[");
         foreach (var d in delta)
         {
-            if (d.Insert != null)
+            switch (d)
             {
-                sb.Append("ins(").Append(V(d.Insert)).Append(')');
-            }
-
-            if (d.Retain != null)
-            {
-                sb.Append("ret(").Append(d.Retain).Append(')');
-            }
-
-            if (d.Delete != null)
-            {
-                sb.Append("del(").Append(d.Delete).Append(')');
+                case Delta.Insert insert:
+                    sb.Append("ins(").Append(V(insert.Value.ToObject())).Append(')');
+                    break;
+                case Delta.Retain retain:
+                    sb.Append("ret(").Append(retain.Length).Append(')');
+                    break;
+                case Delta.Delete delete:
+                    sb.Append("del(").Append(delete.Length).Append(')');
+                    break;
             }
 
             if (d.Attributes != null)
             {
-                sb.Append('{').Append(string.Join(",", d.Attributes.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + V(k.Value)))).Append('}');
+                sb.Append('{').Append(string.Join(",", d.Attributes.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + Attribute(k.Key, k.Value)))).Append('}');
             }
 
             sb.Append(' ');
@@ -124,6 +121,11 @@ internal sealed class ReferenceRun
         return sb.Append(']').ToString();
     }
 
+    private static string Attribute(string key, YValue value) =>
+        key == "ychange" && value.Kind == YValueKind.Object
+            ? "ychange(" + (value["type"] == "added" ? "Added" : "Removed") + "," + (value.TryGetMember("user", out var user) ? V(user.ToObject()) : "") + ")"
+            : V(value.ToObject());
+
     public static string V(object v) => v switch
     {
         null => "null",
@@ -131,7 +133,6 @@ internal sealed class ReferenceRun
         YText t => "YText(" + Esc(t.ToString()) + ")",
         YArray a => "YArray(" + string.Join(",", a.ToArray().Select(V)) + ")",
         YMap => "YMap",
-        YText.YTextChangeAttributes y => "ychange(" + y.Type + "," + y.User + ")",
         System.Collections.IEnumerable e => "[" + string.Join(",", e.Cast<object>().Select(V)) + "]",
         _ => Convert.ToString(v, CultureInfo.InvariantCulture),
     };
@@ -155,7 +156,7 @@ internal sealed class ReferenceRun
     }
 
     public void State(YDoc doc, string label) =>
-        L($"{label} v1={Hex(doc.EncodeStateAsUpdateV1())} v2={Hex(doc.EncodeStateAsUpdateV2())} sv={Hex(doc.EncodeStateVectorV1())}");
+        L($"{label} v1={Hex(doc.EncodeStateAsUpdate())} v2={Hex(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))} sv={Hex(doc.EncodeStateVector())}");
 
     /// <summary>
     /// The structs of every client (kind, clock, length, deletion, content, keep, origins, marker flag), then the
@@ -206,26 +207,25 @@ internal sealed class ReferenceRun
 
     public void LogUpdates(YDoc doc, string label, List<byte[]> sink = null)
     {
-        doc.Update += (_, e) =>
+        doc.Updated += (_, e) =>
         {
-            L($"{label} update {Hex(e.Item1)} local={e.Item3.Local}");
-            sink?.Add(e.Item1);
+            L($"{label} update {Hex(e.Update.ToArray())} local={e.Transaction.Local}");
+            sink?.Add(e.Update.ToArray());
         };
-        doc.UpdateV2 += (_, e) => L($"{label} updateV2 {Hex(e.Item1)}");
+        doc.UpdatedV2 += (_, e) => L($"{label} updateV2 {Hex(e.Update.ToArray())}");
     }
 
     public static string Items(IEnumerable<ItemView> items) =>
         string.Join(",", items.Select(i => i.Id.Client + ":" + i.Id.Clock + "+" + i.Length).OrderBy(x => x, StringComparer.Ordinal));
 
-    public EventHandler<YEventArgs> TextObserver(string label) => (_, e) =>
+    public Action<YTextEvent> TextObserver(string label) => ev =>
     {
-        var ev = e.Event;
         L($"{label} delta={D(ev.Delta)} added={Items(ev.Changes.Added)} deleted={Items(ev.Changes.Deleted)}");
     };
 
-    public EventHandler<YDeepEventArgs> DeepObserver(string label) => (_, e) =>
+    public Action<IReadOnlyList<YEvent>, Transaction> DeepObserver(string label) => (events, _) =>
     {
-        foreach (var ev in e.Events)
+        foreach (var ev in events)
         {
             L($"{label} deep path=[{string.Join("/", ev.Path)}] delta={D(ev.Delta)} keys={string.Join(",", ev.Keys.Keys.OrderBy(k => k, StringComparer.Ordinal))}");
         }

@@ -18,7 +18,7 @@ public class YValueTests
         var b = new YDoc();
         if (v2)
         {
-            b.ApplyUpdateV2(a.EncodeStateAsUpdateV2());
+            b.ApplyUpdate(a.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
         }
         else
         {

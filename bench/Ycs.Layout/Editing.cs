@@ -87,11 +87,11 @@ internal static class Editing
         for (var c = 0; c < docs.Length; c++)
         {
             docs[c] = new YDoc(new YDocOptions { ClientId = c + 1 });
-            docs[c].Update += (_, e) =>
+            docs[c].Updated += (_, e) =>
             {
-                if (e.transaction.Local)
+                if (e.Transaction.Local)
                 {
-                    updates.Add(e.data);
+                    updates.Add(e.Update.ToArray());
                 }
             };
         }
@@ -103,13 +103,13 @@ internal static class Editing
             if (rng.Below(10) == 0)
             {
                 var b = docs[rng.Below(docs.Length)];
-                b.ApplyUpdate(a.EncodeStateAsUpdateV1(b.EncodeStateVector()));
-                a.ApplyUpdate(b.EncodeStateAsUpdateV1(a.EncodeStateVector()));
+                b.ApplyUpdate(a.EncodeStateAsUpdate(b.EncodeStateVector()));
+                a.ApplyUpdate(b.EncodeStateAsUpdate(a.EncodeStateVector()));
             }
             else if (text.Length > 0 && rng.Below(4) == 0)
             {
                 var pos = rng.Below(text.Length);
-                text.Delete(pos, Math.Min(1 + rng.Below(3), text.Length - pos));
+                text.Remove(pos, Math.Min(1 + rng.Below(3), text.Length - pos));
             }
             else
             {
@@ -132,7 +132,7 @@ internal static class Editing
     {
         var doc = new YDoc(new YDocOptions { ClientId = Inputs.ClientId });
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         edit(doc);
         return new(name, root, kind, null, [.. updates], Content(doc, root, kind));
     }
@@ -148,7 +148,7 @@ internal static class Editing
         };
         if (r.Start != null)
         {
-            doc.ApplyUpdateV1(r.Start, null, UpdateLimits.Unlimited);
+            doc.ApplyUpdate(r.Start, null, limits: UpdateLimits.Unlimited);
         }
 
         return doc;

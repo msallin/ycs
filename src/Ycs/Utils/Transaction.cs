@@ -25,7 +25,7 @@ namespace Ycs;
 /// event's changes are computed after its handler).
 /// </para>
 /// </summary>
-public partial class Transaction
+public sealed partial class Transaction
 {
     // How many ended transactions a document keeps for reuse: one, plus those that observers start
     // during a cleanup.
@@ -394,8 +394,8 @@ public partial class Transaction
     /// <item>the observer calls (<see cref="YDoc.BeforeObserverCalls"/>, whose exception skips the others of that
     /// transaction, the observers, the deep observers, <see cref="YDoc.AfterTransaction"/>, the formatting cleanup)
     /// as Yjs' <c>callAll</c>;</item>
-    /// <item>what follows them (<see cref="YDoc.AfterTransactionCleanup"/>, <see cref="YDoc.Update"/>,
-    /// <see cref="YDoc.UpdateV2"/>, <see cref="YDoc.SubdocsChanged"/>, destroying the removed subdocuments), each step
+    /// <item>what follows them (<see cref="YDoc.AfterTransactionCleanup"/>, <see cref="YDoc.Updated"/>,
+    /// <see cref="YDoc.UpdatedV2"/>, <see cref="YDoc.SubdocsChanged"/>, destroying the removed subdocuments), each step
     /// even if one before threw. Yjs lets such an exception escape at once and never finishes the batch, so its
     /// document cleans up no later transaction (yjs#799); Ycs does what the open yjs#803 does.</item>
     /// </list>
@@ -467,7 +467,7 @@ public partial class Transaction
             // collection filter (once per item); when nobody is, the runs stay as they are, which is what the merge
             // below would make of them.
             if (doc.HasTransactionListeners || doc.HasBeforeObserverCallsListeners || AnyObserved(transaction)
-                || (doc.Gc && doc.GcFilter != YDocOptions.DefaultGcFilter && ds.Clients.Count > 0))
+                || (doc.GarbageCollection && doc.GcFilter != YDocOptions.DefaultGcFilter && ds.Clients.Count > 0))
             {
                 transaction.MaterializeRunExtensions();
             }
@@ -618,7 +618,7 @@ public partial class Transaction
         // What follows is Yjs' 'finally' part.
         // Replace deleted items with ItemDeleted / GC.
         // This is where content is actually removed from the Yjs Doc.
-        if (doc.Gc)
+        if (doc.GarbageCollection)
         {
             ds.TryGcDeleteSet(store, doc);
         }
@@ -700,8 +700,8 @@ public partial class Transaction
 
         if (transaction._subdocsAdded?.Count > 0 || transaction._subdocsRemoved?.Count > 0 || transaction._subdocsLoaded?.Count > 0)
         {
-            var added = transaction.SubdocsAdded;
-            var removed = transaction.SubdocsRemoved;
+            var added = transaction.AddedSubdocs;
+            var removed = transaction.RemovedSubdocs;
 
             foreach (var subDoc in added)
             {
@@ -715,10 +715,10 @@ public partial class Transaction
                 doc.Subdocs.Remove(subDoc);
             }
 
-            Step(static t => t._doc.InvokeSubdocsChanged(t.SubdocsLoaded, t.SubdocsAdded, t.SubdocsRemoved), transaction, ref error);
+            Step(static t => t._doc.InvokeSubdocsChanged(t.LoadedSubdocs, t.AddedSubdocs, t.RemovedSubdocs), transaction, ref error);
             Step(static t =>
             {
-                foreach (var subDoc in t.SubdocsRemoved)
+                foreach (var subDoc in t.RemovedSubdocs)
                 {
                     subDoc.Destroy();
                 }

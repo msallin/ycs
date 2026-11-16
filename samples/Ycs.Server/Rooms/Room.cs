@@ -36,7 +36,7 @@ internal sealed partial class Room
         this.logger = logger ?? NullLogger.Instance;
         doc = new YDoc(new YDocOptions { Limits = limits ?? DocumentLimits });
         awareness = new Awareness.Awareness(time ?? TimeProvider.System);
-        doc.Update += OnUpdate;
+        doc.Updated += OnUpdate;
         doc.PendingDropped += OnPendingDropped;
     }
 
@@ -251,7 +251,7 @@ internal sealed partial class Room
     {
         lock (gate)
         {
-            return doc.EncodeStateAsUpdateV1();
+            return doc.EncodeStateAsUpdate();
         }
     }
 
@@ -259,7 +259,7 @@ internal sealed partial class Room
     {
         lock (gate)
         {
-            return doc.EncodeStateVectorV1();
+            return doc.EncodeStateVector();
         }
     }
 
@@ -346,11 +346,11 @@ internal sealed partial class Room
     }
 
     // Runs under the lock: the document changes only there.
-    private void OnUpdate(object? sender, (byte[] Data, object Origin, Transaction Transaction) e)
+    private void OnUpdate(object? sender, UpdateEventArgs e)
     {
-        var message = new ArrayBufferWriter<byte>(e.Data.Length + 16);
+        var message = new ArrayBufferWriter<byte>(e.Update.Length + 16);
         message.Write([(byte)MessageType.Sync]);
-        SyncProtocol.WriteUpdate(message, e.Data);
+        SyncProtocol.WriteUpdate(message, e.Update.Span);
 
         // One array for every session: readers must not modify it.
         var bytes = message.WrittenSpan.ToArray();

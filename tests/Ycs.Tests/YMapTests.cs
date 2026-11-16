@@ -300,18 +300,18 @@ public class YMapTests : YTestBase
         int calls = 0;
         ItemId? dmapId = null;
 
-        map1.DeepEventHandler += (s, e) =>
+        map1.ObserveDeep((deepEvents, _) =>
         {
-            foreach (var evt in e.Events)
+            foreach (var evt in deepEvents)
             {
                 calls++;
 
                 Assert.IsTrue(evt.Changes.Keys.ContainsKey("deepmap"));
                 Assert.AreEqual(1, evt.Path.Count);
-                Assert.AreEqual("map", evt.Path.First());
+                Assert.AreEqual("map", evt.Path[0].Key);
                 dmapId = ((evt.Target as YMap).Get("deepmap") as YMap).OwnerIdForTests;
             }
-        };
+        });
 
         Connector.FlushAllMessages();
 
@@ -341,18 +341,18 @@ public class YMapTests : YTestBase
         Init(users: 2);
         var map0 = Maps[Users[0]];
 
-        var paths = new List<IReadOnlyCollection<object>>();
+        var paths = new List<IReadOnlyList<PathSegment>>();
         int calls = 0;
 
-        map0.DeepEventHandler += (s, e) =>
+        map0.ObserveDeep((deepEvents, _) =>
         {
-            foreach (var evt in e.Events)
+            foreach (var evt in deepEvents)
             {
                 paths.Add(evt.Path);
             }
 
             calls++;
-        };
+        });
 
         map0.Set("map", new YMap());
         (map0.Get("map") as YMap).Set("array", new YArray());
@@ -360,8 +360,8 @@ public class YMapTests : YTestBase
         Assert.AreEqual(3, calls);
         Assert.AreEqual(3, paths.Count);
         Assert.AreEqual(0, paths[0].Count);
-        CollectionAssert.AreEqual(new object[] { "map" }, (ICollection)paths[1]);
-        CollectionAssert.AreEqual(new object[] { "map", "array" }, (ICollection)paths[2]);
+        CollectionAssert.AreEqual(new[] { new PathSegment("map", 0) }, paths[1].ToArray());
+        CollectionAssert.AreEqual(new[] { new PathSegment("map", 0), new PathSegment("array", 0) }, paths[2].ToArray());
 
         CompareUsers();
     }
@@ -374,14 +374,14 @@ public class YMapTests : YTestBase
 
         YMapEvent evt = null;
 
-        map0.EventHandler += (s, e) =>
+        map0.Observe(e =>
         {
-            evt = e.Event as YMapEvent;
+            evt = e as YMapEvent;
 
             // Collect changes while data is not GC'ed.
             var changes = evt.Changes;
             Assert.IsNotNull(changes);
-        };
+        });
 
         map0.Set("stuff", 4);
         Assert.AreSame(map0, evt.Target);
@@ -410,23 +410,23 @@ public class YMapTests : YTestBase
         Init(users: 2);
         var map0 = Maps[Users[0]];
 
-        ChangesCollection changes = null;
-        ChangeKey keyChange = null;
+        YChanges changes = null;
+        KeyChange keyChange;
 
-        map0.EventHandler += (s, e) =>
+        map0.Observe(e =>
         {
-            changes = e.Event.Changes;
-        };
+            changes = e.Changes;
+        });
 
         map0.Set("a", 1);
         Assert.IsTrue(changes.Keys.TryGetValue("a", out keyChange));
-        Assert.AreEqual(ChangeAction.Add, keyChange.Action);
+        Assert.AreEqual(KeyChangeAction.Add, keyChange.Action);
         Assert.IsNull(keyChange.OldValue);
         changes = null;
 
         map0.Set("a", 2);
         Assert.IsTrue(changes.Keys.TryGetValue("a", out keyChange));
-        Assert.AreEqual(ChangeAction.Update, keyChange.Action);
+        Assert.AreEqual(KeyChangeAction.Update, keyChange.Action);
         Assert.AreEqual(1, keyChange.OldValue);
         changes = null;
 
@@ -437,7 +437,7 @@ public class YMapTests : YTestBase
         });
 
         Assert.IsTrue(changes.Keys.TryGetValue("a", out keyChange));
-        Assert.AreEqual(ChangeAction.Update, keyChange.Action);
+        Assert.AreEqual(KeyChangeAction.Update, keyChange.Action);
         Assert.AreEqual(2, keyChange.OldValue);
         changes = null;
 
@@ -448,7 +448,7 @@ public class YMapTests : YTestBase
         });
 
         Assert.IsTrue(changes.Keys.TryGetValue("b", out keyChange));
-        Assert.AreEqual(ChangeAction.Add, keyChange.Action);
+        Assert.AreEqual(KeyChangeAction.Add, keyChange.Action);
         Assert.IsNull(keyChange.OldValue);
         changes = null;
 
@@ -468,7 +468,7 @@ public class YMapTests : YTestBase
         });
 
         Assert.IsTrue(changes.Keys.TryGetValue("d", out keyChange));
-        Assert.AreEqual(ChangeAction.Add, keyChange.Action);
+        Assert.AreEqual(KeyChangeAction.Add, keyChange.Action);
         Assert.IsNull(keyChange.OldValue);
         changes = null;
 
@@ -486,25 +486,25 @@ public class YMapTests : YTestBase
         bool throwingObserverCalled = false;
         bool throwingDeepObserverCalled = false;
 
-        doc.UpdateV2 += (s, e) =>
+        doc.UpdatedV2 += (s, e) =>
         {
             updateCalled = true;
         };
 
-        void throwingObserver(object sender, YEventArgs args)
+        void throwingObserver(YMapEvent args)
         {
             throwingObserverCalled = true;
             throw new Exception("Failure");
         }
 
-        void throwingDeepObserver(object sender, YDeepEventArgs args)
+        void throwingDeepObserver(IReadOnlyList<YEvent> args, Transaction tr)
         {
             throwingDeepObserverCalled = true;
             throw new Exception("Deep failure");
         }
 
-        map.EventHandler += throwingObserver;
-        map.DeepEventHandler += throwingDeepObserver;
+        map.Observe(throwingObserver);
+        map.ObserveDeep(throwingDeepObserver);
 
         Assert.ThrowsExactly<Exception>(() =>
         {

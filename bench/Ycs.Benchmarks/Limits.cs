@@ -30,18 +30,18 @@ internal static class Limits
         // Pending: N shared types that wait for the first struct of their client.
         var (first, waiting) = WaitingTypes(10);
         var doc = new YDoc();
-        Report("YText, pending", Bytes(waiting), waiting.Length, N, () => doc.ApplyUpdateV2(waiting), doc);
+        Report("YText, pending", Bytes(waiting), waiting.Length, N, () => doc.ApplyUpdate(waiting, format: UpdateFormat.V2), doc);
         Report("  EncodeStateAsUpdate with them pending", 0, 0, N, () => doc.EncodeStateAsUpdate(), doc);
 
         // The largest retry: N wait; one update lets them integrate and brings N more that wait.
         var (first2, waiting2) = WaitingTypes(11);
-        var trigger = UpdateOperations.MergeUpdatesV2(new[] { first, waiting2 });
-        Report("  an update lets them integrate and brings N more", 0, trigger.Length, 2 * N, () => doc.ApplyUpdateV2(trigger), doc);
+        var trigger = YUpdate.Merge([first, waiting2], format: UpdateFormat.V2);
+        Report("  an update lets them integrate and brings N more", 0, trigger.Length, 2 * N, () => doc.ApplyUpdate(trigger, format: UpdateFormat.V2), doc);
         System.GC.KeepAlive(first2);
 
         var gc = GcRun(N, clock: 1);
         var gcDoc = new YDoc();
-        Report("GC structs, pending (hand-written v2)", 0, gc.Length, N, () => gcDoc.ApplyUpdateV2(gc), gcDoc);
+        Report("GC structs, pending (hand-written v2)", 0, gc.Length, N, () => gcDoc.ApplyUpdate(gc, format: UpdateFormat.V2), gcDoc);
         Report("  EncodeStateAsUpdate with them pending", 0, 0, N, () => gcDoc.EncodeStateAsUpdate(), gcDoc);
     }
 
@@ -62,16 +62,16 @@ internal static class Limits
             }
         });
 
-        var v2 = source.EncodeStateAsUpdateV2();
+        var v2 = source.EncodeStateAsUpdate(format: UpdateFormat.V2);
         var doc = new YDoc();
-        Report(shape, source.EncodeStateAsUpdate().Length, v2.Length, N, () => doc.ApplyUpdateV2(v2), doc);
+        Report(shape, source.EncodeStateAsUpdate().Length, v2.Length, N, () => doc.ApplyUpdate(v2, format: UpdateFormat.V2), doc);
     }
 
     private static (byte[] First, byte[] Waiting) WaitingTypes(long client)
     {
         var source = new YDoc(new YDocOptions { ClientId = client });
         source.GetText("t").Insert(0, "x");
-        var first = source.EncodeStateAsUpdateV2();
+        var first = source.EncodeStateAsUpdate(format: UpdateFormat.V2);
         var sv = source.EncodeStateVector();
         var array = source.GetArray("a");
         source.Transact(_ =>
@@ -82,10 +82,10 @@ internal static class Limits
             }
         });
 
-        return (first, source.EncodeStateAsUpdateV2(sv));
+        return (first, source.EncodeStateAsUpdate(sv, format: UpdateFormat.V2));
     }
 
-    private static int Bytes(byte[] v2) => UpdateOperations.ConvertUpdateFormatV2ToV1(v2, UpdateLimits.Unlimited).Length;
+    private static int Bytes(byte[] v2) => YUpdate.Convert(v2, UpdateFormat.V2, UpdateFormat.V1, limits: UpdateLimits.Unlimited).Length;
 
     /// <summary><paramref name="count"/> GC structs of length 1 of client 1 from <paramref name="clock"/>, in a few bytes of v2.</summary>
     internal static byte[] GcRun(long count, long clock)

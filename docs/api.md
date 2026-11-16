@@ -12,14 +12,90 @@ names; everything is in the namespace `Ycs`.
 | Transactions | implicit; `doc.transact(fn, origin)` groups changes | explicit: every call takes a `Transaction` from `doc.WriteTransaction()`, which must be committed or disposed | implicit, as in Yjs: `doc.Transact(tr => ..., origin)` groups changes |
 | Indexes | `number` (UTF-16 code units for text) | `uint` | `int` (UTF-16 code units, as in Yjs) |
 | Values | any JSON-like value, `Uint8Array`, `bigint`, shared types | tagged `Input` / `Output` classes (`Input.Long(5)`, `output.Long`) | plain CLR values from a closed set: `null`, `bool`, `int`/`long`, `double`, `BigInteger`, `string`, `byte[]`, lists, string-keyed dictionaries, shared types |
-| Update format | v1 (`applyUpdate`) by default, v2 (`applyUpdateV2`) | `ApplyV1`/`ApplyV2`, `StateDiffV1`/`StateDiffV2` | v1 by default (`ApplyUpdate`), `…V1`/`…V2` explicitly |
-| Subscriptions | `observe(f)` / `unobserve(f)`, `doc.on('update', f)` | `IDisposable Observe(Action<T>)` | .NET events, plus `Observe`/`ObserveDeep` returning `IDisposable` |
+| Update format | v1 (`applyUpdate`) by default, v2 (`applyUpdateV2`) | `ApplyV1`/`ApplyV2`, `StateDiffV1`/`StateDiffV2` | v1 by default, `UpdateFormat.V2` as a `format` argument (`ApplyUpdate`, `EncodeStateAsUpdate`, `YUpdate`, `Snapshot`, `SyncProtocol`) |
+| Subscriptions | `observe(f)` / `unobserve(f)`, `doc.on('update', f)` | `IDisposable Observe(Action<T>)` | typed `Observe(Action<TEvent>)` and `ObserveDeep` returning `IDisposable`; .NET events on `YDoc` (`Updated`, `UpdatedV2`, `SubdocsChanged`, the transaction events) |
 | Positions that survive edits | `RelativePosition` | `StickyIndex` | `RelativePosition` / `AbsolutePosition` |
-| Undo | `UndoManager(scope, { trackedOrigins, captureTimeout })` | `UndoManager(doc, branch, options)` | `UndoManager(scope, new UndoManagerOptions { TrackedOrigins, CaptureTimeout })` |
+| Undo | `UndoManager(scope, { trackedOrigins, captureTimeout })` | `UndoManager(doc, branch, options)` | `UndoManager(scope, new UndoManagerOptions { TrackedOrigins, CaptureTimeout })` (`CaptureTimeout` a `TimeSpan`, `IDisposable`) |
 | Threading | single-threaded | the native document is locked per transaction | the caller's job, as in Yjs ([Thread safety](#thread-safety)) |
 
 YDotNet's explicit transactions and tagged values come from the Rust borrow model and the native
 boundary; they would make Ycs harder to use without making it safer, so Ycs keeps the Yjs shape.
+
+## Options and undo
+
+`YDocOptions`, `UndoManagerOptions` and `UpdateLimits` are sealed records with `init` properties (`with` copies one). A
+document keeps what it was made with and shows it as read-only properties (`GarbageCollection`, `Limits`, `Guid`,
+`Meta`, ...). `ClientId` is checked when it is set. Without a `Guid` the document makes a random one when it is first
+read, so two documents made from one options object differ.
+
+```csharp
+var doc = new YDoc(new YDocOptions { GarbageCollection = false });
+var undo = new UndoManager(doc.GetText("t"), new UndoManagerOptions
+{
+    CaptureTimeout = TimeSpan.FromSeconds(1),
+    TimeProvider = timeProvider, // a test moves the capture timeout's clock by hand
+});
+```
+
+An `UndoManager` is `IDisposable`; its events (`StackItemAdded`, `StackItemUpdated`, `StackItemPopped`) carry an
+`UndoStackEventArgs` (the stack item, the `UndoOperation`, the changed types with their events, the origin) and
+`StackCleared` an `UndoStackClearedEventArgs`. `PermanentUserData(doc)` maps client ids to users of that document:
+`SetUserMapping(clientId, user)`, `GetUserByClientId`, `GetUserByDeletedId`; `Users` is the map that stores them.
+
+## Events
+
+Each shared type observes its own events: `YArray.Observe(Action<YArrayEvent>)`, `YMap` (`YMapEvent`), `YText` and
+`YXmlText` (`YTextEvent`), `YXmlFragment` and `YXmlElement` (`YXmlEvent`). `YType.ObserveDeep(Action<IReadOnlyList<YEvent>,
+Transaction>)` gets the events of the type and everything nested in it, the outer types' first. Both return an
+`IDisposable`; disposing it removes that registration (one handler registered twice is two registrations). A handler may
+be typed more generally (an `Action<YEvent>` observes any type). Every handler runs even when one threw; the last
+exception escapes.
+
+An event is read-only: `Target`, `CurrentTarget`, `Transaction`, `Path` (an `IReadOnlyList<PathSegment>`: a map key, or the
+index in a list when `Key` is null), `Changes` (`YChanges`: `Added`, `Deleted`, `Delta`, `Keys`), `Delta`, `Keys`
+(`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, still an `object?`), and `Adds(view)`,
+`Deletes(view)`. It is valid during the handler, its transaction's observers and cleanup; compute what you keep there.
+
+### Text and deltas
+
+`YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `InsertEmbed(index, YValue,
+attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
+`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `RemoveNonText()`, `CleanupFormatting()`, `ToString()`,
+`CopyTo(Span<char>)` (the characters written; an `ArgumentException` when the span is shorter than the text, and `Length` is
+always enough) and `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is null when unset,
+`GetAttributes`, `SetAttribute`, `RemoveAttribute`) and `Clone`. Formatting attributes and embeds are `YValue`s; in an
+attribute dictionary of `Format` or of a `Retain`, a `YValue.Null` removes the attribute.
+
+A `Delta` is one operation of a delta, one of the sealed cases `Delta.Insert(YValue Value)` (a string, or an embed: a shared
+type or a value; an embed of null is `YValue.Null`), `Delta.InsertItems(IReadOnlyList<YValue> Items)` (what an array's or an
+XML fragment's event inserted), `Delta.Retain(int Length)` and `Delta.Delete(int Length)`, with `Attributes`
+(`IReadOnlyDictionary<string, YValue>?`) on every case. `ToDelta(snapshot, previous)` marks added and removed runs with a
+`ychange` attribute, an object of `type` (`"added"` or `"removed"`) and, when `computeYChange` returns a `YChange(YChangeKind,
+long? User)` with one, `user`. Applying an `InsertItems` to a text throws.
+
+On `YDoc`, `Updated` and `UpdatedV2` raise an `UpdateEventArgs(Update, Origin, Transaction)`: `Update` is a new
+`ReadOnlyMemory<byte>` for each event, which a handler may keep. `SubdocsChanged` raises a `SubdocsEventArgs(Loaded,
+Added, Removed)` of read-only sets and `AfterAllTransactions` an `IReadOnlyList<Transaction>`.
+
+## Transactions
+
+`doc.Transact(tr => ..., origin, local)` runs an `Action<Transaction>`; `Transact<TResult>(Func<Transaction, TResult>)`
+returns what the function returns; `Transact<TState>(state, static (s, tr) => ...)` passes its state in, so that a
+`static` lambda allocates no closure (`TState` may be a `ref struct`: a `Span<T>` can be part of the state, in a type of
+your own). Nested calls join the running transaction.
+
+A `Transaction` (sealed) is read-only but for `Meta`: `Doc`, `Origin`, `Local`, `BeforeState` and `AfterState`
+(`IReadOnlyDictionary<long, long>`), `Changed` (`IReadOnlyDictionary<YType, IReadOnlySet<string?>>`: the changed map keys,
+`null` for the children of a list), `ChangedParentTypes` (`IReadOnlyDictionary<YType, IReadOnlyList<YEvent>>`),
+`SubdocsAdded`, `SubdocsRemoved` and `SubdocsLoaded` (`IReadOnlySet<YDoc>`), and `Meta`, a mutable
+`IDictionary<string, object?>` for what observers pass each other (Yjs' `transaction.meta`). The views read the
+transaction's own collections without a copy; they are valid as long as the transaction is (see Events).
+
+Transactions are synchronous. A lambda that awaits is a compile error (CS0619: the overloads that take a `Func<..., Task>`
+are `[Obsolete(error: true)]` guards), where it would otherwise be an `async void` that ends the transaction at its first
+`await`. Two cases the guards cannot tell from an async lambda: a lambda that returns a `Task` (it is no async lambda, but
+it is no transaction either), and a lambda that only throws, with no `return`, which the compiler can also convert to
+`Func<Transaction, Task>`: cast it, `(Action<Transaction>)(tr => throw ...)`.
 
 ## Items in events and filters
 
@@ -30,24 +106,24 @@ exposes the storage, which is internal.
 | --- | --- |
 | `ItemView` | a `readonly struct`: a document and an id. It reads the struct that holds the id now, as if split at the id. Valid as long as the document, across splits, merges and garbage collection. `default(ItemView)` (`IsDefault`) names nothing: every member throws `InvalidOperationException` |
 | `ItemKind` | what a struct holds: `String`, `Any`, `Json`, `Binary`, `Embed`, `Format`, `Type`, `Doc`, `Deleted`, `GC`, `Skip` (the numbers of the update format) |
-| `DecodedStruct` | a record: one struct of a decoded update, in the update's order, detached from any document |
+| `DecodedStruct` | a `sealed record` of `init` properties (`Id`, `Length` and `Kind` are `required`): one struct of a decoded update, in the update's order, detached from any document |
 
 `ItemView` members: `Id`, `LastId`, `Length`, `Kind`, `Content` (the values, a read-only list), `Deleted`,
 `Countable`, `Keep`, `LeftOrigin`, `RightOrigin`, `Left`, `Right` (`ItemView?`), `Parent`, `ParentSub`, `Redone`,
-`Doc`. A GC struct reads `Parent` null, empty `Content`, `Deleted` true.
+`Doc` (null for a view of a decoded struct that has no document). `Length` is a `long`. `Content` is `IReadOnlyList<object?>`, a diagnostic read of the stored values. A GC struct reads `Parent` null, empty `Content`, `Deleted` true.
 
-`DecodedStruct` members: `Id`, `Length`, `Kind`, `LeftOrigin`, `RightOrigin`, `ParentName` (a root type) or
+`DecodedStruct` members: `Id`, `Length` (a `long`), `Kind`, `LeftOrigin`, `RightOrigin`, `ParentName` (a root type) or
 `ParentId`, `ParentSub`, and what the kind carries, in exactly one place: `Content` (Any, Json, Binary, Embed), `Text`
 (String), `FormatKey` and `FormatValue` (Format), `TypeRef` and `TypeName` (Type), `DocGuid` (Doc). The others are
 empty, null or -1.
 
 | Where | Gets |
 | --- | --- |
-| `ChangesCollection.Added`, `.Deleted` | `ISet<ItemView>` |
+| `YChanges.Added`, `.Deleted` | `IReadOnlySet<ItemView>` |
 | `YEvent.Adds(view)`, `Deletes(view)` | whether the event added or deleted it, also when both |
-| `YDocOptions.GcFilter` | `Predicate<ItemView>`: true lets a deleted item be collected |
+| `YDocOptions.GarbageCollectionFilter` | `Func<ItemView, bool>`: true lets a deleted item be collected |
 | `UndoManagerOptions.DeleteFilter` | `Func<ItemView, bool>`: false keeps an undo or redo from deleting the item |
-| `UpdateOperations.DecodeUpdate…` | `DecodedUpdate.Structs`: `IReadOnlyList<DecodedStruct>` |
+| `YUpdate.Decode` | `DecodedUpdate.Structs`: `IReadOnlyList<DecodedStruct>` |
 
 ```csharp
 using Ycs;
@@ -56,13 +132,13 @@ var doc = new YDoc(new YDocOptions
 {
     ClientId = 1,
     // Collect deleted text; keep deleted shared types (true collects).
-    GcFilter = item => item.Kind != ItemKind.Type,
+    GarbageCollectionFilter = item => item.Kind != ItemKind.Type,
 });
 var list = doc.GetArray("list");
 
-list.Observe((_, e) =>
+list.Observe(e =>
 {
-    foreach (ItemView item in e.Event.Changes.Added)
+    foreach (ItemView item in e.Changes.Added)
     {
         Console.WriteLine($"added {item.Kind}, {item.Length} at {item.Id.Client}:{item.Id.Clock}");
     }
@@ -71,7 +147,7 @@ list.Observe((_, e) =>
 list.Add(["a", "b"]);
 // added Any, 2 at 1:0
 
-foreach (DecodedStruct s in UpdateOperations.DecodeUpdate(doc.EncodeStateAsUpdate()).Structs)
+foreach (DecodedStruct s in YUpdate.Decode(doc.EncodeStateAsUpdate(), format: UpdateFormat.V1).Structs)
 {
     Console.WriteLine($"{s.Kind} {s.Id.Client}:{s.Id.Clock} in {s.ParentName}: {string.Join(",", s.Content)}");
 }
@@ -106,13 +182,29 @@ set). `TryResolve(doc, out position, followUndoneDeletions: false)` gives the sa
 default follows undone deletions, which suits the user who undid. `default(RelativePosition)` names nothing: it does
 not resolve and does not encode.
 
+## Encoding
+
+`enum UpdateFormat { V1, V2 }` picks the encoding wherever bytes go in or out; v1 is the default (what every y-protocols
+provider sends), v2 is denser. Inputs are spans, and a method that decodes an input needs an array internally, so it
+copies the span into a buffer of the shared array pool for the call: no allocation beyond the pool's. A byte array
+converts to a span implicitly.
+
+| On | Members |
+| --- | --- |
+| `YDoc` | `ApplyUpdate(update, origin = null, format = V1, limits = null)` and `TryApplyUpdate` (the same, returning false for a malformed update); `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
+| `YUpdate` | `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta` record: `From` and `To` clocks of every client), `Decode` (a `DecodedUpdate`: the structs and the delete set as `DeletedRange(Clock, Length)`), `Describe` (text, for debugging). No document is needed. |
+| `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`; equality is `Equals`, and `Snapshot.Equals(a, b)` for null-safe |
+| `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree) |
+
+`Merge` of a single update returns a copy of it, unchecked, as Yjs returns it.
+
 ## Untrusted input
 
 [Untrusted input and threads](untrusted-input.md) is the short form, with the defaults of the limits. This section is
-the contract. Every API that decodes bytes — `ApplyUpdate…`, `TryApplyUpdate…`,
-`EncodeStateAsUpdate…(stateVector)`, everything in `UpdateOperations`, `Snapshot.DecodeSnapshot…`,
-`CreateDocFromSnapshot` and `Snapshot.RestoreDocument` (a snapshot that holds more than the document),
-`SnapshotContainsUpdate…`, `RelativePosition.Decode`, `RelativePosition.FromJson`, `SyncProtocol.Read…` — throws only
+the contract. Every API that decodes bytes — `ApplyUpdate`, `TryApplyUpdate`,
+`EncodeStateAsUpdate(stateVector)`, everything in `YUpdate`, `Snapshot.Decode`,
+`CreateDocFromSnapshot` (a snapshot that holds more than the document),
+`Snapshot.ContainsUpdate`, `RelativePosition.Decode`, `RelativePosition.FromJson`, `SyncProtocol.Read…` — throws only
 `YUpdateException` for malformed input, with a message that says what was wrong (never the
 input's content). The snapshot reads (`ToArraySnapshot`, `GetSnapshot`, `GetAllSnapshot`,
 `ToDelta(snapshot)`) ignore deletions of clients or clocks the document does not have, as Yjs does.
@@ -164,8 +256,8 @@ before anything changes:
   format run-length encodes its columns (Yjs writes 20,000 deleted items in 42 bytes; 131,072 deleted
   items are 42 bytes too), and a v1 struct can be as small as 4 bytes. The limit is six times Yjs'
   example and can be set to anything above zero. The same limit, as their `limits` argument, bounds
-  each input of the `UpdateOperations` functions; `ConvertUpdateFormatV2ToV1`, `DecodeUpdateV2` and
-  `DescribeUpdateV2` expand a v2 update to the size of its structs (131,072 structs are about 0.8 MiB
+  each input of the `YUpdate` functions; `Convert` from v2 to v1, `Decode` and
+  `Describe` of a v2 update expand a v2 update to the size of its structs (131,072 structs are about 0.8 MiB
   of v1, 30 MiB decoded, and a description of 11 million characters);
 * garbage collection: in a document that collects garbage, an update whose cleanup would collect a deleted type
   in which a key holds two live items is rejected (Yjs integrates it and then throws "Unexpected case" from
@@ -252,7 +344,7 @@ shape, one peer typing forward where another typed backwards at the same index, 
 and the default admits 4,096 by 4,096. This is the one limit found while the update is integrated:
 **beyond it, the update is applied in part.** `ApplyUpdate` throws `YUpdateException` with
 `PartlyApplied` set (`TryApplyUpdate` returns false); the structs integrated before stay (a causally
-complete part of the update, as if the peer had sent less), observers and `Update` see them, and the
+complete part of the update, as if the peer had sent less), observers and `Updated` see them, and the
 rest of the structs and the update's deletions are dropped. The document is valid, and converges
 with any peer that has the same part; a peer that sends the rest again is refused again.
 
@@ -273,7 +365,7 @@ transactions is finished. The rules:
 
 - **Every step of the cleanup runs**, also after a handler threw: the observers, the deep observers,
   `AfterTransaction`, the formatting cleanup (Yjs' `callAll`), then the garbage collection and merging
-  of structs, `AfterTransactionCleanup`, `Update`, `UpdateV2`, the subdocument bookkeeping, `SubdocsChanged`,
+  of structs, `AfterTransactionCleanup`, `Updated`, `UpdatedV2`, the subdocument bookkeeping, `SubdocsChanged`,
   destroying the removed subdocuments, the cleanup of the transactions queued behind (those observers
   started), and `AfterAllTransactions`.
 - **Several exceptions: the last one escapes** (in the order above; one of `AfterAllTransactions` last of

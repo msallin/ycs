@@ -77,7 +77,7 @@ public class ChangedTypesTests
         array.Insert(0, new object[] { inner });
         var names = new Dictionary<YType, string> { [text] = "t", [map] = "m", [array] = "a", [inner] = "inner" };
         string order = null;
-        map.EventHandler += (_, _) => doc.AfterTransaction += (_, tr) => order ??= string.Join(",", tr.ChangedParentTypes.Keys.Select(k => names[k]));
+        map.Observe(_ => doc.AfterTransaction += (_, tr) => order ??= string.Join(",", tr.ChangedParentTypes.Keys.Select(k => names[k])));
 
         doc.Transact(_ =>
         {

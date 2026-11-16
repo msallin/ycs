@@ -62,14 +62,14 @@ public class HardeningTests
     public void ApplyUpdate_ClockBeyondRange_IsRejected()
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(TextA);
-        AssertRejected(doc, () => doc.ApplyUpdateV1(FarClock), "");
+        doc.ApplyUpdate(TextA);
+        AssertRejected(doc, () => doc.ApplyUpdate(FarClock), "");
     }
 
     [TestMethod]
     public void MergeUpdates_ClockBeyondRange_IsRejected()
     {
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdates(new[] { TextA, FarClock }));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([TextA, FarClock], format: UpdateFormat.V1));
     }
 
     // 10. Three GC structs of length 2^31 - 1 overflowed the merged length.
@@ -79,8 +79,8 @@ public class HardeningTests
     {
         // 1 client, 3 structs, client 1, clock 0, then three GC structs of length 2^31 - 1.
         var update = Concat(Hex("01 03 01 00"), Repeat("00 FF FF FF FF 07", 3), Hex("00"));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdates(new[] { update, ValidA }));
-        Assert.ThrowsExactly<YUpdateException>(() => new YDoc().ApplyUpdateV1(update));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([update, ValidA], format: UpdateFormat.V1));
+        Assert.ThrowsExactly<YUpdateException>(() => new YDoc().ApplyUpdate(update));
     }
 
     // 2. Unbounded recursion in ReadAny: an uncatchable stack overflow.
@@ -89,7 +89,7 @@ public class HardeningTests
     public void ApplyUpdate_DeeplyNestedAnyValue_IsRejected()
     {
         var update = Concat(Hex("01 01 05 00 08 01 01 61 01"), Repeat("75 01", 40000), Hex("7E 00"));
-        AssertRejected(new YDoc(), () => new YDoc().ApplyUpdateV1(update));
+        AssertRejected(new YDoc(), () => new YDoc().ApplyUpdate(update));
     }
 
     [TestMethod]
@@ -152,16 +152,16 @@ public class HardeningTests
     public void ApplyUpdate_TypesNestedBeyondLimit_AreRejected()
     {
         var doc = new YDoc();
-        AssertRejected(doc, () => doc.ApplyUpdateV1(NestedArrays(UpdateLimits.Default.MaxDepth + 1)));
-        doc.ApplyUpdateV1(DeleteFirstOfClient5);
+        AssertRejected(doc, () => doc.ApplyUpdate(NestedArrays(UpdateLimits.Default.MaxDepth + 1)));
+        doc.ApplyUpdate(DeleteFirstOfClient5);
     }
 
     [TestMethod]
     public void ApplyUpdate_TypesNestedUpToLimit_DeleteAndCollect()
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(NestedArrays(UpdateLimits.Default.MaxDepth));
-        doc.ApplyUpdateV1(DeleteFirstOfClient5);
+        doc.ApplyUpdate(NestedArrays(UpdateLimits.Default.MaxDepth));
+        doc.ApplyUpdate(DeleteFirstOfClient5);
         Assert.AreEqual(0, doc.GetArray("a").Length);
     }
 
@@ -187,7 +187,7 @@ public class HardeningTests
     public void ApplyUpdate_ZeroLengthGc_IsRejected()
     {
         var doc = new YDoc();
-        AssertRejected(doc, () => doc.ApplyUpdateV1(Hex("01 01 05 00 00 00 00")));
+        AssertRejected(doc, () => doc.ApplyUpdate(Hex("01 01 05 00 00 00 00")));
         doc.EncodeStateAsUpdate();
     }
 
@@ -196,10 +196,10 @@ public class HardeningTests
     {
         var doc = new YDoc();
         var updates = 0;
-        doc.Update += (_, _) => updates++;
+        doc.Updated += (_, _) => updates++;
 
-        AssertRejected(doc, () => doc.ApplyUpdateV1(Hex("01 01 05 00 01 01 01 74 00 00")), "t");
-        doc.ApplyUpdateV1(ValidA);
+        AssertRejected(doc, () => doc.ApplyUpdate(Hex("01 01 05 00 01 01 01 74 00 00")), "t");
+        doc.ApplyUpdate(ValidA);
 
         Assert.AreEqual(1, updates);
     }
@@ -210,16 +210,16 @@ public class HardeningTests
         var doc = new YDoc();
         var updates = 0;
         var fail = true;
-        doc.Update += (_, _) => updates++;
-        doc.GetText("").EventHandler += (_, _) =>
+        doc.Updated += (_, _) => updates++;
+        doc.GetText("").Observe(_ =>
         {
             if (fail)
             {
                 throw new InvalidOperationException("observer");
             }
-        };
+        });
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => doc.ApplyUpdateV1(ValidA));
+        Assert.ThrowsExactly<InvalidOperationException>(() => doc.ApplyUpdate(ValidA));
         fail = false;
         doc.GetText("").Insert(1, "b");
 
@@ -240,7 +240,7 @@ public class HardeningTests
     public void ApplyUpdate_HugeDecodedCount_AllocatesLittle(string hex)
     {
         var update = Hex(hex);
-        Assert.IsLessThan(1L << 20, AllocatedBy(() => new YDoc().ApplyUpdateV1(update)));
+        Assert.IsLessThan(1L << 20, AllocatedBy(() => new YDoc().ApplyUpdate(update)));
     }
 
     [TestMethod]
@@ -291,11 +291,11 @@ public class HardeningTests
 
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         textA.Insert(250, "-");
-        textA.Delete(250, 1);
+        textA.Remove(250, 1);
         b.GetText("t").Insert(0, "12345");
         var remote = b.EncodeStateAsUpdate(a.EncodeStateVector());
 
-        a.Transact(_ => a.ApplyUpdateV1(remote));
+        a.Transact(_ => a.ApplyUpdate(remote));
         textA.Insert(200, "Z");
 
         Assert.AreEqual(200, textA.ToString().IndexOf('Z', StringComparison.Ordinal));
@@ -308,7 +308,7 @@ public class HardeningTests
         var local = true;
         doc.Transact(tr =>
         {
-            doc.ApplyUpdateV1(ValidA);
+            doc.ApplyUpdate(ValidA);
             local = tr.Local;
         });
 
@@ -340,7 +340,7 @@ public class HardeningTests
         var stopwatch = Stopwatch.StartNew();
         for (var client = 100; client < 8100; client++)
         {
-            doc.ApplyUpdateV1(WaitingForClient99(client));
+            doc.ApplyUpdate(WaitingForClient99(client));
         }
 
         Assert.IsLessThan(2000, stopwatch.ElapsedMilliseconds);
@@ -374,7 +374,7 @@ public class HardeningTests
         var delete = Hex("00 01 09 01 00 01");
         for (var i = 0; i < 8000; i++)
         {
-            doc.ApplyUpdateV1(delete);
+            doc.ApplyUpdate(delete);
         }
 
         Assert.IsLessThanOrEqualTo(256L, doc.Store.PendingBytes);
@@ -384,8 +384,8 @@ public class HardeningTests
     public void ApplyUpdate_PendingDeleteThenItsStruct_Deletes()
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(Hex("00 01 01 01 00 01"));
-        doc.ApplyUpdateV1(ValidA);
+        doc.ApplyUpdate(Hex("00 01 01 01 00 01"));
+        doc.ApplyUpdate(ValidA);
 
         Assert.AreEqual(string.Empty, doc.GetText("").ToString());
         Assert.AreEqual(0, doc.Store.PendingDs.Count);
@@ -396,7 +396,7 @@ public class HardeningTests
     {
         var source = new YDoc(new YDocOptions { ClientId = 7 });
         var updates = new List<byte[]>();
-        source.Update += (_, e) => updates.Add(e.data);
+        source.Updated += (_, e) => updates.Add(e.Update.ToArray());
         var text = source.GetText("t");
         for (var i = 0; i < 500; i++)
         {
@@ -406,7 +406,7 @@ public class HardeningTests
         var doc = new YDoc();
         for (var i = updates.Count - 1; i >= 0; i--)
         {
-            doc.ApplyUpdateV1(updates[i]);
+            doc.ApplyUpdate(updates[i]);
         }
 
         Assert.AreEqual(text.ToString(), doc.GetText("t").ToString());
@@ -420,7 +420,7 @@ public class HardeningTests
     {
         var doc = new YDoc();
         var update = ValidA[..^1].Concat(Hex("01 01")).ToArray();
-        AssertRejected(doc, () => doc.ApplyUpdateV1(update), "");
+        AssertRejected(doc, () => doc.ApplyUpdate(update), "");
     }
 
     [TestMethod]
@@ -428,14 +428,14 @@ public class HardeningTests
     {
         // Client 1: 'a' at clock 0, then 'b' at clock 1 whose left origin is (1, 5).
         var doc = new YDoc();
-        AssertRejected(doc, () => doc.ApplyUpdateV1(Hex("01 02 01 00 04 01 00 01 61 84 01 05 01 62 00")), "");
+        AssertRejected(doc, () => doc.ApplyUpdate(Hex("01 02 01 00 04 01 00 01 61 84 01 05 01 62 00")), "");
     }
 
     [TestMethod]
     public void ApplyUpdate_ClientListedTwice_IsRejected()
     {
         var doc = new YDoc();
-        AssertRejected(doc, () => doc.ApplyUpdateV1(Hex("02 01 01 00 04 01 00 01 61 01 01 00 04 01 00 01 62 00")), "");
+        AssertRejected(doc, () => doc.ApplyUpdate(Hex("02 01 01 00 04 01 00 01 61 01 01 00 04 01 00 01 62 00")), "");
     }
 
     [TestMethod]
@@ -443,7 +443,7 @@ public class HardeningTests
     {
         var doc = new YDoc();
         Assert.IsFalse(doc.TryApplyUpdate(ValidA[..^2]));
-        Assert.IsFalse(doc.TryApplyUpdateV2(ValidA));
+        Assert.IsFalse(doc.TryApplyUpdate(ValidA, format: UpdateFormat.V2));
         Assert.IsTrue(doc.TryApplyUpdate(ValidA));
         Assert.AreEqual("a", doc.GetText("").ToString());
     }
@@ -452,15 +452,15 @@ public class HardeningTests
     public void UpdateOperations_Malformed_ThrowYUpdateException()
     {
         var bad = ValidA[..^2];
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdates(new[] { bad, ValidA }));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.DiffUpdate(bad, new byte[] { 0 }));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.DiffUpdate(ValidA, Hex("01 01")));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.EncodeStateVectorFromUpdate(bad));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.ParseUpdateMeta(bad));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.DecodeUpdate(bad));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.ConvertUpdateFormatV1ToV2(bad));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdatesV2(new[] { ValidA, ValidA }));
-        Assert.ThrowsExactly<YUpdateException>(() => Snapshot.DecodeSnapshot(Hex("01 01 01")));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([bad, ValidA], format: UpdateFormat.V1));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Diff(bad, new byte[] { 0 }, format: UpdateFormat.V1));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Diff(ValidA, Hex("01 01"), format: UpdateFormat.V1));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.EncodeStateVector(bad, format: UpdateFormat.V1));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.ParseMeta(bad, format: UpdateFormat.V1));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Decode(bad, format: UpdateFormat.V1));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Convert(bad, UpdateFormat.V1, UpdateFormat.V2));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([ValidA, ValidA], format: UpdateFormat.V2));
+        Assert.ThrowsExactly<YUpdateException>(() => Snapshot.Decode(Hex("01 01 01")));
         Assert.ThrowsExactly<YUpdateException>(() => RelativePosition.Decode(Hex("07")));
     }
 
@@ -477,30 +477,30 @@ public class HardeningTests
     public void ApplyUpdate_SubdocumentOptionsOfWrongType_AreRejected(string options)
     {
         var doc = new YDoc();
-        AssertRejected(doc, () => doc.ApplyUpdateV1(Subdocument(options)));
+        AssertRejected(doc, () => doc.ApplyUpdate(Subdocument(options)));
     }
 
     [TestMethod]
     public void ApplyUpdate_SubdocumentOptionsWithMeta_ReadsMeta()
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(Subdocument("76 02 02 67 63 79 04 6D 65 74 61 76 01 01 61 7D 01"));
+        doc.ApplyUpdate(Subdocument("76 02 02 67 63 79 04 6D 65 74 61 76 01 01 61 7D 01"));
         var subdoc = (YDoc)doc.GetMap("m").Get("k");
 
-        Assert.IsFalse(subdoc.Gc);
-        Assert.AreEqual(1, ((IDictionary<string, object>)subdoc.Meta)["a"]);
+        Assert.IsFalse(subdoc.GarbageCollection);
+        Assert.AreEqual(1, subdoc.Meta["a"]);
     }
 
     [TestMethod]
     public void EncodeStateAsUpdate_DeletedSubdocumentWithoutGc_Encodes()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var map = doc.GetMap("m");
         var subdoc = new YDoc();
         map.Set("k", subdoc);
         map.Delete("k");
 
-        var copy = new YDoc(new YDocOptions { Gc = false });
+        var copy = new YDoc(new YDocOptions { GarbageCollection = false });
         copy.ApplyUpdate(doc.EncodeStateAsUpdate());
 
         Assert.IsFalse(copy.GetMap("m").ContainsKey("k"));
@@ -589,8 +589,8 @@ public class HardeningTests
         var update = writer.ToArray();
 
         var stopwatch = Stopwatch.StartNew();
-        Assert.ThrowsExactly<YUpdateException>(() => new YDoc().ApplyUpdateV2(update));
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdatesV2(new[] { update, update }));
+        Assert.ThrowsExactly<YUpdateException>(() => new YDoc().ApplyUpdate(update, format: UpdateFormat.V2));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([update, update], format: UpdateFormat.V2));
         Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds);
     }
 
@@ -629,8 +629,8 @@ public class HardeningTests
         var doc = new YDoc();
 
         var stopwatch = Stopwatch.StartNew();
-        AssertRejected(doc, () => doc.ApplyUpdateV2(update), "");
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdatesV2(new[] { update, update }));
+        AssertRejected(doc, () => doc.ApplyUpdate(update, format: UpdateFormat.V2), "");
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([update, update], format: UpdateFormat.V2));
         Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds);
     }
 }

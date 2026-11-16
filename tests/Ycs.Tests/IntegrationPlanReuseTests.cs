@@ -14,9 +14,9 @@ public class IntegrationPlanReuseTests
     public void ApplyUpdate_AfterARejectedPlan_IntegratesTheNextUpdate()
     {
         var doc = new YDoc();
-        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(NestedArrays(UpdateLimits.Default.MaxDepth + 1)));
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(NestedArrays(UpdateLimits.Default.MaxDepth + 1)));
 
-        doc.ApplyUpdateV1(NestedArrays(3));
+        doc.ApplyUpdate(NestedArrays(3));
 
         Assert.AreEqual(1, doc.GetArray("a").Length);
         Assert.AreEqual(3L, doc.Store.GetState(5));
@@ -29,15 +29,15 @@ public class IntegrationPlanReuseTests
         var source = new YDoc(new YDocOptions { ClientId = 1 });
         var text = source.GetText("text");
         text.Insert(0, "ab");
-        var first = source.EncodeStateAsUpdateV1();
+        var first = source.EncodeStateAsUpdate();
         var vector = source.EncodeStateVector();
         text.Insert(2, "cd");
-        var second = source.EncodeStateAsUpdateV1(vector);
+        var second = source.EncodeStateAsUpdate(vector);
         var doc = new YDoc();
 
-        doc.ApplyUpdateV1(second);
+        doc.ApplyUpdate(second);
         var pendingAfterSecond = doc.HasPending;
-        doc.ApplyUpdateV1(first);
+        doc.ApplyUpdate(first);
 
         Assert.IsTrue(pendingAfterSecond);
         Assert.IsFalse(doc.HasPending);
@@ -51,18 +51,18 @@ public class IntegrationPlanReuseTests
         var source = new YDoc(new YDocOptions { ClientId = 1 });
         var text = source.GetText("text");
         text.Insert(0, "ab");
-        var first = source.EncodeStateAsUpdateV1();
+        var first = source.EncodeStateAsUpdate();
         var vector = source.EncodeStateVector();
         text.Insert(2, "cd");
-        var second = source.EncodeStateAsUpdateV1(vector);
+        var second = source.EncodeStateAsUpdate(vector);
         var doc = new YDoc();
-        doc.ApplyUpdateV1(second);
+        doc.ApplyUpdate(second);
         var events = 0;
         var transactions = 0;
-        doc.GetText("text").Observe((_, _) => events++);
+        doc.GetText("text").Observe(_ => events++);
         doc.AfterTransaction += (_, _) => transactions++;
 
-        doc.ApplyUpdateV1(first);
+        doc.ApplyUpdate(first);
 
         Assert.AreEqual((1, 1, "abcd"), (transactions, events, doc.GetText("text").ToString()));
     }
@@ -73,14 +73,14 @@ public class IntegrationPlanReuseTests
         // As Yjs' applyUpdate, which always transacts: three no-op updates raise three afterTransaction events.
         var source = new YDoc(new YDocOptions { ClientId = 1 });
         source.GetText("text").Insert(0, "x");
-        var update = source.EncodeStateAsUpdateV1();
+        var update = source.EncodeStateAsUpdate();
         var doc = new YDoc();
-        doc.ApplyUpdateV1(update);
+        doc.ApplyUpdate(update);
         var transactions = 0;
         doc.AfterTransaction += (_, _) => transactions++;
 
-        doc.ApplyUpdateV1(update);
-        doc.ApplyUpdateV1([0, 0]);
+        doc.ApplyUpdate(update);
+        doc.ApplyUpdate([0, 0]);
 
         Assert.AreEqual(2, transactions);
     }
@@ -90,21 +90,21 @@ public class IntegrationPlanReuseTests
     {
         // As Yjs, which merges the waiting ranges [1, 1] and [0, 1] into [0, 2] when the second arrives: the pair is
         // deleted as one item, not split (a split would replace both halves with U+FFFD).
-        var source = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var source = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var text = source.GetText("t");
         var updates = new System.Collections.Generic.List<byte[]>();
-        source.Update += (_, e) => updates.Add(e.data);
+        source.Updated += (_, e) => updates.Add(e.Update.ToArray());
         text.Insert(0, "\ud83d\udc4d");
-        text.ApplyDelta([new Delta { Delete = 1 }]);
-        text.ApplyDelta([new Delta { Delete = 1 }]);
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        text.ApplyDelta([new Delta.Delete(1)]);
+        text.ApplyDelta([new Delta.Delete(1)]);
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
 
-        doc.ApplyUpdateV1(updates[2]);
-        doc.ApplyUpdateV1(updates[1]);
-        doc.ApplyUpdateV1(updates[0]);
+        doc.ApplyUpdate(updates[2]);
+        doc.ApplyUpdate(updates[1]);
+        doc.ApplyUpdate(updates[0]);
 
         // Yjs 13.6.32's receiver (the sender, which split the pair itself, writes "AQEBAAQBAXQG77+977+9AQEBAAI=").
-        Assert.AreEqual("AQEBAAQBAXQE8J+RjQEBAQAC", Convert.ToBase64String(doc.EncodeStateAsUpdateV1()));
+        Assert.AreEqual("AQEBAAQBAXQE8J+RjQEBAQAC", Convert.ToBase64String(doc.EncodeStateAsUpdate()));
     }
 
     [TestMethod]
@@ -112,15 +112,15 @@ public class IntegrationPlanReuseTests
     {
         // The property engine's huge-clock-gc-encoding: a GC struct up to clock 2^31 - 65, items, a Skip, pending
         // structs and waiting deletions. Expected: Yjs 13.6.32's encodeStateAsUpdate after the same three updates.
-        var doc = new YDoc(new YDocOptions { Gc = false, ClientId = 2 });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false, ClientId = 2 });
 
-        doc.ApplyUpdateV1(Convert.FromBase64String("AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI="));
-        doc.ApplyUpdateV1(Convert.FromBase64String("AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC"));
-        doc.ApplyUpdateV1(Convert.FromBase64String("AQSsAgAIAQFhA30BdwFzfoisAgEDdQJ9AXcBeH0BdQJ9AXcBeAQBAXQD5LitBwEBeAYA"));
+        doc.ApplyUpdate(Convert.FromBase64String("AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI="));
+        doc.ApplyUpdate(Convert.FromBase64String("AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC"));
+        doc.ApplyUpdate(Convert.FromBase64String("AQSsAgAIAQFhA30BdwFzfoisAgEDdQJ9AXcBeH0BdQJ9AXcBeAQBAXQD5LitBwEBeAYA"));
 
         Assert.AreEqual(
             "AwL4+v//BwAAv////wfHrAIFrAIFAgasAgAIAQFhAn0BdwFziKwCAQF+iKwCAQJ1An0BdwF4fQGIrAIEAXUCfQF3AXgEAQF0A+S4rQcBAXgGBAsAhawCBhF7ImltYWdlIjoiaS5wbmcifUSsAgYBYsQLAawCBgFjAQEBYQED+Pr//wcBAL////8HrAIBAggLAgACAwM=",
-            Convert.ToBase64String(doc.EncodeStateAsUpdateV1()));
+            Convert.ToBase64String(doc.EncodeStateAsUpdate()));
     }
 
     [TestMethod]
@@ -128,13 +128,13 @@ public class IntegrationPlanReuseTests
     {
         // Clocks up to 2^31 - 1 are valid (docs/api.md); the v2 clock columns write diff * 2 + flag, as lib0, without a
         // 30-bit limit (a Debug.Assert of one failed here in Debug builds).
-        var doc = new YDoc(new YDocOptions { Gc = false });
-        doc.ApplyUpdateV1(Convert.FromBase64String("AgOsAgACAAy/////BwIBMQMiaiIKAUOsAgADAQIDAwwAAL////8HBwEBYQAKAwA="));
-        var copy = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
+        doc.ApplyUpdate(Convert.FromBase64String("AgOsAgACAAy/////BwIBMQMiaiIKAUOsAgADAQIDAwwAAL////8HBwEBYQAKAwA="));
+        var copy = new YDoc(new YDocOptions { GarbageCollection = false });
 
-        copy.ApplyUpdateV2(doc.EncodeStateAsUpdateV2());
+        copy.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
 
-        Assert.AreEqual(Convert.ToBase64String(doc.EncodeStateAsUpdateV1()), Convert.ToBase64String(copy.EncodeStateAsUpdateV1()));
+        Assert.AreEqual(Convert.ToBase64String(doc.EncodeStateAsUpdate()), Convert.ToBase64String(copy.EncodeStateAsUpdate()));
     }
 
     /// <summary>A v1 update of client 5: <paramref name="depth"/> arrays, each nested in the one before, the first in root 'a'.</summary>

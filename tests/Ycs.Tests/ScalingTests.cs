@@ -53,14 +53,14 @@ public class ScalingTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("t");
         text.Insert(0, new string('a', 20_000));
-        _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = int.MaxValue });
+        _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.MaxValue });
         var random = new Random(1);
 
         var stopwatch = Stopwatch.StartNew();
         for (var i = 0; i < 20_000; i++)
         {
             text.Insert(random.Next(text.Length + 1), "bb");
-            text.Delete(random.Next(text.Length), 1);
+            text.Remove(random.Next(text.Length), 1);
         }
 
         Assert.IsLessThan(3_000, stopwatch.ElapsedMilliseconds);
@@ -74,7 +74,7 @@ public class ScalingTests
         var maps = Enumerable.Range(0, 16_000).Select(_ => new YMap()).ToList();
         array.Insert(0, maps.Cast<object>().ToList());
         var events = 0;
-        array.DeepEventHandler += (_, e) => events += e.Events.Count;
+        array.ObserveDeep((deepEvents, _) => events += deepEvents.Count);
 
         var stopwatch = Stopwatch.StartNew();
         doc.Transact(_ => maps.ForEach(map => map.Set("k", 1)));

@@ -20,7 +20,7 @@ public enum SyncMessageType : uint
 /// <summary>
 /// The y-protocols 'sync' message format, which y-websocket and every other Yjs provider puts on the wire: a
 /// <see cref="SyncMessageType"/> as a variable-length integer, then the payload as a length-prefixed byte array.
-/// The messages carry updates in the original ('v1') encoding; <c>v2: true</c> uses the denser v2 encoding, which
+/// The messages carry updates in the original ('v1') encoding; <see cref="UpdateFormat.V2"/> uses the denser v2 encoding, which
 /// both ends must then agree on. The writers append to a buffer writer and keep nothing; a reader takes one whole
 /// message, and bytes after it are ignored. A message that is malformed throws <see cref="YUpdateException"/>.
 /// </summary>
@@ -39,19 +39,12 @@ public static class SyncProtocol
     }
 
     /// <summary>Appends sync step 2: what a peer with <paramref name="encodedStateVector"/> lacks of the document.</summary>
-    public static void WriteSyncStep2(IBufferWriter<byte> destination, YDoc doc, ReadOnlySpan<byte> encodedStateVector, bool v2 = false)
+    public static void WriteSyncStep2(IBufferWriter<byte> destination, YDoc doc, ReadOnlySpan<byte> encodedStateVector, UpdateFormat format = UpdateFormat.V1)
     {
         ArgumentNullException.ThrowIfNull(destination);
         ArgumentNullException.ThrowIfNull(doc);
         using var payload = new Payload();
-        if (v2)
-        {
-            doc.EncodeStateAsUpdateV2(payload, encodedStateVector);
-        }
-        else
-        {
-            doc.EncodeStateAsUpdateV1(payload, encodedStateVector);
-        }
+        doc.EncodeStateAsUpdate(payload, encodedStateVector, format);
 
         WriteMessage(destination, SyncMessageType.SyncStep2, payload.Written);
     }
@@ -70,10 +63,10 @@ public static class SyncProtocol
     /// </summary>
     /// <exception cref="YUpdateException">
     /// The message is truncated or of an unknown type, or its update is malformed or beyond a limit of the
-    /// document (<see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/>; the document is then as
+    /// document (<see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, object, UpdateFormat, UpdateLimits)"/>; the document is then as
     /// it was). An exception of an observer propagates as it is.
     /// </exception>
-    public static SyncMessageType ReadSyncMessage(ReadOnlySpan<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
+    public static SyncMessageType ReadSyncMessage(ReadOnlySpan<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin, UpdateFormat format = UpdateFormat.V1)
     {
         ArgumentNullException.ThrowIfNull(reply);
         ArgumentNullException.ThrowIfNull(doc);
@@ -89,19 +82,11 @@ public static class SyncProtocol
         switch (type)
         {
             case (uint)SyncMessageType.SyncStep1:
-                WriteSyncStep2(reply, doc, payload, v2);
+                WriteSyncStep2(reply, doc, payload, format);
                 break;
             case (uint)SyncMessageType.SyncStep2:
             case (uint)SyncMessageType.Update:
-                if (v2)
-                {
-                    doc.ApplyUpdateV2(payload, origin);
-                }
-                else
-                {
-                    doc.ApplyUpdateV1(payload, origin);
-                }
-
+                doc.ApplyUpdate(payload, origin, format);
                 break;
             default:
                 throw new YUpdateException($"Unknown sync message type: {type}.");
@@ -110,12 +95,12 @@ public static class SyncProtocol
         return (SyncMessageType)type;
     }
 
-    /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, bool)"/>
-    public static SyncMessageType ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
+    /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, UpdateFormat)"/>
+    public static SyncMessageType ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin, UpdateFormat format = UpdateFormat.V1)
     {
         if (message.IsSingleSegment)
         {
-            return ReadSyncMessage(message.FirstSpan, reply, doc, origin, v2);
+            return ReadSyncMessage(message.FirstSpan, reply, doc, origin, format);
         }
 
         // A message of several segments is copied once, to one array, as the length comes from the peer: the
@@ -125,7 +110,7 @@ public static class SyncProtocol
         try
         {
             message.CopyTo(rented);
-            return ReadSyncMessage(rented.AsSpan(0, length), reply, doc, origin, v2);
+            return ReadSyncMessage(rented.AsSpan(0, length), reply, doc, origin, format);
         }
         finally
         {

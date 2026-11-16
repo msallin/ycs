@@ -26,14 +26,14 @@ public class UpdateLimitsTests
     }
 
     private static byte[] GcRunV1(uint count, int client = 1, uint clock = 0) =>
-        UpdateOperations.ConvertUpdateFormatV2ToV1(HardeningTests.RunOfGcStructsV2(count, client, clock), UpdateLimits.Unlimited);
+        YUpdate.Convert(HardeningTests.RunOfGcStructsV2(count, client, clock), UpdateFormat.V2, UpdateFormat.V1, limits: UpdateLimits.Unlimited);
 
     [TestMethod]
     public void ApplyUpdateV2_DefaultLimit_Accepts131072Structs()
     {
         var doc = new YDoc();
 
-        doc.ApplyUpdateV2(HardeningTests.RunOfGcStructsV2(131_072));
+        doc.ApplyUpdate(HardeningTests.RunOfGcStructsV2(131_072), format: UpdateFormat.V2);
 
         Assert.AreEqual(131_072, doc.Store.GetState(1));
     }
@@ -43,7 +43,7 @@ public class UpdateLimitsTests
     {
         var doc = new YDoc();
 
-        AssertRejected(doc, () => doc.ApplyUpdateV2(HardeningTests.RunOfGcStructsV2(131_073)));
+        AssertRejected(doc, () => doc.ApplyUpdate(HardeningTests.RunOfGcStructsV2(131_073), format: UpdateFormat.V2));
     }
 
     [TestMethod]
@@ -51,7 +51,7 @@ public class UpdateLimitsTests
     {
         var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxStructsPerUpdate = 10_000 } });
 
-        AssertRejected(doc, () => doc.ApplyUpdateV1(GcRunV1(10_001)));
+        AssertRejected(doc, () => doc.ApplyUpdate(GcRunV1(10_001)));
     }
 
     [TestMethod]
@@ -59,7 +59,7 @@ public class UpdateLimitsTests
     {
         var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxStructsPerUpdate = 10_000 } });
 
-        doc.ApplyUpdateV1(GcRunV1(10_000));
+        doc.ApplyUpdate(GcRunV1(10_000));
 
         Assert.AreEqual(10_000, doc.Store.GetState(1));
     }
@@ -72,7 +72,7 @@ public class UpdateLimitsTests
         Assert.IsGreaterThan(15, update.Length);
         var doc = new YDoc(new YDocOptions { Limits = TenStructs });
 
-        AssertRejected(doc, () => doc.ApplyUpdateV2(update));
+        AssertRejected(doc, () => doc.ApplyUpdate(update, format: UpdateFormat.V2));
     }
 
     [TestMethod]
@@ -80,7 +80,7 @@ public class UpdateLimitsTests
     {
         var doc = new YDoc(new YDocOptions { Limits = TenStructs });
 
-        doc.ApplyUpdateV1(GcRunV1(20), transactionOrigin: null, UpdateLimits.Unlimited);
+        doc.ApplyUpdate(GcRunV1(20), null, limits: UpdateLimits.Unlimited);
 
         Assert.AreEqual(20, doc.Store.GetState(1));
     }
@@ -90,7 +90,7 @@ public class UpdateLimitsTests
     {
         var doc = new YDoc();
 
-        Assert.IsFalse(doc.TryApplyUpdate(GcRunV1(20), transactionOrigin: null, TenStructs));
+        Assert.IsFalse(doc.TryApplyUpdate(GcRunV1(20), origin: null, limits: TenStructs));
     }
 
     [TestMethod]
@@ -101,21 +101,21 @@ public class UpdateLimitsTests
         var sv = new byte[] { 0 };
         var calls = new List<(string Name, Action Call)>
         {
-            ("MergeUpdates", () => UpdateOperations.MergeUpdates(new[] { v1, v1 }, TenStructs)),
-            ("MergeUpdatesV2", () => UpdateOperations.MergeUpdatesV2(new[] { v2, v2 }, TenStructs)),
-            ("DiffUpdate", () => UpdateOperations.DiffUpdate(v1, sv, TenStructs)),
-            ("DiffUpdateV2", () => UpdateOperations.DiffUpdateV2(v2, sv, TenStructs)),
-            ("EncodeStateVectorFromUpdate", () => UpdateOperations.EncodeStateVectorFromUpdate(v1, TenStructs)),
-            ("EncodeStateVectorFromUpdateV2", () => UpdateOperations.EncodeStateVectorFromUpdateV2(v2, TenStructs)),
-            ("ParseUpdateMeta", () => UpdateOperations.ParseUpdateMeta(v1, TenStructs)),
-            ("ParseUpdateMetaV2", () => UpdateOperations.ParseUpdateMetaV2(v2, TenStructs)),
-            ("ConvertUpdateFormatV1ToV2", () => UpdateOperations.ConvertUpdateFormatV1ToV2(v1, TenStructs)),
-            ("ConvertUpdateFormatV2ToV1", () => UpdateOperations.ConvertUpdateFormatV2ToV1(v2, TenStructs)),
-            ("DecodeUpdate", () => UpdateOperations.DecodeUpdate(v1, TenStructs)),
-            ("DecodeUpdateV2", () => UpdateOperations.DecodeUpdateV2(v2, TenStructs)),
-            ("DescribeUpdateV2", () => UpdateOperations.DescribeUpdateV2(v2, TenStructs)),
-            ("SnapshotContainsUpdate", () => new YDoc().CreateSnapshot().SnapshotContainsUpdate(v1, TenStructs)),
-            ("SnapshotContainsUpdateV2", () => new YDoc().CreateSnapshot().SnapshotContainsUpdateV2(v2, TenStructs)),
+            ("MergeUpdates", () => YUpdate.Merge([v1, v1], format: UpdateFormat.V1, limits: TenStructs)),
+            ("MergeUpdatesV2", () => YUpdate.Merge([v2, v2], format: UpdateFormat.V2, limits: TenStructs)),
+            ("DiffUpdate", () => YUpdate.Diff(v1, sv, format: UpdateFormat.V1, limits: TenStructs)),
+            ("DiffUpdateV2", () => YUpdate.Diff(v2, sv, format: UpdateFormat.V2, limits: TenStructs)),
+            ("EncodeStateVectorFromUpdate", () => YUpdate.EncodeStateVector(v1, format: UpdateFormat.V1, limits: TenStructs)),
+            ("EncodeStateVectorFromUpdateV2", () => YUpdate.EncodeStateVector(v2, format: UpdateFormat.V2, limits: TenStructs)),
+            ("ParseUpdateMeta", () => YUpdate.ParseMeta(v1, format: UpdateFormat.V1, limits: TenStructs)),
+            ("ParseUpdateMetaV2", () => YUpdate.ParseMeta(v2, format: UpdateFormat.V2, limits: TenStructs)),
+            ("ConvertUpdateFormatV1ToV2", () => YUpdate.Convert(v1, UpdateFormat.V1, UpdateFormat.V2, limits: TenStructs)),
+            ("ConvertUpdateFormatV2ToV1", () => YUpdate.Convert(v2, UpdateFormat.V2, UpdateFormat.V1, limits: TenStructs)),
+            ("DecodeUpdate", () => YUpdate.Decode(v1, format: UpdateFormat.V1, limits: TenStructs)),
+            ("DecodeUpdateV2", () => YUpdate.Decode(v2, format: UpdateFormat.V2, limits: TenStructs)),
+            ("DescribeUpdateV2", () => YUpdate.Describe(v2, format: UpdateFormat.V2, limits: TenStructs)),
+            ("SnapshotContainsUpdate", () => new YDoc().CreateSnapshot().ContainsUpdate(v1, limits: TenStructs)),
+            ("SnapshotContainsUpdateV2", () => new YDoc().CreateSnapshot().ContainsUpdate(v2, UpdateFormat.V2, limits: TenStructs)),
         };
 
         var accepted = calls.Where(c => !Throws(c.Call)).Select(c => c.Name).ToList();
@@ -128,7 +128,7 @@ public class UpdateLimitsTests
     {
         var bomb = HardeningTests.RunOfGcStructsV2(2_097_152);
 
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.ConvertUpdateFormatV2ToV1(bomb));
+        Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Convert(bomb, UpdateFormat.V2, UpdateFormat.V1));
     }
 
     private static bool Throws(Action call)
@@ -161,7 +161,7 @@ public class UpdateLimitsTests
         Assert.IsFalse(new YDoc().TryApplyUpdate(state), "the default limit rejects it");
         var doc = new YDoc();
 
-        doc.ApplyUpdate(state, transactionOrigin: null, UpdateLimits.Unlimited);
+        doc.ApplyUpdate(state, origin: null, limits: UpdateLimits.Unlimited);
 
         Assert.AreEqual(1_000_000, doc.GetText("t").Length);
     }
@@ -171,9 +171,9 @@ public class UpdateLimitsTests
     {
         // Each update is 600 GC structs waiting for clock 0 of its client: a few bytes, many structs.
         var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxPendingStructs = 1_000 } });
-        doc.ApplyUpdateV2(HardeningTests.RunOfGcStructsV2(600, clientId: 1000, clock: 1));
+        doc.ApplyUpdate(HardeningTests.RunOfGcStructsV2(600, clientId: 1000, clock: 1), format: UpdateFormat.V2);
 
-        AssertRejected(doc, () => doc.ApplyUpdateV2(HardeningTests.RunOfGcStructsV2(600, clientId: 1001, clock: 1)));
+        AssertRejected(doc, () => doc.ApplyUpdate(HardeningTests.RunOfGcStructsV2(600, clientId: 1001, clock: 1), format: UpdateFormat.V2));
     }
 
     [TestMethod]
@@ -183,7 +183,7 @@ public class UpdateLimitsTests
         var accepted = 0;
         for (var client = 1000; client < 1006; client++)
         {
-            accepted += doc.TryApplyUpdateV2(HardeningTests.RunOfGcStructsV2(100_000, client, clock: 1)) ? 1 : 0;
+            accepted += doc.TryApplyUpdate(HardeningTests.RunOfGcStructsV2(100_000, client, clock: 1), format: UpdateFormat.V2) ? 1 : 0;
         }
 
         Assert.AreEqual(1, accepted);
@@ -194,9 +194,9 @@ public class UpdateLimitsTests
     {
         var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxPendingStructs = 1_000 } });
         var update = HardeningTests.RunOfGcStructsV2(600, clientId: 1000, clock: 1);
-        doc.ApplyUpdateV2(update);
+        doc.ApplyUpdate(update, format: UpdateFormat.V2);
 
-        doc.ApplyUpdateV2(update);
+        doc.ApplyUpdate(update, format: UpdateFormat.V2);
 
         Assert.AreEqual(600, doc.Store.PendingStructCount);
     }
@@ -205,9 +205,9 @@ public class UpdateLimitsTests
     public void ApplyUpdateV2_PendingThatIntegrates_IsReadUnderItsCount()
     {
         var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxPendingStructs = 1_000 } });
-        doc.ApplyUpdateV2(HardeningTests.RunOfGcStructsV2(600, clientId: 1000, clock: 1));
+        doc.ApplyUpdate(HardeningTests.RunOfGcStructsV2(600, clientId: 1000, clock: 1), format: UpdateFormat.V2);
 
-        doc.ApplyUpdateV2(HardeningTests.RunOfGcStructsV2(2, clientId: 1000, clock: 0));
+        doc.ApplyUpdate(HardeningTests.RunOfGcStructsV2(2, clientId: 1000, clock: 0), format: UpdateFormat.V2);
 
         Assert.AreEqual(601, doc.Store.GetState(1000));
     }
@@ -217,7 +217,7 @@ public class UpdateLimitsTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = client });
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         doc.GetText("t").Insert(0, first);
         doc.GetText("t").Insert(first.Length, second);
         return (updates[0], updates[1]);
@@ -231,7 +231,7 @@ public class UpdateLimitsTests
         var small = TwoInserts(200, "a", "b");
         var big = TwoInserts(1000, "a", new string('x', 100_000));
         doc.ApplyUpdate(small.Second);
-        var trigger = UpdateOperations.MergeUpdates(new[] { small.First, big.Second });
+        var trigger = YUpdate.Merge([small.First, big.Second], format: UpdateFormat.V1);
 
         AssertRejected(doc, () => doc.ApplyUpdate(trigger));
     }
@@ -244,7 +244,7 @@ public class UpdateLimitsTests
         var other = TwoInserts(1000, "a", "c");
         doc.ApplyUpdate(small.Second);
 
-        doc.ApplyUpdate(UpdateOperations.MergeUpdates(new[] { small.First, other.Second }));
+        doc.ApplyUpdate(YUpdate.Merge([small.First, other.Second], format: UpdateFormat.V1));
 
         Assert.AreEqual("ab", doc.GetText("t").ToString());
         Assert.IsTrue(doc.HasPending);

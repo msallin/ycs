@@ -53,45 +53,7 @@ internal static class CanonicalJson
             case bool b: sb.Append(b ? "true" : "false"); break;
             case YType t: Str(sb, $"<{t.GetType().Name}>"); break;
             case byte[] bytes: Write(sb, new Dictionary<string, object> { ["$bytes"] = Convert.ToHexString(bytes).ToLowerInvariant() }); break;
-            case Delta d:
-                {
-                    var o = new Dictionary<string, object>();
-                    if (d.Insert != null)
-                    {
-                        o["insert"] = d.Insert;
-                    }
-
-                    if (d.Delete != null)
-                    {
-                        o["delete"] = d.Delete.Value;
-                    }
-
-                    if (d.Retain != null)
-                    {
-                        o["retain"] = d.Retain.Value;
-                    }
-
-                    if (d.Attributes != null)
-                    {
-                        o["attributes"] = d.Attributes;
-                    }
-
-                    Write(sb, o);
-                    break;
-                }
-
-            case YText.YTextChangeAttributes yc:
-                {
-                    var o = new Dictionary<string, object> { ["type"] = yc.Type.ToString().ToLowerInvariant() };
-                    if (yc.User is { } user)
-                    {
-                        o["user"] = user;
-                    }
-
-                    Write(sb, o);
-                    break;
-                }
-
+            case Delta d: Write(sb, d.ToPlain()); break;
             case IDictionary<string, object> m:
                 {
                     sb.Append('{');

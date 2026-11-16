@@ -12,11 +12,13 @@ namespace Ycs;
 
 public partial class YDoc
 {
-    public string Guid => _opts.Guid;
-    public bool Gc => _opts.Gc;
-    public Predicate<ItemView> GcFilter => _opts.GcFilter;
+    /// <summary>The one the options named, or a random one made when it is first read (a document that never reads it costs none).</summary>
+    public string Guid => _guid ??= _opts.Guid ?? System.Guid.NewGuid().ToString("D");
+    public bool GarbageCollection => _opts.GarbageCollection;
     public bool AutoLoad => _opts.AutoLoad;
-    public object Meta => _opts.Meta;
+    public YValue Meta => _opts.Meta;
+
+    internal Func<ItemView, bool> GcFilter => _opts.GarbageCollectionFilter ?? YDocOptions.DefaultGcFilter;
 
     /// <summary>What an applied update may cost (<see cref="YDocOptions.Limits"/>).</summary>
     public UpdateLimits Limits => _opts.Limits;
@@ -25,11 +27,9 @@ public partial class YDoc
     /// <summary>Whether the document should be synced by the provider now (Yjs' <c>shouldLoad</c>); <see cref="Load"/> sets it.</summary>
     public bool ShouldLoad { get; private set; }
 
-    /// <param name="gc">Disable garbage collection.</param>
-    /// <param name="gcFilter">WIll be called before an Item is garbage collected. Return false to keep the item.</param>
-    public YDoc(YDocOptions opts = null)
+    public YDoc(YDocOptions options = null)
     {
-        _opts = opts ?? new YDocOptions();
+        _opts = options ?? new YDocOptions();
         _transactionCleanups = new List<Transaction>();
 
         ClientId = _opts.ClientId ?? GenerateNewClientId();
@@ -50,7 +50,7 @@ public partial class YDoc
         if (!ShouldLoad)
         {
             var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : (_item.Parent as AbstractType).Doc;
-            parentDoc?.Transact(this, static (doc, tr) => tr.SubdocsLoaded.Add(doc));
+            parentDoc?.Transact(this, static (doc, tr) => tr.LoadedSubdocs.Add(doc));
         }
         ShouldLoad = true;
     }
@@ -75,7 +75,7 @@ public partial class YDoc
         {
             _itemCollected = false;
             _item = default;
-            _collectedParentDoc.Transact(this, static (doc, tr) => tr.SubdocsRemoved.Add(doc));
+            _collectedParentDoc.Transact(this, static (doc, tr) => tr.RemovedSubdocs.Add(doc));
         }
         else if (!item.IsNull)
         {
@@ -92,10 +92,10 @@ public partial class YDoc
             {
                 if (!s.item.Deleted)
                 {
-                    tr.SubdocsAdded.Add(s.content.Doc);
+                    tr.AddedSubdocs.Add(s.content.Doc);
                 }
 
-                tr.SubdocsRemoved.Add(s.doc);
+                tr.RemovedSubdocs.Add(s.doc);
             });
         }
 
@@ -107,7 +107,7 @@ public partial class YDoc
     public event EventHandler<Transaction> AfterTransaction;
     public event EventHandler<Transaction> AfterTransactionCleanup;
     public event EventHandler BeforeAllTransactions;
-    public event EventHandler<IList<Transaction>> AfterAllTransactions;
+    public event EventHandler<IReadOnlyList<Transaction>> AfterAllTransactions;
     /// <summary>
     /// Fires after each transaction that changed the document, with the change as an update in the
     /// original ('v1') format: Yjs' <c>doc.on('update')</c>, what every y-protocols provider sends.
@@ -115,12 +115,12 @@ public partial class YDoc
     /// resync (send the state, or a diff by state vector). Unlike Yjs, the document still finishes the cleanup and
     /// stays usable; the exception escapes from the outermost <c>Transact</c> or <c>ApplyUpdate</c> afterwards.
     /// </summary>
-    public event EventHandler<(byte[] data, object origin, Transaction transaction)> Update;
+    public event EventHandler<UpdateEventArgs> Updated;
 
     /// <summary>
-    /// Like <see cref="Update"/>, with the update in the v2 format: Yjs' <c>doc.on('updateV2')</c>.
+    /// Like <see cref="Updated"/>, with the update in the v2 format: Yjs' <c>doc.on('updateV2')</c>.
     /// </summary>
-    public event EventHandler<(byte[] data, object origin, Transaction transaction)> UpdateV2;
+    public event EventHandler<UpdateEventArgs> UpdatedV2;
     public event EventHandler Destroyed;
 
     /// <summary>
@@ -130,7 +130,7 @@ public partial class YDoc
     /// waiting structs may integrate them under other limits. No user content is passed.
     /// </summary>
     public event EventHandler<PendingDrop> PendingDropped;
-    public event EventHandler<(ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed)> SubdocsChanged;
+    public event EventHandler<SubdocsEventArgs> SubdocsChanged;
 
     public long ClientId { get; internal set; }
 
@@ -138,35 +138,48 @@ public partial class YDoc
     /// Whether received structs or deletions wait for an update this document has not received (Yjs'
     /// <c>doc.store.pendingStructs</c> and <c>pendingDs</c>). What waits is not in the document yet; it is
     /// integrated when the missing update arrives, and updates that do not depend on it are integrated
-    /// meanwhile. <see cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/> includes it, as Yjs does.
+    /// meanwhile. <see cref="EncodeStateAsUpdate(ReadOnlySpan{byte}, UpdateFormat)"/> includes it, as Yjs does.
     /// </summary>
     public bool HasPending => Store.HasPending;
 
+#nullable enable
     /// <summary>
     /// Changes that happen inside of a transaction are bundled.
     /// This means that the observer fires _after_ the transaction is finished and that
     /// all changes that happened inside of the transaction are sent as one message to the
-    /// other peers.
+    /// other peers. Transactions are synchronous: <paramref name="action"/> must not <c>await</c>
+    /// (an <c>async</c> lambda does not compile).
     /// </summary>
-    /// <param name="fun">The function that should be executed as a transaction.</param>
+    /// <param name="action">The function that should be executed as a transaction.</param>
     /// <param name="origin">Transaction owner. Will be stored in 'transaction.origin'.</param>
-    /// <param name="local"></param>
-    public void Transact(Action<Transaction> fun, object origin = null, bool local = true)
+    /// <param name="local">Whether the change originates from this document.</param>
+    public void Transact(Action<Transaction> action, object? origin = null, bool local = true)
     {
-        ArgumentNullException.ThrowIfNull(fun);
-        Transact(fun, static (f, tr) => f(tr), origin, local);
+        ArgumentNullException.ThrowIfNull(action);
+        Transact(action, static (f, tr) => f(tr), origin, local);
+    }
+
+    /// <summary>Like <see cref="Transact(Action{Transaction}, object, bool)"/>, and returns what <paramref name="func"/> returns.</summary>
+    public TResult Transact<TResult>(Func<Transaction, TResult> func, object? origin = null, bool local = true)
+    {
+        ArgumentNullException.ThrowIfNull(func);
+        TResult result = default!;
+        Transact(tr => { result = func(tr); }, origin, local);
+        return result;
     }
 
     /// <summary>
     /// Like <see cref="Transact(Action{Transaction}, object, bool)"/>, with the state that
     /// <paramref name="action"/> needs passed in, so that a <c>static</c> lambda captures nothing
     /// and no closure is allocated: <c>doc.Transact((text, index), static (s, tr) => ...)</c>.
+    /// The state may be a <c>ref struct</c> (a <see cref="Span{T}"/> among its fields).
     /// </summary>
     /// <param name="state">Passed to <paramref name="action"/>.</param>
     /// <param name="action">The function that should be executed as a transaction.</param>
     /// <param name="origin">Transaction owner. Will be stored in 'transaction.origin'.</param>
     /// <param name="local">Whether the change originates from this document.</param>
-    public void Transact<TState>(TState state, Action<TState, Transaction> action, object origin = null, bool local = true)
+    public void Transact<TState>(TState state, Action<TState, Transaction> action, object? origin = null, bool local = true)
+        where TState : allows ref struct
     {
         ArgumentNullException.ThrowIfNull(action);
 
@@ -213,6 +226,26 @@ public partial class YDoc
             }
         }
     }
+
+    /// <summary>Transactions are synchronous: an <c>async</c> lambda is a compile error (CS0619), not a transaction that ends at its first <c>await</c>.</summary>
+    [Obsolete("Transactions are synchronous.", error: true)]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public void Transact(Func<Transaction, Task> _, object? origin = null, bool local = true) =>
+        throw new NotSupportedException("Transactions are synchronous.");
+
+    /// <summary>The guard above for an <c>async</c> lambda that returns a value.</summary>
+    [Obsolete("Transactions are synchronous.", error: true)]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public Task<TResult> Transact<TResult>(Func<Transaction, Task<TResult>> _, object? origin = null, bool local = true) =>
+        throw new NotSupportedException("Transactions are synchronous.");
+
+    /// <summary>The <see cref="Transact{TState}(TState, Action{TState, Transaction}, object, bool)"/> form of the guard above.</summary>
+    [Obsolete("Transactions are synchronous.", error: true)]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public void Transact<TState>(TState state, Func<TState, Transaction, Task> _, object? origin = null, bool local = true)
+        where TState : allows ref struct =>
+        throw new NotSupportedException("Transactions are synchronous.");
+#nullable disable
 
     public YArray GetArray(string name = "")
     {
@@ -294,136 +327,4 @@ public partial class YDoc
             throw new InvalidOperationException($"{typeof(T).Name} is not a type a document can define by name");
         return (T)created;
     }
-
-    /// <summary>
-    /// Applies an update in the original ('v1') format, the output of Yjs' <c>Y.encodeStateAsUpdate</c>
-    /// and of every y-protocols provider (Yjs' <c>Y.applyUpdate</c>). The transaction it runs in is
-    /// not local, as in Yjs, also when it is the caller's.
-    /// <br/>
-    /// A malformed update, or one beyond a limit, throws <see cref="YUpdateException"/> and leaves the
-    /// document as it was, except when it was cut short (<see cref="YUpdateException.PartlyApplied"/>: beyond
-    /// <see cref="UpdateLimits.MaxIntegrationSteps"/>, or its own structs waited for waiting structs that were
-    /// dropped). Waiting structs of earlier updates that this one lets integrate, and that then fail a check, are
-    /// dropped and the update stands whole: <see cref="PendingDropped"/> reports it (docs/api.md,
-    /// "Pending structs, retried").
-    /// </summary>
-    /// <param name="update">The update.</param>
-    /// <param name="transactionOrigin">Stored on the transaction; observers and the undo manager see it.</param>
-    /// <param name="limits">For this update instead of <see cref="YDocOptions.Limits"/>, e.g. <see cref="UpdateLimits.Unlimited"/> for a stored state the application trusts.</param>
-    /// <exception cref="YUpdateException">The update is malformed or beyond a limit; the document is unchanged unless <see cref="YUpdateException.PartlyApplied"/>.</exception>
-    public void ApplyUpdate(byte[] update, object transactionOrigin = null, UpdateLimits limits = null) => ApplyUpdateV1(update, transactionOrigin, limits);
-
-    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
-    public void ApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) => ApplyUpdateV1(update, transactionOrigin, limits);
-
-    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
-    public void ApplyUpdateV1(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
-    {
-        ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(update, update.Length, v2: false, transactionOrigin, limits);
-    }
-
-    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
-    public void ApplyUpdateV1(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
-    {
-        ApplyPooledCopy(update, v2: false, transactionOrigin, limits);
-    }
-
-    /// <summary>
-    /// Applies an update in the v2 format (Yjs' <c>Y.applyUpdateV2</c>).
-    /// </summary>
-    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
-    public void ApplyUpdateV2(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
-    {
-        ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(update, update.Length, v2: true, transactionOrigin, limits);
-    }
-
-    /// <inheritdoc cref="ApplyUpdateV2(byte[], object, UpdateLimits)"/>
-    public void ApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
-    {
-        ApplyPooledCopy(update, v2: true, transactionOrigin, limits);
-    }
-
-    /// <summary>
-    /// Like <see cref="ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/> (v1), but returns false instead of throwing
-    /// <see cref="YUpdateException"/>; the document is then unchanged, except when the update was
-    /// cut short (see <see cref="YUpdateException.PartlyApplied"/>).
-    /// </summary>
-    public bool TryApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) =>
-        TryApply(update, v2: false, transactionOrigin, limits);
-
-    /// <summary>
-    /// Like <see cref="ApplyUpdateV2(ReadOnlySpan{byte}, object, UpdateLimits)"/>, but returns false instead of throwing
-    /// <see cref="YUpdateException"/>; the document is then unchanged, except when the update was
-    /// cut short (see <see cref="YUpdateException.PartlyApplied"/>).
-    /// </summary>
-    public bool TryApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) =>
-        TryApply(update, v2: true, transactionOrigin, limits);
-
-    /// <summary>
-    /// Encodes the document as one update in the original ('v1') format (Yjs' <c>Y.encodeStateAsUpdate</c>).
-    /// With a remote state vector, only what the remote side is missing is written.
-    /// </summary>
-    /// <param name="encodedTargetStateVector">A state vector from <see cref="EncodeStateVector()"/>; empty for the whole document.</param>
-    public byte[] EncodeStateAsUpdate(ReadOnlySpan<byte> encodedTargetStateVector = default) => EncodeStateAsUpdateV1(encodedTargetStateVector);
-
-    /// <summary>
-    /// Writes the document as one update in the original ('v1') format into <paramref name="destination"/>.
-    /// </summary>
-    /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public void EncodeStateAsUpdate(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default) =>
-        EncodeStateAsUpdateV1(destination, encodedTargetStateVector);
-
-    /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public byte[] EncodeStateAsUpdateV1(ReadOnlySpan<byte> encodedTargetStateVector = default)
-    {
-        MaterializeRunExtensions();
-        return EncodingUtils.EncodeStateAsUpdate(Store, encodedTargetStateVector, v2: false);
-    }
-
-    /// <inheritdoc cref="EncodeStateAsUpdate(IBufferWriter{byte}, ReadOnlySpan{byte})"/>
-    public void EncodeStateAsUpdateV1(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default)
-    {
-        MaterializeRunExtensions();
-        EncodingUtils.EncodeStateAsUpdate(Store, destination, encodedTargetStateVector, v2: false);
-    }
-
-    /// <summary>
-    /// Encodes the document as one update in the v2 format (Yjs' <c>Y.encodeStateAsUpdateV2</c>).
-    /// </summary>
-    /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public byte[] EncodeStateAsUpdateV2(ReadOnlySpan<byte> encodedTargetStateVector = default)
-    {
-        MaterializeRunExtensions();
-        return EncodingUtils.EncodeStateAsUpdate(Store, encodedTargetStateVector, v2: true);
-    }
-
-    /// <summary>
-    /// Writes the document as one update in the v2 format into <paramref name="destination"/>.
-    /// </summary>
-    /// <inheritdoc cref="EncodeStateAsUpdate(ReadOnlySpan{byte})"/>
-    public void EncodeStateAsUpdateV2(IBufferWriter<byte> destination, ReadOnlySpan<byte> encodedTargetStateVector = default)
-    {
-        MaterializeRunExtensions();
-        EncodingUtils.EncodeStateAsUpdate(Store, destination, encodedTargetStateVector, v2: true);
-    }
-
-    /// <summary>
-    /// Encodes the document's state vector (Yjs' <c>Y.encodeStateVector</c>). The state vector has the
-    /// same bytes in both update formats.
-    /// </summary>
-    public byte[] EncodeStateVector() => EncodingUtils.EncodeStateVector(Store);
-
-    /// <summary>
-    /// Writes the document's state vector into <paramref name="destination"/>.
-    /// </summary>
-    /// <inheritdoc cref="EncodeStateVector()"/>
-    public void EncodeStateVector(IBufferWriter<byte> destination) => EncodingUtils.EncodeStateVector(Store, destination);
-
-    /// <inheritdoc cref="EncodeStateVector()"/>
-    public byte[] EncodeStateVectorV1() => EncodeStateVector();
-
-    /// <inheritdoc cref="EncodeStateVector()"/>
-    public byte[] EncodeStateVectorV2() => EncodeStateVector();
 }

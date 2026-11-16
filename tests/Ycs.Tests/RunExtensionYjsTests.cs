@@ -28,28 +28,28 @@ public class RunExtensionYjsTests
     {
         var doc = Doc(1);
         var t = doc.GetText("t");
-        t.EventHandler += (_, _) => { };
+        t.Observe(_ => { });
         var m = doc.GetMap("m");
         doc.Transact(_ =>
         {
             t.Insert(0, "a");
             t.Insert(1, "b");
-            t.Delete(1, 1);
+            t.Remove(1, 1);
             t.Insert(1, "c");
             t.Insert(2, "d");
-            t.Delete(2, 1);
+            t.Remove(2, 1);
         });
         var peer = Doc(2);
         Sync(doc, peer);
         var pt = peer.GetText("t");
         peer.GetMap("m").Set("k", 1);
         pt.Insert(2, "e");
-        pt.Delete(0, 1);
-        m.EventHandler += (_, _) => t.Insert(2, "f");
+        pt.Remove(0, 1);
+        m.Observe(_ => t.Insert(2, "f"));
 
         Sync(peer, doc);
 
-        Assert.AreEqual(("cef", "020202002801016d016b017d0184010301650401000101017402840101016381010201840201016601010200020301"), (t.ToString(), Hex(doc.EncodeStateAsUpdateV1())));
+        Assert.AreEqual(("cef", "020202002801016d016b017d0184010301650401000101017402840101016381010201840201016601010200020301"), (t.ToString(), Hex(doc.EncodeStateAsUpdate())));
     }
 
     [TestMethod]
@@ -74,7 +74,7 @@ public class RunExtensionYjsTests
             a.Insert(1, new object[] { 4 });
         });
 
-        Assert.AreEqual(("4,2,3", "01040300010101740141030001c803010300027d027d03480301017d040103010002"), (string.Join(",", a.ToArray()), Hex(doc.EncodeStateAsUpdateV1())));
+        Assert.AreEqual(("4,2,3", "01040300010101740141030001c803010300027d027d03480301017d040103010002"), (string.Join(",", a.ToArray()), Hex(doc.EncodeStateAsUpdate())));
     }
 
     [TestMethod]
@@ -87,7 +87,7 @@ public class RunExtensionYjsTests
             {
                 t.Insert(0, "a");
                 t.Insert(1, "b");
-                t.Delete(0, 2);
+                t.Remove(0, 2);
             });
         });
 
@@ -104,7 +104,7 @@ public class RunExtensionYjsTests
             doc.Transact(_ =>
             {
                 t.Insert(1, "b");
-                t.Delete(0, 2);
+                t.Remove(0, 2);
             });
         });
 
@@ -132,7 +132,7 @@ public class RunExtensionYjsTests
     [TestMethod]
     public void ToArraySnapshot_TakenAndReadWithinATransaction_ShowsWhatTheSnapshotHolds()
     {
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var a = doc.GetArray("a");
         a.Push(new object[] { 1, 2 });
         IList<object> read = null;
@@ -152,7 +152,7 @@ public class RunExtensionYjsTests
     [TestMethod]
     public void ToDelta_SnapshotsWithinATransaction_ChangesPerYjsItem()
     {
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var t = doc.GetText("t");
         t.Insert(0, "ab");
         var s1 = doc.CreateSnapshot();
@@ -166,14 +166,14 @@ public class RunExtensionYjsTests
             t.Insert(3, "d");
             t.Insert(4, "e");
             t.Insert(5, "f");
-            t.Delete(1, 2);
+            t.Remove(1, 2);
             var s2 = doc.CreateSnapshot();
 
             // A user that never equals the client, as Yjs' 'u' + client: every item is a change of its own.
             withChanges = Describe(t.ToDelta(s2, s1, (type, id) =>
             {
                 calls.Add($"{type} {id.Client}:{id.Clock}");
-                return new YText.YTextChangeAttributes { Type = type };
+                return new YChange(type, null);
             }));
             plain = Describe(t.ToDelta(s2, s1));
         });
@@ -192,7 +192,7 @@ public class RunExtensionYjsTests
         var y = doc.GetText("y");
         var deltas = new List<string>();
         var fired = false;
-        x.EventHandler += (_, _) =>
+        x.Observe(_ =>
         {
             if (fired)
             {
@@ -201,8 +201,8 @@ public class RunExtensionYjsTests
 
             fired = true;
             y.Insert(y.Length, "c");
-            y.EventHandler += (_, e) => deltas.Add(Describe(e.Event.Delta));
-        };
+            y.Observe(e => deltas.Add(Describe(e.Delta)));
+        });
 
         doc.Transact(_ =>
         {
@@ -210,7 +210,7 @@ public class RunExtensionYjsTests
             y.Insert(0, "b");
         });
 
-        Assert.AreEqual(("bc | ", "010201000401017801780401017902626300"), (string.Join(" | ", deltas), Hex(doc.EncodeStateAsUpdateV1())));
+        Assert.AreEqual(("bc | ", "010201000401017801780401017902626300"), (string.Join(" | ", deltas), Hex(doc.EncodeStateAsUpdate())));
     }
 
     [TestMethod]
@@ -221,7 +221,7 @@ public class RunExtensionYjsTests
         var y = doc.GetText("y");
         var seen = new List<string>();
         var fired = false;
-        x.EventHandler += (_, _) =>
+        x.Observe(_ =>
         {
             if (fired)
             {
@@ -231,7 +231,7 @@ public class RunExtensionYjsTests
             fired = true;
             y.Insert(y.Length, "c");
             doc.AfterTransaction += (_, tr) => seen.Add(tr.ChangedParentTypes.TryGetValue(y, out var events) ? string.Join(";", events.Select(e => Describe(e.Delta))) : "-");
-        };
+        });
 
         doc.Transact(_ =>
         {
@@ -250,7 +250,7 @@ public class RunExtensionYjsTests
         var y = doc.GetArray("y");
         var added = new List<string>();
         var fired = false;
-        x.EventHandler += (_, _) =>
+        x.Observe(_ =>
         {
             if (fired)
             {
@@ -259,8 +259,8 @@ public class RunExtensionYjsTests
 
             fired = true;
             y.Push(new object[] { 2 });
-            y.EventHandler += (_, e) => added.Add(string.Join(",", e.Event.Changes.Added.Select(i => $"{i.Id.Clock}+{i.Length}").Order(StringComparer.Ordinal)));
-        };
+            y.Observe(e => added.Add(string.Join(",", e.Changes.Added.Select(i => $"{i.Id.Clock}+{i.Length}").Order(StringComparer.Ordinal))));
+        });
 
         doc.Transact(_ =>
         {
@@ -277,14 +277,14 @@ public class RunExtensionYjsTests
         var t = doc.GetText("t");
         if (observed)
         {
-            t.EventHandler += (_, _) => { };
+            t.Observe(_ => { });
         }
 
         var peer = Doc(2);
         var pt = peer.GetText("t");
         t.Insert(0, "a");
         Sync(doc, peer);
-        pt.Delete(0, 1);
+        pt.Remove(0, 1);
 
         doc.Transact(_ =>
         {
@@ -294,7 +294,7 @@ public class RunExtensionYjsTests
             t.Insert(2, "d");
         });
 
-        return (t.ToString(), Hex(doc.EncodeStateAsUpdateV1()));
+        return (t.ToString(), Hex(doc.EncodeStateAsUpdate()));
     }
 
     [TestMethod]
@@ -369,7 +369,7 @@ public class RunExtensionYjsTests
             pa.Delete(0, 5);
         });
         object result = null;
-        m.EventHandler += (_, _) =>
+        m.Observe(_ =>
         {
             try
             {
@@ -380,11 +380,11 @@ public class RunExtensionYjsTests
                 // Yjs throws as well (findIndexSS on a negative clock).
                 result = "throws";
             }
-        };
+        });
 
         Sync(peer, doc);
 
-        return (result, Hex(doc.EncodeStateAsUpdateV1()));
+        return (result, Hex(doc.EncodeStateAsUpdate()));
     }
 
     private static (string Calls, string Updates, string V1) Filtered(Func<ItemView, bool> keep, Action<YDoc> body)
@@ -393,27 +393,27 @@ public class RunExtensionYjsTests
         var doc = new YDoc(new YDocOptions
         {
             ClientId = 1,
-            GcFilter = item =>
+            GarbageCollectionFilter = item =>
             {
                 calls.Add($"{item.Id.Clock}+{item.Length}");
                 return keep(item);
             },
         });
         var updates = new List<string>();
-        doc.Update += (_, e) => updates.Add(Hex(e.Item1));
+        doc.Updated += (_, e) => updates.Add(Hex(e.Update.ToArray()));
 
         body(doc);
 
-        return (string.Join(",", calls), string.Join(",", updates), Hex(doc.EncodeStateAsUpdateV1()));
+        return (string.Join(",", calls), string.Join(",", updates), Hex(doc.EncodeStateAsUpdate()));
     }
 
     private static YDoc Doc(long client) => new(new YDocOptions { ClientId = client });
 
-    private static void Sync(YDoc from, YDoc to) => to.ApplyUpdateV1(from.EncodeStateAsUpdateV1(to.EncodeStateVectorV1()));
+    private static void Sync(YDoc from, YDoc to) => to.ApplyUpdate(from.EncodeStateAsUpdate(to.EncodeStateVector()));
 
     private static string Hex(byte[] bytes) => Convert.ToHexStringLower(bytes);
 
     // Each op as its insert, and its ychange type after a colon.
-    private static string Describe(IList<Delta> delta) =>
-        string.Join("|", delta.Select(d => d.Insert + (d.Attributes != null && d.Attributes.TryGetValue("ychange", out var c) ? ":" + ((YText.YTextChangeAttributes)c).Type : "")));
+    private static string Describe(IEnumerable<Delta> delta) =>
+        string.Join("|", delta.Select(d => d.Inserted() + (d.Attributes != null && d.Attributes.TryGetValue("ychange", out var c) ? ":" + (c["type"] == "added" ? "Added" : "Removed") : "")));
 }

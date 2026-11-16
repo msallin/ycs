@@ -36,35 +36,35 @@ internal sealed class CorpusDoc
     /// <summary>A fresh document; <paramref name="clientId"/> pins the id for reproducible conflict resolution.</summary>
     public static CorpusDoc Create(bool gc = true, int? clientId = null)
     {
-        return new CorpusDoc(new YDoc(new YDocOptions { Gc = gc, ClientId = clientId }));
+        return new CorpusDoc(new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = clientId }));
     }
 
     /// <summary>Raised with the v1 update of every transaction made on this doc (not of applied remote updates).</summary>
     public event Action<byte[]> LocalUpdateV1
     {
-        add => _doc.Update += Forward(value);
+        add => _doc.Updated += Forward(value);
         remove => throw new NotSupportedException();
     }
 
-    private static EventHandler<(byte[] data, object origin, Transaction transaction)> Forward(Action<byte[]> handler) =>
+    private static EventHandler<UpdateEventArgs> Forward(Action<byte[]> handler) =>
         (_, e) =>
         {
-            if (!ReferenceEquals(e.origin, Remote))
+            if (!ReferenceEquals(e.Origin, Remote))
             {
-                handler(e.data);
+                handler(e.Update.ToArray());
             }
         };
 
-    public void ApplyV1(byte[] update) => _doc.ApplyUpdateV1(update, Remote);
+    public void ApplyV1(byte[] update) => _doc.ApplyUpdate(update, Remote);
 
-    public void ApplyV2(byte[] update) => _doc.ApplyUpdateV2(update, Remote);
+    public void ApplyV2(byte[] update) => _doc.ApplyUpdate(update, Remote, UpdateFormat.V2);
 
-    public byte[] EncodeStateV1(byte[] stateVector = null) => _doc.EncodeStateAsUpdateV1(stateVector);
+    public byte[] EncodeStateV1(byte[] stateVector = null) => _doc.EncodeStateAsUpdate(stateVector);
 
-    public byte[] EncodeStateV2(byte[] stateVector = null) => _doc.EncodeStateAsUpdateV2(stateVector);
+    public byte[] EncodeStateV2(byte[] stateVector = null) => _doc.EncodeStateAsUpdate(stateVector, format: UpdateFormat.V2);
 
     /// <summary>The state vector in the (format-independent) lib0 encoding Yjs' encodeStateVector uses.</summary>
-    public byte[] EncodeStateVector() => _doc.EncodeStateVectorV1();
+    public byte[] EncodeStateVector() => _doc.EncodeStateVector();
 
     public string Text(string root) => _doc.GetText(root).ToString();
 
@@ -72,7 +72,7 @@ internal sealed class CorpusDoc
 
     public void InsertText(string root, int index, string text) => _doc.GetText(root).Insert(index, text);
 
-    public void DeleteText(string root, int index, int length) => _doc.GetText(root).Delete(index, length);
+    public void DeleteText(string root, int index, int length) => _doc.GetText(root).Remove(index, length);
 
     /// <summary>Makes the changes of one scripted step (gen.mjs' runOp) in one transaction.</summary>
     public void EditText(IReadOnlyList<TextOp> ops) => _doc.Transact(_ =>
@@ -83,16 +83,16 @@ internal sealed class CorpusDoc
             switch (op.Op)
             {
                 case "insert":
-                    text.Insert(op.At, op.Text, op.Attributes);
+                    text.Insert(op.At, op.Text, Attributes(op.Attributes));
                     break;
                 case "delete":
-                    text.Delete(op.At, op.Length);
+                    text.Remove(op.At, op.Length);
                     break;
                 case "format":
-                    text.Format(op.At, op.Length, op.Attributes);
+                    text.Format(op.At, op.Length, Attributes(op.Attributes));
                     break;
                 case "embed":
-                    text.InsertEmbed(op.At, op.Embed, op.Attributes);
+                    text.InsertEmbed(op.At, YValue.FromObject(op.Embed), Attributes(op.Attributes));
                     break;
                 default:
                     throw new ArgumentException($"Unknown text op '{op.Op}'.", nameof(ops));
@@ -100,16 +100,19 @@ internal sealed class CorpusDoc
         }
     });
 
+    private static Dictionary<string, YValue> Attributes(IDictionary<string, object> attributes) =>
+        attributes?.ToDictionary(kvp => kvp.Key, kvp => YValue.FromObject(kvp.Value));
+
     /// <summary>Y.Text.toDelta() as plain values: a list of {insert, attributes?}.</summary>
     public object Delta(string root)
     {
         var result = new List<object>();
         foreach (var d in _doc.GetText(root).ToDelta())
         {
-            var op = new Dictionary<string, object> { ["insert"] = Plain(d.Insert) };
+            var op = new Dictionary<string, object> { ["insert"] = Plain(((Delta.Insert)d).Value.ToObject()) };
             if (d.Attributes is { Count: > 0 })
             {
-                op["attributes"] = Plain(d.Attributes);
+                op["attributes"] = Plain(d.Attributes.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToObject()));
             }
 
             result.Add(op);
@@ -232,22 +235,22 @@ internal sealed class CorpusDoc
 internal static class CorpusUpdates
 {
     public static byte[] Merge(IList<byte[]> updates, bool v2) =>
-        v2 ? UpdateOperations.MergeUpdatesV2(updates) : UpdateOperations.MergeUpdates(updates);
+        v2 ? YUpdate.Merge([.. updates], format: UpdateFormat.V2) : YUpdate.Merge([.. updates], format: UpdateFormat.V1);
 
     public static byte[] Diff(byte[] update, byte[] stateVector, bool v2) =>
-        v2 ? UpdateOperations.DiffUpdateV2(update, stateVector) : UpdateOperations.DiffUpdate(update, stateVector);
+        v2 ? YUpdate.Diff(update, stateVector, format: UpdateFormat.V2) : YUpdate.Diff(update, stateVector, format: UpdateFormat.V1);
 
     /// <summary>Per client, the first clock and the clock after the last struct in the update.</summary>
     public static (IReadOnlyDictionary<long, long> From, IReadOnlyDictionary<long, long> To) Meta(byte[] update, bool v2)
     {
-        var meta = v2 ? UpdateOperations.ParseUpdateMetaV2(update) : UpdateOperations.ParseUpdateMeta(update);
+        var meta = v2 ? YUpdate.ParseMeta(update, format: UpdateFormat.V2) : YUpdate.ParseMeta(update, format: UpdateFormat.V1);
         return (meta.From, meta.To);
     }
 
     /// <summary>The delete set carried by an update, as (clock, length) ranges per client.</summary>
     public static IReadOnlyDictionary<long, IReadOnlyList<(long Clock, long Length)>> DeleteSet(byte[] update, bool v2)
     {
-        var decoded = v2 ? UpdateOperations.DecodeUpdateV2(update) : UpdateOperations.DecodeUpdate(update);
+        var decoded = v2 ? YUpdate.Decode(update, format: UpdateFormat.V2) : YUpdate.Decode(update, format: UpdateFormat.V1);
         return decoded.DeleteSet.ToDictionary(
             kvp => kvp.Key,
             kvp => (IReadOnlyList<(long, long)>)kvp.Value.Select(r => (r.Clock, r.Length)).ToList());

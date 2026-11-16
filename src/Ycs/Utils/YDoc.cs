@@ -11,86 +11,13 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-public class YDocOptions
-{
-    // Collects everything; another filter is called once per item (see Transaction.CleanupTransaction).
-    internal static readonly Predicate<ItemView> DefaultGcFilter = static item => true;
-
-    public bool Gc { get; set; } = true;
-    public Predicate<ItemView> GcFilter { get; set; } = DefaultGcFilter;
-    /// <summary>A random one unless set (only when first read, so that one that is set costs nothing).</summary>
-    public string Guid
-    {
-        get => _guid ??= System.Guid.NewGuid().ToString("D");
-        set => _guid = value;
-    }
-
-    private string _guid;
-
-    /// <summary>
-    /// Yjs' <c>collectionid</c>: associates the document with a collection of the provider. A
-    /// subdocument without one takes its parent's when it is added. Not encoded.
-    /// </summary>
-    public string CollectionId { get; set; }
-
-    /// <summary>Any value of the 'any' encoding; a subdocument's meta travels with its item.</summary>
-    public object Meta { get; set; }
-
-    public bool AutoLoad { get; set; }
-
-    /// <summary>Whether the document should be synced by the provider now; <see cref="YDoc.Load"/> sets it. Yjs' default is true.</summary>
-    public bool ShouldLoad { get; set; } = true;
-
-    /// <summary>
-    /// What an update applied to the document may cost (<see cref="UpdateLimits.Default"/> unless set);
-    /// <see cref="YDoc.ApplyUpdate(byte[], object, UpdateLimits)"/> can override it for one update. A
-    /// subdocument read from an update takes its parent's.
-    /// </summary>
-    public UpdateLimits Limits
-    {
-        get => _limits;
-        set => _limits = value ?? throw new ArgumentNullException(nameof(value));
-    }
-
-    private UpdateLimits _limits = UpdateLimits.Default;
-
-    /// <summary>
-    /// The client id to start with instead of a random one; for tests and reproducible benchmarks.
-    /// Two documents that edit concurrently must never share a client id. 0 to 2^53 - 1, as Yjs'
-    /// <c>doc.clientID</c> (which it generates as a random 32-bit unsigned integer).
-    /// </summary>
-    public long? ClientId
-    {
-        get => _clientId;
-        set => _clientId = value is null or >= 0 and <= Ycs.Limits.MaxClient
-            ? value
-            : throw new ArgumentOutOfRangeException(nameof(value), "A client id is 0 to 2^53 - 1.");
-    }
-
-    private long? _clientId;
-
-    internal YDocOptions Clone()
-    {
-        return new YDocOptions
-        {
-            Gc = Gc,
-            GcFilter = GcFilter,
-            Guid = Guid,
-            CollectionId = CollectionId,
-            Meta = Meta,
-            AutoLoad = AutoLoad,
-            ShouldLoad = ShouldLoad,
-            Limits = Limits,
-        };
-    }
-}
-
 /// <summary>
 /// Yjs instance handles the state of shared data.
 /// </summary>
 public partial class YDoc
 {
     private readonly YDocOptions _opts;
+    private string _guid;
 
     internal List<Transaction> _transactionCleanups;
     // The list of the batch before, kept for the next one (see Transaction.CleanupTransactions).
@@ -271,9 +198,9 @@ public partial class YDoc
     /// <summary>The root type named <paramref name="name"/>, if it was defined (without defining it).</summary>
     internal bool TryGetRoot(string name, out AbstractType type) => _share.TryGetValue(name, out type);
 
-    internal void InvokeSubdocsChanged(ISet<YDoc> loaded, ISet<YDoc> added, ISet<YDoc> removed)
+    internal void InvokeSubdocsChanged(IReadOnlySet<YDoc> loaded, IReadOnlySet<YDoc> added, IReadOnlySet<YDoc> removed)
     {
-        SubdocsChanged?.Invoke(this, (loaded, added, removed));
+        SubdocsChanged?.Invoke(this, new SubdocsEventArgs(loaded, added, removed));
     }
 
     internal bool HasBeforeObserverCallsListeners => BeforeObserverCalls != null;
@@ -286,7 +213,7 @@ public partial class YDoc
         BeforeObserverCalls?.Invoke(this, transaction);
     }
 
-    internal void InvokeAfterAllTransactions(IList<Transaction> transactions)
+    internal void InvokeAfterAllTransactions(IReadOnlyList<Transaction> transactions)
     {
         AfterAllTransactions?.Invoke(this, transactions);
     }
@@ -320,7 +247,7 @@ public partial class YDoc
 
     internal void InvokeUpdateV1(Transaction transaction)
     {
-        var handler = Update;
+        var handler = Updated;
         if (handler != null)
         {
             // The encoder goes back before the handler runs, which may encode updates itself.
@@ -340,14 +267,14 @@ public partial class YDoc
 
             if (update != null)
             {
-                handler.Invoke(this, (update, transaction.Origin, transaction));
+                handler.Invoke(this, new UpdateEventArgs(update, transaction.Origin, transaction));
             }
         }
     }
 
     internal void InvokeUpdateV2(Transaction transaction)
     {
-        var handler = UpdateV2;
+        var handler = UpdatedV2;
         if (handler != null)
         {
             // The encoder goes back before the handler runs, which may encode updates itself.
@@ -367,16 +294,14 @@ public partial class YDoc
 
             if (update != null)
             {
-                handler.Invoke(this, (update, transaction.Origin, transaction));
+                handler.Invoke(this, new UpdateEventArgs(update, transaction.Origin, transaction));
             }
         }
     }
 
     internal YDocOptions CloneOptionsWithNewGuid()
     {
-        var newOpts = _opts.Clone();
-        newOpts.Guid = System.Guid.NewGuid().ToString("D");
-        return newOpts;
+        return _opts with { Guid = System.Guid.NewGuid().ToString("D") };
     }
 
     internal string FindRootTypeKey(AbstractType type)

@@ -17,7 +17,7 @@ public class GarbageCollectionCheckTests
     [TestMethod]
     public void ApplyUpdate_DeletesATypeWhoseKeyHasTwoLiveItems_RejectsAndLeavesTheDocumentUnchanged()
     {
-        var doc = new YDoc(new YDocOptions { Gc = true });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = true });
         doc.ApplyUpdate(Convert.FromBase64String(Base));
         var before = Convert.ToBase64String(doc.EncodeStateAsUpdate());
 
@@ -30,7 +30,7 @@ public class GarbageCollectionCheckTests
     public void ApplyUpdate_SameUpdatesWithoutGarbageCollection_AppliesThem()
     {
         // Yjs applies them too: without garbage collection the second live item of the key stays, unseen.
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.ApplyUpdate(Convert.FromBase64String(Base));
 
         doc.ApplyUpdate(Convert.FromBase64String(SplitAndDelete));
@@ -42,7 +42,7 @@ public class GarbageCollectionCheckTests
     public void ApplyUpdate_SplitWithoutDeletingTheType_AppliesIt()
     {
         // The value of key "l" (70000:2, three items) loses its middle item; the map it is in stays.
-        var doc = new YDoc(new YDocOptions { Gc = true });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = true });
         doc.ApplyUpdate(Convert.FromBase64String(Base));
 
         doc.ApplyUpdate(DeleteRange(70000, 3, 1));

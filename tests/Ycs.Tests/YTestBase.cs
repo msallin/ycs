@@ -121,7 +121,7 @@ public class YTestBase
 
             // Compare texts.
             CompareYText(Users[i].GetText("text"), Users[i + 1].GetText("text"));
-            var deltaStr = string.Join(null, userTextValues[i].Select(a => a.Insert != null && a.Insert is string s ? s : string.Empty));
+            var deltaStr = string.Join(null, userTextValues[i].Select(a => a is Delta.Insert { Value: var v } && v.TryGetString(out var s) ? s : string.Empty));
             Assert.AreEqual(Users[i].GetText("text").ToString(), deltaStr);
 
             // Compare maps.

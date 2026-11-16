@@ -121,13 +121,13 @@ public class CorpusTests
     [DynamicData(nameof(Cases))]
     public void DiffUpdate_OfYjsState_CoversWhatYjsDiffCovers(string name) => Run(name, c =>
         Assert.AreEqual(DiffSummary(c.Diff.V1, false), DiffSummary(CorpusUpdates.Diff(c.ExpectedState.V1, c.DiffStateVector, v2: false), false),
-            "UpdateOperations.DiffUpdate(Yjs state, prefix state vector) against Yjs' diff"));
+            "YUpdate.Diff(Yjs state, prefix state vector, format: UpdateFormat.V1) against Yjs' diff"));
 
     [TestMethod]
     [DynamicData(nameof(Cases))]
     public void DiffUpdateV2_OfYjsState_CoversWhatYjsDiffCovers(string name) => Run(name, c =>
         Assert.AreEqual(DiffSummary(c.Diff.V2, true), DiffSummary(CorpusUpdates.Diff(c.ExpectedState.V2, c.DiffStateVector, v2: true), true),
-            "UpdateOperations.DiffUpdateV2(Yjs state, prefix state vector) against Yjs' diff"));
+            "YUpdate.Diff(Yjs state, prefix state vector, format: UpdateFormat.V2) against Yjs' diff"));
 
     [TestMethod]
     [DynamicData(nameof(Cases))]

@@ -22,8 +22,8 @@ public class YArrayTests : YTestBase
         var doc2 = new YDoc();
         var content = new List<object> { "hi" };
         doc1.GetArray("array").Insert(0, content);
-        var update = doc1.EncodeStateAsUpdateV2();
-        doc2.ApplyUpdateV2(update);
+        var update = doc1.EncodeStateAsUpdate(format: UpdateFormat.V2);
+        doc2.ApplyUpdate(update, format: UpdateFormat.V2);
 
         CollectionAssert.AreEqual(content, (ICollection)doc2.GetArray("array").ToArray());
     }
@@ -189,12 +189,12 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        YEventArgs evt = null;
+        YArrayEvent evt = null;
 
-        array0.EventHandler += (s, e) =>
+        array0.Observe(e =>
         {
             evt = e;
-        };
+        });
 
         array0.Insert(0, new object[] { 0, 1, 2 });
         Assert.IsNotNull(evt);
@@ -219,7 +219,7 @@ public class YArrayTests : YTestBase
         var array0 = Arrays[Users[0]];
         var values = new List<object>();
 
-        array0.EventHandler += (s, e) =>
+        array0.Observe(_ =>
         {
             if (array0.Length == 1)
             {
@@ -233,7 +233,7 @@ public class YArrayTests : YTestBase
                 // This should be called the second time an element is inserted (above case).
                 values.Add(1);
             }
-        };
+        });
 
         array0.Insert(0, new object[] { 0 });
 
@@ -249,12 +249,12 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        YEventArgs evt = null;
+        YArrayEvent evt = null;
 
-        array0.EventHandler += (s, e) =>
+        array0.Observe(e =>
         {
             evt = e;
-        };
+        });
 
         array0.Insert(0, new object[] { new YArray() });
         Assert.IsNotNull(evt);
@@ -273,12 +273,12 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        IList<YEvent> events = null;
+        IReadOnlyList<YEvent> events = null;
 
-        array0.DeepEventHandler += (s, e) =>
+        array0.ObserveDeep((deepEvents, _) =>
         {
-            events = e.Events;
-        };
+            events = deepEvents;
+        });
 
         array0.Insert(0, new[] { new YMap() });
 
@@ -300,12 +300,12 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        ChangesCollection changes = null;
+        YChanges changes = null;
 
-        array0.EventHandler += (s, e) =>
+        array0.Observe(e =>
         {
-            changes = e.Event.Changes;
-        };
+            changes = e.Changes;
+        });
 
         var newArr = new YArray();
 
@@ -314,14 +314,14 @@ public class YArrayTests : YTestBase
         Assert.AreEqual(2, changes.Added.Count);
         Assert.AreEqual(0, changes.Deleted.Count);
         Assert.AreEqual(1, changes.Delta.Count);
-        CollectionAssert.AreEqual(new object[] { newArr, 4, "dtrn" }, (ICollection)changes.Delta[0].Insert);
+        CollectionAssert.AreEqual(new object[] { newArr, 4, "dtrn" }, ((Delta.InsertItems)changes.Delta[0]).Items.Select(v => v.ToObject()).ToList());
         changes = null;
 
         array0.Delete(0, 2);
         Assert.IsNotNull(changes);
         Assert.AreEqual(0, changes.Added.Count);
         Assert.AreEqual(2, changes.Deleted.Count);
-        Assert.AreEqual(2, changes.Delta[0].Delete);
+        Assert.AreEqual(2, changes.Delta[0].Deleted());
         changes = null;
 
         array0.Insert(1, new object[] { 0.1 });
@@ -329,8 +329,8 @@ public class YArrayTests : YTestBase
         Assert.AreEqual(1, changes.Added.Count);
         Assert.AreEqual(0, changes.Deleted.Count);
         Assert.AreEqual(2, changes.Delta.Count);
-        Assert.AreEqual(1, changes.Delta[0].Retain);
-        CollectionAssert.AreEqual(new object[] { 0.1 }, (ICollection)changes.Delta[1].Insert);
+        Assert.AreEqual(1, changes.Delta[0].Retained());
+        CollectionAssert.AreEqual(new object[] { 0.1 }, ((Delta.InsertItems)changes.Delta[1]).Items.Select(v => v.ToObject()).ToList());
 
         CompareUsers();
     }
@@ -341,12 +341,12 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        var events = new List<YEventArgs>();
+        var events = new List<YArrayEvent>();
 
-        array0.EventHandler += (s, e) =>
+        array0.Observe(e =>
         {
             events.Add(e);
-        };
+        });
 
         array0.Insert(0, new object[] { "hi", new YMap() });
         Assert.AreEqual(1, events.Count, "Event is triggered exactly once for insertion of two elements");
@@ -367,10 +367,10 @@ public class YArrayTests : YTestBase
         Users[0].Transact(tr =>
         {
             var newMap = new YMap();
-            newMap.EventHandler += (s, e) =>
+            newMap.Observe(_ =>
             {
                 fired = true;
-            };
+            });
 
             array0.Insert(0, new object[] { newMap });
             newMap.Set("tst", 42);
@@ -404,10 +404,10 @@ public class YArrayTests : YTestBase
         var array0 = Arrays[Users[0]];
         YEvent evt = null;
 
-        array0.EventHandler += (s, e) =>
+        array0.Observe(e =>
         {
-            evt = e.Event;
-        };
+            evt = e;
+        });
 
         array0.Insert(0, new object[] { "stuff" });
         Assert.AreSame(array0, evt.Target, "Target property is set correctly");
@@ -422,10 +422,10 @@ public class YArrayTests : YTestBase
         var array1 = Arrays[Users[1]];
         YEvent evt = null;
 
-        array0.EventHandler += (s, e) =>
+        array0.Observe(e =>
         {
-            evt = e.Event;
-        };
+            evt = e;
+        });
 
         array1.Insert(0, new object[] { "stuff" });
         Connector.FlushAllMessages();

@@ -47,11 +47,11 @@ public class ValueAliasingTests
         var map = Sample(out var inner, out var bytes);
         var list = new List<object?> { map, inner, bytes };
         doc.GetArray("a").Add(list.Cast<object>().ToList());
-        var before = doc.EncodeStateAsUpdateV2();
+        var before = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
 
         Mutate(map, inner, bytes);
 
-        CollectionAssert.AreEqual(before, doc.EncodeStateAsUpdateV2());
+        CollectionAssert.AreEqual(before, doc.EncodeStateAsUpdate(format: UpdateFormat.V2));
     }
 
     [TestMethod]
@@ -202,8 +202,8 @@ public class ValueAliasingTests
         text.Insert(0, "ab");
         var attribute = new List<object?> { 1 };
         var embed = new Dictionary<string, object?> { ["e"] = new List<object?> { 1 } };
-        text.Format(0, 1, new Dictionary<string, object> { ["x"] = attribute });
-        text.InsertEmbed(2, embed);
+        text.Format(0, 1, new Dictionary<string, YValue> { ["x"] = YValue.FromObject(attribute) });
+        text.InsertEmbed(2, YValue.FromObject(embed));
         var before = doc.EncodeStateAsUpdate();
 
         attribute.Add(2);
@@ -212,8 +212,8 @@ public class ValueAliasingTests
 
         CollectionAssert.AreEqual(before, doc.EncodeStateAsUpdate());
         var delta = text.ToDelta();
-        Assert.AreEqual(1, ((IList)delta[0].Attributes["x"]).Count);
-        Assert.AreEqual(1, ((IDictionary<string, object?>)delta[2].Insert).Count);
+        Assert.AreEqual(1, delta[0].Attributes["x"].Length);
+        Assert.AreEqual(1, delta[2].Inserted().MemberCount);
     }
 
     [TestMethod]
@@ -221,11 +221,11 @@ public class ValueAliasingTests
     {
         var doc = new YDoc();
         var text = doc.GetText("t");
-        text.InsertEmbed(0, new byte[] { 1, 2 });
+        text.InsertEmbed(0, YValue.FromObject(new byte[] { 1, 2 }));
 
-        ((byte[])text.ToDelta()[0].Insert)[0] = 9;
+        text.ToDelta()[0].Inserted().GetBytes()[0] = 9;
 
-        CollectionAssert.AreEqual(new byte[] { 1, 2 }, (byte[])text.ToDelta()[0].Insert);
+        CollectionAssert.AreEqual(new byte[] { 1, 2 }, text.ToDelta()[0].Inserted().GetBytes());
     }
 
     [TestMethod]

@@ -25,13 +25,13 @@ internal static class Ops
         Find(find, "text-random-100k", random, check);
 
         const string split = "split in the middle of a client's structs";
-        var traceState = Workloads.TraceDoc(f).EncodeStateAsUpdateV1();
+        var traceState = Workloads.TraceDoc(f).EncodeStateAsUpdate();
         Split(split, "trace-replay", () => Load(traceState), (d, s) => d.GetText("text").ToString() == Builder.Text(s, "text"), check);
 
         var sw = Stopwatch.StartNew();
         var delete = Workloads.DeleteDoc();
         Console.Error.WriteLine($"array-delete-random built in {sw.Elapsed.TotalSeconds:F0} s");
-        var deleteState = delete.EncodeStateAsUpdateV1();
+        var deleteState = delete.EncodeStateAsUpdate();
         Split(split, "array-delete-random", () => Load(deleteState), (d, s) => d.GetArray("array").SequenceEqual(Builder.Array(s, "array")), check);
         WalkLeft(delete, check);
     }
@@ -40,7 +40,7 @@ internal static class Ops
     private static YDoc Load(byte[] state)
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
-        doc.ApplyUpdateV1(state, null, UpdateLimits.Unlimited);
+        doc.ApplyUpdate(state, null, limits: UpdateLimits.Unlimited);
         return doc;
     }
 

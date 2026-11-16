@@ -60,7 +60,7 @@ public class YjsInteropTests
         Assert.AreEqual("plain bold tail", doc.GetText("text").ToString());
         var delta = doc.GetText("text").ToDelta();
         Assert.AreEqual(true, delta[1].Attributes["bold"], "formatting attribute lost");
-        Assert.IsTrue(delta.Any(d => d.Insert is IDictionary<string, object> embed && (string)embed["image"] == "x.png"),
+        Assert.IsTrue(delta.Any(d => d is Delta.Insert { Value.Kind: YValueKind.Object } && d.Inserted()["image"] == "x.png"),
             "embedded object lost");
     }
 
@@ -70,17 +70,17 @@ public class YjsInteropTests
     public void ReEncodesToAnUpdateYjsCanRead(string base64Update, bool v2)
     {
         var doc = Apply(base64Update, v2);
-        var reEncoded = v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1();
+        var reEncoded = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
 
         // Round-trips through Ycs itself...
         var copy = new YDoc();
         if (v2)
         {
-            copy.ApplyUpdateV2(reEncoded);
+            copy.ApplyUpdate(reEncoded, format: UpdateFormat.V2);
         }
         else
         {
-            copy.ApplyUpdateV1(reEncoded);
+            copy.ApplyUpdate(reEncoded);
         }
 
         Assert.AreEqual("plain bold tail", copy.GetText("text").ToString());
@@ -98,12 +98,12 @@ public class YjsInteropTests
     public void StateVectorMatchesYjs()
     {
         var doc = Apply(Yjs13UpdateV1, v2: false);
-        var sv = doc.EncodeStateVectorV1();
+        var sv = doc.EncodeStateVector();
 
         // One client, and a diff against its own state vector carries no structs.
-        var diff = doc.EncodeStateAsUpdateV1(sv);
+        var diff = doc.EncodeStateAsUpdate(sv);
         var empty = new YDoc();
-        empty.ApplyUpdateV1(diff);
+        empty.ApplyUpdate(diff);
         Assert.AreEqual(0, empty.GetArray("array").Length);
     }
 
@@ -163,11 +163,11 @@ public class YjsInteropTests
         var update = Convert.FromBase64String(base64Update);
         if (v2)
         {
-            doc.ApplyUpdateV2(update);
+            doc.ApplyUpdate(update, format: UpdateFormat.V2);
         }
         else
         {
-            doc.ApplyUpdateV1(update);
+            doc.ApplyUpdate(update);
         }
 
         return doc;
@@ -181,7 +181,7 @@ public class YjsInteropTests
         // struct lands in the real Y.Text (and encoding the transaction does not hit a stale placeholder).
         var doc = new YDoc();
         var updates = 0;
-        doc.Update += (_, _) => updates++;
+        doc.Updated += (_, _) => updates++;
         doc.ApplyUpdate(Convert.FromBase64String("AQEBAQQBBHRleHQBYgA="));
         var text = doc.GetText("text");
         doc.ApplyUpdate(Convert.FromBase64String("AQEBAAQBBW90aGVyAWEA"));

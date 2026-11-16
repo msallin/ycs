@@ -39,7 +39,7 @@ public class ClientStructsTests
         var random = new Random(11);
         for (var round = 0; round < 60; round++)
         {
-            var doc = new YDoc(new YDocOptions { Gc = round % 2 == 0 });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = round % 2 == 0 });
             var text = doc.GetText("t");
             var array = doc.GetArray("a");
             var remote = new YDoc();
@@ -53,7 +53,7 @@ public class ClientStructsTests
                         break;
                     case 1 when text.Length > 0:
                         var at = random.Next(text.Length);
-                        text.Delete(at, Math.Min(1 + random.Next(3), text.Length - at));
+                        text.Remove(at, Math.Min(1 + random.Next(3), text.Length - at));
                         break;
                     case 2:
                         array.Insert(random.Next(array.Length + 1), new object[] { (long)step, (long)round });
@@ -62,9 +62,9 @@ public class ClientStructsTests
                         array.Delete(random.Next(array.Length), 1);
                         break;
                     case 4:
-                        remote.ApplyUpdateV2(doc.EncodeStateAsUpdateV2(remote.EncodeStateVectorV2()));
+                        remote.ApplyUpdate(doc.EncodeStateAsUpdate(remote.EncodeStateVector(), format: UpdateFormat.V2), format: UpdateFormat.V2);
                         remote.GetText("t").Insert(0, "r");
-                        doc.ApplyUpdateV2(remote.EncodeStateAsUpdateV2(doc.EncodeStateVectorV2()));
+                        doc.ApplyUpdate(remote.EncodeStateAsUpdate(doc.EncodeStateVector(), format: UpdateFormat.V2), format: UpdateFormat.V2);
                         break;
                     default:
                         doc.Transact(_ =>
@@ -144,7 +144,7 @@ public class ClientStructsTests
     [DataRow(3)]
     public void FindIndex_ClockBelowTheFirstStartWithLeaves_ThrowsAsWithoutLeaves(int leaves) => WithLeafCapacity(2, () =>
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var text = doc.GetText("t");
         for (var i = 0; i < 10 + (2 * leaves); i++)
         {

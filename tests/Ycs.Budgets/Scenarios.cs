@@ -27,16 +27,16 @@ internal static class Scenarios
         {
             var (doc, _) = LargeText();
             var remote = new YDoc(new YDocOptions { ClientId = 2 });
-            remote.ApplyUpdateV1(doc.EncodeStateAsUpdateV1());
+            remote.ApplyUpdate(doc.EncodeStateAsUpdate());
             var updates = new List<byte[]>();
-            remote.Update += (_, e) => updates.Add(e.data);
+            remote.Updated += (_, e) => updates.Add(e.Update.ToArray());
             var remoteText = remote.GetText("text");
             for (var i = 0; i < 500 + Warmup; i++)
             {
                 remoteText.Insert(TextLength / 3 + i, "y");
             }
 
-            return i => doc.ApplyUpdateV1(updates[i]);
+            return i => doc.ApplyUpdate(updates[i]);
         }),
 
         new("doc.encode-small-document-v1", 500, () =>
@@ -47,7 +47,7 @@ internal static class Scenarios
             map.Set("a", 1);
             map.Set("b", "two");
             map.Set("c", true);
-            return _ => doc.EncodeStateAsUpdateV1();
+            return _ => doc.EncodeStateAsUpdate();
         }),
 
         new("doc.encode-diff-of-one-edit-100k", 500, () =>
@@ -55,7 +55,7 @@ internal static class Scenarios
             var (doc, text) = LargeText();
             var stateVector = doc.EncodeStateVector();
             text.Insert(TextLength / 2, "z");
-            return _ => doc.EncodeStateAsUpdateV1(stateVector);
+            return _ => doc.EncodeStateAsUpdate(stateVector);
         }),
 
         new("doc.encode-diff-100k-into-buffer-writer", 500, () =>
@@ -67,7 +67,7 @@ internal static class Scenarios
             return _ =>
             {
                 destination.ResetWrittenCount();
-                doc.EncodeStateAsUpdateV1(destination, stateVector);
+                doc.EncodeStateAsUpdate(destination, stateVector);
             };
         }),
 
@@ -118,7 +118,7 @@ internal static class Scenarios
         new("text.insert-formatted-char-100k", 500, () =>
         {
             var (_, text) = LargeText();
-            var bold = new Dictionary<string, object> { ["bold"] = true };
+            var bold = new Dictionary<string, YValue> { ["bold"] = true };
             var caret = TextLength / 2;
             return _ => text.Insert(caret++, "x", bold);
         }),
@@ -128,7 +128,7 @@ internal static class Scenarios
             // An editor binding: every keystroke's observer reads the delta.
             var (_, text) = LargeText();
             var ops = 0;
-            text.EventHandler += (_, e) => ops += e.Event.Delta.Count;
+            text.Observe(e => ops += e.Delta.Count);
             var caret = TextLength / 2;
             return _ => text.Insert(caret++, "x");
         }),
@@ -136,7 +136,7 @@ internal static class Scenarios
         new("undo.undo-redo-typing-100k", 500, () =>
         {
             var (doc, text) = LargeText();
-            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
             for (var i = 0; i < 1000; i++)
             {
                 text.Insert(TextLength / 2 + i, "x");
@@ -153,7 +153,7 @@ internal static class Scenarios
         {
             // Every redo splits the undone run (merged while deleted) at its front.
             var (_, text) = LargeText();
-            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
             const int typed = 20_000;
             for (var i = 0; i < typed; i++)
             {
@@ -172,9 +172,9 @@ internal static class Scenarios
         {
             // Backspace with an UndoManager whose capture never ends: the deleted characters are kept.
             var (_, text) = LargeText();
-            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = int.MaxValue });
+            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.MaxValue });
             var caret = TextLength / 2;
-            return _ => text.Delete(--caret, 1);
+            return _ => text.Remove(--caret, 1);
         }),
 
         new("array.push-100k-in-one-transaction", 3, () =>
@@ -253,11 +253,11 @@ internal static class Scenarios
             text.Insert(random.Next(text.Length + 1), run);
             if (random.Next(8) == 0 && text.Length > 10)
             {
-                text.Delete(random.Next(text.Length - 5), 1 + random.Next(4));
+                text.Remove(random.Next(text.Length - 5), 1 + random.Next(4));
             }
         }
 
-        text.Delete(TextLength, text.Length - TextLength);
+        text.Remove(TextLength, text.Length - TextLength);
         return (doc, text);
     }
 }

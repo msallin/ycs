@@ -167,7 +167,7 @@ subdocument gets a random guid on the wire).
 | --- | --- | --- |
 | `lazyStructReaderGenerator`, `LazyStructReader` | `StructCursor`, `LazyStructReader` | equivalent on Yjs output (same rejections as `readClientsStructRefs`) |
 | `LazyStructWriter`, `writeStructToLazyStructWriter`, `flushLazyStructWriter`, `finishLazyStructWriting` | `LazyStructWriter` | equivalent |
-| `mergeUpdates(V2)` | `UpdateOperations.MergeUpdates(V2)` / `MergeStructs` | **DIFFERS** - F1, F19 |
+| `mergeUpdates(V2)` | `YUpdate.Merge` / `MergeStructs` | **DIFFERS** - F1, F19 |
 | - | `MergeUpdatesTrusted` (groups of 8) | port-only |
 | `sliceStruct` | `SliceStruct` | identical |
 | `encodeStateVectorFromUpdate(V2)` | same name | identical |

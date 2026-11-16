@@ -8,7 +8,7 @@ namespace Ycs;
 public sealed class StackItem
 {
     /// <summary>Metadata to save and restore with the step, like a selection range.</summary>
-    public IDictionary<string, object> Meta { get; } = new Dictionary<string, object>();
+    public IDictionary<string, object?> Meta { get; } = new Dictionary<string, object?>();
 
     // The ranges the captured transactions created, and the ranges they deleted.
     internal DeleteSet Insertions;

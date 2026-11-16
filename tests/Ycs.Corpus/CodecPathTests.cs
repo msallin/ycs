@@ -36,7 +36,7 @@ public class CodecPathTests
         foreach (var v2 in new[] { false, true })
         {
             var doc = BuildWithReader(c, v2);
-            var expected = v2 ? doc.EncodeStateAsUpdateV2(c.DiffStateVector) : doc.EncodeStateAsUpdateV1(c.DiffStateVector);
+            var expected = v2 ? doc.EncodeStateAsUpdate(c.DiffStateVector, format: UpdateFormat.V2) : doc.EncodeStateAsUpdate(c.DiffStateVector);
             AssertBytes(expected, EncodingUtils.EncodeStateAsUpdate(doc.Store, c.DiffStateVector, v2), $"array, v2: {v2}");
             AssertBytes(expected, IntoBufferWriter(w => EncodingUtils.EncodeStateAsUpdate(doc.Store, w, c.DiffStateVector, v2), chunk: 1), $"buffer writer, v2: {v2}");
         }
@@ -80,7 +80,7 @@ public class CodecPathTests
     /// <summary>Like <see cref="CorpusTests.Build"/>, through the reused reader and the store, as <see cref="YDoc"/> will.</summary>
     private static YDoc BuildWithReader(CorpusCase c, bool v2)
     {
-        var doc = new YDoc(new YDocOptions { Gc = c.Gc });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = c.Gc });
         foreach (var update in c.Updates)
         {
             var bytes = update.Get(v2);

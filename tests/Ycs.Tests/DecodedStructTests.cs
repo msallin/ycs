@@ -65,22 +65,22 @@ public class DecodedStructTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var updates = new List<byte[]>();
-        doc.UpdateV2 += (_, e) => updates.Add(e.data);
+        doc.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
             doc.GetArray("a").Insert(0, new List<object> { i });
         }
 
-        var gapped = UpdateOperations.MergeUpdatesV2(new[] { updates[0], updates[2] });
+        var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);
 
-        var structs = UpdateOperations.DecodeUpdateV2(gapped).Structs;
+        var structs = YUpdate.Decode(gapped, format: UpdateFormat.V2).Structs;
 
         Assert.AreEqual((ItemKind.Skip, 1), structs.Where(s => s.Kind == ItemKind.Skip).Select(s => (s.Kind, s.Length)).Single());
     }
 
     private static IEnumerable<DecodedStruct> Decodable(byte[] update)
     {
-        foreach (var decode in new Func<byte[], DecodedUpdate>[] { u => UpdateOperations.DecodeUpdate(u), u => UpdateOperations.DecodeUpdateV2(u) })
+        foreach (var decode in new Func<byte[], DecodedUpdate>[] { u => YUpdate.Decode(u, format: UpdateFormat.V1), u => YUpdate.Decode(u, format: UpdateFormat.V2) })
         {
             DecodedUpdate decoded = null;
             try
@@ -106,21 +106,28 @@ public class DecodedStructTests
         {
             foreach (var v2 in new[] { false, true })
             {
+                var raw = ReadObjects(input, v2, out var rawError);
                 DecodedUpdate decoded;
                 try
                 {
-                    decoded = v2 ? UpdateOperations.DecodeUpdateV2(input) : UpdateOperations.DecodeUpdate(input);
+                    decoded = v2 ? YUpdate.Decode(input, format: UpdateFormat.V2) : YUpdate.Decode(input, format: UpdateFormat.V1);
                 }
-                catch (YUpdateException)
+                catch (YUpdateException e)
                 {
+                    if (rawError != null)
+                    {
+                        Assert.AreEqual(rawError, e.Message, "the same exception as the struct objects' read");
+                    }
+
                     continue;
                 }
 
+                Assert.IsNull(rawError, "decoding succeeds where the struct objects' read fails");
                 var detached = decoded.Structs;
-                Assert.HasCount(decoded.Structs.Count, detached);
+                Assert.HasCount(raw.Count, detached);
                 for (var i = 0; i < detached.Count; i++)
                 {
-                    AssertEqual(decoded.Raw[i], detached[i]);
+                    AssertEqual(raw[i], detached[i]);
                 }
 
                 updates++;
@@ -129,6 +136,30 @@ public class DecodedStructTests
         }
 
         return (updates, structs);
+    }
+
+    // The structs as objects, in the order of the update, up to the one that fails.
+    private static List<AbstractStruct> ReadObjects(byte[] input, bool v2, out string rawError)
+    {
+        var limits = UpdateLimits.Default;
+        var reader = new Lib0Reader(input) { MaxDepth = limits.MaxDepth };
+        var result = new List<AbstractStruct>();
+        rawError = null;
+        try
+        {
+            IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader, limits.MaxStructsPerUpdate) : new UpdateDecoderV1(reader, limits.MaxStructsPerUpdate);
+            var cursor = new EncodingUtils.StructCursor(decoder);
+            while (cursor.Next() is { } str)
+            {
+                result.Add(str);
+            }
+        }
+        catch (Exception e) when (e is YUpdateException || YUpdateException.IsDecodingFailure(e))
+        {
+            rawError = YUpdateException.Wrap(e).Message;
+        }
+
+        return result;
     }
 
     // The oracle reads the objects with the wire's own numbers (IContentEx.Ref) and their public members.
@@ -159,7 +190,13 @@ public class DecodedStructTests
             Assert.AreEqual(item.Length, d.Content.Count);
         }
 
-        CollectionAssert.AreEqual(holdsValues ? content.GetContent().ToList() : new List<object>(), d.Content.ToList());
+        var expectedValues = holdsValues ? content.GetContent().ToList() : new List<object>();
+        Assert.HasCount(expectedValues.Count, d.Content);
+        for (var i = 0; i < expectedValues.Count; i++)
+        {
+            Assert.IsTrue(StagingDifferential.DeepEqual(expectedValues[i], d.Content[i]), $"value {i} of {s.Id}");
+        }
+
         Assert.AreEqual(d.Kind == ItemKind.String ? ((ContentString)content).GetString() : null, d.Text);
         Assert.AreEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Key : null, d.FormatKey);
         Assert.AreEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Value : null, d.FormatValue);
@@ -209,10 +246,10 @@ public class DecodedStructTests
         var result = new List<byte[]>();
         foreach (var gc in new[] { true, false })
         {
-            var doc = new YDoc(new YDocOptions { ClientId = 7, Gc = gc });
+            var doc = new YDoc(new YDocOptions { ClientId = 7, GarbageCollection = gc });
             doc.GetText("t").Insert(0, "hello é😀 world");
-            doc.GetText("t").Format(1, 3, new Dictionary<string, object> { ["bold"] = true });
-            doc.GetText("t").InsertEmbed(2, new Dictionary<string, object> { ["img"] = "x" });
+            doc.GetText("t").Format(1, 3, new Dictionary<string, YValue> { ["bold"] = true });
+            doc.GetText("t").InsertEmbed(2, YValue.FromObject(new Dictionary<string, object> { ["img"] = "x" }));
             doc.GetArray("a").Push(new List<object> { 1, "two", 3.5, null, true, new byte[] { 1, 2, 3 }, new List<object> { 1 } });
             doc.GetArray("a").Push(new List<object> { new YDoc(new YDocOptions { Guid = "sub-1" }) });
             var map = doc.GetMap("m");
@@ -226,25 +263,25 @@ public class DecodedStructTests
             var xml = doc.GetXmlFragment("x");
             var element = new YXmlElement("div");
             xml.Insert(0, new List<object> { element, new YXmlText("t"), new YXmlHook("hk"), new YXmlFragment() });
-            doc.GetText("t").Delete(4, 5);
+            doc.GetText("t").Remove(4, 5);
             doc.GetArray("a").Delete(0, 2);
-            var peer = new YDoc(new YDocOptions { ClientId = 8, Gc = gc });
+            var peer = new YDoc(new YDocOptions { ClientId = 8, GarbageCollection = gc });
             peer.ApplyUpdate(doc.EncodeStateAsUpdate());
             peer.GetText("t").Insert(1, "peer");
             doc.ApplyUpdate(peer.EncodeStateAsUpdate());
             result.Add(doc.EncodeStateAsUpdate());
-            result.Add(doc.EncodeStateAsUpdateV2());
+            result.Add(doc.EncodeStateAsUpdate(format: UpdateFormat.V2));
         }
 
         var gapped = new YDoc(new YDocOptions { ClientId = 1 });
         var updates = new List<byte[]>();
-        gapped.UpdateV2 += (_, e) => updates.Add(e.data);
+        gapped.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
             gapped.GetArray("a").Insert(0, new List<object> { i });
         }
 
-        result.Add(UpdateOperations.MergeUpdatesV2(new[] { updates[0], updates[2] }));
+        result.Add(YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2));
         return result;
     }
 

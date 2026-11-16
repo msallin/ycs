@@ -11,7 +11,7 @@ internal static class YcsCases
     private static YDoc NewDoc(long id = Inputs.ClientId) => new(new YDocOptions { ClientId = id });
 
     private static Prepared TextResult(YDoc doc, YText text, Action body) =>
-        new(body, text.ToString, () => doc.EncodeStateAsUpdateV1(), () => doc.EncodeStateAsUpdateV2(), doc.Destroy);
+        new(body, text.ToString, () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
 
     public static Prepared TextAppend(Fixtures f)
     {
@@ -48,7 +48,7 @@ internal static class YcsCases
         var text = doc.GetText("text");
         var chars = Inputs.TypingOf(n);
         long seen = 0;
-        text.Observe((_, _) => seen++);
+        text.Observe(_ => seen++);
         return new Prepared(
             () => doc.Transact(_ =>
             {
@@ -58,8 +58,8 @@ internal static class YcsCases
                 }
             }),
             () => $"{seen} {text}",
-            () => doc.EncodeStateAsUpdateV1(),
-            () => doc.EncodeStateAsUpdateV2(),
+            () => doc.EncodeStateAsUpdate(),
+            () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2),
             doc.Destroy);
     }
 
@@ -107,7 +107,7 @@ internal static class YcsCases
                         var e = trace.Edits[i];
                         if (e.Delete > 0)
                         {
-                            text.Delete(e.Pos, e.Delete);
+                            text.Remove(e.Pos, e.Delete);
                         }
 
                         if (e.Insert.Length > 0)
@@ -124,7 +124,7 @@ internal static class YcsCases
     {
         var baseDoc = NewDoc(100);
         baseDoc.GetText("text").Insert(0, Inputs.BaseText);
-        var baseUpdate = baseDoc.EncodeStateAsUpdateV1();
+        var baseUpdate = baseDoc.EncodeStateAsUpdate();
         var clients = new YDoc[Inputs.Clients];
         var texts = new YText[Inputs.Clients];
         for (var c = 0; c < clients.Length; c++)
@@ -141,7 +141,7 @@ internal static class YcsCases
             {
                 if (e.Delete > 0)
                 {
-                    texts[c].Delete(e.Pos, e.Delete);
+                    texts[c].Remove(e.Pos, e.Delete);
                 }
                 else
                 {
@@ -156,7 +156,7 @@ internal static class YcsCases
                 var diffs = new byte[clients.Length][];
                 for (var c = 0; c < clients.Length; c++)
                 {
-                    diffs[c] = clients[c].EncodeStateAsUpdateV1(baseVector);
+                    diffs[c] = clients[c].EncodeStateAsUpdate(baseVector);
                 }
 
                 for (var i = 0; i < clients.Length; i++)
@@ -180,8 +180,8 @@ internal static class YcsCases
 
                 return first;
             },
-            () => clients[0].EncodeStateAsUpdateV1(),
-            () => clients[0].EncodeStateAsUpdateV2(),
+            () => clients[0].EncodeStateAsUpdate(),
+            () => clients[0].EncodeStateAsUpdate(format: UpdateFormat.V2),
             () =>
             {
                 foreach (var c in clients)
@@ -204,17 +204,17 @@ internal static class YcsCases
                     last = new YDoc();
                     if (v2)
                     {
-                        last.ApplyUpdateV2(update, null, UpdateLimits.Unlimited);
+                        last.ApplyUpdate(update, null, UpdateFormat.V2, limits: UpdateLimits.Unlimited);
                     }
                     else
                     {
-                        last.ApplyUpdateV1(update, null, UpdateLimits.Unlimited);
+                        last.ApplyUpdate(update, null, limits: UpdateLimits.Unlimited);
                     }
                 }
             },
             () => last.GetText("text").ToString(),
-            () => last.EncodeStateAsUpdateV1(),
-            () => last.EncodeStateAsUpdateV2());
+            () => last.EncodeStateAsUpdate(),
+            () => last.EncodeStateAsUpdate(format: UpdateFormat.V2));
     }
 
     /// <summary>Updates from a peer, at the default limits.</summary>
@@ -237,7 +237,7 @@ internal static class YcsCases
     private static (YDoc Doc, YText Text) Loaded(Fixtures f)
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(f.Bytes("trace.ycs.v1"), null, UpdateLimits.Unlimited);
+        doc.ApplyUpdate(f.Bytes("trace.ycs.v1"), null, limits: UpdateLimits.Unlimited);
         return (doc, doc.GetText("text"));
     }
 
@@ -252,7 +252,7 @@ internal static class YcsCases
             {
                 for (var i = 0; i < 10; i++)
                 {
-                    sink += doc.EncodeStateAsUpdateV1().Length;
+                    sink += doc.EncodeStateAsUpdate().Length;
                 }
             }
             ,
@@ -260,7 +260,7 @@ internal static class YcsCases
             {
                 for (var i = 0; i < 10; i++)
                 {
-                    sink += doc.EncodeStateAsUpdateV2().Length;
+                    sink += doc.EncodeStateAsUpdate(format: UpdateFormat.V2).Length;
                 }
             }
             ,
@@ -276,17 +276,17 @@ internal static class YcsCases
             {
                 for (var i = 0; i < 10; i++)
                 {
-                    sink += doc.EncodeStateAsUpdateV1(halfVector).Length;
+                    sink += doc.EncodeStateAsUpdate(halfVector).Length;
                 }
             }
             ,
             _ => throw new ArgumentException(what),
         };
-        return new Prepared(body, () => text.ToString(), () => doc.EncodeStateAsUpdateV1(), () => doc.EncodeStateAsUpdateV2(), doc.Destroy);
+        return new Prepared(body, () => text.ToString(), () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
     }
 
     private static Prepared MapResult(YDoc doc, YMap map, Action body) =>
-        new(body, () => Canonical.Map(map.Select(kv => (kv.Key, Convert.ToInt64(kv.Value)))), () => doc.EncodeStateAsUpdateV1(), () => doc.EncodeStateAsUpdateV2(), doc.Destroy);
+        new(body, () => Canonical.Map(map.Select(kv => (kv.Key, Convert.ToInt64(kv.Value)))), () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
 
     public static Prepared MapSetDistinct(Fixtures f, bool oneTxn)
     {
@@ -318,7 +318,7 @@ internal static class YcsCases
     }
 
     private static Prepared ArrayResult(YDoc doc, YArray array, Action body) =>
-        new(body, () => Canonical.Array(array.Select(Convert.ToInt64)), () => doc.EncodeStateAsUpdateV1(), () => doc.EncodeStateAsUpdateV2(), doc.Destroy);
+        new(body, () => Canonical.Array(array.Select(Convert.ToInt64)), () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
 
     public static Prepared ArrayPush(Fixtures f, bool oneTxn, int n)
     {
@@ -384,8 +384,8 @@ internal static class YcsCases
                 }
             },
             () => $"{chars} {text}",
-            () => doc.EncodeStateAsUpdateV1(),
-            () => doc.EncodeStateAsUpdateV2(),
+            () => doc.EncodeStateAsUpdate(),
+            () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2),
             doc.Destroy);
     }
 
@@ -406,8 +406,8 @@ internal static class YcsCases
                 }
             },
             () => sum.ToString(),
-            () => doc.EncodeStateAsUpdateV1(),
-            () => doc.EncodeStateAsUpdateV2(),
+            () => doc.EncodeStateAsUpdate(),
+            () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2),
             doc.Destroy);
     }
 
@@ -435,8 +435,8 @@ internal static class YcsCases
                 }
             },
             () => sum.ToString(),
-            () => doc.EncodeStateAsUpdateV1(),
-            () => doc.EncodeStateAsUpdateV2(),
+            () => doc.EncodeStateAsUpdate(),
+            () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2),
             doc.Destroy);
     }
 
@@ -445,7 +445,7 @@ internal static class YcsCases
     {
         var doc = NewDoc();
         var text = doc.GetText("text");
-        var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+        var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
         var chars = Inputs.Typing.AsSpan(0, Inputs.UndoN).ToArray();
         void Type()
         {
@@ -484,7 +484,7 @@ internal static class YcsCases
         }
 
         Action body = phase switch { "type" => Type, "undo" => UndoAll, "redo" => RedoAll, _ => throw new ArgumentException(phase) };
-        return new Prepared(body, () => $"{(phase == "type" ? chars.Length : steps)} {text}", () => doc.EncodeStateAsUpdateV1(), () => doc.EncodeStateAsUpdateV2(), doc.Destroy);
+        return new Prepared(body, () => $"{(phase == "type" ? chars.Length : steps)} {text}", () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
     }
 
     public static Prepared Observe(Fixtures f, bool readDelta)
@@ -493,7 +493,7 @@ internal static class YcsCases
         var text = doc.GetText("text");
         var chars = Inputs.Typing;
         long seen = 0;
-        text.Observe((_, e) => seen += readDelta ? ((YTextEvent)e.Event).Delta.Count : 1);
+        text.Observe(e => seen += readDelta ? e.Delta.Count : 1);
         return new Prepared(
             () =>
             {
@@ -503,8 +503,8 @@ internal static class YcsCases
                 }
             },
             () => $"{seen} {text}",
-            () => doc.EncodeStateAsUpdateV1(),
-            () => doc.EncodeStateAsUpdateV2(),
+            () => doc.EncodeStateAsUpdate(),
+            () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2),
             doc.Destroy);
     }
 
@@ -514,7 +514,7 @@ internal static class YcsCases
         var doc = NewDoc();
         var text = doc.GetText("text");
         var updates = new List<byte[]>(trace.Transactions);
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         byte[] half = null;
         for (var t = 0; t < trace.Transactions; t++)
         {
@@ -530,7 +530,7 @@ internal static class YcsCases
                     var e = trace.Edits[i];
                     if (e.Delete > 0)
                     {
-                        text.Delete(e.Pos, e.Delete);
+                        text.Remove(e.Pos, e.Delete);
                     }
 
                     if (e.Insert.Length > 0)
@@ -541,14 +541,14 @@ internal static class YcsCases
             });
         }
 
-        return (text.ToString(), doc.EncodeStateAsUpdateV1(), doc.EncodeStateAsUpdateV2(), updates, half);
+        return (text.ToString(), doc.EncodeStateAsUpdate(), doc.EncodeStateAsUpdate(format: UpdateFormat.V2), updates, half);
     }
 
     /// <summary>The content of a v1 state as each workload's <see cref="Prepared.Content"/> canonicalizes it.</summary>
     public static string ContentOf(byte[] v1, string root)
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(v1, null, UpdateLimits.Unlimited);
+        doc.ApplyUpdate(v1, null, limits: UpdateLimits.Unlimited);
         return root switch
         {
             "text" => doc.GetText("text").ToString(),

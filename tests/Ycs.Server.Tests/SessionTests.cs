@@ -282,7 +282,7 @@ public class SessionTests
         session.Start();
         session.Close();
 
-        session.Receive(Messages.Update(source.EncodeStateAsUpdateV1()));
+        session.Receive(Messages.Update(source.EncodeStateAsUpdate()));
 
         Assert.AreEqual(string.Empty, Messages.TextOf(room.EncodeStateAsUpdate()));
     }
@@ -309,8 +309,8 @@ public class SessionTests
     {
         var source = new YDoc(new YDocOptions { ClientId = 9 });
         source.GetText("text").Insert(0, "lost");
-        source.GetText("text").Delete(1, 1);
-        var update = source.EncodeStateAsUpdateV1();
+        source.GetText("text").Remove(1, 1);
+        var update = source.EncodeStateAsUpdate();
         return kind switch
         {
             "empty" => [],
@@ -328,7 +328,7 @@ public class SessionTests
     private static List<byte[]> RecordEdits(YDoc doc, int count, int seed)
     {
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         var random = new Random(seed);
         var text = doc.GetText("text");
         for (var i = 0; i < count; i++)

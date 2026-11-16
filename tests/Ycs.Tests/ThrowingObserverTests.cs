@@ -105,20 +105,20 @@ public class ThrowingObserverTests
             }
         }
 
-        a.EventHandler += (_, _) => Maybe("obs:a");
-        a.EventHandler += (_, _) => Maybe("obs:a2");
-        m.EventHandler += (_, _) => Maybe("obs:m");
-        t.EventHandler += (_, _) => Maybe("obs:t");
-        a.DeepEventHandler += (_, _) => Maybe("deep:a");
-        m.DeepEventHandler += (_, _) => Maybe("deep:m");
+        a.Observe(_ => Maybe("obs:a"));
+        a.Observe(_ => Maybe("obs:a2"));
+        m.Observe(_ => Maybe("obs:m"));
+        t.Observe(_ => Maybe("obs:t"));
+        a.ObserveDeep((_, _) => Maybe("deep:a"));
+        m.ObserveDeep((_, _) => Maybe("deep:m"));
         doc.BeforeAllTransactions += (_, _) => Maybe("beforeAllTransactions");
         doc.BeforeTransaction += (_, _) => Maybe("beforeTransaction");
         doc.BeforeObserverCalls += (_, _) => Maybe("beforeObserverCalls");
         doc.AfterTransaction += (_, _) => Maybe("afterTransaction");
         doc.AfterTransaction += (_, _) => Maybe("afterTransaction2");
         doc.AfterTransactionCleanup += (_, _) => Maybe("afterTransactionCleanup");
-        doc.Update += (_, _) => Maybe("update");
-        doc.UpdateV2 += (_, _) => Maybe("updateV2");
+        doc.Updated += (_, _) => Maybe("update");
+        doc.UpdatedV2 += (_, _) => Maybe("updateV2");
         doc.SubdocsChanged += (_, _) => Maybe("subdocs");
         doc.AfterAllTransactions += (_, _) => Maybe("afterAllTransactions");
 
@@ -172,25 +172,25 @@ public class ThrowingObserverTests
                 break;
             case "the function and an observer":
                 throws.Add("obs:m");
-                act = () => doc.Transact(_ =>
+                act = () => doc.Transact((Action<Transaction>)(_ =>
                 {
                     a.Insert(0, [1]);
                     m.Set("k", 1);
                     throw new InvalidOperationException("function");
-                });
+                }));
                 break;
             case "the function":
-                act = () => doc.Transact(_ =>
+                act = () => doc.Transact((Action<Transaction>)(_ =>
                 {
                     a.Insert(0, [1]);
                     throw new InvalidOperationException("function");
-                });
+                }));
                 break;
             case "an observer that changes the document, then one of its transaction":
                 {
                     throws.Add("obs:m");
                     var once = false;
-                    a.EventHandler += (_, _) =>
+                    a.Observe(_ =>
                     {
                         if (!once)
                         {
@@ -198,7 +198,7 @@ public class ThrowingObserverTests
                             log.Add("obs:a changes m");
                             m.Set("n", 2);
                         }
-                    };
+                    });
                     break;
                 }
 
@@ -206,22 +206,22 @@ public class ThrowingObserverTests
                 {
                     throws.Add("obs:a");
                     var once = false;
-                    a.EventHandler += (_, _) =>
+                    a.Observe(_ =>
                     {
                         if (!once)
                         {
                             once = true;
                             m.Set("n", 2);
                         }
-                    };
-                    m.EventHandler += (_, _) =>
+                    });
+                    m.Observe(_ =>
                     {
                         if (m.ContainsKey("n"))
                         {
                             log.Add("obs:m nested");
                             throw new InvalidOperationException("obs:m nested");
                         }
-                    };
+                    });
                     break;
                 }
 

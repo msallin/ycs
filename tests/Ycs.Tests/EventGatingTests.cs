@@ -27,7 +27,7 @@ public class EventGatingTests
         var doc = new YDoc();
         var text = doc.GetText("text");
         YEvent seen = null;
-        text.EventHandler += (_, e) => seen = e.Event;
+        text.Observe(e => seen = e);
 
         var changedParentTypes = InsertCapturingChangedParentTypes(doc, text);
 
@@ -41,8 +41,8 @@ public class EventGatingTests
         var map = doc.GetMap("map");
         var text = new YText();
         map.Set("text", text);
-        IList<YEvent> seen = null;
-        map.DeepEventHandler += (_, e) => seen = e.Events;
+        IReadOnlyList<YEvent> seen = null;
+        map.ObserveDeep((deepEvents, _) => seen = deepEvents);
 
         var changedParentTypes = InsertCapturingChangedParentTypes(doc, text);
 
@@ -128,12 +128,12 @@ public class EventGatingTests
     [TestMethod]
     public void Changed_MapKeyAddedByHandler_IsInTheSet()
     {
-        // Yjs' transaction.changed holds mutable Sets: a handler may add to one.
+        // The sets inside the library stay mutable (Transaction.Changed hands them out read-only).
         var doc = new YDoc();
         var map = doc.GetMap("map");
         var seen = new List<string>();
-        doc.AfterTransaction += (_, tr) => tr.Changed[map].Add("added");
-        doc.AfterTransactionCleanup += (_, tr) => seen.AddRange(tr.Changed[map]);
+        doc.AfterTransaction += (_, tr) => tr._changed[map].Add("added");
+        doc.AfterTransactionCleanup += (_, tr) => seen.AddRange(tr._changed[map]);
 
         map.Set("key", 1);
 
@@ -156,7 +156,7 @@ public class EventGatingTests
         var doc = new YDoc();
         var text = doc.GetText("text");
         YTextEvent seen = null;
-        text.EventHandler += (_, e) => seen = (YTextEvent)e.Event;
+        text.Observe(e => seen = (YTextEvent)e);
 
         doc.Transact(_ =>
         {
@@ -170,10 +170,10 @@ public class EventGatingTests
 
     // The Update handler sees the transaction after its observers, and is no transaction listener
     // (YDoc.HasTransactionListeners); a copy, because the transaction is reused once it has ended.
-    private static Dictionary<YType, IList<YEvent>> InsertCapturingChangedParentTypes(YDoc doc, YText text)
+    private static Dictionary<YType, IReadOnlyList<YEvent>> InsertCapturingChangedParentTypes(YDoc doc, YText text)
     {
-        Dictionary<YType, IList<YEvent>> captured = null;
-        doc.Update += (_, e) => captured = new Dictionary<YType, IList<YEvent>>(e.transaction.ChangedParentTypes);
+        Dictionary<YType, IReadOnlyList<YEvent>> captured = null;
+        doc.Updated += (_, e) => captured = new Dictionary<YType, IReadOnlyList<YEvent>>(e.Transaction.ChangedParentTypes);
 
         text.Insert(0, "a");
 

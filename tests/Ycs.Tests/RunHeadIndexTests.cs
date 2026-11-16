@@ -38,18 +38,18 @@ public class RunHeadIndexTests
         var b = Doc(2, walk);
         var ta = List(a, text);
         var tb = List(b, text);
-        ta.EventHandler += (_, _) => { };
+        ta.ObserveAny(_ => { });
         Insert(ta, 0, "abxcde");
         Delete(ta, 2, 1);
         Sync(a, b);
         Insert(tb, 5, "D");
         Sync(b, a);
         Delete(tb, 0, 2);
-        var diff = b.EncodeStateAsUpdateV1(a.EncodeStateVectorV1());
+        var diff = b.EncodeStateAsUpdate(a.EncodeStateVector());
         a.Transact(_ =>
         {
             Insert(ta, 5, "p");
-            a.ApplyUpdateV1(diff);
+            a.ApplyUpdate(diff);
             Insert(ta, 5, "q");
         });
 
@@ -102,7 +102,7 @@ public class RunHeadIndexTests
         var log = new System.Text.StringBuilder();
         var doc = Doc(1, walk);
         var a = doc.GetArray("a");
-        a.EventHandler += (_, _) => { };
+        a.Observe(_ => { });
         a.Insert(0, Enumerable.Range(0, 3000).Select(v => (object)(long)v).ToList());
         for (var k = 0; k < 1500; k++)
         {
@@ -206,14 +206,14 @@ public class RunHeadIndexTests
             switch (random.Next(4))
             {
                 case 0:
-                    ta.Insert(random.Next(length + 1), "F", new Dictionary<string, object> { [random.Next(2) == 0 ? "b" : "i"] = true });
+                    ta.Insert(random.Next(length + 1), "F", new Dictionary<string, YValue> { [random.Next(2) == 0 ? "b" : "i"] = true });
                     break;
                 case 1:
                     var at = random.Next(length);
-                    ta.Format(at, Math.Min(1 + random.Next(6), length - at), new Dictionary<string, object> { ["b"] = random.Next(3) == 0 ? null : true });
+                    ta.Format(at, Math.Min(1 + random.Next(6), length - at), new Dictionary<string, YValue> { ["b"] = random.Next(3) == 0 ? YValue.Null : true });
                     break;
                 case 2:
-                    ta.Delete(random.Next(length), 1);
+                    ta.Remove(random.Next(length), 1);
                     break;
                 default:
                     ta.Insert(random.Next(length + 1), "p");
@@ -222,7 +222,7 @@ public class RunHeadIndexTests
         }
 
         // b integrates the formats before it asks for the text.
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
         var tb = b.GetText("t");
         for (var k = 0; k < 60; k++)
         {
@@ -242,11 +242,11 @@ public class RunHeadIndexTests
                 withMarkers++;
             }
 
-            log.Append(string.Join("|", tb.ToDelta().Select(d => d.Insert + (d.Attributes == null ? "" : "{" + string.Join(",", d.Attributes.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Key + "=" + x.Value)) + "}"))));
+            log.Append(string.Join("|", tb.ToDelta().Select(d => d.Inserted() + (d.Attributes == null ? "" : "{" + string.Join(",", d.Attributes.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Key + "=" + x.Value)) + "}"))));
             log.Append(" # ").Append(lookups).Append(" # ").Append(markers).Append('\n');
         }
 
-        log.Append(Convert.ToHexString(b.EncodeStateAsUpdateV1()));
+        log.Append(Convert.ToHexString(b.EncodeStateAsUpdate()));
         return log.ToString();
     }
 
@@ -265,7 +265,7 @@ public class RunHeadIndexTests
                 if (length > 0)
                 {
                     var at = random.Next(length);
-                    tb.Delete(at, Math.Min(1 + random.Next(4), length - at));
+                    tb.Remove(at, Math.Min(1 + random.Next(4), length - at));
                 }
 
                 break;
@@ -274,7 +274,7 @@ public class RunHeadIndexTests
                 Sync(b, a);
                 if (ta.Length > 0)
                 {
-                    ta.Delete(random.Next(ta.Length), 1);
+                    ta.Remove(random.Next(ta.Length), 1);
                 }
 
                 Sync(a, b);
@@ -304,17 +304,17 @@ public class RunHeadIndexTests
             _tb = List(_b, text);
             if (seed % 2 == 0)
             {
-                _ta.EventHandler += (_, _) => { };
+                _ta.ObserveAny(_ => { });
             }
 
             // The second window: during the cleanup of a remote transaction, before the list's own observer call.
-            _a.GetMap("m").EventHandler += (_, _) =>
+            _a.GetMap("m").Observe(_ =>
             {
                 for (; _armed > 0; _armed--)
                 {
                     LocalEdit();
                 }
-            };
+            });
 
             // A long list in one piece of client 1: the deletes split it into one long chain.
             Insert(_ta, 0, new string('a', 300 + _random.Next(300)));
@@ -339,11 +339,11 @@ public class RunHeadIndexTests
                     // The first window: the other client's update applied inside a local transaction.
                     Sync(_a, _b);
                     Insert(_tb, _random.Next(Length(_tb) + 1), "S");
-                    var diff = _b.EncodeStateAsUpdateV1(_a.EncodeStateVectorV1());
+                    var diff = _b.EncodeStateAsUpdate(_a.EncodeStateVector());
                     _a.Transact(_ =>
                     {
                         LocalEdit();
-                        _a.ApplyUpdateV1(diff);
+                        _a.ApplyUpdate(diff);
                         LocalEdit();
                     });
                     break;
@@ -416,7 +416,7 @@ public class RunHeadIndexTests
 
     private static YDoc Doc(long client, string walk, bool gc = true)
     {
-        var doc = new YDoc(new YDocOptions { ClientId = client, Gc = gc });
+        var doc = new YDoc(new YDocOptions { ClientId = client, GarbageCollection = gc });
         doc.LiteralWalkStepsForTests = walk == "eager" ? 1 : doc.LiteralWalkStepsForTests;
         doc.RunHeadIndexDisabledForTests = walk == "plain";
         doc.MarkerLookupsForTests = [];
@@ -443,7 +443,7 @@ public class RunHeadIndexTests
     {
         if (type is YText text)
         {
-            text.Delete(index, length);
+            text.Remove(index, length);
         }
         else
         {
@@ -453,7 +453,7 @@ public class RunHeadIndexTests
 
     private static string Content(YType type) => type is YText text ? text.ToString() : string.Join(",", ((YArray)type).ToArray());
 
-    private static void Sync(YDoc from, YDoc to) => to.ApplyUpdateV1(from.EncodeStateAsUpdateV1(to.EncodeStateVectorV1()));
+    private static void Sync(YDoc from, YDoc to) => to.ApplyUpdate(from.EncodeStateAsUpdate(to.EncodeStateVector()));
 
     private static string Lookups(YDoc doc)
     {

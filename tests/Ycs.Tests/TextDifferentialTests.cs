@@ -49,11 +49,11 @@ public class TextDifferentialTests
         foreach (var doc in docs)
         {
             doc.GetText("text");
-            doc.Update += (_, e) =>
+            doc.Updated += (_, e) =>
             {
-                if (!ReferenceEquals(e.origin, remote))
+                if (!ReferenceEquals(e.Origin, remote))
                 {
-                    log.Add(e.data);
+                    log.Add(e.Update.ToArray());
                 }
             };
         }
@@ -67,7 +67,7 @@ public class TextDifferentialTests
                     docs[op.GetProperty("replica").GetInt32()].GetText("text").Insert(op.GetProperty("index").GetInt32(), op.GetProperty("text").GetString());
                     break;
                 case "delete":
-                    docs[op.GetProperty("replica").GetInt32()].GetText("text").Delete(op.GetProperty("index").GetInt32(), op.GetProperty("length").GetInt32());
+                    docs[op.GetProperty("replica").GetInt32()].GetText("text").Remove(op.GetProperty("index").GetInt32(), op.GetProperty("length").GetInt32());
                     break;
                 case "deliver":
                     docs[op.GetProperty("to").GetInt32()].ApplyUpdate(log[op.GetProperty("update").GetInt32()], remote);

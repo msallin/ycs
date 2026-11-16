@@ -23,7 +23,7 @@ public class ItemViewTests
         var text = doc.GetText("t");
         var views = new List<ItemView>();
         var clock = 0;
-        using var subscription = text.Observe((_, _) => views.Add(ItemView.Of(doc, doc.Store.Find(new ItemId(1, clock)))));
+        using var subscription = text.Observe(_ => views.Add(ItemView.Of(doc, doc.Store.Find(new ItemId(1, clock)))));
         foreach (var part in parts)
         {
             text.Insert(text.Length, part);
@@ -162,7 +162,7 @@ public class ItemViewTests
         var doc = NewDoc();
         var text = doc.GetText("t");
         var parts = new List<Item>();
-        using var subscription = text.Observe((_, _) => parts.Add((Item)doc.Store.Find(new ItemId(1, parts.Count)).ToStruct()));
+        using var subscription = text.Observe(_ => parts.Add((Item)doc.Store.Find(new ItemId(1, parts.Count)).ToStruct()));
         text.Insert(0, "a");
         text.Insert(1, "b");
 

@@ -1,62 +1,75 @@
-// ------------------------------------------------------------------------------
-//  <copyright company="Microsoft Corporation">
-//      Copyright (c) Microsoft Corporation.  All rights reserved.
-//  </copyright>
-// ------------------------------------------------------------------------------
-
-#nullable disable // Not annotated for nullable reference types yet.
+#nullable enable
 
 namespace Ycs;
 
-public partial class UndoManager
+/// <summary>
+/// Tracks the changes of a document, or of some of its types, so that they can be undone and redone;
+/// Yjs 13.6's <c>UndoManager</c>. Fires <see cref="StackItemAdded"/> when a stack item was added to either the undo or
+/// the redo stack, <see cref="StackItemUpdated"/> when a change was merged into the last one,
+/// <see cref="StackItemPopped"/> when one was popped (restore what was saved in <see cref="StackItem.Meta"/> there), and
+/// <see cref="StackCleared"/> when <see cref="Clear"/> emptied a stack. Disposing it unhooks it from the document.
+/// </summary>
+public sealed partial class UndoManager : IDisposable
 {
-    public UndoManager(AbstractType typeScope, UndoManagerOptions options = null)
-        : this(new object[] { typeScope ?? throw new ArgumentNullException(nameof(typeScope)) }, options)
+    /// <summary>Tracks the changes of <paramref name="scope"/> and of the types inside it.</summary>
+    /// <exception cref="ArgumentException">The type is not part of a document.</exception>
+    public UndoManager(YType scope, UndoManagerOptions? options = null)
+        : this(DocOf(scope), false, options)
+    {
+        AddToScope(scope);
+    }
+
+    /// <summary>Tracks the changes of the given types and of the types inside them.</summary>
+    /// <exception cref="ArgumentException">The first type is not part of a document, or there is none.</exception>
+    public UndoManager(IEnumerable<YType> scope, UndoManagerOptions? options = null)
+        : this(DocOf(scope), false, options)
+    {
+        AddToScope(scope);
+    }
+
+    /// <summary>Tracks every change of <paramref name="doc"/>, whichever type it touches.</summary>
+    public UndoManager(YDoc doc, UndoManagerOptions? options = null)
+        : this(doc, true, options)
     {
     }
 
-    /// <summary>Tracks every change of <paramref name="doc"/>, whichever type it touched.</summary>
-    public UndoManager(YDoc doc, UndoManagerOptions options = null)
-        : this(new object[] { doc ?? throw new ArgumentNullException(nameof(doc)) }, options)
+    private UndoManager(YDoc doc, bool wholeDocument, UndoManagerOptions? options)
     {
-    }
-
-    /// <summary>
-    /// Tracks changes of the given types (and their children) and, for a <see cref="YDoc"/> entry, of the whole document.
-    /// </summary>
-    public UndoManager(IReadOnlyList<object> typeScope, UndoManagerOptions options = null)
-    {
-        ArgumentNullException.ThrowIfNull(typeScope);
-        _doc = options?.Doc ?? InferDoc(typeScope)
-            ?? throw new ArgumentException("The document cannot be determined from an empty scope; set UndoManagerOptions.Doc.", nameof(typeScope));
-
-        AddToScope(typeScope);
-        _captureTimeout = options?.CaptureTimeout ?? 500;
-        _captureTransaction = options?.CaptureTransaction ?? (_ => true);
-        _deleteFilter = options?.DeleteFilter ?? (_ => true);
-        _trackedOrigins = options?.TrackedOrigins ?? new HashSet<object> { null };
+        ArgumentNullException.ThrowIfNull(doc);
+        _doc = doc;
+        _wholeDocument = wholeDocument;
+        _captureTimeout = options?.CaptureTimeout ?? UndoManagerOptions.DefaultCaptureTimeout;
+        _timeProvider = options?.TimeProvider ?? TimeProvider.System;
+        _captureTransaction = options?.CaptureTransaction ?? (static _ => true);
+        _deleteFilter = options?.DeleteFilter ?? (static _ => true);
+        _trackedOrigins = options?.TrackedOrigins is { } origins ? new HashSet<object?>(origins) : new HashSet<object?> { null };
         _trackedOrigins.Add(this);
         IgnoreRemoteMapChanges = options?.IgnoreRemoteMapChanges ?? false;
-        _lastChange = DateTime.MinValue;
 
         _doc.AfterTransaction += OnAfterTransaction;
         _doc.Destroyed += OnDocDestroyed;
     }
 
-    public event EventHandler<StackEventArgs> StackItemAdded;
+    public event EventHandler<UndoStackEventArgs>? StackItemAdded;
 
     /// <summary>Fires when a captured change was merged into the stack item on top of the undo stack.</summary>
-    public event EventHandler<StackEventArgs> StackItemUpdated;
+    public event EventHandler<UndoStackEventArgs>? StackItemUpdated;
 
-    public event EventHandler<StackEventArgs> StackItemPopped;
+    public event EventHandler<UndoStackEventArgs>? StackItemPopped;
 
-    /// <summary>Fires inside the transaction of <see cref="Clear(bool, bool)"/> when it empties a stack.</summary>
-    public event EventHandler<StackClearedEventArgs> StackCleared;
+    /// <summary>Fires inside the transaction of <see cref="Clear"/> when it empties a stack.</summary>
+    public event EventHandler<UndoStackClearedEventArgs>? StackCleared;
 
     public YDoc Doc => _doc;
 
-    /// <summary>The tracked <see cref="AbstractType"/> and <see cref="YDoc"/> entries.</summary>
-    public IReadOnlyList<object> Scope => _scope;
+    /// <summary>
+    /// The tracked types. A manager made for a document (or extended with one: <see cref="AddToScope(YDoc)"/>)
+    /// tracks all of it, whatever this lists; Yjs lists the document itself here.
+    /// </summary>
+    public IReadOnlyList<YType> Scope => _scope;
+
+    /// <summary>Whether every change of <see cref="Doc"/> is tracked, not only those of <see cref="Scope"/>.</summary>
+    public bool TracksWholeDocument => _wholeDocument;
 
     /// <summary>The undo stack, oldest first; the last item is undone next.</summary>
     public IReadOnlyList<StackItem> UndoStack => _undoStack;
@@ -69,66 +82,68 @@ public partial class UndoManager
     /// <see cref="StackItemPopped"/> handlers returned; null otherwise. The handlers of
     /// <see cref="StackItemAdded"/> for the opposite stack can carry its <see cref="StackItem.Meta"/> over.
     /// </summary>
-    public StackItem CurrentStackItem { get; private set; }
+    public StackItem? CurrentStackItem { get; private set; }
+
+    public bool CanUndo => _undoStack.Count > 0;
+
+    public bool CanRedo => _redoStack.Count > 0;
 
     /// <summary>See <see cref="UndoManagerOptions.IgnoreRemoteMapChanges"/>.</summary>
     public bool IgnoreRemoteMapChanges { get; set; }
 
-    public void AddToScope(object scopeEntry)
+    /// <summary>Extends the scope by a type (and the types inside it); one already in the scope is skipped.</summary>
+    public void AddToScope(YType type)
     {
-        AddToScope(new[] { scopeEntry });
+        ArgumentNullException.ThrowIfNull(type);
+        if (!_scope.Contains(type))
+        {
+            _scope.Add(type);
+        }
+    }
+
+    public void AddToScope(IEnumerable<YType> types)
+    {
+        ArgumentNullException.ThrowIfNull(types);
+        foreach (var type in types)
+        {
+            AddToScope(type);
+        }
+    }
+
+    /// <summary>Extends the scope by the whole document (<see cref="TracksWholeDocument"/>).</summary>
+    /// <exception cref="ArgumentException">It is not the document of this manager.</exception>
+    public void AddToScope(YDoc doc)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        if (doc != _doc)
+        {
+            throw new ArgumentException("An undo manager tracks one document.", nameof(doc));
+        }
+
+        _wholeDocument = true;
     }
 
     /// <summary>
-    /// Extends the scope. Each entry must be an <see cref="AbstractType"/> or a <see cref="YDoc"/>; one already
-    /// in the scope is skipped.
+    /// Captures the transactions of an origin as well (by equality, or by type: a transaction whose origin is of
+    /// the given <see cref="Type"/>). Null is the origin of a transaction made without one.
     /// </summary>
-    public void AddToScope(IEnumerable<object> scopeEntries)
-    {
-        if (scopeEntries == null)
-        {
-            return;
-        }
+    public void AddTrackedOrigin(object? origin) => _trackedOrigins.Add(origin);
 
-        foreach (var entry in scopeEntries)
-        {
-            if (entry == null || _scope.Contains(entry))
-            {
-                continue;
-            }
-
-            if (!(entry is AbstractType) && !(entry is YDoc))
-            {
-                throw new ArgumentException($"UndoManager scope entries must be an {nameof(AbstractType)} or a {nameof(YDoc)}.", nameof(scopeEntries));
-            }
-
-            _scope.Add(entry);
-        }
-    }
-
-    public void AddTrackedOrigin(object origin) => _trackedOrigins.Add(origin);
-
-    public void RemoveTrackedOrigin(object origin) => _trackedOrigins.Remove(origin);
-
-    public bool CanUndo() => _undoStack.Count > 0;
-
-    public bool CanRedo() => _redoStack.Count > 0;
-
-    public void Clear() => Clear(true, true);
+    public void RemoveTrackedOrigin(object? origin) => _trackedOrigins.Remove(origin);
 
     /// <summary>
     /// Empties the undo and/or the redo stack and lets the deleted items they kept be garbage collected.
     /// </summary>
-    public void Clear(bool clearUndoStack, bool clearRedoStack)
+    public void Clear(bool undoStack = true, bool redoStack = true)
     {
-        if (!((clearUndoStack && CanUndo()) || (clearRedoStack && CanRedo())))
+        if (!((undoStack && CanUndo) || (redoStack && CanRedo)))
         {
             return;
         }
 
         _doc.Transact(tr =>
         {
-            if (clearUndoStack)
+            if (undoStack)
             {
                 foreach (var item in _undoStack)
                 {
@@ -138,7 +153,7 @@ public partial class UndoManager
                 _undoStack = new List<StackItem>();
             }
 
-            if (clearRedoStack)
+            if (redoStack)
             {
                 foreach (var item in _redoStack)
                 {
@@ -148,7 +163,7 @@ public partial class UndoManager
                 _redoStack = new List<StackItem>();
             }
 
-            StackCleared?.Invoke(this, new StackClearedEventArgs(clearUndoStack, clearRedoStack));
+            StackCleared?.Invoke(this, new UndoStackClearedEventArgs(undoStack, redoStack));
         });
     }
 
@@ -156,19 +171,16 @@ public partial class UndoManager
     /// Changes are merged into one stack item while they come within the capture timeout of each other;
     /// after this call the next change starts a new one.
     /// </summary>
-    public void StopCapturing()
-    {
-        _lastChange = DateTime.MinValue;
-    }
+    public void StopCapturing() => _lastChange = null;
 
     /// <summary>Undoes the last stack item that changes the document.</summary>
     /// <returns>The stack item, or null when none changed anything.</returns>
-    public StackItem Undo()
+    public StackItem? Undo()
     {
         _undoing = true;
         try
         {
-            return PopStackItem(_undoStack, OperationType.Undo);
+            return PopStackItem(_undoStack, UndoOperation.Undo);
         }
         finally
         {
@@ -178,12 +190,12 @@ public partial class UndoManager
 
     /// <summary>Redoes the last undone stack item that changes the document.</summary>
     /// <returns>The stack item, or null when none changed anything.</returns>
-    public StackItem Redo()
+    public StackItem? Redo()
     {
         _redoing = true;
         try
         {
-            return PopStackItem(_redoStack, OperationType.Redo);
+            return PopStackItem(_redoStack, UndoOperation.Redo);
         }
         finally
         {
@@ -191,19 +203,34 @@ public partial class UndoManager
         }
     }
 
-    /// <summary>
-    /// Unhooks this UndoManager from its document. Safe to call more than once.
-    /// </summary>
-    public void Destroy()
+    /// <summary>Unhooks this manager from its document; the stacks stay readable. Safe to call more than once.</summary>
+    public void Dispose()
     {
-        if (_destroyed)
+        if (_disposed)
         {
             return;
         }
 
-        _destroyed = true;
+        _disposed = true;
         _trackedOrigins.Remove(this);
         _doc.AfterTransaction -= OnAfterTransaction;
         _doc.Destroyed -= OnDocDestroyed;
+    }
+
+    private static YDoc DocOf(YType type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return type.Doc ?? throw new ArgumentException("The type is not part of a document.", nameof(type));
+    }
+
+    private static YDoc DocOf(IEnumerable<YType> types)
+    {
+        ArgumentNullException.ThrowIfNull(types);
+        foreach (var type in types)
+        {
+            return DocOf(type);
+        }
+
+        throw new ArgumentException("The document cannot be determined from an empty scope.", nameof(types));
     }
 }

@@ -20,12 +20,12 @@ public class RetryAtomicityTests
     {
         var (trigger, deep) = DeepAfterTrigger();
         var doc = new YDoc(new YDocOptions { ClientId = 9, Limits = Shallow });
-        doc.ApplyUpdateV1(deep);
+        doc.ApplyUpdate(deep);
         var pendingBefore = doc.HasPending;
         var dropped = new List<PendingDrop>();
         doc.PendingDropped += (_, drop) => dropped.Add(drop);
 
-        doc.ApplyUpdateV1(trigger);
+        doc.ApplyUpdate(trigger);
 
         Assert.IsTrue(pendingBefore);
         Assert.AreEqual(1, dropped.Count);
@@ -39,11 +39,11 @@ public class RetryAtomicityTests
     {
         var (trigger, deep) = DeepAfterTrigger();
         var doc = new YDoc(new YDocOptions { ClientId = 9, Limits = Shallow });
-        doc.ApplyUpdateV1(deep);
+        doc.ApplyUpdate(deep);
 
         // The trigger and a struct of client 3 that waits for the deep structs: it joins the retry.
-        var withOwnRest = UpdateOperations.MergeUpdates([trigger, IntoTheDeepArray()]);
-        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(withOwnRest));
+        var withOwnRest = YUpdate.Merge([trigger, IntoTheDeepArray()], format: UpdateFormat.V1);
+        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(withOwnRest));
 
         Assert.IsTrue(e.PartlyApplied);
         Assert.AreEqual("[\"x\"]", Json(doc.GetArray("a")));
@@ -56,13 +56,13 @@ public class RetryAtomicityTests
     {
         var (trigger, deep) = DeepAfterTrigger();
         var doc = new YDoc(new YDocOptions { ClientId = 9, Limits = Shallow });
-        doc.ApplyUpdateV1(deep);
-        doc.ApplyUpdateV1(trigger);
-        var state = doc.EncodeStateAsUpdateV1();
+        doc.ApplyUpdate(deep);
+        doc.ApplyUpdate(trigger);
+        var state = doc.EncodeStateAsUpdate();
 
         // Now nothing waits: the same structs are planned with the update and rejected before anything changes.
-        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(deep));
-        var unchanged = Convert.ToHexString(state) == Convert.ToHexString(doc.EncodeStateAsUpdateV1());
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(deep));
+        var unchanged = Convert.ToHexString(state) == Convert.ToHexString(doc.EncodeStateAsUpdate());
         doc.GetArray("a").Insert(1, ["y"]);
 
         Assert.IsTrue(unchanged);
@@ -78,12 +78,12 @@ public class RetryAtomicityTests
         // two live parts, and collecting N would fail (Yjs: "Unexpected case" from Item.gc). The garbage collection
         // check of the retry rejects it, after "x" was integrated.
         var doc = new YDoc(new YDocOptions { ClientId = 9 });
-        doc.ApplyUpdateV1(SplitValueInDeletedMap());
+        doc.ApplyUpdate(SplitValueInDeletedMap());
         var pendingBefore = doc.HasPending;
         var dropped = new List<PendingDrop>();
         doc.PendingDropped += (_, drop) => dropped.Add(drop);
 
-        doc.ApplyUpdateV1(XOfClient5());
+        doc.ApplyUpdate(XOfClient5());
 
         Assert.IsTrue(pendingBefore);
         Assert.AreEqual(1, dropped.Count);
@@ -97,10 +97,10 @@ public class RetryAtomicityTests
     public void Retry_PendingValueSplitInACollectedType_IntegratesWithoutGarbageCollection()
     {
         // Without garbage collection nothing is collected, so the same structs integrate (as in Yjs, unseen).
-        var doc = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
-        doc.ApplyUpdateV1(SplitValueInDeletedMap());
+        var doc = new YDoc(new YDocOptions { ClientId = 9, GarbageCollection = false });
+        doc.ApplyUpdate(SplitValueInDeletedMap());
 
-        doc.ApplyUpdateV1(XOfClient5());
+        doc.ApplyUpdate(XOfClient5());
 
         Assert.AreEqual("[\"x\"]", Json(doc.GetArray("a")));
         Assert.IsFalse(doc.HasPending);
@@ -112,11 +112,11 @@ public class RetryAtomicityTests
     {
         // 2,000 items of client 9 (clocks 1 to 2,000) wait for clock 0; then they conflict with 2,000 of client 5.
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
-        doc.ApplyUpdateV1(ItemsWithoutOrigins(5, 0, 2_000));
-        doc.ApplyUpdateV1(ItemsWithoutOrigins(9, 1, 2_000));
+        doc.ApplyUpdate(ItemsWithoutOrigins(5, 0, 2_000));
+        doc.ApplyUpdate(ItemsWithoutOrigins(9, 1, 2_000));
         var limits = new UpdateLimits { MaxIntegrationSteps = 1_000_000 };
 
-        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(ItemsWithoutOrigins(9, 0, 1), null, limits));
+        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(ItemsWithoutOrigins(9, 0, 1), null, limits: limits));
 
         Assert.IsTrue(e.PartlyApplied);
         var integrated = doc.Store.GetState(9);
@@ -131,14 +131,14 @@ public class RetryAtomicityTests
     {
         foreach (var v2 in new[] { false, true })
         {
-            var fresh = new YDoc(new YDocOptions { ClientId = 2, Gc = doc.Gc, Limits = UpdateLimits.Unlimited });
+            var fresh = new YDoc(new YDocOptions { ClientId = 2, GarbageCollection = doc.GarbageCollection, Limits = UpdateLimits.Unlimited });
             if (v2)
             {
-                fresh.ApplyUpdateV2(doc.EncodeStateAsUpdateV2());
+                fresh.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
             }
             else
             {
-                fresh.ApplyUpdateV1(doc.EncodeStateAsUpdateV1());
+                fresh.ApplyUpdate(doc.EncodeStateAsUpdate());
             }
 
             Assert.AreEqual(Convert.ToHexString(doc.EncodeStateVector()), Convert.ToHexString(fresh.EncodeStateVector()));
@@ -158,9 +158,9 @@ public class RetryAtomicityTests
     {
         var one = new YDoc(new YDocOptions { ClientId = 1 });
         one.GetArray("a").Insert(0, ["x"]);
-        var trigger = one.EncodeStateAsUpdateV1();
+        var trigger = one.EncodeStateAsUpdate();
         var two = new YDoc(new YDocOptions { ClientId = 2 });
-        two.ApplyUpdateV1(trigger);
+        two.ApplyUpdate(trigger);
         var vector = two.EncodeStateVector();
         two.Transact(_ =>
         {
@@ -173,7 +173,7 @@ public class RetryAtomicityTests
             }
         });
 
-        return (trigger, two.EncodeStateAsUpdateV1(vector));
+        return (trigger, two.EncodeStateAsUpdate(vector));
     }
 
     /// <summary>Client 3's insert into the outermost array of <see cref="DeepAfterTrigger"/>: it waits for client 2.</summary>
@@ -181,11 +181,11 @@ public class RetryAtomicityTests
     {
         var (trigger, deep) = DeepAfterTrigger();
         var three = new YDoc(new YDocOptions { ClientId = 3 });
-        three.ApplyUpdateV1(trigger);
-        three.ApplyUpdateV1(deep);
+        three.ApplyUpdate(trigger);
+        three.ApplyUpdate(deep);
         var vector = three.EncodeStateVector();
         ((YArray)three.GetArray("a").Get(1)).Insert(0, ["z"]);
-        return three.EncodeStateAsUpdateV1(vector);
+        return three.EncodeStateAsUpdate(vector);
     }
 
     private static byte[] XOfClient5()

@@ -14,7 +14,7 @@ namespace Ycs;
 /// Ports the meaningful behavioural cases for the <see cref="UndoManager"/> surface added to
 /// reach Yjs 13.6.32 parity: whole-document scope (<c>new UndoManager(doc)</c>), <c>AddToScope</c>,
 /// <c>AddTrackedOrigin</c>/<c>RemoveTrackedOrigin</c>, <c>CanUndo</c>/<c>CanRedo</c>, the
-/// <c>stack-cleared</c> event, and <c>Destroy()</c>. The existing <c>UndoRedoTests</c> already
+/// <c>stack-cleared</c> event, and <c>Dispose()</c>. The existing <c>UndoRedoTests</c> already
 /// cover redo/delete-filter/stack-item-metadata behaviour and are left untouched.
 /// </summary>
 [TestClass]
@@ -27,20 +27,20 @@ public class UndoManagerParityTests
         var text = doc.GetText("text");
         var um = new UndoManager(text);
 
-        Assert.IsFalse(um.CanUndo());
-        Assert.IsFalse(um.CanRedo());
+        Assert.IsFalse(um.CanUndo);
+        Assert.IsFalse(um.CanRedo);
 
         text.Insert(0, "a");
-        Assert.IsTrue(um.CanUndo());
-        Assert.IsFalse(um.CanRedo());
+        Assert.IsTrue(um.CanUndo);
+        Assert.IsFalse(um.CanRedo);
 
         um.Undo();
-        Assert.IsFalse(um.CanUndo());
-        Assert.IsTrue(um.CanRedo());
+        Assert.IsFalse(um.CanUndo);
+        Assert.IsTrue(um.CanRedo);
 
         um.Redo();
-        Assert.IsTrue(um.CanUndo());
-        Assert.IsFalse(um.CanRedo());
+        Assert.IsTrue(um.CanUndo);
+        Assert.IsFalse(um.CanRedo);
     }
 
     [TestMethod]
@@ -51,17 +51,17 @@ public class UndoManagerParityTests
         var um = new UndoManager(text);
         text.Insert(0, "abc");
 
-        UndoManager.StackClearedEventArgs captured = null;
+        UndoStackClearedEventArgs? captured = null;
         um.StackCleared += (s, e) => captured = e;
 
-        Assert.IsTrue(um.CanUndo());
+        Assert.IsTrue(um.CanUndo);
         um.Clear();
 
         Assert.IsNotNull(captured);
-        Assert.IsTrue(captured.UndoStackCleared);
-        Assert.IsTrue(captured.RedoStackCleared);
-        Assert.IsFalse(um.CanUndo());
-        Assert.IsFalse(um.CanRedo());
+        Assert.IsTrue(captured.Value.UndoStackCleared);
+        Assert.IsTrue(captured.Value.RedoStackCleared);
+        Assert.IsFalse(um.CanUndo);
+        Assert.IsFalse(um.CanRedo);
     }
 
     [TestMethod]
@@ -91,12 +91,12 @@ public class UndoManagerParityTests
         um.StopCapturing();
         text.Insert(0, "b");
         um.Undo();
-        Assert.IsTrue(um.CanUndo());
-        Assert.IsTrue(um.CanRedo());
+        Assert.IsTrue(um.CanUndo);
+        Assert.IsTrue(um.CanRedo);
 
         um.Clear(true, false);
-        Assert.IsFalse(um.CanUndo());
-        Assert.IsTrue(um.CanRedo(), "Clear(true, false) must leave the redo stack untouched.");
+        Assert.IsFalse(um.CanUndo);
+        Assert.IsTrue(um.CanRedo, "Clear(true, false) must leave the redo stack untouched.");
     }
 
     [TestMethod]
@@ -166,7 +166,7 @@ public class UndoManagerParityTests
     }
 
     [TestMethod]
-    public void TestDestroyStopsTrackingAndIsIdempotent()
+    public void TestDisposeStopsTrackingAndIsIdempotent()
     {
         var doc = new YDoc();
         var text = doc.GetText("text");
@@ -175,11 +175,11 @@ public class UndoManagerParityTests
         text.Insert(0, "a");
         Assert.AreEqual(1, um.UndoStack.Count);
 
-        um.Destroy();
-        um.Destroy(); // Must be safe to call twice.
+        um.Dispose();
+        um.Dispose(); // Must be safe to call twice.
 
         text.Insert(1, "b");
-        Assert.AreEqual(1, um.UndoStack.Count, "No further transactions should be tracked after Destroy().");
+        Assert.AreEqual(1, um.UndoStack.Count, "No further transactions should be tracked after Dispose().");
     }
 
     [TestMethod]

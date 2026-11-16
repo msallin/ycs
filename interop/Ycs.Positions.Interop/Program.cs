@@ -16,10 +16,10 @@ var jsonOptions = new JsonSerializerOptions { WriteIndented = true, Encoder = Ja
 
 var input = JsonNode.Parse(File.ReadAllText(args[0]));
 
-var doc = new YDoc(new YDocOptions { Gc = false });
-doc.ApplyUpdateV1(Convert.FromBase64String(input["updateV1"].GetValue<string>()));
+var doc = new YDoc(new YDocOptions { GarbageCollection = false });
+doc.ApplyUpdate(Convert.FromBase64String(input["updateV1"].GetValue<string>()));
 
-var snapshot = Snapshot.DecodeSnapshot(Convert.FromBase64String(input["snapshotV1"].GetValue<string>()));
+var snapshot = Snapshot.Decode(Convert.FromBase64String(input["snapshotV1"].GetValue<string>()));
 
 var positions = input["positions"].AsArray().Select(p =>
 {
@@ -44,6 +44,6 @@ var positions = input["positions"].AsArray().Select(p =>
 
 Console.WriteLine(JsonSerializer.Serialize(new
 {
-    snapshotReencoded = Convert.ToBase64String(snapshot.EncodeSnapshot()),
+    snapshotReencoded = Convert.ToBase64String(snapshot.Encode()),
     positions
 }, jsonOptions));

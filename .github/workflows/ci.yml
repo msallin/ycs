@@ -24,6 +24,9 @@ jobs:
       - name: Unit tests
         run: dotnet test tests/Ycs.Tests -c Release --no-build
 
+      - name: Unit tests (Debug, overflow checks on)
+        run: dotnet test tests/Ycs.Tests -c Debug
+
       - name: Yjs corpus
         run: dotnet test tests/Ycs.Corpus -c Release --no-build
 

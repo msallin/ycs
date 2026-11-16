@@ -94,7 +94,7 @@ internal static class Workloads
                     var e = trace.Edits[i];
                     if (e.Delete > 0)
                     {
-                        text.Delete(e.Pos, e.Delete);
+                        text.Remove(e.Pos, e.Delete);
                     }
 
                     if (e.Insert.Length > 0)
@@ -143,7 +143,7 @@ internal static class Workloads
     {
         var baseDoc = NewDoc(100);
         baseDoc.GetText("text").Insert(0, Inputs.BaseText);
-        var baseUpdate = baseDoc.EncodeStateAsUpdateV1();
+        var baseUpdate = baseDoc.EncodeStateAsUpdate();
         var clients = new YDoc[Inputs.Clients];
         var texts = new YText[Inputs.Clients];
         for (var c = 0; c < clients.Length; c++)
@@ -160,7 +160,7 @@ internal static class Workloads
             {
                 if (e.Delete > 0)
                 {
-                    texts[c].Delete(e.Pos, e.Delete);
+                    texts[c].Remove(e.Pos, e.Delete);
                 }
                 else
                 {
@@ -172,7 +172,7 @@ internal static class Workloads
         var diffs = new byte[clients.Length][];
         for (var c = 0; c < clients.Length; c++)
         {
-            diffs[c] = clients[c].EncodeStateAsUpdateV1(baseVector);
+            diffs[c] = clients[c].EncodeStateAsUpdate(baseVector);
         }
 
         return (clients, baseUpdate, diffs);

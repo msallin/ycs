@@ -27,11 +27,11 @@ public class UpdateOperationsFuzzTests
         var seeds = new List<(byte[], byte[])>();
         var a = new YDoc(new YDocOptions { ClientId = 1 });
         var b = new YDoc(new YDocOptions { ClientId = 2 });
-        a.Update += (_, e) => seeds.Add((e.data, UpdateOperations.ConvertUpdateFormatV1ToV2(e.data)));
+        a.Updated += (_, e) => seeds.Add((e.Update.ToArray(), YUpdate.Convert(e.Update.ToArray(), UpdateFormat.V1, UpdateFormat.V2)));
 
         a.GetText("t").Insert(0, "hello world");
-        a.GetText("t").Format(0, 5, new Dictionary<string, object> { ["bold"] = true });
-        a.GetText("t").Delete(2, 3);
+        a.GetText("t").Format(0, 5, new Dictionary<string, YValue> { ["bold"] = true });
+        a.GetText("t").Remove(2, 3);
         a.GetMap("m").Set("k", new Dictionary<string, object> { ["n"] = 1.5, ["l"] = new List<object> { "x", null, true } });
         a.GetArray("a").Insert(0, new object[] { 1, "two", new byte[] { 3 }, new YMap() });
         a.GetArray("a").Delete(1, 1);
@@ -42,7 +42,7 @@ public class UpdateOperationsFuzzTests
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         b.GetText("t").Insert(3, "BBB");
         var full = b.EncodeStateAsUpdate();
-        seeds.Add((full, b.EncodeStateAsUpdateV2()));
+        seeds.Add((full, b.EncodeStateAsUpdate(format: UpdateFormat.V2)));
         return seeds;
     }
 
@@ -97,25 +97,25 @@ public class UpdateOperationsFuzzTests
     {
         if (v2)
         {
-            yield return ("MergeUpdatesV2", () => UpdateOperations.MergeUpdatesV2(new[] { mutated, valid.V2 }));
-            yield return ("DiffUpdateV2", () => UpdateOperations.DiffUpdateV2(mutated, new byte[] { 0 }));
-            yield return ("DiffUpdateV2 sv", () => UpdateOperations.DiffUpdateV2(valid.V2, mutated));
-            yield return ("EncodeStateVectorFromUpdateV2", () => UpdateOperations.EncodeStateVectorFromUpdateV2(mutated));
-            yield return ("ParseUpdateMetaV2", () => UpdateOperations.ParseUpdateMetaV2(mutated));
-            yield return ("ConvertUpdateFormatV2ToV1", () => UpdateOperations.ConvertUpdateFormatV2ToV1(mutated));
-            yield return ("ApplyUpdateV2", () => doc.ApplyUpdateV2(mutated));
+            yield return ("MergeUpdatesV2", () => YUpdate.Merge([mutated, valid.V2], format: UpdateFormat.V2));
+            yield return ("DiffUpdateV2", () => YUpdate.Diff(mutated, new byte[] { 0 }, format: UpdateFormat.V2));
+            yield return ("DiffUpdateV2 sv", () => YUpdate.Diff(valid.V2, mutated, format: UpdateFormat.V2));
+            yield return ("EncodeStateVectorFromUpdateV2", () => YUpdate.EncodeStateVector(mutated, format: UpdateFormat.V2));
+            yield return ("ParseUpdateMetaV2", () => YUpdate.ParseMeta(mutated, format: UpdateFormat.V2));
+            yield return ("ConvertUpdateFormatV2ToV1", () => YUpdate.Convert(mutated, UpdateFormat.V2, UpdateFormat.V1));
+            yield return ("ApplyUpdateV2", () => doc.ApplyUpdate(mutated, format: UpdateFormat.V2));
         }
         else
         {
-            yield return ("MergeUpdates", () => UpdateOperations.MergeUpdates(new[] { mutated, valid.V1 }));
-            yield return ("DiffUpdate", () => UpdateOperations.DiffUpdate(mutated, new byte[] { 0 }));
-            yield return ("DiffUpdate sv", () => UpdateOperations.DiffUpdate(valid.V1, mutated));
-            yield return ("EncodeStateVectorFromUpdate", () => UpdateOperations.EncodeStateVectorFromUpdate(mutated));
-            yield return ("ParseUpdateMeta", () => UpdateOperations.ParseUpdateMeta(mutated));
-            yield return ("DecodeUpdate", () => UpdateOperations.DecodeUpdate(mutated));
-            yield return ("ConvertUpdateFormatV1ToV2", () => UpdateOperations.ConvertUpdateFormatV1ToV2(mutated));
+            yield return ("MergeUpdates", () => YUpdate.Merge([mutated, valid.V1], format: UpdateFormat.V1));
+            yield return ("DiffUpdate", () => YUpdate.Diff(mutated, new byte[] { 0 }, format: UpdateFormat.V1));
+            yield return ("DiffUpdate sv", () => YUpdate.Diff(valid.V1, mutated, format: UpdateFormat.V1));
+            yield return ("EncodeStateVectorFromUpdate", () => YUpdate.EncodeStateVector(mutated, format: UpdateFormat.V1));
+            yield return ("ParseUpdateMeta", () => YUpdate.ParseMeta(mutated, format: UpdateFormat.V1));
+            yield return ("DecodeUpdate", () => YUpdate.Decode(mutated, format: UpdateFormat.V1));
+            yield return ("ConvertUpdateFormatV1ToV2", () => YUpdate.Convert(mutated, UpdateFormat.V1, UpdateFormat.V2));
             yield return ("EncodeStateAsUpdate sv", () => doc.EncodeStateAsUpdate(mutated));
-            yield return ("ApplyUpdate", () => doc.ApplyUpdateV1(mutated));
+            yield return ("ApplyUpdate", () => doc.ApplyUpdate(mutated));
         }
     }
 

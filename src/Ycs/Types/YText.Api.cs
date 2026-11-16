@@ -4,7 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+#nullable enable
 
 using System.Buffers;
 using System.Text;
@@ -13,54 +13,72 @@ namespace Ycs;
 
 public partial class YText
 {
-    public YText()
-        : this(null)
-    {
-        // Do nothing.
-    }
+    /// <summary>
+    /// Observes the events of this text (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
+    /// </summary>
+    public IDisposable Observe(Action<YTextEvent> handler) => AddObserver(handler);
 
-    public YText(string str)
+    public YText(string? text = null)
     {
-        if (str != null)
+        if (text != null)
         {
-            AddPending(new PendingOperation(PendingKind.Insert, 0, 0, null, str, null));
+            AddPending(new PendingOperation(PendingKind.Insert, 0, 0, null, text, null));
         }
     }
 
-    public void ApplyDelta(IList<Delta> delta, bool sanitize = true)
+    /// <summary>
+    /// Applies <paramref name="delta"/> (Yjs' <c>applyDelta</c>): inserts, retains (which formats) and deletes, in order, from the start.
+    /// </summary>
+    /// <param name="sanitize">Whether a newline that ends the last insert is kept (Quill's trailing newline is not part of the text when false).</param>
+    /// <exception cref="ArgumentException">The delta holds an <see cref="Delta.InsertItems"/>, which is for arrays; nothing was applied.</exception>
+    public void ApplyDelta(IEnumerable<Delta> delta, bool sanitize = true)
     {
+        ArgumentNullException.ThrowIfNull(delta);
+
+        var ops = delta as IReadOnlyList<Delta> ?? delta.ToList();
+        foreach (var op in ops)
+        {
+            if (op is Delta.InsertItems)
+            {
+                throw new ArgumentException("A text takes Insert, Retain and Delete operations; InsertItems is for arrays. Nothing was applied.", nameof(delta));
+            }
+        }
+
         if (Doc != null)
         {
             Doc.Transact(tr =>
             {
                 var curPos = new ItemTextListPosition(default, _start, 0);
-                for (int i = 0; i < delta.Count; i++)
+                for (int i = 0; i < ops.Count; i++)
                 {
-                    var op = delta[i];
+                    var op = ops[i];
 
-                    if (op.Insert != null)
+                    switch (op)
                     {
-                        // Quill assumes that the content starts with an empty paragraph.
-                        // Yjs/Y.Text assumes that it starts empty. We always hide that
-                        // there is a newline at the end of the content.
-                        // If we omit this step, clients will see a different number of paragraphs,
-                        // but nothing bad will happen.
-                        var insertStr = op.Insert as string;
-                        var ins = (!sanitize && insertStr != null && i == delta.Count - 1 && curPos.Right.IsNull && insertStr.EndsWith("\n")) ? insertStr.Substring(0, insertStr.Length - 1)
-                            : op.Insert == Delta.NullEmbed ? null
-                            : op.Insert;
-                        if (!(ins is string) || ((string)ins).Length > 0)
-                        {
-                            InsertText(tr, ref curPos, ins, op.Attributes);
-                        }
-                    }
-                    else if (op.Retain != null)
-                    {
-                        FormatText(tr, ref curPos, op.Retain.Value, op.Attributes ?? new Dictionary<string, object>());
-                    }
-                    else if (op.Delete != null)
-                    {
-                        DeleteText(tr, ref curPos, op.Delete.Value);
+                        case Delta.Insert insert:
+                            // Quill assumes that the content starts with an empty paragraph.
+                            // Yjs/Y.Text assumes that it starts empty. We always hide that
+                            // there is a newline at the end of the content.
+                            // If we omit this step, clients will see a different number of paragraphs,
+                            // but nothing bad will happen.
+                            var ins = insert.Value.Stored();
+                            if (!sanitize && ins is string insertStr && i == ops.Count - 1 && curPos.Right.IsNull && insertStr.EndsWith('\n'))
+                            {
+                                ins = insertStr.Substring(0, insertStr.Length - 1);
+                            }
+
+                            if (ins is not string str || str.Length > 0)
+                            {
+                                InsertText(tr, ref curPos, ins, StoredAttributes(op.Attributes));
+                            }
+
+                            break;
+                        case Delta.Retain retain:
+                            FormatText(tr, ref curPos, retain.Length, StoredAttributes(op.Attributes) ?? new Dictionary<string, object>());
+                            break;
+                        case Delta.Delete delete:
+                            DeleteText(tr, ref curPos, delete.Length);
+                            break;
                     }
                 }
             });
@@ -69,11 +87,31 @@ public partial class YText
         {
             // As Yjs ('this._pending.push(() => this.applyDelta(delta))'): applied with the default 'sanitize' once
             // the text is in a document, whatever was given.
-            AddPending(new PendingOperation(PendingKind.ApplyDelta, 0, 1, null, delta, null));
+            AddPending(new PendingOperation(PendingKind.ApplyDelta, 0, 1, null, ops.ToArray(), null));
         }
     }
 
-    public IList<Delta> ToDelta(Snapshot snapshot = null, Snapshot prevSnapshot = null, Func<YTextChangeType, ID, YTextChangeAttributes> computeYChange = null)
+    /// <summary>The text as a delta: runs of inserted text and embeds, with the attributes in effect (Yjs' <c>toDelta()</c>).</summary>
+    public IReadOnlyList<Delta> ToDelta() => ComputeDelta(null, null, null);
+
+    /// <summary>
+    /// The text as of <paramref name="snapshot"/> (the current text when null, with <paramref name="previous"/> given); with
+    /// <paramref name="previous"/>, also what was added since it and what was removed, each run with a
+    /// <c>ychange</c> attribute (an object of <c>type</c>, <c>added</c> or <c>removed</c>, and <c>user</c> when
+    /// <paramref name="computeYChange"/> sets one).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The text is not in a document yet.</exception>
+    public IReadOnlyList<Delta> ToDelta(Snapshot? snapshot, Snapshot? previous = null, Func<YChangeKind, ItemId, YChange>? computeYChange = null)
+    {
+        if (snapshot == null && previous == null)
+        {
+            throw new ArgumentNullException(nameof(snapshot), "Pass a snapshot, a previous snapshot or both; ToDelta() reads the current text.");
+        }
+
+        return ComputeDelta(snapshot, previous, computeYChange);
+    }
+
+    private List<Delta> ComputeDelta(Snapshot? snapshot, Snapshot? prevSnapshot, Func<YChangeKind, ItemId, YChange>? computeYChange)
     {
         var ops = new List<Delta>();
         var currentAttributes = new Dictionary<string, object>();
@@ -88,22 +126,7 @@ public partial class YText
             if (str.Length > 0)
             {
                 // Pack str with attributes to ops.
-                var attributes = new Dictionary<string, object>();
-                var addAttributes = false;
-
-                foreach (var kvp in currentAttributes)
-                {
-                    addAttributes = true;
-                    attributes[kvp.Key] = kvp.Value;
-                }
-
-                var op = new Delta { Insert = str.ToString() };
-                if (addAttributes)
-                {
-                    op.Attributes = attributes;
-                }
-
-                ops.Add(op);
+                ops.Add(new Delta.Insert(str.ToString()) { Attributes = currentAttributes.Count > 0 ? AttributeValues(currentAttributes, skipNull: false) : null });
                 str.Clear();
             }
         }
@@ -122,22 +145,22 @@ public partial class YText
                                 val = null;
                             }
 
-                            var cur = val as YTextChangeAttributes;
+                            var cur = val as YChange?;
 
                             if (snapshot != null && !n.IsVisible(snapshot))
                             {
-                                if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Removed)
+                                if (cur == null || cur.Value.User != n.Id.Client || cur.Value.Kind != YChangeKind.Removed)
                                 {
                                     packStr();
-                                    currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YTextChangeType.Removed, n.Id) : new YTextChangeAttributes { Type = YTextChangeType.Removed };
+                                    currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YChangeKind.Removed, n.Id) : new YChange(YChangeKind.Removed, null);
                                 }
                             }
                             else if (prevSnapshot != null && !n.IsVisible(prevSnapshot))
                             {
-                                if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Added)
+                                if (cur == null || cur.Value.User != n.Id.Client || cur.Value.Kind != YChangeKind.Added)
                                 {
                                     packStr();
-                                    currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YTextChangeType.Added, n.Id) : new YTextChangeAttributes { Type = YTextChangeType.Added };
+                                    currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YChangeKind.Added, n.Id) : new YChange(YChangeKind.Added, null);
                                 }
                             }
                             else if (cur != null)
@@ -151,17 +174,7 @@ public partial class YText
                         case ContentType:
                         case ContentEmbed:
                             packStr();
-                            var op = new Delta { Insert = EmbedOf(n.Content) };
-                            if (currentAttributes.Count > 0)
-                            {
-                                var attrs = new Dictionary<string, object>();
-                                op.Attributes = attrs;
-                                foreach (var kvp in currentAttributes)
-                                {
-                                    attrs[kvp.Key] = kvp.Value;
-                                }
-                            }
-                            ops.Add(op);
+                            ops.Add(new Delta.Insert(EmbedOf(n.Content)) { Attributes = currentAttributes.Count > 0 ? AttributeValues(currentAttributes, skipNull: false) : null });
                             break;
                         case ContentFormat cf:
                             if (n.IsVisible(snapshot))
@@ -213,7 +226,7 @@ public partial class YText
         return ops;
     }
 
-    public void Insert(int index, string text, IDictionary<string, object> attributes = null)
+    public void Insert(int index, string text, IReadOnlyDictionary<string, YValue>? attributes = null)
     {
         // As in Yjs, the search marker is only used for inserts without explicit attributes.
         if (string.IsNullOrEmpty(text))
@@ -224,11 +237,11 @@ public partial class YText
         var doc = Doc;
         if (doc != null)
         {
-            doc.Transact((self: this, index, text, attributes), static (s, tr) => s.self.InsertInTransaction(tr, s.index, s.text, s.attributes));
+            doc.Transact((self: this, index, text, attributes: StoredAttributes(attributes)), static (s, tr) => s.self.InsertInTransaction(tr, s.index, s.text, s.attributes));
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.Insert, index, 0, null, text, attributes));
+            AddPending(new PendingOperation(PendingKind.Insert, index, 0, null, text, Copy(attributes)));
         }
     }
 
@@ -236,11 +249,11 @@ public partial class YText
     /// Inserts an embed: a shared type (which becomes part of this text, as in an array), or any
     /// other value as JSON. It counts one towards <see cref="YType.Length"/>.
     /// </summary>
-    public void InsertEmbed(int index, object embed, IDictionary<string, object> attributes = null)
+    public void InsertEmbed(int index, YValue embed, IReadOnlyDictionary<string, YValue>? attributes = null)
     {
         if (Doc != null)
         {
-            Doc.Transact((self: this, index, embed, attributes), static (s, tr) =>
+            Doc.Transact((self: this, index, embed: embed.Stored(), attributes: StoredAttributes(attributes)), static (s, tr) =>
             {
                 var pos = s.self.FindPosition(tr, s.index, useSearchMarker: s.attributes == null);
                 s.self.InsertText(tr, ref pos, s.embed, s.attributes ?? new Dictionary<string, object>());
@@ -248,11 +261,11 @@ public partial class YText
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, attributes ?? new Dictionary<string, object>()));
+            AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, Copy(attributes) ?? new Dictionary<string, YValue>()));
         }
     }
 
-    public void Delete(int index, int length)
+    public void Remove(int index, int length)
     {
         if (length == 0)
         {
@@ -269,8 +282,10 @@ public partial class YText
         }
     }
 
-    public void Format(int index, int length, IDictionary<string, object> attributes)
+    public void Format(int index, int length, IReadOnlyDictionary<string, YValue> attributes)
     {
+        ArgumentNullException.ThrowIfNull(attributes);
+
         if (length == 0)
         {
             return;
@@ -278,7 +293,7 @@ public partial class YText
 
         if (Doc != null)
         {
-            Doc.Transact((self: this, index, length, attributes), static (s, tr) =>
+            Doc.Transact((self: this, index, length, attributes: StoredAttributes(attributes)), static (s, tr) =>
             {
                 var pos = s.self.FindPosition(tr, s.index, useSearchMarker: false);
                 if (pos.Right.IsNull)
@@ -291,7 +306,7 @@ public partial class YText
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.Format, index, length, null, null, attributes));
+            AddPending(new PendingOperation(PendingKind.Format, index, length, null, null, Copy(attributes)));
         }
     }
 
@@ -311,7 +326,7 @@ public partial class YText
             throw new InvalidOperationException("The text is not in a document yet; add it to one first. Nothing was changed.");
         }
 
-        List<ItemRef> remove = null;
+        List<ItemRef>? remove = null;
         for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
             if (!n.Deleted && (n.Content is ContentFormat || (n.Countable && n.Content is not ContentString)))
@@ -425,7 +440,7 @@ public partial class YText
         }
     }
 
-    public YText Clone() => InternalClone() as YText;
+    public YText Clone() => (YText)InternalClone();
 
     /// <summary>
     /// Returns the unformatted string representation of this YText type. Mirrors Yjs' <c>toJSON()</c>
@@ -445,11 +460,11 @@ public partial class YText
         }
     }
 
-    public void SetAttribute(string name, object value)
+    public void SetAttribute(string name, YValue value)
     {
         if (Doc != null)
         {
-            Doc.Transact((self: this, name, value), static (s, tr) => s.self.TypeMapSet(tr, s.name, s.value));
+            Doc.Transact((self: this, name, value: value.Stored()), static (s, tr) => s.self.TypeMapSet(tr, s.name, s.value));
         }
         else
         {
@@ -457,9 +472,16 @@ public partial class YText
         }
     }
 
-    public object GetAttribute(string name) => TryTypeMapGet(name, out var value) ? value : null;
+    /// <summary>The text attribute <paramref name="name"/> (Yjs' <c>getAttribute</c>); null when it is not set.</summary>
+    public YValue? GetAttribute(string name) => TryTypeMapGet(name, out var value) ? YValue.FromStored(value) : default(YValue?);
 
-    public IEnumerable<KeyValuePair<string, object>> GetAttributes() => TypeMapEnumerateValues();
+    public IEnumerable<KeyValuePair<string, YValue>> GetAttributes()
+    {
+        foreach (var kvp in TypeMapEnumerateValues())
+        {
+            yield return new KeyValuePair<string, YValue>(kvp.Key, YValue.FromStored(kvp.Value));
+        }
+    }
 
     /// <summary>
     /// This function is experimental and subject to change / be removed.
@@ -479,8 +501,8 @@ public partial class YText
         {
             var start = _start;
             var end = _start;
-            OrderedDictionary<string, object> startAttributes = null;
-            OrderedDictionary<string, object> currentAttributes = null;
+            OrderedDictionary<string, object>? startAttributes = null;
+            OrderedDictionary<string, object>? currentAttributes = null;
 
             while (!end.IsNull)
             {

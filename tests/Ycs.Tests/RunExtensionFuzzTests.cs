@@ -104,14 +104,17 @@ public class RunExtensionFuzzTests
         YText nt = null;
         YArray na = null;
         c.LogUpdates(doc, "d");
-        var bold = new Dictionary<string, object> { ["bold"] = true };
+        var bold = new Dictionary<string, YValue> { ["bold"] = true };
         var relpos = new List<RelativePosition>();
         var snapshots = new List<Snapshot>();
         UndoManager um = null;
-        EventHandler<YEventArgs> tObs = null, aObs = null, reactor = null;
-        EventHandler<YDeepEventArgs> mDeep = null;
+        Action<YTextEvent> tObs = null;
+        Action<YArrayEvent> aObs = null;
+        Action<YMapEvent> reactor = null;
+        Action<IReadOnlyList<YEvent>, Transaction> mDeep = null;
+        IDisposable tSub = null, aSub = null, rSub = null, mSub = null;
         EventHandler<Transaction> atx = null, boc = null;
-        EventHandler<(byte[], object, Transaction)> onUpdate = null;
+        EventHandler<UpdateEventArgs> onUpdate = null;
         var caret = 0;
         var slot = 0;
         var armed = 0;
@@ -127,7 +130,7 @@ public class RunExtensionFuzzTests
 
         var throwInHandler = false;
 
-        void SyncToPeer() => peer.ApplyUpdateV1(doc.EncodeStateAsUpdateV1(peer.EncodeStateVectorV1()));
+        void SyncToPeer() => peer.ApplyUpdate(doc.EncodeStateAsUpdate(peer.EncodeStateVector()));
 
         void PeerEdit()
         {
@@ -138,7 +141,7 @@ public class RunExtensionFuzzTests
                 if (r == 0 && pt.Length > 0)
                 {
                     var at = rng.Int(pt.Length);
-                    pt.Delete(at, Math.Min(1 + rng.Int(3), pt.Length - at));
+                    pt.Remove(at, Math.Min(1 + rng.Int(3), pt.Length - at));
                 }
                 else if (r <= 2)
                 {
@@ -161,7 +164,7 @@ public class RunExtensionFuzzTests
             }
         }
 
-        byte[] RemoteDiff(bool v2) => v2 ? peer.EncodeStateAsUpdateV2(doc.EncodeStateVectorV1()) : peer.EncodeStateAsUpdateV1(doc.EncodeStateVectorV1());
+        byte[] RemoteDiff(bool v2) => v2 ? peer.EncodeStateAsUpdate(doc.EncodeStateVector(), format: UpdateFormat.V2) : peer.EncodeStateAsUpdate(doc.EncodeStateVector());
 
         void ReadSnapshot()
         {
@@ -172,12 +175,12 @@ public class RunExtensionFuzzTests
 
             var s = snapshots[rng.Int(snapshots.Count)];
             var prev = rng.Chance(0.5) ? snapshots[rng.Int(snapshots.Count)] : null;
-            Func<YText.YTextChangeType, ItemId, YText.YTextChangeAttributes> cy = rng.Chance(0.5)
+            Func<YChangeKind, ItemId, YChange> cy = rng.Chance(0.5)
                 ? null
                 : (type, id) =>
                 {
                     c.L($"ychange {type} {id.Client}:{id.Clock}");
-                    return new YText.YTextChangeAttributes { Type = type, User = rng.Chance(0.5) ? id.Client : null };
+                    return new YChange(type, rng.Chance(0.5) ? id.Client : null);
                 };
             c.L("snap delta " + ReferenceRun.D(t.ToDelta(s, prev, cy)) + " array " + ReferenceRun.V(a.ToArraySnapshot(s)));
         }
@@ -190,12 +193,12 @@ public class RunExtensionFuzzTests
                     if (tObs == null)
                     {
                         tObs = c.TextObserver("t");
-                        t.EventHandler += tObs;
+                        tSub = t.Observe(tObs);
                         c.L("+tObs");
                     }
                     else
                     {
-                        t.EventHandler -= tObs;
+                        tSub.Dispose();
                         tObs = null;
                         c.L("-tObs");
                     }
@@ -204,22 +207,22 @@ public class RunExtensionFuzzTests
                 case 1:
                     if (aObs == null)
                     {
-                        aObs = (_, e) =>
+                        aObs = e =>
                         {
-                            var ch = e.Event.Changes;
-                            c.L($"a delta={ReferenceRun.D(e.Event.Delta)} added={ReferenceRun.Items(ch.Added)} deleted={ReferenceRun.Items(ch.Deleted)}");
+                            var ch = e.Changes;
+                            c.L($"a delta={ReferenceRun.D(e.Delta)} added={ReferenceRun.Items(ch.Added)} deleted={ReferenceRun.Items(ch.Deleted)}");
                             if (throwInHandler)
                             {
                                 throwInHandler = false;
                                 throw new InvalidOperationException("handler");
                             }
                         };
-                        a.EventHandler += aObs;
+                        aSub = a.Observe(aObs);
                         c.L("+aObs");
                     }
                     else
                     {
-                        a.EventHandler -= aObs;
+                        aSub.Dispose();
                         aObs = null;
                         c.L("-aObs");
                     }
@@ -229,12 +232,12 @@ public class RunExtensionFuzzTests
                     if (mDeep == null)
                     {
                         mDeep = c.DeepObserver("m");
-                        m.DeepEventHandler += mDeep;
+                        mSub = m.ObserveDeep(mDeep);
                         c.L("+mDeep");
                     }
                     else
                     {
-                        m.DeepEventHandler -= mDeep;
+                        mSub.Dispose();
                         mDeep = null;
                         c.L("-mDeep");
                     }
@@ -275,7 +278,7 @@ public class RunExtensionFuzzTests
                     // also during a remote transaction's cleanup, while the lists' markers are stale.
                     if (reactor == null)
                     {
-                        reactor = (_, e) =>
+                        reactor = e =>
                         {
                             c.L("reactor local=" + e.Transaction.Local + " armed=" + armed);
                             if (armed == 0)
@@ -303,12 +306,12 @@ public class RunExtensionFuzzTests
                                 }
                             }
                         };
-                        m.EventHandler += reactor;
+                        rSub = m.Observe(reactor);
                         c.L("+reactor");
                     }
                     else
                     {
-                        m.EventHandler -= reactor;
+                        rSub.Dispose();
                         reactor = null;
                         c.L("-reactor");
                     }
@@ -333,12 +336,12 @@ public class RunExtensionFuzzTests
                             caret++;
                             a.Push(Vals(-100));
                         };
-                        doc.Update += onUpdate;
+                        doc.Updated += onUpdate;
                         c.L("+update");
                     }
                     else
                     {
-                        doc.Update -= onUpdate;
+                        doc.Updated -= onUpdate;
                         onUpdate = null;
                         c.L("-update");
                     }
@@ -371,7 +374,7 @@ public class RunExtensionFuzzTests
                 if (caret > 0)
                 {
                     caret--;
-                    t.Delete(caret, 1);
+                    t.Remove(caret, 1);
                 }
             }
             else if (r < 40)
@@ -390,7 +393,7 @@ public class RunExtensionFuzzTests
             {
                 var at = rng.Int(t.Length);
                 var len = Math.Min(1 + rng.Int(4), t.Length - at);
-                t.Delete(at, len);
+                t.Remove(at, len);
                 caret = at;
             }
             else if (r < 62)
@@ -479,7 +482,7 @@ public class RunExtensionFuzzTests
             }
             else if (r < 91)
             {
-                c.L("diff " + ReferenceRun.Hex(doc.EncodeStateAsUpdateV1(peer.EncodeStateVectorV1())) + " " + ReferenceRun.Hex(doc.EncodeStateAsUpdateV2(peer.EncodeStateVectorV1())));
+                c.L("diff " + ReferenceRun.Hex(doc.EncodeStateAsUpdate(peer.EncodeStateVector())) + " " + ReferenceRun.Hex(doc.EncodeStateAsUpdate(peer.EncodeStateVector(), format: UpdateFormat.V2)));
             }
             else if (r < 93)
             {
@@ -506,12 +509,12 @@ public class RunExtensionFuzzTests
             {
                 if (um == null)
                 {
-                    um = new UndoManager(new object[] { t, a }, new UndoManagerOptions { CaptureTimeout = rng.Chance(0.5) ? 0 : 100000 });
+                    um = new UndoManager(new YType[] { t, a }, new UndoManagerOptions { CaptureTimeout = TimeSpan.FromMilliseconds(rng.Chance(0.5) ? 0 : 100000) });
                     c.L("+um");
                 }
                 else if (rng.Chance(0.3))
                 {
-                    um.Destroy();
+                    um.Dispose();
                     um = null;
                     c.L("-um");
                 }
@@ -529,7 +532,7 @@ public class RunExtensionFuzzTests
             else if (r < 99 && !gc)
             {
                 snapshots.Add(doc.CreateSnapshot());
-                c.L("snap " + ReferenceRun.Hex(snapshots[^1].EncodeSnapshot()));
+                c.L("snap " + ReferenceRun.Hex(snapshots[^1].Encode()));
             }
             else if (!gc)
             {
@@ -587,7 +590,7 @@ public class RunExtensionFuzzTests
                         armed = 1 + rng.Int(4);
                     }
 
-                    doc.ApplyUpdateV1(RemoteDiff(false));
+                    doc.ApplyUpdate(RemoteDiff(false));
                     SyncToPeer();
                 }
                 else
@@ -625,7 +628,7 @@ public class RunExtensionFuzzTests
 
         armed = 0;
         SyncToPeer();
-        doc.ApplyUpdateV1(RemoteDiff(false));
+        doc.ApplyUpdate(RemoteDiff(false));
         c.State(doc, "final");
         c.State(peer, "peer");
         c.L(pt.ToString() == t.ToString() ? "converged" : "diverged");

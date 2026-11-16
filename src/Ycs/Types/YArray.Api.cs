@@ -10,6 +10,11 @@ namespace Ycs;
 
 public sealed partial class YArray
 {
+    /// <summary>
+    /// Observes the events of this array (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
+    /// </summary>
+    public IDisposable Observe(Action<YArrayEvent> handler) => AddObserver(handler);
+
     public YArray()
         : this(null)
     {

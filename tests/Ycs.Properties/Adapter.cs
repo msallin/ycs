@@ -274,21 +274,21 @@ namespace Ycs.Properties
             switch (via)
             {
                 case "v1":
-                    to.Doc.ApplyUpdateV1(u, Net);
+                    to.Doc.ApplyUpdate(u, Net);
                     return Missing.Value;
                 case "v2":
-                    to.Doc.ApplyUpdateV2(u, Net);
+                    to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
                     return Missing.Value;
                 case "v1to2":
                     {
-                        var c = UpdateOperations.ConvertUpdateFormatV1ToV2(u);
-                        to.Doc.ApplyUpdateV2(c, Net);
+                        var c = YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2);
+                        to.Doc.ApplyUpdate(c, Net, UpdateFormat.V2);
                         return Obj(("u", B64(c)));
                     }
                 case "v2to1":
                     {
-                        var c = UpdateOperations.ConvertUpdateFormatV2ToV1(u);
-                        to.Doc.ApplyUpdateV1(c, Net);
+                        var c = YUpdate.Convert(u, UpdateFormat.V2, UpdateFormat.V1);
+                        to.Doc.ApplyUpdate(c, Net);
                         return Obj(("u", B64(c)));
                     }
                 default:
@@ -316,7 +316,7 @@ namespace Ycs.Properties
                 reader.ReadByte();
                 var sv = new byte[ReadVarUint(reader)];
                 reader.ReadExactly(sv);
-                var update = v2 ? UpdateOperations.DiffUpdateV2(from.Doc.EncodeStateAsUpdateV2(), sv) : UpdateOperations.DiffUpdate(from.Doc.EncodeStateAsUpdateV1(), sv);
+                var update = v2 ? YUpdate.Diff(from.Doc.EncodeStateAsUpdate(format: UpdateFormat.V2), sv, format: UpdateFormat.V2) : YUpdate.Diff(from.Doc.EncodeStateAsUpdate(), sv, format: UpdateFormat.V1);
                 var m2 = new MemoryStream();
                 m2.WriteByte(1);
                 WriteVarUint(m2, update.Length);
@@ -326,11 +326,11 @@ namespace Ycs.Properties
             else
             {
                 var m2 = new System.Buffers.ArrayBufferWriter<byte>();
-                SyncProtocol.ReadSyncMessage(step1, m2, from.Doc, Net, v2);
+                SyncProtocol.ReadSyncMessage(step1, m2, from.Doc, Net, v2 ? UpdateFormat.V2 : UpdateFormat.V1);
                 step2 = m2.WrittenSpan.ToArray();
             }
 
-            SyncProtocol.ReadSyncMessage(step2, new System.Buffers.ArrayBufferWriter<byte>(), to.Doc, Net, v2);
+            SyncProtocol.ReadSyncMessage(step2, new System.Buffers.ArrayBufferWriter<byte>(), to.Doc, Net, v2 ? UpdateFormat.V2 : UpdateFormat.V1);
             return Obj(("s1", B64(step1)), ("s2", B64(step2)));
         }
 
@@ -368,21 +368,21 @@ namespace Ycs.Properties
         private object Raw(Dictionary<string, object> s, Client to)
         {
             var u = Convert.FromBase64String(s.Str("u"));
-            var before = (Canonical(to.Replica.Content()), B64(to.Doc.EncodeStateAsUpdateV1()), B64(to.Doc.EncodeStateVectorV1()));
+            var before = (Canonical(to.Replica.Content()), B64(to.Doc.EncodeStateAsUpdate()), B64(to.Doc.EncodeStateVector()));
             try
             {
                 switch (s.Str("via") ?? "v1")
                 {
                     case "v1":
-                        to.Doc.ApplyUpdateV1(u, Net);
+                        to.Doc.ApplyUpdate(u, Net);
                         return Missing.Value;
                     case "v2":
-                        to.Doc.ApplyUpdateV2(u, Net);
+                        to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
                         return Missing.Value;
                     case "v1to2":
                         {
-                            var c = UpdateOperations.ConvertUpdateFormatV1ToV2(u);
-                            to.Doc.ApplyUpdateV2(c, Net);
+                            var c = YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2);
+                            to.Doc.ApplyUpdate(c, Net, UpdateFormat.V2);
                             return Obj(("u", B64(c)));
                         }
                     default:
@@ -391,7 +391,7 @@ namespace Ycs.Properties
             }
             catch (Exception e)
             {
-                var after = (Canonical(to.Replica.Content()), B64(to.Doc.EncodeStateAsUpdateV1()), B64(to.Doc.EncodeStateVectorV1()));
+                var after = (Canonical(to.Replica.Content()), B64(to.Doc.EncodeStateAsUpdate()), B64(to.Doc.EncodeStateVector()));
                 if (e is not YUpdateException)
                 {
                     RejectionViolations.Add($"threw {e.GetType().Name}: {e.Message}");
@@ -417,27 +417,27 @@ namespace Ycs.Properties
                 return "skip";
             }
 
-            var u = v2 ? UpdateOperations.MergeUpdatesV2(updates) : UpdateOperations.MergeUpdates(updates);
+            var u = v2 ? YUpdate.Merge([.. updates], format: UpdateFormat.V2) : YUpdate.Merge([.. updates], format: UpdateFormat.V1);
             var merged = u;
             if (s.Bool("diff"))
             {
-                u = v2 ? UpdateOperations.DiffUpdateV2(u, to.Doc.EncodeStateVector()) : UpdateOperations.DiffUpdate(u, to.Doc.EncodeStateVector());
+                u = v2 ? YUpdate.Diff(u, to.Doc.EncodeStateVector(), format: UpdateFormat.V2) : YUpdate.Diff(u, to.Doc.EncodeStateVector(), format: UpdateFormat.V1);
             }
 
-            var meta = v2 ? UpdateOperations.ParseUpdateMetaV2(u) : UpdateOperations.ParseUpdateMeta(u);
+            var meta = v2 ? YUpdate.ParseMeta(u, format: UpdateFormat.V2) : YUpdate.ParseMeta(u, format: UpdateFormat.V1);
             var r = Obj(
                 ("m", B64(merged)),
                 ("u", B64(u)),
-                ("sv", B64(v2 ? UpdateOperations.EncodeStateVectorFromUpdateV2(u) : UpdateOperations.EncodeStateVectorFromUpdate(u))),
+                ("sv", B64(v2 ? YUpdate.EncodeStateVector(u, format: UpdateFormat.V2) : YUpdate.EncodeStateVector(u, format: UpdateFormat.V1))),
                 ("from", Clocks(meta.From)),
                 ("to", Clocks(meta.To)));
             if (v2)
             {
-                to.Doc.ApplyUpdateV2(u, Net);
+                to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
             }
             else
             {
-                to.Doc.ApplyUpdateV1(u, Net);
+                to.Doc.ApplyUpdate(u, Net);
             }
 
             return r;
@@ -470,7 +470,7 @@ namespace Ycs.Properties
         {
             try
             {
-                return UpdateOperations.DecodeUpdate(Convert.FromBase64String(base64V1)).DeleteSet.Values
+                return YUpdate.Decode(Convert.FromBase64String(base64V1), format: UpdateFormat.V1).DeleteSet.Values
                     .Any(ranges => ranges.Zip(ranges.Skip(1)).Any(p => p.Second.Clock < p.First.Clock + p.First.Length));
             }
             catch (YUpdateException)
@@ -536,8 +536,8 @@ namespace Ycs.Properties
                 }
 
                 var t = Replica.Root(name);
-                t.Observe((_, e) => Event("obs:" + name, [e.Event], e.Transaction));
-                t.ObserveDeep((_, e) => Event("deep:" + name, e.Events, e.Transaction));
+                ObserveAny(t, e => Event("obs:" + name, [e], e.Transaction));
+                t.ObserveDeep((deepEvents, deepTransaction) => Event("deep:" + name, deepEvents, deepTransaction));
             }
 
             if (!quiet)
@@ -552,18 +552,20 @@ namespace Ycs.Properties
                         .ToList())));
             }
 
-            doc.Update += (_, e) =>
+            doc.Updated += (_, e) =>
             {
                 run.FixClientIds();
-                Push(Obj(("w", "u1"), ("u", ScriptRun.B64(e.Item1)), ("origin", run.OriginLabel(e.Item2)), ("local", e.Item3.Local)));
-                _pendingV1 = e.Item3.Local ? e.Item1 : null;
+                var update = e.Update.ToArray();
+                Push(Obj(("w", "u1"), ("u", ScriptRun.B64(update)), ("origin", run.OriginLabel(e.Origin)), ("local", e.Transaction.Local)));
+                _pendingV1 = e.Transaction.Local ? update : null;
             };
-            doc.UpdateV2 += (_, e) =>
+            doc.UpdatedV2 += (_, e) =>
             {
-                Push(Obj(("w", "u2"), ("u", ScriptRun.B64(e.Item1)), ("origin", run.OriginLabel(e.Item2)), ("local", e.Item3.Local)));
-                if (e.Item3.Local)
+                var update = e.Update.ToArray();
+                Push(Obj(("w", "u2"), ("u", ScriptRun.B64(update)), ("origin", run.OriginLabel(e.Origin)), ("local", e.Transaction.Local)));
+                if (e.Transaction.Local)
                 {
-                    Log.Add((_pendingV1, e.Item1));
+                    Log.Add((_pendingV1, update));
                 }
 
                 _pendingV1 = null;
@@ -576,6 +578,15 @@ namespace Ycs.Properties
         }
 
         private static List<object> Guids(IEnumerable<YDoc> docs) => docs.Select(d => d.Guid).Order(StringComparer.Ordinal).Cast<object>().ToList();
+
+        private static IDisposable ObserveAny(YType type, Action<YEvent> handler) => type switch
+        {
+            YArray array => array.Observe(handler),
+            YMap map => map.Observe(handler),
+            YText text => text.Observe(handler),
+            YXmlFragment fragment => fragment.Observe(handler),
+            _ => throw new ArgumentException("not a shared type", nameof(type)),
+        };
 
         internal void Push(Dictionary<string, object> record)
         {
@@ -592,16 +603,16 @@ namespace Ycs.Properties
         private Dictionary<string, object> EventView(YEvent e)
         {
             var k = Replica.KindOf(e.Target);
-            var o = Obj(("t", Replica.PathOf(e.Target)), ("k", k), ("p", e.Path.Select(p => p is int i ? (long)i : p).ToList()));
+            var o = Obj(("t", Replica.PathOf(e.Target)), ("k", k), ("p", e.Path.Select(p => p.Key ?? (object)(long)p.Index).ToList()));
             var keys = e.Changes.Keys.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToList();
             if (keys.Count > 0)
             {
                 var kd = new Dictionary<string, object>();
                 foreach (var (key, ch) in keys)
                 {
-                    kd[key] = ch.Action == ChangeAction.Add
+                    kd[key] = ch.Action == KeyChangeAction.Add
                         ? Obj(("action", "add"))
-                        : Obj(("action", ch.Action == ChangeAction.Update ? "update" : "delete"), ("old", Replica.View(ch.OldValue)));
+                        : Obj(("action", ch.Action == KeyChangeAction.Update ? "update" : "delete"), ("old", Replica.View(ch.OldValue)));
                 }
 
                 o["keys"] = kd;
@@ -659,13 +670,13 @@ namespace Ycs.Properties
                             default: um.Clear(); break;
                         }
 
-                        return Obj(("r", r), ("u", um.CanUndo()), ("d", um.CanRedo()), ("n", (long)um.UndoStack.Count));
+                        return Obj(("r", r), ("u", um.CanUndo), ("d", um.CanRedo), ("n", (long)um.UndoStack.Count));
                     }
                 case "snap":
                     {
                         var snap = Doc.CreateSnapshot();
                         Snapshots[ScriptRun.IdText(s.Get("id"))] = snap;
-                        return Obj(("s1", ScriptRun.B64(snap.EncodeSnapshot())), ("s2", ScriptRun.B64(snap.EncodeSnapshotV2())));
+                        return Obj(("s1", ScriptRun.B64(snap.Encode())), ("s2", ScriptRun.B64(snap.Encode(UpdateFormat.V2))));
                     }
                 case "docFromSnap":
                     {
@@ -681,7 +692,7 @@ namespace Ycs.Properties
                             roots[name] = Replica.View(Replica.RootOf(d, name, kind));
                         }
 
-                        return Obj(("roots", roots), ("v1", ScriptRun.B64(d.EncodeStateAsUpdateV1())));
+                        return Obj(("roots", roots), ("v1", ScriptRun.B64(d.EncodeStateAsUpdate())));
                     }
                 case "rpos":
                     {
@@ -738,7 +749,7 @@ namespace Ycs.Properties
                         var len = Clamp(s.Int("len"), target.Length - at);
                         if (text != null)
                         {
-                            text.Delete(at, len);
+                            text.Remove(at, len);
                         }
                         else if (target is YArray a)
                         {
@@ -765,7 +776,7 @@ namespace Ycs.Properties
                         return "skip";
                     }
 
-                    text.InsertEmbed(Clamp(s.Int("at"), text.Length), Val(s.Get("value")), AttrsOf(s.Get("attrs")));
+                    text.InsertEmbed(Clamp(s.Int("at"), text.Length), YValue.FromObject(Val(s.Get("value"))), AttrsOf(s.Get("attrs")));
                     return Missing.Value;
                 case "delta":
                     if (text == null)
@@ -864,7 +875,7 @@ namespace Ycs.Properties
                     }
                     else if (text != null)
                     {
-                        text.SetAttribute(s.Str("key"), Val(s.Get("value")));
+                        text.SetAttribute(s.Str("key"), YValue.FromObject(Val(s.Get("value"))));
                     }
                     else
                     {
@@ -890,8 +901,8 @@ namespace Ycs.Properties
                 case "observe":
                     {
                         var label = "o:" + string.Join("/", s.List("path").Select(p => p is JsonNumber n ? n.Text : (string)p));
-                        target.Observe((_, e) => Event(label, [e.Event], e.Transaction));
-                        target.ObserveDeep((_, e) => Event("deep" + label, e.Events, e.Transaction));
+                        ObserveAny(target, e => Event(label, [e], e.Transaction));
+                        target.ObserveDeep((deepEvents, deepTransaction) => Event("deep" + label, deepEvents, deepTransaction));
                         return Missing.Value;
                     }
                 case "react":
@@ -949,13 +960,13 @@ namespace Ycs.Properties
                                 Doc.AfterTransactionCleanup += (_, tr) => Fire(tr.Local);
                                 break;
                             case "update":
-                                Doc.Update += (_, e) => Fire(e.Item3.Local);
+                                Doc.Updated += (_, e) => Fire(e.Transaction.Local);
                                 break;
                             case "after":
                                 Doc.AfterTransaction += (_, tr) => Fire(tr.Local);
                                 break;
                             default:
-                                target.Observe((_, e) => Fire(e.Transaction.Local));
+                                ObserveAny(target, e => Fire(e.Transaction.Local));
                                 break;
                         }
 
@@ -998,12 +1009,13 @@ namespace Ycs.Properties
 
         private object NewUndoManager(Dictionary<string, object> s)
         {
-            var scope = new List<object>();
+            var scope = new List<YType>();
+            var wholeDoc = false;
             foreach (var p in s.List("scope"))
             {
                 if (p is "$doc")
                 {
-                    scope.Add(Doc);
+                    wholeDoc = true;
                 }
                 else if (Replica.Resolve(p as List<object>) is { } t)
                 {
@@ -1011,25 +1023,21 @@ namespace Ycs.Properties
                 }
             }
 
-            if (scope.Count == 0)
+            if (scope.Count == 0 && !wholeDoc)
             {
                 return "skip";
             }
 
             var origins = s.List("origins") is { } list ? new HashSet<object>(list) : null;
-            var options = new UndoManagerOptions { CaptureTimeout = s.Str("timeout") == "inf" ? int.MaxValue : 0 };
-            if (origins != null)
-            {
-                options.TrackedOrigins = origins;
-            }
-
-            var um = new UndoManager(scope, options);
+            var options = new UndoManagerOptions { CaptureTimeout = TimeSpan.FromMilliseconds(s.Str("timeout") == "inf" ? int.MaxValue : 0), TrackedOrigins = origins };
+            var um = wholeDoc ? new UndoManager(Doc, options) : new UndoManager(scope, options);
+            um.AddToScope(scope);
             var id = $"{Index}.{ScriptRun.IdText(s.Get("id"))}";
             _run.UndoIds[um] = id;
             UndoManagers[ScriptRun.IdText(s.Get("id"))] = um;
-            um.StackItemAdded += (_, e) => Push(Obj(("w", "um+"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
-            um.StackItemUpdated += (_, e) => Push(Obj(("w", "um~"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
-            um.StackItemPopped += (_, e) => Push(Obj(("w", "um-"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
+            um.StackItemAdded += (_, e) => Push(Obj(("w", "um+"), ("id", id), ("type", e.Operation == UndoOperation.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
+            um.StackItemUpdated += (_, e) => Push(Obj(("w", "um~"), ("id", id), ("type", e.Operation == UndoOperation.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
+            um.StackItemPopped += (_, e) => Push(Obj(("w", "um-"), ("id", id), ("type", e.Operation == UndoOperation.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
             um.StackCleared += (_, e) => Push(Obj(("w", "umclear"), ("id", id), ("u", e.UndoStackCleared), ("r", e.RedoStackCleared)));
             return Missing.Value;
         }
@@ -1050,15 +1058,17 @@ namespace Ycs.Properties
 
         private static int Clamp(long i, int n) => (int)Math.Max(0, Math.Min(i, n));
 
-        private static IDictionary<string, object> AttrsOf(object a) => a == null ? null : (IDictionary<string, object>)Val(a);
+        private static IReadOnlyDictionary<string, YValue> AttrsOf(object a) =>
+            a == null ? null : ((IDictionary<string, object>)Val(a)).ToDictionary(kv => kv.Key, kv => YValue.FromObject(kv.Value));
 
         /// <summary>A script delta (docs/testing.md) as a Ycs delta.</summary>
-        private static List<Delta> DeltaOf(List<object> delta) => delta.Cast<Dictionary<string, object>>().Select(d => new Delta
+        private static List<Delta> DeltaOf(List<object> delta) => delta.Cast<Dictionary<string, object>>().Select(d =>
         {
-            Insert = d.Has("insert") ? Val(d.Get("insert")) : null,
-            Retain = d.Has("retain") ? (int)d.Int("retain") : null,
-            Delete = d.Has("delete") ? (int)d.Int("delete") : null,
-            Attributes = d.Has("attrs") ? AttrsOf(d.Get("attrs")) : null,
+            var attributes = d.Has("attrs") ? AttrsOf(d.Get("attrs")) : null;
+            return d.Has("insert") ? new Delta.Insert(YValue.FromObject(Val(d.Get("insert")))) { Attributes = attributes }
+                : d.Has("retain") ? new Delta.Retain((int)d.Int("retain")) { Attributes = attributes }
+                : d.Has("delete") ? new Delta.Delete((int)d.Int("delete")) { Attributes = attributes }
+                : (Delta)new Delta.Retain(0) { Attributes = attributes };
         }).ToList();
 
         /// <summary>A new text with its prelim content: "s" inserted, then the delta "dl" applied (both wait for the integration).</summary>
@@ -1121,7 +1131,7 @@ namespace Ycs.Properties
                     if (o.Has("$doc"))
                     {
                         var d = (Dictionary<string, object>)o["$doc"];
-                        return new YDoc(new YDocOptions { Guid = d.Str("g"), Gc = d.Get("gc") is not false, AutoLoad = d.Bool("autoLoad") });
+                        return new YDoc(new YDocOptions { Guid = d.Str("g"), GarbageCollection = d.Get("gc") is not false, AutoLoad = d.Bool("autoLoad") });
                     }
 
                     return o.ToDictionary(kv => kv.Key, kv => Val(kv.Value));
@@ -1198,11 +1208,12 @@ namespace Ycs.Properties
 
         public Replica(long? clientId, bool gc, IEnumerable<(string Name, string Kind)> roots, Predicate<ItemView> gcFilter = null)
         {
-            var options = new YDocOptions { Gc = gc, ClientId = clientId };
-            if (gcFilter != null)
+            var options = new YDocOptions
             {
-                options.GcFilter = gcFilter;
-            }
+                GarbageCollection = gc,
+                ClientId = clientId,
+                GarbageCollectionFilter = gcFilter == null ? null : item => gcFilter(item),
+            };
 
             Doc = new YDoc(options);
             _roots = roots.ToList();
@@ -1214,7 +1225,7 @@ namespace Ycs.Properties
 
         public IReadOnlyList<(string Name, string Kind)> Roots => _roots;
 
-        public bool Gc => Doc.Gc;
+        public bool Gc => Doc.GarbageCollection;
 
         public long ClientId => Doc.ClientId;
 
@@ -1242,22 +1253,22 @@ namespace Ycs.Properties
 
         // ---- bytes
 
-        public byte[] EncodeV1(byte[] stateVector = null) => Doc.EncodeStateAsUpdateV1(stateVector);
+        public byte[] EncodeV1(byte[] stateVector = null) => Doc.EncodeStateAsUpdate(stateVector);
 
-        public byte[] EncodeV2(byte[] stateVector = null) => Doc.EncodeStateAsUpdateV2(stateVector);
+        public byte[] EncodeV2(byte[] stateVector = null) => Doc.EncodeStateAsUpdate(stateVector, format: UpdateFormat.V2);
 
-        public byte[] StateVector() => Doc.EncodeStateVectorV1();
+        public byte[] StateVector() => Doc.EncodeStateVector();
 
-        public void ApplyV1(byte[] update, object origin = null) => Doc.ApplyUpdateV1(update, origin ?? ScriptRun.Net);
+        public void ApplyV1(byte[] update, object origin = null) => Doc.ApplyUpdate(update, origin ?? ScriptRun.Net);
 
-        public void ApplyV2(byte[] update, object origin = null) => Doc.ApplyUpdateV2(update, origin ?? ScriptRun.Net);
+        public void ApplyV2(byte[] update, object origin = null) => Doc.ApplyUpdate(update, origin ?? ScriptRun.Net, UpdateFormat.V2);
 
         public bool HasPending => Doc.HasPending;
 
         /// <summary>Raised with (v1 update, local) for every transaction that changed something.</summary>
         public event Action<byte[], bool> UpdateV1
         {
-            add => Doc.Update += (_, e) => value(e.Item1, e.Item3.Local);
+            add => Doc.Updated += (_, e) => value(e.Update.ToArray(), e.Transaction.Local);
             remove => throw new NotSupportedException();
         }
 
@@ -1265,13 +1276,13 @@ namespace Ycs.Properties
 
         public Dictionary<string, object> State(bool full)
         {
-            var v1 = Doc.EncodeStateAsUpdateV1();
-            var v2 = Doc.EncodeStateAsUpdateV2();
-            var sv = Doc.EncodeStateVectorV1();
+            var v1 = Doc.EncodeStateAsUpdate();
+            var v2 = Doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
+            var sv = Doc.EncodeStateVector();
             return Obj(
                 ("sv", ScriptRun.Clocks(Lib0.DecodeStateVector(sv))),
                 ("svb", ScriptRun.B64(sv)),
-                ("ds", DsView(UpdateOperations.DecodeUpdate(v1).DeleteSet)),
+                ("ds", DsView(YUpdate.Decode(v1, format: UpdateFormat.V1).DeleteSet)),
                 ("v1", full ? ScriptRun.B64(v1) : Hash(v1)),
                 ("v2", full ? ScriptRun.B64(v2) : Hash(v2)),
                 ("pend", Doc.HasPending),
@@ -1305,7 +1316,7 @@ namespace Ycs.Properties
 
         /// <summary>The delete set of an update, merged and sorted, as plain values.</summary>
         public static Dictionary<string, object> DeleteSetOf(byte[] update, bool v2) =>
-            DsView((v2 ? UpdateOperations.DecodeUpdateV2(update) : UpdateOperations.DecodeUpdate(update)).DeleteSet);
+            DsView((v2 ? YUpdate.Decode(update, format: UpdateFormat.V2) : YUpdate.Decode(update, format: UpdateFormat.V1)).DeleteSet);
 
         private static Dictionary<string, object> DsView(IReadOnlyDictionary<long, IReadOnlyList<DeletedRange>> ds)
         {
@@ -1434,9 +1445,6 @@ namespace Ycs.Properties
                     return Obj(("$t", "doc"), ("g", d.Guid));
                 case ItemId id:
                     return Obj(("client", id.Client), ("clock", id.Clock));
-                case YText.YTextChangeAttributes ychange:
-                    // Yjs' default computeYChange gives { type: 'added' | 'removed' }.
-                    return Obj(("type", ychange.Type == YText.YTextChangeType.Added ? "added" : "removed"));
                 case YType t:
                     return TypeView(t);
                 case IDictionary<string, object> map:
@@ -1458,6 +1466,9 @@ namespace Ycs.Properties
             }
         }
 
+        private static object AttrsView(IEnumerable<KeyValuePair<string, YValue>> attrs) =>
+            AttrsView(attrs?.Select(kv => KeyValuePair.Create(kv.Key, kv.Value.ToObject())));
+
         private static object AttrsView(IEnumerable<KeyValuePair<string, object>> attrs)
         {
             if (attrs == null)
@@ -1477,19 +1488,20 @@ namespace Ycs.Properties
         internal static List<object> DeltaView(IEnumerable<Delta> delta) => delta.Select(d =>
         {
             var o = new Dictionary<string, object>();
-            if (d.Insert != null)
+            switch (d)
             {
-                o["insert"] = View(d.Insert);
-            }
-
-            if (d.Retain.HasValue)
-            {
-                o["retain"] = (long)d.Retain.Value;
-            }
-
-            if (d.Delete.HasValue)
-            {
-                o["delete"] = (long)d.Delete.Value;
+                case Delta.Insert insert:
+                    o["insert"] = View(insert.Value.ToObject());
+                    break;
+                case Delta.InsertItems items:
+                    o["insert"] = items.Items.Select(item => View(item.ToObject())).ToList();
+                    break;
+                case Delta.Retain retain:
+                    o["retain"] = (long)retain.Length;
+                    break;
+                case Delta.Delete delete:
+                    o["delete"] = (long)delete.Length;
+                    break;
             }
 
             if (AttrsView(d.Attributes) is Dictionary<string, object> a)
@@ -1574,12 +1586,12 @@ namespace Ycs.Properties
                         long i = 0;
                         foreach (var d in ((YText)parent).ToDelta())
                         {
-                            if (ReferenceEquals(d.Insert, t))
+                            if (d is Delta.Insert { Value: var embedded } && embedded.TryGetShared(out var shared) && ReferenceEquals(shared, t))
                             {
                                 return i;
                             }
 
-                            i += d.Insert is string s ? s.Length : 1;
+                            i += d is Delta.Insert text && text.Value.TryGetString(out var s) ? s.Length : 1;
                         }
 
                         return null;
@@ -1954,21 +1966,21 @@ namespace Ycs.Properties
         }
 
         /// <summary>Whether everything <paramref name="update"/> (v1) holds is in this document (a snapshot of it contains it).</summary>
-        public bool Contains(byte[] update) => Doc.CreateSnapshot().SnapshotContainsUpdate(update);
+        public bool Contains(byte[] update) => Doc.CreateSnapshot().ContainsUpdate(update);
     }
 
     /// <summary>Operations on encoded updates and snapshots, without a script.</summary>
     internal static class Updates
     {
-        public static byte[] Merge(IList<byte[]> updates, bool v2) => v2 ? UpdateOperations.MergeUpdatesV2(updates) : UpdateOperations.MergeUpdates(updates);
+        public static byte[] Merge(IList<byte[]> updates, bool v2) => v2 ? YUpdate.Merge([.. updates], format: UpdateFormat.V2) : YUpdate.Merge([.. updates], format: UpdateFormat.V1);
 
-        public static byte[] Diff(byte[] update, byte[] stateVector, bool v2) => v2 ? UpdateOperations.DiffUpdateV2(update, stateVector) : UpdateOperations.DiffUpdate(update, stateVector);
+        public static byte[] Diff(byte[] update, byte[] stateVector, bool v2) => v2 ? YUpdate.Diff(update, stateVector, format: UpdateFormat.V2) : YUpdate.Diff(update, stateVector, format: UpdateFormat.V1);
 
-        public static byte[] V1ToV2(byte[] update) => UpdateOperations.ConvertUpdateFormatV1ToV2(update);
+        public static byte[] V1ToV2(byte[] update) => YUpdate.Convert(update, UpdateFormat.V1, UpdateFormat.V2);
 
-        public static byte[] V2ToV1(byte[] update) => UpdateOperations.ConvertUpdateFormatV2ToV1(update);
+        public static byte[] V2ToV1(byte[] update) => YUpdate.Convert(update, UpdateFormat.V2, UpdateFormat.V1);
 
-        public static byte[] StateVectorFromUpdate(byte[] update, bool v2) => v2 ? UpdateOperations.EncodeStateVectorFromUpdateV2(update) : UpdateOperations.EncodeStateVectorFromUpdate(update);
+        public static byte[] StateVectorFromUpdate(byte[] update, bool v2) => v2 ? YUpdate.EncodeStateVector(update, format: UpdateFormat.V2) : YUpdate.EncodeStateVector(update, format: UpdateFormat.V1);
 
         public static bool IsUpdateException(Exception e) => e is YUpdateException;
     }

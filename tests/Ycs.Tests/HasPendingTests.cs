@@ -38,7 +38,7 @@ public class HasPendingTests
         var updates = Updates(text =>
         {
             text.Insert(0, "ab");
-            text.Delete(0, 1);
+            text.Remove(0, 1);
         });
         var doc = new YDoc();
 
@@ -83,7 +83,7 @@ public class HasPendingTests
     {
         var doc = new YDoc();
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         edit(doc.GetText("text"));
         return updates;
     }

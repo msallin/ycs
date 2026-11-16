@@ -135,8 +135,10 @@ public class TraceReplayTests
         protected static string StateHash(YDoc doc) => CanonicalJson.Hash(doc.EncodeStateAsUpdate());
 
         /// <summary>The attributes at <paramref name="i"/> of <paramref name="op"/>; null when absent or null.</summary>
-        internal static IDictionary<string, object> AttrsOf(JsonElement op, int i) =>
-            i >= op.GetArrayLength() || op[i].ValueKind == JsonValueKind.Null ? null : (IDictionary<string, object>)CanonicalJson.FromJson(op[i]);
+        internal static IReadOnlyDictionary<string, YValue> AttrsOf(JsonElement op, int i) =>
+            i >= op.GetArrayLength() || op[i].ValueKind == JsonValueKind.Null
+                ? null
+                : ((IDictionary<string, object>)CanonicalJson.FromJson(op[i])).ToDictionary(kv => kv.Key, kv => YValue.FromObject(kv.Value));
 
         protected static List<object> KeysOf(YEvent e) =>
             e.Keys.OrderBy(kv => kv.Key, StringComparer.Ordinal)
@@ -147,7 +149,7 @@ public class TraceReplayTests
         {
             var d = new Dictionary<string, object>
             {
-                ["path"] = e.Path.ToList(),
+                ["path"] = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(),
                 ["keys"] = KeysOf(e),
                 ["delta"] = e.Changes.Delta,
                 ["added"] = e.Changes.Added.Count,
@@ -163,10 +165,10 @@ public class TraceReplayTests
 
         protected void ObserveType(YType t, int id)
         {
-            t.Observe((_, e) => Log.Add(new List<object> { "obs", id, Describe(e.Event) }));
+            t.ObserveAny(e => Log.Add(new List<object> { "obs", id, Describe(e) }));
             if (id % 3 == 0)
             {
-                t.ObserveDeep((_, e) => Log.Add(new List<object> { "deep", id, e.Events.Select(Describe).ToList() }));
+                t.ObserveDeep((deepEvents, _) => Log.Add(new List<object> { "deep", id, deepEvents.Select(Describe).ToList() }));
             }
         }
     }
@@ -197,7 +199,7 @@ public class TraceReplayTests
             return base.Run(trace);
         }
 
-        private void ObserveText() => _text.Observe((_, e) => Log.Add(DescribeText((YTextEvent)e.Event)));
+        private void ObserveText() => _text.Observe(e => Log.Add(DescribeText((YTextEvent)e)));
 
         private Dictionary<string, object> DescribeText(YTextEvent e)
         {
@@ -261,7 +263,7 @@ public class TraceReplayTests
                 break;
             case "delete":
             case "tdelete":
-                t.Delete(op[at].GetInt32(), op[at + 1].GetInt32());
+                t.Remove(op[at].GetInt32(), op[at + 1].GetInt32());
                 break;
             case "format":
             case "tformat":
@@ -269,13 +271,13 @@ public class TraceReplayTests
                 break;
             case "embed":
             case "tembed":
-                t.InsertEmbed(op[at].GetInt32(), CanonicalJson.FromJson(op[at + 1]), Replay.AttrsOf(op, at + 2));
+                t.InsertEmbed(op[at].GetInt32(), YValue.FromObject(CanonicalJson.FromJson(op[at + 1])), Replay.AttrsOf(op, at + 2));
                 break;
             case "embedType":
                 t.InsertEmbed(op[at].GetInt32(), NewType(op[at + 1].GetString()), Replay.AttrsOf(op, at + 2));
                 break;
             case "setAttribute":
-                t.SetAttribute(op[at].GetString(), CanonicalJson.FromJson(op[at + 1]));
+                t.SetAttribute(op[at].GetString(), YValue.FromObject(CanonicalJson.FromJson(op[at + 1])));
                 break;
             case "removeAttribute":
                 t.RemoveAttribute(op[at].GetString());
@@ -530,7 +532,7 @@ public class TraceReplayTests
         public new string Run(JsonElement trace)
         {
             var clients = trace.GetProperty("clients").EnumerateArray().Select(c => c.GetInt64()).ToList();
-            Doc = new YDoc(new YDocOptions { ClientId = clients[0], Gc = false });
+            Doc = new YDoc(new YDocOptions { ClientId = clients[0], GarbageCollection = false });
             _text = Doc.GetText("t");
             return base.Run(trace);
         }
@@ -538,7 +540,7 @@ public class TraceReplayTests
         protected override void Special(string kind, JsonElement step)
         {
             Assert.AreEqual("snapshot", kind);
-            _snapshots.Add(Snapshot.DecodeSnapshot(Convert.FromBase64String(step.GetProperty("snapshot").GetString())));
+            _snapshots.Add(Snapshot.Decode(Convert.FromBase64String(step.GetProperty("snapshot").GetString())));
         }
 
         protected override void ApplyOp(JsonElement op) => ApplyTextOp(_text, op, 1);
@@ -562,6 +564,6 @@ public class TraceReplayTests
             return got;
         }
 
-        private static YText.YTextChangeAttributes ComputeYChange(YText.YTextChangeType type, ItemId id) => new() { Type = type, User = id.Client };
+        private static YChange ComputeYChange(YChangeKind kind, ItemId id) => new(kind, id.Client);
     }
 }

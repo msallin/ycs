@@ -94,20 +94,20 @@ public class StructStagingTests
     }
 
     [TestMethod]
-    public void LazyStructReader_WithStaging_StagesSkipsToo()
+    public void NextStaged_AGappedUpdate_StagesSkipsToo()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var updates = new List<byte[]>();
-        doc.UpdateV2 += (_, e) => updates.Add(e.data);
+        doc.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
             doc.GetArray("a").Insert(0, new List<object> { i });
         }
 
-        var gapped = UpdateOperations.MergeUpdatesV2(new[] { updates[0], updates[2] });
+        var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);
         var table = new StagingTable();
-        var reader = new LazyStructReader(new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited), filterSkips: true, table);
-        while (reader.Next() != null)
+        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited), staging: table);
+        while (cursor.NextStaged() >= 0)
         {
         }
 
@@ -129,16 +129,7 @@ public class StructStagingTests
 
     private static void AssertShadows(UpdateReader.Lease lease)
     {
-        foreach (var (client, list) in lease.Structs)
-        {
-            var (start, n) = lease.Staging.RangeOf(lease.Staging.FindClient(client));
-            var detached = UpdateOperations.Detach(list);
-            Assert.AreEqual(list.Count, n);
-            for (var k = 0; k < n; k++)
-            {
-                StagingDifferential.AssertEqual(detached[k], StructStaging.Decoded(lease.Staging, start + k));
-            }
-        }
+        StagingDifferential.AssertShadows(new Dictionary<long, List<AbstractStruct>>(lease.Structs), lease.Staging);
     }
 
     private static int Sum(IEnumerable<byte[]> inputs)

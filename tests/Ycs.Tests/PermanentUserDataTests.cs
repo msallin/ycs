@@ -25,7 +25,7 @@ public class PermanentUserDataTests
         doc.ClientId = 1;
 
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, doc.ClientId, "user1");
+        pud.SetUserMapping(doc.ClientId, "user1");
 
         Assert.AreEqual("user1", pud.GetUserByClientId(1));
         Assert.IsNull(pud.GetUserByClientId(9999));
@@ -38,7 +38,7 @@ public class PermanentUserDataTests
         doc.ClientId = 1;
 
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, doc.ClientId, "user1");
+        pud.SetUserMapping(doc.ClientId, "user1");
 
         var array = doc.GetArray("array");
 
@@ -63,8 +63,8 @@ public class PermanentUserDataTests
         doc.ClientId = 1;
 
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, 1, "user1");
-        pud.SetUserMapping(doc, 2, "user1");
+        pud.SetUserMapping(1, "user1");
+        pud.SetUserMapping(2, "user1");
 
         Assert.AreEqual("user1", pud.GetUserByClientId(1));
         Assert.AreEqual("user1", pud.GetUserByClientId(2));
@@ -77,7 +77,7 @@ public class PermanentUserDataTests
         doc.ClientId = 1;
 
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, doc.ClientId, "user1", filter: _ => false);
+        pud.SetUserMapping(doc.ClientId, "user1", filter: _ => false);
 
         var array = doc.GetArray("array");
         var clockBeforeInsert = doc.Store.GetState(doc.ClientId);
@@ -99,8 +99,8 @@ public class PermanentUserDataTests
 
         var pud1 = new PermanentUserData(doc1);
         var pud2 = new PermanentUserData(doc2);
-        pud1.SetUserMapping(doc1, doc1.ClientId, "user1");
-        pud2.SetUserMapping(doc2, doc2.ClientId, "user2");
+        pud1.SetUserMapping(doc1.ClientId, "user1");
+        pud2.SetUserMapping(doc2.ClientId, "user2");
 
         var clockBeforeInsert = doc1.Store.GetState(doc1.ClientId);
         doc1.GetArray("array").Insert(0, new object[] { "a", "b" });
@@ -109,10 +109,10 @@ public class PermanentUserDataTests
 
         // Sync both ways: each doc's PermanentUserData should learn about the other user, and doc2
         // should learn that 'a' was deleted by user1 even though it never performed the delete.
-        var update1 = doc1.EncodeStateAsUpdateV2();
-        var update2 = doc2.EncodeStateAsUpdateV2();
-        doc2.ApplyUpdateV2(update1);
-        doc1.ApplyUpdateV2(update2);
+        var update1 = doc1.EncodeStateAsUpdate(format: UpdateFormat.V2);
+        var update2 = doc2.EncodeStateAsUpdate(format: UpdateFormat.V2);
+        doc2.ApplyUpdate(update1, format: UpdateFormat.V2);
+        doc1.ApplyUpdate(update2, format: UpdateFormat.V2);
 
         Assert.AreEqual("user1", pud2.GetUserByClientId(1));
         Assert.AreEqual("user2", pud1.GetUserByClientId(2));
@@ -128,10 +128,10 @@ public class PermanentUserDataTests
         var doc1 = new YDoc();
         doc1.ClientId = 1;
         var pud1 = new PermanentUserData(doc1);
-        pud1.SetUserMapping(doc1, doc1.ClientId, "user1");
+        pud1.SetUserMapping(doc1.ClientId, "user1");
 
         var doc2 = new YDoc();
-        doc2.ApplyUpdateV2(doc1.EncodeStateAsUpdateV2());
+        doc2.ApplyUpdate(doc1.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
         var pud2 = new PermanentUserData(doc2); // constructed after the sync
 
         Assert.AreEqual("user1", pud2.GetUserByClientId(1));
@@ -145,9 +145,9 @@ public class PermanentUserDataTests
         var customUsers = doc.GetMap("customUsers");
 
         var pud = new PermanentUserData(doc, customUsers);
-        pud.SetUserMapping(doc, doc.ClientId, "user1");
+        pud.SetUserMapping(doc.ClientId, "user1");
 
-        Assert.AreSame(customUsers, pud.YUsers);
+        Assert.AreSame(customUsers, pud.Users);
         Assert.AreEqual("user1", pud.GetUserByClientId(1));
         Assert.IsTrue(customUsers.ContainsKey("user1"));
     }

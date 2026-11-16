@@ -81,7 +81,7 @@ internal class ContentType : IContentEx
 
                 if (!frame.Keys.MoveNext())
                 {
-                    transaction.Changed.Remove(frame.Type);
+                    transaction.LiveChanged.Remove(frame.Type);
                     open.RemoveAt(open.Count - 1);
                     continue;
                 }

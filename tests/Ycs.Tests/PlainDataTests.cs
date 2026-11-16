@@ -60,11 +60,11 @@ public class PlainDataTests
     [TestMethod]
     public void Snapshot_InHashSetAndDictionary_EqualSnapshotsCollapse()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var text = doc.GetText("t");
         text.Insert(0, "abc");
         var (first, second) = (doc.CreateSnapshot(), doc.CreateSnapshot());
-        text.Delete(1, 1);
+        text.Remove(1, 1);
         var third = doc.CreateSnapshot();
         var set = new HashSet<Snapshot> { first, second, third };
         var map = new Dictionary<Snapshot, int> { [first] = 1 };
@@ -73,9 +73,23 @@ public class PlainDataTests
     }
 
     [TestMethod]
+    public void Snapshot_GetHashCode_ManyClientsWithLargeValues_DoesNotThrowUnderCheckedArithmetic()
+    {
+        var vector = new Dictionary<long, long>();
+        for (var i = 0; i < 200; i++)
+        {
+            vector[uint.MaxValue - i] = int.MaxValue - i;
+        }
+
+        var snapshot = new Snapshot(new DeleteSet(), vector);
+
+        Assert.AreEqual(snapshot.GetHashCode(), new Snapshot(new DeleteSet(), new Dictionary<long, long>(vector)).GetHashCode());
+    }
+
+    [TestMethod]
     public void Snapshot_Equals_ObjectOverloadAgreesWithTypedAndHash()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetText("t").Insert(0, "abc");
         var a = doc.CreateSnapshot();
         var b = doc.CreateSnapshot();

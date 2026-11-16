@@ -6,17 +6,19 @@
 
 #nullable enable
 
+using System.Buffers;
+
 namespace Ycs;
 
 /// <summary>
 /// Mirrors Yjs 13.6.32's <c>Snapshot</c> (src/utils/Snapshot.js): an immutable pair of a state
 /// vector and a delete set that together pin down "the document as of this point in time".
 /// <br/>
-/// Snapshots are only meaningful against a document created with <c>Gc = false</c>
-/// (<see cref="YDocOptions.Gc"/>) - a garbage-collected document may already have thrown away the
+/// Snapshots are only meaningful against a document created with <c>GarbageCollection = false</c>
+/// (<see cref="YDocOptions.GarbageCollection"/>) - a garbage-collected document may already have thrown away the
 /// content of deleted items a snapshot would need to restore. <see cref="RestoreDocument"/> and
 /// <see cref="YDocSnapshotExtensions.CreateDocFromSnapshot"/> both enforce this the same way Yjs
-/// does, by throwing if <c>originDoc.Gc</c> is <c>true</c>.
+/// does, by throwing if <c>originDoc.GarbageCollection</c> is <c>true</c>.
 /// </summary>
 public sealed partial class Snapshot : IEquatable<Snapshot>
 {
@@ -44,32 +46,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     public static readonly Snapshot Empty = new Snapshot(new DeleteSet(), new Dictionary<long, long>());
 
     /// <summary>
-    /// Yjs parity: <c>equalSnapshots(snap1, snap2)</c>. Null-safe wrapper around
-    /// <see cref="Equals(Snapshot)"/> (which requires a non-null receiver).
-    /// </summary>
-    public static bool EqualSnapshots(Snapshot? snap1, Snapshot? snap2)
-    {
-        return ReferenceEquals(snap1, snap2) || (snap1 != null && snap1.Equals(snap2));
-    }
-
-    public YDoc RestoreDocument(YDoc originDoc, YDocOptions? opts = null)
-    {
-        if (originDoc.Gc)
-        {
-            // We should try to restore a GC-ed document, because some of the restored items might have their content deleted.
-            throw new InvalidOperationException("Garbage collection must be disabled in the origin document.");
-        }
-
-        var update = EncodeRestoreUpdateV2(originDoc, DeleteSet, StateVector);
-        var newDoc = new YDoc(opts ?? originDoc.CloneOptionsWithNewGuid());
-        newDoc.ApplyUpdateV2(update, transactionOrigin: "snapshot");
-        return newDoc;
-    }
-
-    /// <summary>
-    /// Shared body of Yjs' <c>restoreDocument</c>-shaped logic (used here by
-    /// <see cref="RestoreDocument"/>) and <c>createDocFromSnapshot</c> (used by
-    /// <see cref="YDocSnapshotExtensions.CreateDocFromSnapshot"/>): encodes, as a v2 update, exactly
+    /// Yjs' <c>createDocFromSnapshot</c> (<see cref="YDoc.CreateDocFromSnapshot"/>): encodes, as a v2 update, exactly
     /// the structs/deletes described by <paramref name="stateVector"/>/<paramref name="ds"/>,
     /// splitting structs in <paramref name="originDoc"/> as needed so the encoded ranges land on
     /// exact struct boundaries.
@@ -200,12 +177,13 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     public override bool Equals(object? obj) => obj is Snapshot other && Equals(other);
 
     // Order-independent over the clients, as Equals; order-dependent within a client's ranges.
+    // The per-client hashes are summed modulo 2^32 on purpose.
     public override int GetHashCode()
     {
         var hash = 0;
         foreach (var kvp in StateVector)
         {
-            hash += HashCode.Combine(kvp.Key, kvp.Value);
+            hash = unchecked(hash + HashCode.Combine(kvp.Key, kvp.Value));
         }
 
         foreach (var kvp in DeleteSet.Clients)
@@ -218,73 +196,55 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
                 client.Add(item.Length);
             }
 
-            hash += client.ToHashCode();
+            hash = unchecked(hash + client.ToHashCode());
         }
 
         return hash;
     }
 
-    public byte[] EncodeSnapshotV2()
+    /// <summary>Encodes the snapshot (Yjs' <c>encodeSnapshot</c>, <c>encodeSnapshotV2</c>).</summary>
+    public byte[] Encode(UpdateFormat format = UpdateFormat.V1)
     {
-        var encoder = new DSEncoderV2();
+        IDSEncoder encoder = format.IsV2() ? new DSEncoderV2() : new DSEncoderV1();
         DeleteSet.Write(encoder);
         EncodingUtils.WriteStateVector(encoder, StateVector);
         return encoder.ToArray();
     }
 
-    /// <summary>
-    /// Yjs parity: <c>encodeSnapshot(snapshot)</c> - the original ('v1') snapshot wire format.
-    /// </summary>
-    public byte[] EncodeSnapshot()
+    /// <summary>Writes the bytes <see cref="Encode(UpdateFormat)"/> returns into <paramref name="destination"/>; they are built in an array first.</summary>
+    public void Encode(IBufferWriter<byte> destination, UpdateFormat format = UpdateFormat.V1)
     {
-        var encoder = new DSEncoderV1();
-        DeleteSet.Write(encoder);
-        EncodingUtils.WriteStateVector(encoder, StateVector);
-        return encoder.ToArray();
+        ArgumentNullException.ThrowIfNull(destination);
+        destination.Write(Encode(format));
+    }
+
+    /// <summary>Decodes a snapshot (Yjs' <c>decodeSnapshot</c>, <c>decodeSnapshotV2</c>); the span is copied into a pooled buffer for the call.</summary>
+    /// <exception cref="YUpdateException">The bytes are not a snapshot.</exception>
+    public static Snapshot Decode(ReadOnlySpan<byte> bytes, UpdateFormat format = UpdateFormat.V1)
+    {
+        var v2 = format.IsV2();
+        using var input = new PooledCopy(bytes);
+        var segment = input.Segment;
+        return YUpdateException.Decode(() =>
+        {
+            var reader = new Lib0Reader(segment.Array!, segment.Offset, segment.Count);
+            IDSDecoder decoder = v2 ? new DSDecoderV2(reader) : new DSDecoderV1(reader);
+            var ds = DeleteSet.Read(decoder);
+            return new Snapshot(ds, EncodingUtils.ReadStateVector(decoder));
+        });
     }
 
     /// <summary>
-    /// Yjs parity: <c>decodeSnapshotV2(buf)</c>.
+    /// Yjs' <c>snapshotContainsUpdate</c>: whether the update in <paramref name="format"/> holds nothing beyond this
+    /// snapshot. The span is copied into a pooled buffer for the call.
     /// </summary>
-    internal static Snapshot DecodeSnapshotV2(Lib0Reader input)
+    public bool ContainsUpdate(ReadOnlySpan<byte> update, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
-        var decoder = new DSDecoderV2(input);
-        var ds = DeleteSet.Read(decoder);
-        var sv = EncodingUtils.ReadStateVector(decoder);
-        return new Snapshot(ds, sv);
+        var v2 = format.IsV2();
+        using var input = new PooledCopy(update);
+        var segment = input.Segment;
+        return YUpdateException.Decode(() => ContainsUpdate(segment, !v2, (limits ?? UpdateLimits.Default).MaxStructsPerUpdate));
     }
-
-    public static Snapshot DecodeSnapshotV2(byte[] buf)
-    {
-        return DecodeSnapshotV2(new Lib0Reader(buf));
-    }
-
-    /// <summary>
-    /// Yjs parity: <c>decodeSnapshot(buf)</c> - the original ('v1') snapshot wire format.
-    /// </summary>
-    internal static Snapshot DecodeSnapshot(Lib0Reader input)
-    {
-        var decoder = new DSDecoderV1(input);
-        var ds = DeleteSet.Read(decoder);
-        var sv = EncodingUtils.ReadStateVector(decoder);
-        return new Snapshot(ds, sv);
-    }
-
-    public static Snapshot DecodeSnapshot(byte[] buf)
-    {
-        return DecodeSnapshot(new Lib0Reader(buf));
-    }
-
-    /// <summary>
-    /// Yjs parity: <c>snapshotContainsUpdate(snapshot, update)</c> - checks an original ('v1')
-    /// update against this snapshot.
-    /// </summary>
-    public bool SnapshotContainsUpdate(byte[] update, UpdateLimits? limits = null) => SnapshotContainsUpdateCore(update, isV1: true, limits);
-
-    /// <summary>
-    /// Yjs parity: <c>snapshotContainsUpdateV2(snapshot, update)</c>.
-    /// </summary>
-    public bool SnapshotContainsUpdateV2(byte[] update, UpdateLimits? limits = null) => SnapshotContainsUpdateCore(update, isV1: false, limits);
 
     /// <summary>
     /// Unlike Yjs' version, which reads the struct headers lazily and stops at the first client the
@@ -296,9 +256,9 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
         return YUpdateException.Decode(() => ContainsUpdate(update, isV1, (limits ?? UpdateLimits.Default).MaxStructsPerUpdate));
     }
 
-    private bool ContainsUpdate(byte[] update, bool isV1, long maxStructs)
+    private bool ContainsUpdate(ArraySegment<byte> update, bool isV1, long maxStructs)
     {
-        var stream = new Lib0Reader(update);
+        var stream = new Lib0Reader(update.Array!, update.Offset, update.Count);
         IUpdateDecoder decoder = isV1
             ? (IUpdateDecoder)new UpdateDecoderV1(stream, maxStructs)
             : new UpdateDecoderV2(stream, maxStructs);
@@ -330,7 +290,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// <summary>
     /// Yjs parity: <c>equalDeleteSets(ds1, ds2)</c> (utils/DeleteSet.js) - not otherwise exposed on
     /// the internal <see cref="Ycs.DeleteSet"/> type, so ported here for
-    /// <see cref="SnapshotContainsUpdateCore"/>'s use. Structurally the same comparison
+    /// <see cref="ContainsUpdate(ArraySegment{byte}, bool, long)"/>'s use. Structurally the same comparison
     /// <see cref="Equals(Snapshot)"/> already does for its two delete sets.
     /// </summary>
     private static bool DeleteSetsEqual(DeleteSet a, DeleteSet b)

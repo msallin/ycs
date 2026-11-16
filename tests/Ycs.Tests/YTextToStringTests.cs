@@ -37,7 +37,7 @@ public class YTextToStringTests
         var text = NewText("hello");
         _ = text.ToString();
 
-        text.Delete(0, 1);
+        text.Remove(0, 1);
 
         Assert.AreEqual("ello", text.ToString());
     }
@@ -51,7 +51,7 @@ public class YTextToStringTests
         text.Doc.Transact(tr =>
         {
             _ = text.ToString();
-            text.Delete(0, 1);
+            text.Remove(0, 1);
             text.Insert(0, "j");
             inside = text.ToString();
         });
@@ -64,15 +64,15 @@ public class YTextToStringTests
     {
         var local = NewText("hello");
         var remote = new YDoc(new YDocOptions { ClientId = 2 });
-        remote.ApplyUpdateV1(local.Doc.EncodeStateAsUpdateV1());
+        remote.ApplyUpdate(local.Doc.EncodeStateAsUpdate());
         var remoteText = remote.GetText("text");
         _ = local.ToString();
 
         remoteText.Insert(0, ">");
-        local.Doc.ApplyUpdateV1(remote.EncodeStateAsUpdateV1(local.Doc.EncodeStateVector()));
+        local.Doc.ApplyUpdate(remote.EncodeStateAsUpdate(local.Doc.EncodeStateVector()));
         var afterInsert = local.ToString();
-        remoteText.Delete(1, 2);
-        local.Doc.ApplyUpdateV1(remote.EncodeStateAsUpdateV1(local.Doc.EncodeStateVector()));
+        remoteText.Remove(1, 2);
+        local.Doc.ApplyUpdate(remote.EncodeStateAsUpdate(local.Doc.EncodeStateVector()));
 
         Assert.AreEqual(">hello", afterInsert);
         Assert.AreEqual(">llo", local.ToString());
@@ -101,7 +101,7 @@ public class YTextToStringTests
         text.Insert(3, "XYZ");
         _ = text.ToString();
 
-        text.Delete(2, 5);
+        text.Remove(2, 5);
 
         Assert.AreEqual("abef", text.ToString());
         Assert.AreEqual("abef", Reloaded(text.Doc).ToString());
@@ -113,7 +113,7 @@ public class YTextToStringTests
         // "a" + high surrogate, a snapshot, then the low surrogate merged into the same item. Reading
         // the snapshot splits the item between the two halves, which replaces both: the only change
         // to the text that adds and deletes nothing.
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var text = doc.GetText("text");
         text.Insert(0, "a\uD83D");
         var snapshot = doc.CreateSnapshot();
@@ -131,7 +131,7 @@ public class YTextToStringTests
         var text = NewText("hello");
         _ = text.ToString();
 
-        text.Format(1, 2, new Dictionary<string, object> { ["bold"] = true });
+        text.Format(1, 2, new Dictionary<string, YValue> { ["bold"] = true });
 
         Assert.AreEqual("hello", text.ToString());
     }
@@ -141,7 +141,7 @@ public class YTextToStringTests
     {
         var text = NewText("ab");
 
-        text.InsertEmbed(1, new Dictionary<string, object> { ["image"] = "x" });
+        text.InsertEmbed(1, YValue.FromObject(new Dictionary<string, object> { ["image"] = "x" }));
 
         Assert.AreEqual("ab", text.ToString());
     }
@@ -150,7 +150,7 @@ public class YTextToStringTests
     public void CopyTo_LengthLongDestination_WritesTheTextWithoutEmbeds()
     {
         var text = NewText("ab");
-        text.InsertEmbed(1, new Dictionary<string, object> { ["image"] = "x" });
+        text.InsertEmbed(1, YValue.FromObject(new Dictionary<string, object> { ["image"] = "x" }));
         var destination = new char[text.Length];
 
         var written = text.CopyTo(destination);
@@ -188,7 +188,7 @@ public class YTextToStringTests
     private static YText Reloaded(YDoc doc)
     {
         var copy = new YDoc(new YDocOptions { ClientId = 9 });
-        copy.ApplyUpdateV1(doc.EncodeStateAsUpdateV1());
+        copy.ApplyUpdate(doc.EncodeStateAsUpdate());
         return copy.GetText("text");
     }
 }

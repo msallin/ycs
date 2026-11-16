@@ -28,11 +28,11 @@ public class FormattingCleanupTests
         var transactions = 0;
         b.AfterTransaction += (_, _) => transactions++;
 
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1(b.EncodeStateVector()));
-        a.ApplyUpdateV1(b.EncodeStateAsUpdateV1(a.EncodeStateVector()));
+        b.ApplyUpdate(a.EncodeStateAsUpdate(b.EncodeStateVector()));
+        a.ApplyUpdate(b.EncodeStateAsUpdate(a.EncodeStateVector()));
 
         Assert.AreEqual(2, transactions, "the update and the formatting cleanup, as in Yjs");
-        Assert.AreEqual(ConcurrentBoldAfterSync, Convert.ToBase64String(b.EncodeStateAsUpdateV1()));
+        Assert.AreEqual(ConcurrentBoldAfterSync, Convert.ToBase64String(b.EncodeStateAsUpdate()));
         Assert.AreEqual("[ab bold][cd bold][ef]", Describe(b.GetText("text")));
     }
 
@@ -46,7 +46,7 @@ public class FormattingCleanupTests
         var transactions = 0;
         c.AfterTransaction += (_, _) => transactions++;
 
-        c.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        c.ApplyUpdate(a.EncodeStateAsUpdate());
 
         Assert.AreEqual(2, transactions);
     }
@@ -61,9 +61,9 @@ public class FormattingCleanupTests
         var transactions = 0;
         e.AfterTransaction += (_, _) => transactions++;
 
-        e.ApplyUpdateV1(d.EncodeStateAsUpdateV1());
-        d.GetText("text").Delete(0, 1);
-        e.ApplyUpdateV1(d.EncodeStateAsUpdateV1(e.EncodeStateVector()));
+        e.ApplyUpdate(d.EncodeStateAsUpdate());
+        d.GetText("text").Remove(0, 1);
+        e.ApplyUpdate(d.EncodeStateAsUpdate(e.EncodeStateVector()));
 
         Assert.AreEqual(2, transactions, "one per update, as in Yjs");
         Assert.AreEqual("y", text.ToString());
@@ -75,7 +75,7 @@ public class FormattingCleanupTests
         var b = new YDoc(new YDocOptions { ClientId = 2 });
         a.GetText("text").Insert(0, content);
         b.GetText("text");
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
         return (a, b);
     }
 
@@ -84,8 +84,8 @@ public class FormattingCleanupTests
         var parts = new System.Text.StringBuilder();
         foreach (var op in text.ToDelta())
         {
-            parts.Append('[').Append(op.Insert);
-            foreach (var attribute in op.Attributes ?? new Dictionary<string, object>())
+            parts.Append('[').Append(op.Inserted());
+            foreach (var attribute in op.Attributes ?? new Dictionary<string, YValue>())
             {
                 parts.Append(' ').Append(attribute.Key);
             }
@@ -114,16 +114,16 @@ public class FormattingCleanupTests
                 texts.Add(text);
             }
         });
-        target.ApplyUpdate(source.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
+        target.ApplyUpdate(source.EncodeStateAsUpdate(), null, limits: UpdateLimits.Unlimited);
         byte[] update = null;
-        source.Update += (_, e) => update = e.data;
-        source.Transact(_ => texts.ForEach(text => text.Format(0, 2, new Dictionary<string, object> { ["italic"] = true })));
+        source.Updated += (_, e) => update = e.Update.ToArray();
+        source.Transact(_ => texts.ForEach(text => text.Format(0, 2, new Dictionary<string, YValue> { ["italic"] = true })));
 
         var stopwatch = Stopwatch.StartNew();
-        target.ApplyUpdate(update, null, UpdateLimits.Unlimited);
+        target.ApplyUpdate(update, null, limits: UpdateLimits.Unlimited);
 
         Assert.IsLessThan(1_500, stopwatch.ElapsedMilliseconds);
     }
 
-    private static Dictionary<string, object> Bold() => new() { ["bold"] = true };
+    private static Dictionary<string, YValue> Bold() => new() { ["bold"] = true };
 }

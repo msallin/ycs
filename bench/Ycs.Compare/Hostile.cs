@@ -63,23 +63,23 @@ internal static class Hostile
 
     private static (string, string, string) Ycs(HostileCase c)
     {
-        var doc = new YDoc(new YDocOptions { Gc = c.Gc, ClientId = 1 });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = c.Gc, ClientId = 1 });
         if (c.BaseV1.Length > 0)
         {
-            doc.ApplyUpdateV1(c.BaseV1, null, UpdateLimits.Unlimited);
+            doc.ApplyUpdate(c.BaseV1, null, limits: UpdateLimits.Unlimited);
         }
 
-        var before = doc.EncodeStateAsUpdateV1();
+        var before = doc.EncodeStateAsUpdate();
         string outcome;
         try
         {
             if (c.V2)
             {
-                doc.ApplyUpdateV2(c.Update);
+                doc.ApplyUpdate(c.Update, format: UpdateFormat.V2);
             }
             else
             {
-                doc.ApplyUpdateV1(c.Update);
+                doc.ApplyUpdate(c.Update);
             }
 
             outcome = "applied";
@@ -98,7 +98,7 @@ internal static class Hostile
                 _ = doc.GetText(r).ToString();
             }
 
-            var after = doc.EncodeStateAsUpdateV1();
+            var after = doc.EncodeStateAsUpdate();
             readable = "yes";
             unchanged = before.AsSpan().SequenceEqual(after) ? "yes" : "no";
         }
@@ -170,7 +170,7 @@ internal static class Hostile
     {
         var doc = new YDoc(new YDocOptions { ClientId = 7 });
         doc.GetText("text").Insert(0, string.Concat(Inputs.Typing.Take(1_000)));
-        var v1 = doc.EncodeStateAsUpdateV1();
+        var v1 = doc.EncodeStateAsUpdate();
         return v1[..(v1.Length / 2)];
     }
 
@@ -187,7 +187,7 @@ internal static class Hostile
 
             array.Delete(0, array.Length);
         });
-        return doc.EncodeStateAsUpdateV2();
+        return doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
     }
 
     /// <summary>A v1 update of <paramref name="count"/> deleted items of <paramref name="client"/> in the root text "t", without origins.</summary>

@@ -389,7 +389,7 @@ internal sealed partial class StructStore
         var plan = _spare ?? new IntegrationPlan(this);
         _spare = null;
         plan.Plan(structs, limits.MaxDepth);
-        if (transaction.Doc.Gc)
+        if (transaction.Doc.GarbageCollection)
         {
             plan.CheckGarbageCollection(transaction.Doc, ds, PendingDs);
         }

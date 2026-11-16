@@ -38,7 +38,7 @@ public class EnumeratorLifetimeTests
         var b = new YDoc(new YDocOptions { ClientId = 2 });
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         b.GetArray("a").Insert(3, new object[] { "y" });
-        return b.EncodeStateAsUpdate(a.EncodeStateVectorV1());
+        return b.EncodeStateAsUpdate(a.EncodeStateVector());
     }
 
     [TestMethod]
@@ -163,12 +163,12 @@ public class EnumeratorLifetimeTests
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         b.GetText("t").Insert(4, "z");
         a.ApplyUpdate(b.EncodeStateAsUpdate());
-        text.Delete(1, 1);
+        text.Remove(1, 1);
         var writer = new CallbackWriter(onSpan: count =>
         {
             if (count == 2)
             {
-                text.Delete(1, 2);
+                text.Remove(1, 2);
             }
         });
 
@@ -215,8 +215,8 @@ public class EnumeratorLifetimeTests
             seen.Add(((YXmlElement)walker.Current).NodeName);
             var other = doc.GetText("t");
             other.Insert(0, "xy");
-            other.Delete(0, 1);
-            other.Delete(0, 1);
+            other.Remove(0, 1);
+            other.Remove(0, 1);
         }
 
         Assert.AreEqual("a,b,c", string.Join(",", seen));

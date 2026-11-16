@@ -15,13 +15,18 @@ var jsonOptions = new JsonSerializerOptions { WriteIndented = true, Encoder = Ja
 
 static object DeltaToJson(Delta d) => new
 {
-    insert = d.Insert,
-    retain = d.Retain,
-    delete = d.Delete,
-    attributes = d.Attributes
+    insert = d switch
+    {
+        Delta.Insert i => i.Value.ToObject(),
+        Delta.InsertItems items => items.Items.Select(v => v.ToObject()).ToList(),
+        _ => null,
+    },
+    retain = (d as Delta.Retain)?.Length,
+    delete = (d as Delta.Delete)?.Length,
+    attributes = d.Attributes?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToObject()),
 };
 
-static string ActionToJson(ChangeAction a) => a.ToString().ToLowerInvariant();
+static string ActionToJson(KeyChangeAction a) => a.ToString().ToLowerInvariant();
 
 var doc = new YDoc();
 var map = doc.GetMap("map");
@@ -29,18 +34,16 @@ var arr = doc.GetArray("array");
 var text = doc.GetText("text");
 
 var mapEvents = new List<object>();
-map.Observe((s, e) =>
+map.Observe(e =>
 {
-    var evt = (YMapEvent)e.Event;
-    var keys = evt.Keys.ToDictionary(kvp => kvp.Key, kvp => ActionToJson(kvp.Value.Action));
-    mapEvents.Add(new { path = evt.Path.ToList(), keys });
+    var keys = e.Keys.ToDictionary(kvp => kvp.Key, kvp => ActionToJson(kvp.Value.Action));
+    mapEvents.Add(new { path = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(), keys });
 });
 
 var arrEvents = new List<object>();
-arr.Observe((s, e) =>
+arr.Observe(e =>
 {
-    var evt = (YArrayEvent)e.Event;
-    arrEvents.Add(new { path = evt.Path.ToList(), delta = evt.Delta.Select(DeltaToJson).ToList() });
+    arrEvents.Add(new { path = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(), delta = e.Delta.Select(DeltaToJson).ToList() });
 });
 
 // Note: this deliberately does NOT compare per-event YTextEvent.Delta values. That computation has
@@ -51,7 +54,7 @@ arr.Observe((s, e) =>
 // per-implicit-transact model) is still a meaningful, bug-free signal; the actual delta *content* is
 // separately proven correct below via ToDelta()/toDelta(), a different code path the bug doesn't reach.
 var textEventCount = 0;
-text.Observe((s, e) => textEventCount++);
+text.Observe(_ => textEventCount++);
 
 // --- Map ---
 map.Set("str", "hello");
@@ -64,9 +67,9 @@ arr.Delete(1, 1);
 
 // --- Text ---
 text.Insert(0, "hello");
-text.Format(0, 5, new Dictionary<string, object> { { "bold", true } });
+text.Format(0, 5, new Dictionary<string, YValue> { { "bold", true } });
 text.Insert(5, " world");
-text.Delete(0, 1);
+text.Remove(0, 1);
 
 var finalState = new
 {
@@ -104,8 +107,8 @@ var result = new
     {
         afterUndo1,
         afterUndo2,
-        canUndo = um2.CanUndo(),
-        canRedo = um2.CanRedo()
+        canUndo = um2.CanUndo,
+        canRedo = um2.CanRedo
     }
 };
 

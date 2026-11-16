@@ -87,9 +87,15 @@ internal static class UndoReplay
             ["x"] = doc.GetXmlFragment("x"),
         };
 
+        var tracked = config.GetProperty("tracked").ValueKind == JsonValueKind.Array
+            ? config.GetProperty("tracked").EnumerateArray()
+                .Select(o => o.ValueKind == JsonValueKind.Null ? null : o.GetString() == "cls" ? typeof(ClassOrigin) : (object?)o.GetString())
+                .ToHashSet()
+            : null;
         var options = new UndoManagerOptions
         {
-            CaptureTimeout = config.GetProperty("timeout").GetDouble() > 0 ? 1_000_000_000 : 0,
+            TrackedOrigins = tracked,
+            CaptureTimeout = TimeSpan.FromMilliseconds(config.GetProperty("timeout").GetDouble() > 0 ? 1_000_000_000 : 0),
             IgnoreRemoteMapChanges = config.GetProperty("ignoreRemoteMapChanges").GetBoolean(),
             DeleteFilter = config.GetProperty("deleteFilter").GetInt32() switch
             {
@@ -100,22 +106,15 @@ internal static class UndoReplay
             CaptureTransaction = config.GetProperty("captureTransaction").GetBoolean() ? tr => tr.Origin is not "nocap" : null,
         };
 
-        if (config.GetProperty("tracked").ValueKind == JsonValueKind.Array)
-        {
-            options.TrackedOrigins = config.GetProperty("tracked").EnumerateArray()
-                .Select(o => o.ValueKind == JsonValueKind.Null ? null : o.GetString() == "cls" ? typeof(ClassOrigin) : (object)o.GetString())
-                .ToHashSet();
-        }
-
         var scope = config.GetProperty("scope");
         var um = scope.ValueKind == JsonValueKind.Null
             ? new UndoManager(doc, options)
-            : new UndoManager(scope.EnumerateArray().Select(n => (object)roots[n.GetString()]).ToList(), options);
+            : new UndoManager(scope.EnumerateArray().Select(n => roots[n.GetString()]).ToList(), options);
 
         var events = new List<string>();
-        um.StackItemAdded += (_, e) => events.Add($"added {Name(e.Type)} {e.ChangedParentTypes.Count}");
-        um.StackItemUpdated += (_, e) => events.Add($"updated {Name(e.Type)} {e.ChangedParentTypes.Count}");
-        um.StackItemPopped += (_, e) => events.Add($"popped {Name(e.Type)} {e.ChangedParentTypes.Count}");
+        um.StackItemAdded += (_, e) => events.Add($"added {Name(e.Operation)} {e.ChangedParentTypes.Count}");
+        um.StackItemUpdated += (_, e) => events.Add($"updated {Name(e.Operation)} {e.ChangedParentTypes.Count}");
+        um.StackItemPopped += (_, e) => events.Add($"popped {Name(e.Operation)} {e.ChangedParentTypes.Count}");
         um.StackCleared += (_, e) => events.Add($"cleared {Bool(e.UndoStackCleared)} {Bool(e.RedoStackCleared)}");
 
         var history = new List<string>();
@@ -172,7 +171,7 @@ internal static class UndoReplay
     {
         // A file written with FULL=1 holds whole states instead of their hashes.
         var expectedState = step.GetProperty("state").GetString();
-        var state = Convert.ToHexStringLower(doc.EncodeStateAsUpdateV1());
+        var state = Convert.ToHexStringLower(doc.EncodeStateAsUpdate());
         if ((expectedState.Length == 16 ? Convert.ToHexStringLower(SHA256.HashData(Convert.FromHexString(state)))[..16] : state) != expectedState)
         {
             return expectedState.Length == 16 ? "state: the document differs" : $"state: the document differs: Yjs {expectedState}, Ycs {state}";
@@ -199,7 +198,7 @@ internal static class UndoReplay
 
     private static object Origin(JsonElement name) => name.ValueKind == JsonValueKind.Null ? null : name.GetString() == "cls" ? new ClassOrigin() : name.GetString();
 
-    private static string Name(UndoManager.OperationType type) => type == UndoManager.OperationType.Undo ? "undo" : "redo";
+    private static string Name(UndoOperation type) => type == UndoOperation.Undo ? "undo" : "redo";
 
     private static string Bool(bool b) => b ? "true" : "false";
 
@@ -224,11 +223,11 @@ internal static class UndoReplay
         switch (op[0].GetString())
         {
             case "tins":
-                t.Insert(op[1].GetInt32(), op[2].GetString(), op[3].ValueKind == JsonValueKind.Null ? null : new Dictionary<string, object> { ["b"] = true });
+                t.Insert(op[1].GetInt32(), op[2].GetString(), op[3].ValueKind == JsonValueKind.Null ? null : new Dictionary<string, YValue> { ["b"] = true });
                 break;
-            case "tdel": t.Delete(op[1].GetInt32(), op[2].GetInt32()); break;
-            case "tfmt": t.Format(op[1].GetInt32(), op[2].GetInt32(), new Dictionary<string, object> { ["b"] = Value(op[3]) }); break;
-            case "temb": t.InsertEmbed(op[1].GetInt32(), new Dictionary<string, object> { ["e"] = op[2].GetInt32() }); break;
+            case "tdel": t.Remove(op[1].GetInt32(), op[2].GetInt32()); break;
+            case "tfmt": t.Format(op[1].GetInt32(), op[2].GetInt32(), new Dictionary<string, YValue> { ["b"] = YValue.FromObject(Value(op[3])) }); break;
+            case "temb": t.InsertEmbed(op[1].GetInt32(), YValue.Object(new KeyValuePair<string, YValue>("e", op[2].GetInt32()))); break;
             case "mset": m.Set(op[1].GetString(), Value(op[2])); break;
             case "mdel": m.Delete(op[1].GetString()); break;
             case "mnest": { var n = new YMap(); m.Set(op[1].GetString(), n); n.Set("k", Value(op[2])); break; }
@@ -280,7 +279,7 @@ internal static class UndoReplay
             case "xfmt":
                 if (XmlAt(op[1].GetInt32()) is YXmlText ft && ft.Length > 0)
                 {
-                    ft.Format(0, Math.Min(op[2].GetInt32(), ft.Length), new Dictionary<string, object> { ["i"] = Value(op[3]) });
+                    ft.Format(0, Math.Min(op[2].GetInt32(), ft.Length), new Dictionary<string, YValue> { ["i"] = YValue.FromObject(Value(op[3])) });
                 }
 
                 break;

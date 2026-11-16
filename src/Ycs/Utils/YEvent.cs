@@ -8,42 +8,6 @@
 
 namespace Ycs;
 
-public class ChangesCollection
-{
-    public ISet<ItemView> Added;
-    public ISet<ItemView> Deleted;
-    public IList<Delta> Delta;
-    public IDictionary<string, ChangeKey> Keys;
-}
-
-public class Delta
-{
-    /// <summary>
-    /// What <see cref="Insert"/> holds for an embed whose value is null (Yjs' <c>{ insert: null }</c>,
-    /// which only another peer can write), since a null <see cref="Insert"/> means no insert: an embed
-    /// of length 1, as every embed. <see cref="YText.ApplyDelta"/> inserts it as that embed.
-    /// </summary>
-    public static readonly object NullEmbed = new();
-
-    public object Insert;
-    public int? Delete;
-    public int? Retain;
-    public IDictionary<string, object> Attributes;
-}
-
-public enum ChangeAction
-{
-    Add,
-    Update,
-    Delete
-}
-
-public class ChangeKey
-{
-    public ChangeAction Action;
-    public object OldValue;
-}
-
 /// <summary>
 /// The sets in <see cref="Transaction.Changed"/>: per changed type, the map keys that changed, and
 /// <c>null</c> when its list of children changed.
@@ -142,7 +106,7 @@ internal static class ChangedKeys
     }
 
     /// <summary>The keys in <paramref name="changed"/> other than <c>null</c>, as a new set.</summary>
-    public static ISet<string> WithoutChildList(ISet<string> changed)
+    public static HashSet<string> WithoutChildList(ISet<string> changed)
     {
         var keys = new HashSet<string>();
         if (changed != null)
@@ -160,10 +124,10 @@ internal static class ChangedKeys
     }
 }
 
-public partial class YEvent
+public abstract partial class YEvent
 {
-    private ChangesCollection _changes = null;
-    private IDictionary<string, ChangeKey> _keys = null;
+    private YChanges _changes = null;
+    private IReadOnlyDictionary<string, KeyChange> _keys = null;
 
     /// <summary>
     /// Every event, when it is made (the observers are called right after), compares the views of the structs of its
@@ -172,7 +136,7 @@ public partial class YEvent
     /// </summary>
     internal static bool CheckViewsForTests;
 
-    internal YEvent(AbstractType target, Transaction transaction)
+    private protected YEvent(YType target, Transaction transaction)
     {
         Target = target;
         CurrentTarget = target;
@@ -193,15 +157,15 @@ public partial class YEvent
         return !Transaction.BeforeState.TryGetValue(str.Id.Client, out var clock) || str.Id.Clock >= clock;
     }
 
-    private IDictionary<string, ChangeKey> CollectKeys()
+    private IReadOnlyDictionary<string, KeyChange> CollectKeys()
     {
         if (_keys == null)
         {
             var target = Target;
             // Cached only once complete: a read after the transaction ended throws on every try.
-            var keys = new Dictionary<string, ChangeKey>();
+            var keys = new Dictionary<string, KeyChange>();
 
-            if (!Transaction.Changed.TryGetValue(Target, out var changed))
+            if (!Transaction.LiveChanged.TryGetValue(Target, out var changed))
             {
                 changed = ChangedKeys.None;
             }
@@ -210,7 +174,7 @@ public partial class YEvent
             {
                 if (key != null)
                 {
-                    ChangeAction action;
+                    KeyChangeAction action;
                     object oldValue;
                     var item = target._map[key];
 
@@ -226,7 +190,7 @@ public partial class YEvent
                         {
                             if (!prev.IsNull && Deletes(prev))
                             {
-                                action = ChangeAction.Delete;
+                                action = KeyChangeAction.Delete;
                                 oldValue = LastValue(prev);
                             }
                             else
@@ -239,12 +203,12 @@ public partial class YEvent
                         {
                             if (!prev.IsNull && Deletes(prev))
                             {
-                                action = ChangeAction.Update;
+                                action = KeyChangeAction.Update;
                                 oldValue = LastValue(prev);
                             }
                             else
                             {
-                                action = ChangeAction.Add;
+                                action = KeyChangeAction.Add;
                                 oldValue = null;
                             }
                         }
@@ -253,7 +217,7 @@ public partial class YEvent
                     {
                         if (Deletes(item))
                         {
-                            action = ChangeAction.Delete;
+                            action = KeyChangeAction.Delete;
                             oldValue = LastValue(item);
                         }
                         else
@@ -263,7 +227,7 @@ public partial class YEvent
                         }
                     }
 
-                    keys[key] = new ChangeKey { Action = action, OldValue = oldValue };
+                    keys[key] = new KeyChange(action, oldValue);
                 }
             }
 
@@ -275,7 +239,31 @@ public partial class YEvent
 
     private static object LastValue(ItemRef item) => AbstractType.ValueAt(item.Content, item.Length - 1);
 
-    private ChangesCollection CollectChanges()
+    private enum DeltaRun
+    {
+        None,
+        Delete,
+        Insert,
+        Retain,
+    }
+
+    private static void PackRun(List<Delta> delta, DeltaRun run, int count, StoredItems inserted)
+    {
+        switch (run)
+        {
+            case DeltaRun.Delete:
+                delta.Add(new Delta.Delete(count));
+                break;
+            case DeltaRun.Insert:
+                delta.Add(new Delta.InsertItems(inserted));
+                break;
+            case DeltaRun.Retain:
+                delta.Add(new Delta.Retain(count));
+                break;
+        }
+    }
+
+    private YChanges CollectChanges()
     {
         if (_changes == null)
         {
@@ -284,30 +272,19 @@ public partial class YEvent
             var deleted = new HashSet<ItemView>();
             var delta = new List<Delta>();
 
-            var changes = new ChangesCollection
-            {
-                Added = added,
-                Deleted = deleted,
-                Delta = delta,
-                Keys = CollectKeys()
-            };
+            var changes = new YChanges(added, deleted, delta, CollectKeys());
 
-            if (!Transaction.Changed.TryGetValue(Target, out var changed))
+            if (!Transaction.LiveChanged.TryGetValue(Target, out var changed))
             {
                 changed = ChangedKeys.None;
             }
 
             if (changed.Contains(null))
             {
-                Delta lastOp = null;
-
-                void packOp()
-                {
-                    if (lastOp != null)
-                    {
-                        delta.Add(lastOp);
-                    }
-                }
+                // The run being collected: none, a deletion or a retain (counted), or an insertion (its items).
+                var run = DeltaRun.None;
+                var count = 0;
+                StoredItems inserted = null;
 
                 for (var item = Target._start; !item.IsNull; item = item.Right.AsItem)
                 {
@@ -315,49 +292,47 @@ public partial class YEvent
                     {
                         if (Deletes(item) && !Adds(item))
                         {
-                            if (lastOp == null || lastOp.Delete == null)
+                            if (run != DeltaRun.Delete)
                             {
-                                packOp();
-                                lastOp = new Delta { Delete = 0 };
+                                PackRun(delta, run, count, inserted);
+                                run = DeltaRun.Delete;
+                                count = 0;
                             }
 
-                            lastOp.Delete += item.Length;
+                            count += item.Length;
                             deleted.Add(ItemView.Of(Target.Doc, item));
                         }
-                        else
+                    }
+                    else if (Adds(item))
+                    {
+                        if (run != DeltaRun.Insert)
                         {
-                            // Do nothing.
+                            PackRun(delta, run, count, inserted);
+                            run = DeltaRun.Insert;
+                            inserted = new StoredItems();
                         }
+
+                        inserted.AddRange(item.Content.GetContent());
+
+                        added.Add(ItemView.Of(Target.Doc, item));
                     }
                     else
                     {
-                        if (Adds(item))
+                        if (run != DeltaRun.Retain)
                         {
-                            if (lastOp == null || lastOp.Insert == null)
-                            {
-                                packOp();
-                                lastOp = new Delta { Insert = new List<object>(1) };
-                            }
-
-                            (lastOp.Insert as List<object>).AddRange(item.Content.GetContent());
-                            added.Add(ItemView.Of(Target.Doc, item));
+                            PackRun(delta, run, count, inserted);
+                            run = DeltaRun.Retain;
+                            count = 0;
                         }
-                        else
-                        {
-                            if (lastOp == null || lastOp.Retain == null)
-                            {
-                                packOp();
-                                lastOp = new Delta { Retain = 0 };
-                            }
 
-                            lastOp.Retain += item.Length;
-                        }
+                        count += item.Length;
                     }
                 }
 
-                if (lastOp != null && lastOp.Retain == null)
+                // A trailing retain says nothing.
+                if (run != DeltaRun.Retain)
                 {
-                    packOp();
+                    PackRun(delta, run, count, inserted);
                 }
             }
 
@@ -372,9 +347,6 @@ public partial class YEvent
         return _changes;
     }
 
-    /// <summary>
-    /// Compute the path from this type to the specified target.
-    /// </summary>
     /// <summary>The number of elements of <see cref="Path"/>, without walking the siblings to compute them.</summary>
     internal int PathLength
     {
@@ -390,16 +362,17 @@ public partial class YEvent
         }
     }
 
-    private IReadOnlyCollection<object> GetPathTo(AbstractType parent, AbstractType child)
+    private PathSegment[] GetPathTo(YType parent, YType child)
     {
-        var path = new Stack<object>();
+        var path = new PathSegment[PathLength];
+        var at = path.Length;
 
         while (!child.IsRoot && child != parent)
         {
             if (child.ItemParentSub != null)
             {
                 // Parent is map-ish.
-                path.Push(child.ItemParentSub);
+                path[--at] = new PathSegment(child.ItemParentSub, 0);
             }
             else
             {
@@ -418,7 +391,7 @@ public partial class YEvent
                     c = cItem.IsNull ? default : cItem.Right;
                 }
 
-                path.Push(i);
+                path[--at] = new PathSegment(null, i);
             }
 
             child = child.ParentType;

@@ -13,7 +13,7 @@ public class PermanentUserDataYjsTests
     public void GetUserByClientId_IdAbove2Pow31_ReturnsTheUser()
     {
         var peer = new YDoc(new YDocOptions { ClientId = 1 });
-        new PermanentUserData(peer).SetUserMapping(peer, 3_000_000_000L, "bob");
+        new PermanentUserData(peer).SetUserMapping(3_000_000_000L, "bob");
         var doc = new YDoc(new YDocOptions { ClientId = 2 });
         var pud = new PermanentUserData(doc);
 
@@ -29,16 +29,16 @@ public class PermanentUserDataYjsTests
         var text = doc.GetText("t");
         text.Insert(0, "abc");
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, 1, "alice");
+        pud.SetUserMapping(1, "alice");
         var peer = new YDoc(new YDocOptions { ClientId = 2 });
         Sync(doc, peer);
         peer.GetMap("users").Set("alice", "oops");
         peer.GetMap("users").Set("eve", new YMap());
 
         Sync(peer, doc);
-        text.Delete(0, 1);
-        pud.SetUserMapping(doc, 1, "alice");
-        text.Delete(0, 1);
+        text.Remove(0, 1);
+        pud.SetUserMapping(1, "alice");
+        text.Remove(0, 1);
 
         Assert.AreEqual(("alice", "alice"), (pud.GetUserByClientId(1), pud.GetUserByDeletedId(new ItemId(1, 1))));
     }
@@ -69,12 +69,12 @@ public class PermanentUserDataYjsTests
         var text = doc.GetText("t");
         text.Insert(0, "abc");
         var pud = new PermanentUserData(doc);
-        pud.SetUserMapping(doc, 1, "alice");
+        pud.SetUserMapping(1, "alice");
         var ds = (YArray)((YMap)doc.GetMap("users").Get("alice")).Get("ds");
         var dsLengthAtUpdates = new List<int>();
-        doc.Update += (_, _) => dsLengthAtUpdates.Add(ds.Length);
+        doc.Updated += (_, _) => dsLengthAtUpdates.Add(ds.Length);
 
-        text.Delete(0, 1);
+        text.Remove(0, 1);
 
         CollectionAssert.AreEqual(new[] { 0, 1 }, dsLengthAtUpdates);
     }

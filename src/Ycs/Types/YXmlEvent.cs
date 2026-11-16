@@ -9,10 +9,10 @@ namespace Ycs;
 /// <summary>
 /// An event that describes changes on a YXmlElement or YXmlFragment.
 /// </summary>
-public class YXmlEvent : YEvent
+public sealed class YXmlEvent : YEvent
 {
     private readonly ISet<string?>? _subs;
-    private ISet<string>? _attributesChanged;
+    private IReadOnlySet<string>? _attributesChanged;
 
     internal YXmlEvent(YType target, ISet<string?>? subs, Transaction transaction)
         : base(target, transaction)
@@ -28,5 +28,5 @@ public class YXmlEvent : YEvent
     /// <summary>
     /// The set of all changed attributes.
     /// </summary>
-    public ISet<string> AttributesChanged => _attributesChanged ??= ChangedKeys.WithoutChildList(_subs);
+    public IReadOnlySet<string> AttributesChanged => _attributesChanged ??= ChangedKeys.WithoutChildList(_subs);
 }

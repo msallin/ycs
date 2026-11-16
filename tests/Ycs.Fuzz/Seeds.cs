@@ -39,13 +39,13 @@ internal static class Seeds
                 .Select(u => (V1: Convert.FromBase64String(u.GetProperty("v1").GetString()!), V2: Convert.FromBase64String(u.GetProperty("v2").GetString()!)))
                 .ToList();
 
-            var doc = new YDoc(new YDocOptions { Gc = gc, ClientId = 1 });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = 1 });
             for (var i = 0; i < updates.Count; i++)
             {
-                var baseState = i == 0 ? [] : doc.EncodeStateAsUpdateV1();
+                var baseState = i == 0 ? [] : doc.EncodeStateAsUpdate();
                 yield return new Seed($"corpus/{name}#{i}", gc, false, baseState, updates[i].V1, textRoots);
                 yield return new Seed($"corpus/{name}#{i}", gc, true, baseState, updates[i].V2, textRoots);
-                doc.ApplyUpdateV1(updates[i].V1);
+                doc.ApplyUpdate(updates[i].V1);
             }
         }
     }
@@ -56,28 +56,28 @@ internal static class Seeds
         {
             foreach (var (name, roots, edits) in Scenarios())
             {
-                var a = new YDoc(new YDocOptions { Gc = gc, ClientId = 10 });
-                var b = new YDoc(new YDocOptions { Gc = gc, ClientId = 20 });
+                var a = new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = 10 });
+                var b = new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = 20 });
                 var recorded = new List<(byte[] V1, byte[] V2)>();
                 byte[]? v1 = null;
-                a.Update += (_, e) => v1 = e.data;
-                a.UpdateV2 += (_, e) => recorded.Add((v1!, e.data));
-                b.Update += (_, e) => a.ApplyUpdateV1(e.data, "b");
+                a.Updated += (_, e) => v1 = e.Update.ToArray();
+                a.UpdatedV2 += (_, e) => recorded.Add((v1!, e.Update.ToArray()));
+                b.Updated += (_, e) => a.ApplyUpdate(e.Update.ToArray(), "b");
                 edits(a, b);
 
                 // One seed per incremental update, and one for the whole document as a single update.
-                var replica = new YDoc(new YDocOptions { Gc = gc, ClientId = 1 });
+                var replica = new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = 1 });
                 for (var i = 0; i < recorded.Count; i++)
                 {
-                    var baseState = i == 0 ? [] : replica.EncodeStateAsUpdateV1();
+                    var baseState = i == 0 ? [] : replica.EncodeStateAsUpdate();
                     var seedName = $"gen/{name}{(gc ? "" : "-nogc")}#{i}";
                     yield return new Seed(seedName, gc, false, baseState, recorded[i].V1, roots);
                     yield return new Seed(seedName, gc, true, baseState, recorded[i].V2, roots);
-                    replica.ApplyUpdateV1(recorded[i].V1);
+                    replica.ApplyUpdate(recorded[i].V1);
                 }
 
-                yield return new Seed($"gen/{name}{(gc ? "" : "-nogc")}#all", gc, false, [], a.EncodeStateAsUpdateV1(), roots);
-                yield return new Seed($"gen/{name}{(gc ? "" : "-nogc")}#all", gc, true, [], a.EncodeStateAsUpdateV2(), roots);
+                yield return new Seed($"gen/{name}{(gc ? "" : "-nogc")}#all", gc, false, [], a.EncodeStateAsUpdate(), roots);
+                yield return new Seed($"gen/{name}{(gc ? "" : "-nogc")}#all", gc, true, [], a.EncodeStateAsUpdate(format: UpdateFormat.V2), roots);
             }
         }
     }
@@ -96,13 +96,13 @@ internal static class Seeds
         {
             var name = $"crafted/map-value-split{(gc ? "" : "-nogc")}";
             yield return new Seed(name + "#0", gc, false, [], value, ["t"]);
-            yield return new Seed(name + "#0", gc, true, [], UpdateOperations.ConvertUpdateFormatV1ToV2(value), ["t"]);
+            yield return new Seed(name + "#0", gc, true, [], YUpdate.Convert(value, UpdateFormat.V1, UpdateFormat.V2), ["t"]);
             if (!gc)
             {
                 yield return new Seed(name + "#1", gc, false, value, splitAndDelete, ["t"]);
             }
 
-            yield return new Seed(name + "#1", gc, true, value, UpdateOperations.ConvertUpdateFormatV1ToV2(splitAndDelete), ["t"]);
+            yield return new Seed(name + "#1", gc, true, value, YUpdate.Convert(splitAndDelete, UpdateFormat.V1, UpdateFormat.V2), ["t"]);
         }
     }
 
@@ -120,13 +120,13 @@ internal static class Seeds
         var t = a.GetText("t");
         t.Insert(0, "hello world");
         t.Insert(5, ",");
-        t.Delete(0, 2);
-        t.Format(1, 4, new Dictionary<string, object> { ["bold"] = true });
-        t.InsertEmbed(3, new Dictionary<string, object> { ["image"] = "x.png" });
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        t.Remove(0, 2);
+        t.Format(1, 4, new Dictionary<string, YValue> { ["bold"] = true });
+        t.InsertEmbed(3, YValue.Object(new KeyValuePair<string, YValue>("image", "x.png")));
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
         b.GetText("t").Insert(2, "\u00fc\U0001F600");
         t.Insert(1, "abc");
-        t.Delete(4, 3);
+        t.Remove(4, 3);
     }
 
     private static void MapEdits(YDoc a, YDoc b)
@@ -143,7 +143,7 @@ internal static class Seeds
         m.Set("nested", new YMap(new Dictionary<string, object> { ["x"] = 1 }));
         m.Set("s", "overwritten");
         m.Delete("i");
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
         b.GetMap("m").Set("from-b", "b");
     }
 
@@ -153,7 +153,7 @@ internal static class Seeds
         arr.Insert(0, new object[] { 1, 2, 3, "four" });
         arr.Insert(2, new object[] { new YArray(new object[] { "inner" }), new YText("text inside") });
         arr.Delete(1, 2);
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
         b.GetArray("a").Insert(0, new object[] { true });
         arr.Add(new object[] { new byte[] { 9 } });
     }
@@ -165,7 +165,7 @@ internal static class Seeds
         f.Insert(0, new object[] { p, new YXmlText("tail") });
         p.SetAttribute("class", "c");
         p.Insert(0, new object[] { new YXmlText("inside"), new YXmlElement("br") });
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
         ((YXmlElement)b.GetXmlFragment("x").Get(0)).RemoveAttribute("class");
         f.Delete(1);
     }
@@ -174,7 +174,7 @@ internal static class Seeds
     {
         var m = a.GetMap("docs");
         m.Set("sub", new YDoc(new YDocOptions { Guid = "sub-guid" }));
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
 
         // Not m.Delete("sub"): with Gc = false the destroyed subdocument's item keeps a ContentDoc
         // whose Doc is null, and encoding the document throws NullReferenceException.

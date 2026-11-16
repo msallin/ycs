@@ -141,13 +141,13 @@ public class ContentStringTests
         }
 
         text.Insert(50, "|");
-        var update = doc.EncodeStateAsUpdateV1();
+        var update = doc.EncodeStateAsUpdate();
         var copy = new YDoc(new YDocOptions { ClientId = 2 });
-        copy.ApplyUpdateV1(update);
+        copy.ApplyUpdate(update);
 
         Assert.AreEqual(text.ToString(), copy.GetText("text").ToString());
-        Assert.AreEqual(Convert.ToBase64String(update), Convert.ToBase64String(copy.EncodeStateAsUpdateV1()));
-        Assert.AreEqual(Convert.ToBase64String(doc.EncodeStateAsUpdateV2()), Convert.ToBase64String(copy.EncodeStateAsUpdateV2()));
+        Assert.AreEqual(Convert.ToBase64String(update), Convert.ToBase64String(copy.EncodeStateAsUpdate()));
+        Assert.AreEqual(Convert.ToBase64String(doc.EncodeStateAsUpdate(format: UpdateFormat.V2)), Convert.ToBase64String(copy.EncodeStateAsUpdate(format: UpdateFormat.V2)));
     }
 
     [TestMethod]
@@ -207,15 +207,15 @@ public class ContentStringTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("text");
         text.Insert(0, "abcdef");
-        text.Format(2, 2, new Dictionary<string, object> { ["bold"] = true });
+        text.Format(2, 2, new Dictionary<string, YValue> { ["bold"] = true });
         var copy = new YDoc(new YDocOptions { ClientId = 2 });
 
-        copy.ApplyUpdateV2(doc.EncodeStateAsUpdateV2());
+        copy.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
 
         Assert.AreEqual(Json(text.ToDelta()), Json(copy.GetText("text").ToDelta()));
     }
 
-    private static string Json(IEnumerable<Delta> delta) => string.Join(",", delta.Select(d => $"{d.Insert}:{string.Join(";", d.Attributes?.Select(a => a.Key) ?? [])}"));
+    private static string Json(IEnumerable<Delta> delta) => string.Join(",", delta.Select(d => $"{d.Inserted()}:{string.Join(";", d.Attributes?.Select(a => a.Key) ?? [])}"));
 
     private static ContentString Grown(int length)
     {

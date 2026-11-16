@@ -25,12 +25,12 @@ public class TestYInstance : YDoc
         _tc._allConns.Add(this);
 
         // Setup observe on local model.
-        UpdateV2 += (s, e) =>
+        UpdatedV2 += (s, e) =>
         {
-            if (e.origin != _tc)
+            if (e.Origin != _tc)
             {
                 var message = new ArrayBufferWriter<byte>();
-                SyncProtocol.WriteUpdate(message, e.data);
+                SyncProtocol.WriteUpdate(message, e.Update.Span);
                 BroadcastMessage(this, message.WrittenSpan.ToArray());
             }
         };

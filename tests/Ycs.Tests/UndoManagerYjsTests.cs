@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -19,7 +20,7 @@ public class UndoManagerYjsTests
     {
         var doc = Doc(1);
         var text = doc.GetText("t");
-        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 1_000_000_000, TrackedOrigins = new HashSet<object> { "t" } });
+        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.FromMilliseconds(1_000_000_000), TrackedOrigins = new HashSet<object> { "t" } });
         doc.Transact(_ => text.Insert(0, "a"), "t");
         doc.Transact(_ => text.Insert(1, "X"), "u");
         doc.Transact(_ => text.Insert(2, "b"), "t");
@@ -35,7 +36,7 @@ public class UndoManagerYjsTests
         var doc = Doc(1);
         var remote = Doc(2);
         var text = doc.GetText("t");
-        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 1_000_000_000 });
+        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.FromMilliseconds(1_000_000_000) });
         text.Insert(0, "a");
         Sync(doc, remote);
         remote.GetText("t").Insert(1, "R");
@@ -52,10 +53,10 @@ public class UndoManagerYjsTests
     {
         var doc = Doc(1);
         var text = doc.GetText("t");
-        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
         text.Insert(0, "a");
         text.Insert(1, "b");
-        doc.Transact(_ => text.Delete(1, 1), "untracked");
+        doc.Transact(_ => text.Remove(1, 1), "untracked");
 
         var result = um.Undo();
 
@@ -67,7 +68,7 @@ public class UndoManagerYjsTests
     {
         var doc = Doc(1);
         var map = doc.GetMap("m");
-        var um = new UndoManager(map, new UndoManagerOptions { CaptureTimeout = 0, TrackedOrigins = new HashSet<object> { "t" } });
+        var um = new UndoManager(map, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero, TrackedOrigins = new HashSet<object> { "t" } });
         doc.Transact(_ => map.Set("a", 1), "t");
         doc.Transact(_ => map.Set("a", 2), "t");
         map.Set("a", 3);
@@ -98,7 +99,7 @@ public class UndoManagerYjsTests
         var doc = Doc(1);
         var remote = Doc(2);
         var map = doc.GetMap("m");
-        var um = new UndoManager(map, new UndoManagerOptions { CaptureTimeout = 0, IgnoreRemoteMapChanges = ignoreRemoteMapChanges });
+        var um = new UndoManager(map, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero, IgnoreRemoteMapChanges = ignoreRemoteMapChanges });
         map.Set("a", 1);
         map.Set("a", 2);
         Sync(doc, remote);
@@ -112,7 +113,7 @@ public class UndoManagerYjsTests
     {
         var doc = Doc(1);
         var array = doc.GetArray("a");
-        var um = new UndoManager(array, new UndoManagerOptions { CaptureTimeout = 0 });
+        var um = new UndoManager(array, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
         var nested = new YText();
         array.Insert(0, new object[] { nested });
         nested.Insert(0, "pq");
@@ -128,7 +129,7 @@ public class UndoManagerYjsTests
     {
         var doc = Doc(1);
         var text = doc.GetText("t");
-        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0, CaptureTransaction = tr => tr.Origin is not "skip" });
+        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero, CaptureTransaction = tr => tr.Origin is not "skip" });
         text.Insert(0, "a");
         doc.Transact(_ => text.Insert(1, "b"), "skip");
 
@@ -144,9 +145,9 @@ public class UndoManagerYjsTests
         var text = doc.GetText("t");
         var um = new UndoManager(text);
         var events = new List<string>();
-        um.StackItemAdded += (_, e) => events.Add($"added {e.Type} current={um.CurrentStackItem != null}");
-        um.StackItemUpdated += (_, e) => events.Add($"updated {e.Type}");
-        um.StackItemPopped += (_, e) => events.Add($"popped {e.Type} current={um.CurrentStackItem == e.StackItem}");
+        um.StackItemAdded += (_, e) => events.Add($"added {e.Operation} current={um.CurrentStackItem != null}");
+        um.StackItemUpdated += (_, e) => events.Add($"updated {e.Operation}");
+        um.StackItemPopped += (_, e) => events.Add($"popped {e.Operation} current={um.CurrentStackItem == e.StackItem}");
         um.StackCleared += (_, e) => events.Add($"cleared inTransaction={doc._transaction != null}");
         text.Insert(0, "a");
         text.Insert(1, "b");
@@ -164,7 +165,7 @@ public class UndoManagerYjsTests
     {
         var doc = Doc(1);
         var text = doc.GetText("t");
-        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+        var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
         text.Insert(0, "a");
         var first = um.UndoStack[0];
         text.Insert(1, "b");
@@ -181,7 +182,7 @@ public class UndoManagerYjsTests
         var text = doc.GetText("t");
         var um = new UndoManager(text);
         text.Insert(0, "abc");
-        IDictionary<YType, IList<YEvent>> changed = null;
+        IReadOnlyDictionary<YType, IReadOnlyList<YEvent>> changed = null;
         um.StackItemPopped += (_, e) => changed = e.ChangedParentTypes;
 
         doc.Transact(_ => um.Undo());
