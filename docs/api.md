@@ -150,7 +150,8 @@ before anything changes:
   the structs as their v2 encoding counts them, the deletions as their v1 encoding does. The struct
   count bounds what a struct costs whatever its encoding; the bytes bound the content (text, values,
   keys), which both encodings carry as it is. An update that would grow either beyond its limit is
-  rejected (a duplicate is merged away first). An update that lets pending structs integrate may add
+  rejected (a duplicate is merged away first, so an update that only carries again what waits, as a client's
+  state sent back, is accepted even where what waits is over a limit). An update that lets pending structs integrate may add
   up to the limits on top of what waits, which is then read again and integrated, wholly or in part;
   so what waits, and what that re-read decodes, never exceeds twice the limits.
 

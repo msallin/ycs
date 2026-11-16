@@ -137,7 +137,8 @@ internal sealed partial class StructStore
     /// Rejects an update that would make more wait than <paramref name="limits"/> allow. One that lets
     /// pending structs integrate (<paramref name="retry"/>) may add up to the limits on top of what
     /// waits, since what waits is then integrated, wholly or in part: so what waits never exceeds
-    /// twice the limits, and the retry's re-read is bounded with it. Returns true when
+    /// twice the limits, and the retry's re-read is bounded with it. A remainder that adds nothing to what waits (all
+    /// duplicates) is accepted whatever that is. Returns true when
     /// <paramref name="rest"/> had to be merged into <see cref="Pending"/> to fit (a duplicate).
     /// </summary>
     private bool CheckPendingLimits(UpdateLimits limits, bool retry, byte[] rest, long restStructs, Dictionary<long, List<AbstractStruct>> restStore, long deleteGrowth)
@@ -150,6 +151,7 @@ internal sealed partial class StructStore
 
         var maxStructs = retry ? Twice(limits.MaxPendingStructs) : limits.MaxPendingStructs;
         var maxBytes = retry ? Twice(limits.MaxPendingBytes) : limits.MaxPendingBytes;
+        var (allowStructs, allowBytes) = (maxStructs, maxBytes);
         if (Fits(restStructs, restBytes))
         {
             return false;
@@ -165,7 +167,12 @@ internal sealed partial class StructStore
 
         if (rest != null && Pending != null)
         {
-            var (pending, pendingStructs) = (Pending.Updates[0], Pending.Structs);
+            // What waits may already exceed the limit (a retry may add up to the limit again, and part of that waits on): a
+            // remainder that is all duplicates adds nothing, and refusing it would lock out a client whose step 2 carries the
+            // waiting structs it was sent. So the merged remainder may not exceed the larger of the limit and what waited before.
+            var (pending, pendingStructs, pendingBytes) = (Pending.Updates[0], Pending.Structs, PendingBytes);
+            allowStructs = Math.Max(maxStructs, pendingStructs);
+            allowBytes = Math.Max(maxBytes, pendingBytes);
             Pending.Add(rest, restStructs, restStore);
             Pending.Merge();
             if (Fits(0, 0))
@@ -183,7 +190,7 @@ internal sealed partial class StructStore
             $"UpdateLimits.MaxPendingBytes). The document is unchanged.");
 
         bool Fits(long addedStructs, long addedBytes) =>
-            addedStructs <= maxStructs - PendingStructCount && addedBytes + deleteGrowth <= maxBytes - PendingBytes;
+            addedStructs <= allowStructs - PendingStructCount && addedBytes + deleteGrowth <= allowBytes - PendingBytes;
 
         static long Twice(long limit) => limit > long.MaxValue / 2 ? long.MaxValue : 2 * limit;
     }
