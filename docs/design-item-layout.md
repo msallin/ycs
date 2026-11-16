@@ -145,8 +145,9 @@ absolute positions.
   they throw `NullReferenceException`, as `(str as Item).Member` did; the type test walks faster than a cast (below).
   The members every kind has (`Delete`, `Integrate`, `CanMergeWith`, `MergeWith`, `Write`) dispatch by kind: an item's
   algorithm, else the struct's own override. `ItemRef.New` is Yjs' `new Item(id, left, left && left.lastId, right, right
-  && right.id, parent, parentSub, content)`. Objects enter by `ItemRef.Of` and leave by `ToStruct`/`ToItem`: those calls
-  are the boundaries, listed below.
+  && right.id, parent, parentSub, content)`. A decoded object enters the store only through `ItemRef.Adopt`; `Of`, `ToStruct` and
+  `ToItem` are called by no method outside `ItemRef` (an IL test, `ItemRefAdoptionTests`, reads every method body and
+  also catches a method group, `ldtoken` or `ldvirtftn` that names one).
 * **What it costs**: no allocation (every workload allocates the same bytes, below); no box (a test reads every
   method body of the library and fails on a `box` or `constrained.` of an `ItemRef`; the one exception is the
   non-generic `IEnumerator.Current` of the lists' `IEnumerable<ItemRef>`, which nothing calls); no `ValueType.Equals`
@@ -164,21 +165,10 @@ absolute positions.
   pending structs, `UpdateOperations`, the integration plan; until step 9), the members that pass a public filter
   (`Predicate<Item>`, `Func<Item, bool>`) to its call, and three hooks of the property tests.
 
-**The public boundaries (step 6's work list).** Thirteen conversions, for twelve public members:
-
-| public member | where it converts |
-| --- | --- |
-| `Item.LastId`, `Item.Next`, `Item.Prev`, `Item.SplitItem` | `Item.cs` (`ItemRef.Of(this)`, `ToStruct`/`ToItem` of the result) |
-| `YEvent.Adds(AbstractStruct)`, `YEvent.Deletes(AbstractStruct)` | `YEvent.cs` (`ItemRef.Of`; the library calls the internal overloads) |
-| `ChangesCollection.Added`, `ChangesCollection.Deleted` | `YEvent.CollectChanges` (`ToItem`, 2) |
-| `YDoc.GcFilter` / `YDocOptions.GcFilter` | `DeleteSet.TryGcDeleteSet`; the integration plan's calls (`PlanItem.GcView`): a store view (`ItemView.At`) for a store item, as the cleanup passes, a detached view for a planned one |
-| `UndoManagerOptions.DeleteFilter` | `UndoManager.PopStackItem` (`ToItem`) |
-| `AbstractType.TypeMapEnumerate` (protected) | `AbstractType.cs` (`ToItem`) |
-| `YArrayBase.InsertGenericsAfter(Transaction, Item, ...)` (protected) | `YArrayBase.cs` (`ItemRef.Of`) |
-
-Public members that hand out objects without a conversion: `Item.Left`, `Item.Right` (the fields themselves),
-`DecodedUpdate.Structs` (the decoded form), and the classes `AbstractStruct`, `GC`, `Skip`, `Item`, `IContent`, the
-`Content*`.
+**The public boundaries.** No public member names `Item`, `GC`, `Skip` or `AbstractStruct` (they are internal) and none
+converts: callers read an item through `ItemView` (a store view by id, or the detached view of a decoded struct the
+integration plan hands to `GcFilter`, made by `ItemRef.Decoded` in `ItemView.Detached` only), and an update's structs
+through `DecodedStruct`. `YDoc.GcFilter` and `UndoManagerOptions.DeleteFilter` take an `ItemView`.
 
 **The holders across a free point (step 5's work list, done: 1.5).** Marked in the code with "ItemRef lifetime
 (docs/design-item-layout.md, 3.1)" until step 5:
@@ -199,10 +189,11 @@ of a live type, the push hint, the clock order) are kept current by split and me
 
 **Where the code was not moved mechanically, and why.**
 
-* The decoded form stays objects (2.5, step 9): `IntegrationPlan` keys dictionaries by `Item` and mixes the store's
-  items into them (`Target`, `KeyOf`, `LandsLast`, `DeletedTypes`: `ToStruct`/`ToItem` of a store lookup), the pending
-  structs' rest store holds `Skip` structs (`ToStruct` to test for them), `ItemRef.Adopt` (which resolves references) links a decoded item
-  to the store's (`ToStruct`). Step 7 must give the plan an id or a handle for the store's items there.
+* The decoded form stays objects (2.5, step 9): `IntegrationPlan` keys its dictionaries by `PlanItem`, which is a
+  store item (by id) or a decoded one, so the plan never converts an `ItemRef` to an object; the pending structs'
+  rest store holds `Skip` structs, tested by kind. `ItemRef.Adopt` is the one place a decoded struct enters the store:
+  it resolves the item's references (`ResolveReferences` sets `Left` and `Right` to store `ItemRef`s) and integrates
+  it, or adds a GC struct.
 * Casts that only fail on a GC struct the code cannot reach (no item's neighbour, run or redone copy is one) are gone;
   the next member read throws `NullReferenceException` where the cast threw `InvalidCastException`:
   `(Item)structs[reached]` in `StructStore.SeekRight` and the marker walk, the undo manager's
@@ -367,8 +358,9 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
 ### 2.4 Handles: lifetime and slot reuse
 
 * **Split**: the left part keeps its handle; the right part gets a new slot. **Merge**: the right part's slot is
-  freed (kind `Free`, linked in its page's free list). **GC**: an item becomes `GC` or `Deleted` in place; its handle
-  stays.
+  freed (kind `Free`, linked in its page's free list). **GC**: an item whose parent type is collected is replaced by a new `GC` struct in its list
+  (`StructStore.ReplaceStruct`), which takes over the old struct's slot handle (`TakeSlotFrom`) and rewrites the slot;
+  the old object's handle is reset to -1. An item that only loses its content (`Deleted`) stays, with its handle.
 * **Reuse**: a freed slot is reused only when the cleanup queue (`_transactionCleanups`) is empty: after the outermost
   batch, nested transactions from observers and `Update` handlers included (H4). A page whose slots are all free is
   released (M4: 1,000,000 merged items would otherwise leave 64 MB of free slots).
