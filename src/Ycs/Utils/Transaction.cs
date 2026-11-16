@@ -68,7 +68,10 @@ public partial class Transaction
     // a Dictionary keeps that order while nothing is removed, and entries are only added, or all
     // cleared (SortEventsByOrderOfChange re-adds them).
     internal readonly Dictionary<AbstractType, IList<YEvent>> _changedParentTypes = new();
-    internal readonly List<AbstractStruct> _mergeStructs = new();
+
+    // ItemRef lifetime (docs/design-item-layout.md, 3.1): the cleanup's merge pass reads an entry after it merged the
+    // entries after it, which can have merged this one's struct away; these must become ids before slots are reused.
+    internal readonly List<ItemRef> _mergeStructs = new();
 
     // Where an insert continued the run of the item before it in place (Item.ExtendRun) instead of integrating an
     // item of its own, in clock order: the clock at which that item would have started, as runs of equal steps
