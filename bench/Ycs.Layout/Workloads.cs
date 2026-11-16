@@ -123,6 +123,24 @@ internal static class Workloads
 
     public static YDoc[] Concurrent()
     {
+        var (clients, _, diffs) = ConcurrentUpdates();
+        for (var i = 0; i < clients.Length; i++)
+        {
+            for (var j = 0; j < clients.Length; j++)
+            {
+                if (i != j)
+                {
+                    clients[i].ApplyUpdate(diffs[j]);
+                }
+            }
+        }
+
+        return clients;
+    }
+
+    /// <summary>The 20 clients of <c>concurrent-20</c> after their own edits, the base text's update, and each client's edits as an update.</summary>
+    public static (YDoc[] Clients, byte[] Base, byte[][] Diffs) ConcurrentUpdates()
+    {
         var baseDoc = NewDoc(100);
         baseDoc.GetText("text").Insert(0, Inputs.BaseText);
         var baseUpdate = baseDoc.EncodeStateAsUpdateV1();
@@ -157,17 +175,6 @@ internal static class Workloads
             diffs[c] = clients[c].EncodeStateAsUpdateV1(baseVector);
         }
 
-        for (var i = 0; i < clients.Length; i++)
-        {
-            for (var j = 0; j < clients.Length; j++)
-            {
-                if (i != j)
-                {
-                    clients[i].ApplyUpdate(diffs[j]);
-                }
-            }
-        }
-
-        return clients;
+        return (clients, baseUpdate, diffs);
     }
 }

@@ -132,6 +132,8 @@ internal static class Builder
         {
             var e = store.Types[i];
             e.Start = Handle(t._start);
+            e.Length = t.Length;
+            e.MapCount = t._mapCount;
             if (t._map.Count > 0)
             {
                 e.Map = new Dictionary<string, int>(t._map.Count);

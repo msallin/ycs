@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Builds and runs the layout prototype: each workload's memory, the sizes by kind and the operations, each in a process
-# of its own. Usage: bench/Ycs.Layout/run.sh [output file]. Fetches the automerge-paper trace as the comparison does.
+# Builds and runs the layout prototype: each workload's memory, the sizes by kind, the operations and editing, each in
+# a process of its own. Usage: bench/Ycs.Layout/run.sh [output file]. Fetches the automerge-paper trace as the comparison does.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 OUT="${1:-bench/Ycs.Layout/results/$(date -u +%Y-%m-%d).md}"
@@ -21,5 +21,6 @@ DLL=bench/Ycs.Layout/bin/Release/net11.0/Ycs.Layout.dll
   done
   dotnet "$DLL" "$FIX" sizes | grep -v '^all checks passed$'
   dotnet "$DLL" "$FIX" small | grep -v '^all checks passed$'
-  dotnet "$DLL" "$FIX" ops
+  dotnet "$DLL" "$FIX" ops | grep -v '^all checks passed$'
+  dotnet "$DLL" "$FIX" edit
 } | tee "$OUT"

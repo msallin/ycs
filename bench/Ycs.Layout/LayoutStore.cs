@@ -69,6 +69,8 @@ internal sealed class TypeEntry
     public Dictionary<string, int> Map;
     public int Item = -1;
     public string RootName;
+    public int Length;      // the visible countable length of the list (AbstractType.Length)
+    public int MapCount;    // the live map entries (AbstractType._mapCount)
 }
 
 /// <summary>A key and a cold content object for one item, when it has both (a nested type in a map holds no object).</summary>
@@ -207,6 +209,16 @@ internal sealed class LayoutStore
         return Count++;
     }
 
+    /// <summary>Grows the slab to at least <paramref name="capacity"/> slots.</summary>
+    public void Reserve(int capacity)
+    {
+        if (capacity > Slots.Length)
+        {
+            Array.Resize(ref Slots, capacity);
+            Array.Resize(ref Refs, capacity);
+        }
+    }
+
     /// <summary>
     /// Sets the slab's spare capacity to what <see cref="Paging"/> gives (a paged slab holds whole pages; one array of
     /// that capacity holds the same bytes). The clock orders keep their doubling slack, as a List does.
@@ -263,23 +275,36 @@ internal sealed class LayoutStore
     /// </summary>
     public int SplitAt(int client, uint clock)
     {
-        var order = Orders[client];
-        var pos = FindIndex(order, clock);
-        var left = order.Handles[pos];
-        ref var l = ref Slots[left];
-        var diff = (int)(clock - l.Clock);
-        if (diff == 0)
-        {
-            return left;
-        }
+        var pos = FindIndex(Orders[client], clock);
+        var left = Orders[client].Handles[pos];
+        return clock == Slots[left].Clock ? left : SplitAt(client, pos, clock);
+    }
 
+    /// <summary>
+    /// Splits the struct at position <paramref name="pos"/> of <paramref name="client"/>'s order, which holds
+    /// <paramref name="clock"/> past its start, and returns the right part's handle.
+    /// </summary>
+    public int SplitAt(int client, int pos, uint clock)
+    {
+        var right = SplitSlot(Orders[client].Handles[pos], clock);
+        Orders[client].Insert(pos + 1, clock, right);
+        return right;
+    }
+
+    /// <summary>
+    /// The slot half of a split: <paramref name="left"/> ends before <paramref name="clock"/>, a new slot holds the rest
+    /// and is linked in. The caller inserts it into its client's order. Returns the new slot's handle.
+    /// </summary>
+    public int SplitSlot(int left, uint clock)
+    {
+        var diff = (int)(clock - Slots[left].Clock);
         var right = NewSlot();
         ref var ls = ref Slots[left]; // the slab may have moved
         ref var r = ref Slots[right];
         r = ls;
         r.Clock = clock;
         r.Length = ls.Length - diff;
-        r.OriginClient = client;
+        r.OriginClient = ls.Client;
         r.OriginClock = clock - 1;
         r.Left = left;
         r.Info &= ~Flags.Marker;
@@ -299,12 +324,11 @@ internal sealed class LayoutStore
 
         ls.Right = right;
         ls.Length = diff;
-        if (Refs[right] is string key && r.Right < 0)
+        if (r.Right < 0 && KeyOf(right) is string key)
         {
             Types[r.Parent].Map[key] = right;
         }
 
-        order.Insert(pos + 1, clock, right);
         return right;
     }
 
