@@ -36,8 +36,9 @@ public class YDeepEventArgs
 
 public partial class AbstractType
 {
-    // The item the type is in. Once the type is collected (Collect), only the siblings' links may be read through it
-    // (XML NextSibling, PrevSibling, InsertAfter); the rest asks IsRoot, ParentType, ItemId or ItemDeleted.
+    // The item the type is in. Once the type is collected (Collect), nothing but the XML siblings' links (NextSibling,
+    // PrevSibling, InsertAfter) and StructStore.IntegrationPlan's keys may read it; the rest asks IsRoot, ParentType,
+    // ItemId, ItemParentSub, ItemDeleted or ItemKeep.
     internal ItemRef _item;
     internal ItemRef _start;
     internal Dictionary<string, ItemRef> _map = new Dictionary<string, ItemRef>();
@@ -52,6 +53,8 @@ public partial class AbstractType
     private bool _collected;
     private AbstractType _collectedParent;
     private ID _collectedId;
+    private string _collectedParentSub;
+    private bool _collectedKeep;
 
     internal bool IsRoot => !_collected && _item.IsNull;
 
@@ -63,6 +66,35 @@ public partial class AbstractType
     /// <summary>Whether the type's item is deleted: a collected type's is, and a root type has none.</summary>
     internal bool ItemDeleted => _collected || (!_item.IsNull && _item.Deleted);
 
+    /// <summary>The key of the item the type is in, null in a list.</summary>
+    internal string ItemParentSub => _collected ? _collectedParentSub : _item.ParentSub;
+
+    /// <summary>The item's keep flag; a collected type's item is deleted, so its keep only decides where <see cref="KeepItemAndParents"/> stops.</summary>
+    internal bool ItemKeep
+    {
+        get => _collected ? _collectedKeep : _item.Keep;
+        set
+        {
+            if (_collected)
+            {
+                _collectedKeep = value;
+            }
+            else
+            {
+                _item.Keep = value;
+            }
+        }
+    }
+
+    /// <summary>Sets the keep flag of this type's item and of the items above it, up to the first that has it (Yjs' <c>keepItem</c> on the item's parents).</summary>
+    internal void KeepItemAndParents(bool value)
+    {
+        for (var type = this; !type.IsRoot && type.ItemKeep != value; type = type.ParentType)
+        {
+            type.ItemKeep = value;
+        }
+    }
+
     internal void Collect()
     {
         if (_collected || _item.IsNull)
@@ -72,8 +104,21 @@ public partial class AbstractType
 
         _collectedParent = _item.Parent as AbstractType;
         _collectedId = _item.Id;
+        _collectedParentSub = _item.ParentSub;
+        _collectedKeep = _item.Keep;
         _collected = true;
+        if (PoisonCollectedHandleForTests)
+        {
+            _item = PoisonItem();
+        }
     }
+
+    // Test switch: after collection the type's handle names an unrelated live item, as a reused slot would (7.6), so
+    // any read of the struct instead of the facts changes behaviour.
+    internal static bool PoisonCollectedHandleForTests;
+
+    internal static ItemRef PoisonItem() =>
+        ItemRef.Of(new Item(new ID(424242, 7), null, null, null, null, new YMap(), "POISON", new ContentAny(new object[] { "poison" })));
 
     internal IEnumerable<KeyValuePair<string, Item>> MapForTests() => _map.Select(kv => new KeyValuePair<string, Item>(kv.Key, kv.Value.ToItem()));
 
@@ -95,6 +140,7 @@ public partial class AbstractType
     {
         Doc = doc;
         _item = item;
+        _collected = false;
         Depth = !item.IsNull && item.Parent is AbstractType parent ? parent.Depth + 1 : 0;
 
         // A root type that was read from an update before it was defined takes over the map of

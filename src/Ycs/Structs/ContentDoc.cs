@@ -70,7 +70,7 @@ internal class ContentDoc : IContentEx
         _doc ??= _read.Create(transaction.Doc.Limits);
 
         // This needs to be reflected in doc.destroy as well.
-        Doc._item = item;
+        Doc.SetItem(item);
         transaction.SubdocsAdded.Add(Doc);
 
         if (Doc.ShouldLoad)
@@ -93,7 +93,7 @@ internal class ContentDoc : IContentEx
 
     void IContentEx.Gc(StructStore store)
     {
-        Doc.CollectItem();
+        _doc?.CollectItem();
     }
 
     void IContentEx.Write(IUpdateEncoder encoder, int offset)

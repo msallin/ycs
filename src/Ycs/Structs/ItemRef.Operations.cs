@@ -450,12 +450,10 @@ internal readonly partial struct ItemRef
     /// </summary>
     public void KeepItemAndParents(bool value)
     {
-        var item = this;
-
-        while (!item.IsNull && item.Keep != value)
+        if (!IsNull && Keep != value)
         {
-            item.Keep = value;
-            item = item.Parent is AbstractType parent ? parent._item : default;
+            Keep = value;
+            (Parent as AbstractType)?.KeepItemAndParents(value);
         }
     }
 

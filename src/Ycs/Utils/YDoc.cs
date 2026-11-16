@@ -122,6 +122,13 @@ public partial class YDoc
     private bool _itemCollected;
     private YDoc _collectedParentDoc;
 
+    internal void SetItem(ItemRef item)
+    {
+        _item = item;
+        _itemCollected = false;
+        _collectedParentDoc = null;
+    }
+
     internal void CollectItem()
     {
         if (_itemCollected || _item.IsNull)
@@ -131,6 +138,10 @@ public partial class YDoc
 
         _collectedParentDoc = (_item.Parent as AbstractType).Doc;
         _itemCollected = true;
+        if (AbstractType.PoisonCollectedHandleForTests)
+        {
+            _item = AbstractType.PoisonItem();
+        }
     }
 
     private readonly Dictionary<string, AbstractType> _share;

@@ -11,6 +11,12 @@ namespace Ycs;
 [TestClass]
 public class CollectedTypeFactsTests
 {
+    // Whether the scenarios run with a collected type's handle replaced by an unrelated live item (a reused slot).
+    protected virtual bool PoisonHandles => false;
+
+    [TestInitialize]
+    public void SetPoison() => AbstractType.PoisonCollectedHandleForTests = PoisonHandles || AbstractType.PoisonCollectedHandleForTests;
+
     // inner's item is a GC struct that merges with its neighbours' (all one client, consecutive clocks); outer's item
     // is a deleted item that merges into the deleted item left of it.
     private static (YDoc Doc, YArray Array, YMap Outer, YMap Inner) Collected()
@@ -62,7 +68,7 @@ public class CollectedTypeFactsTests
     }
 
     [TestMethod]
-    public void Changes_OfACollectedTypeOutsideADeletedParent_AreNotReported()
+    public void Change_OfACollectedType_IsNotReportedToItsFormerParentsDeepObservers()
     {
         var (doc, array, outer, _) = Collected();
         var events = 0;
@@ -74,7 +80,7 @@ public class CollectedTypeFactsTests
     }
 
     [TestMethod]
-    public void Delete_OfASubdocumentWhoseItemIsCollected_ReportsItRemoved()
+    public void Destroy_OfASubdocumentRemovedByCleanup_ReportsItRemovedAgain()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var map = doc.GetMap("m");
@@ -94,4 +100,126 @@ public class CollectedTypeFactsTests
 
         Assert.AreEqual("010,001,001", string.Join(",", log));
     }
+
+    private static string Bytes(YDoc doc) => string.Join(",", doc.EncodeStateAsUpdate());
+
+    private static string SubdocLog(YDoc doc, System.Collections.Generic.List<string> log)
+    {
+        doc.SubdocsChanged += (_, e) => log.Add($"L{e.Loaded.Count}A{e.Added.Count}R{e.Removed.Count}");
+        return "";
+    }
+
+    [TestMethod]
+    public void LoadAndDestroy_OfACollectedSubdocumentCleanupDoesNotDestroy_ReachTheParentDocument()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var m = doc.GetMap("m");
+        var sub = new YDoc(new YDocOptions { Guid = "g", ShouldLoad = false });
+        var log = new System.Collections.Generic.List<string>();
+        SubdocLog(doc, log);
+        doc.Transact(_ =>
+        {
+            m.Set("s", sub);
+            m.Set("t", 1);
+            m.Delete("s");
+        });
+        m.Delete("t");
+
+        sub.Load();
+        sub.Destroy();
+
+        Assert.AreEqual("L1A0R0,L0A0R1", string.Join(",", log));
+    }
+
+    [TestMethod]
+    public void Insert_OfACollectedSubdocumentAgain_BelongsToTheNewItem()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var m = doc.GetMap("m");
+        var sub = new YDoc(new YDocOptions { Guid = "g", ShouldLoad = false });
+        var log = new System.Collections.Generic.List<string>();
+        SubdocLog(doc, log);
+        doc.Transact(_ =>
+        {
+            m.Set("s", sub);
+            m.Delete("s");
+        });
+        m.Set("s2", sub);
+
+        sub.Destroy();
+
+        Assert.AreEqual(("L0A1R0,L0A1R1", true), (string.Join(",", log), !ReferenceEquals(m.Get("s2"), sub)));
+    }
+
+    private static (YDoc Doc, YMap M, YMap Mid, YMap Inner) NestedCollected()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var m = doc.GetMap("m");
+        var mid = new YMap();
+        var inner = new YMap();
+        m.Set("mid", mid);
+        mid.Set("inner", inner);
+        mid.Delete("inner");
+        return (doc, m, mid, inner);
+    }
+
+    [TestMethod]
+    public void Set_OnACollectedTypeUnderAScopedUndoManager_KeepsItsParents()
+    {
+        var (doc, m, _, inner) = NestedCollected();
+        _ = new UndoManager(m);
+        doc.Transact(_ =>
+        {
+            inner.Set("z", "payload");
+            m.Set("q", 1);
+        });
+
+        doc.Transact(_ => m.Delete("mid"), origin: "remote");
+
+        Assert.AreEqual(
+            "1,4,1,0,39,1,1,109,3,109,105,100,1,33,0,1,0,5,105,110,110,101,114,1,40,0,1,1,1,122,1,119,7,112,97,121,108,111,97,100,40,1,1,109,1,113,1,125,1,1,1,1,0,3",
+            Bytes(doc));
+    }
+
+    [TestMethod]
+    public void Set_OnACollectedTypeUnderADocumentUndoManager_KeepsItsParents()
+    {
+        var (doc, m, _, inner) = NestedCollected();
+        _ = new UndoManager(doc);
+        inner.Set("z", "payload");
+        m.Set("q", 1);
+
+        doc.Transact(_ => m.Delete("mid"), origin: "remote");
+
+        Assert.AreEqual(
+            "1,4,1,0,39,1,1,109,3,109,105,100,1,33,0,1,0,5,105,110,110,101,114,1,40,0,1,1,1,122,1,119,7,112,97,121,108,111,97,100,40,1,1,109,1,113,1,125,1,1,1,1,0,3",
+            Bytes(doc));
+    }
+
+    [TestMethod]
+    public void Path_OfAHeldEventWhoseTargetWasCollected_IsTheOldPath()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var m = doc.GetMap("m");
+        var mid = new YMap();
+        var arr = new YArray();
+        m.Set("mid", mid);
+        mid.Set("arr", arr);
+        YEvent held = null;
+        m.DeepEventHandler += (_, e) => held ??= e.Events.FirstOrDefault(ev => ReferenceEquals(ev.Target, arr));
+        arr.Push(new object[] { 1 });
+        m.Delete("mid");
+
+        Assert.AreEqual("mid/arr", string.Join("/", held.Path));
+    }
+}
+
+/// <summary>The same scenarios with a collected type's handle replaced by an unrelated live item, as a reused slot would be.</summary>
+[TestClass]
+public class CollectedTypeFactsPoisonedTests : CollectedTypeFactsTests
+{
+    protected override bool PoisonHandles => true;
+
+    [TestCleanup]
+    public void ClearPoison() => AbstractType.PoisonCollectedHandleForTests = false;
 }
