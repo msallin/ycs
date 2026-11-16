@@ -315,6 +315,7 @@ internal static class EncodingUtils
         private long _structCount;
         private long _client;
         private long _clock;
+        private object[] _values;
 
         /// <param name="seenClients">An empty set to find a client listed twice; one is created when needed if null.</param>
         /// <param name="staging">
@@ -352,6 +353,31 @@ internal static class EncodingUtils
 
             _clock += str.Length;
             return str;
+        }
+
+        /// <summary>
+        /// The next struct staged straight from the decoder, as <see cref="Next"/> checks and reads it but without the
+        /// struct object: a String's characters come from <see cref="IUpdateDecoder.ReadStringSpan"/>, a Type's reference
+        /// and name are read as <see cref="ContentType.Read"/> does. Returns its index in the table, or -1 after the last.
+        /// The table is the one given to the constructor; the cursor appends only.
+        /// </summary>
+        public int NextStaged()
+        {
+            while (_structsLeft == 0)
+            {
+                if (_section == _sections)
+                {
+                    return -1;
+                }
+
+                _section++;
+                ReadSectionHeader();
+            }
+
+            _structsLeft--;
+            var i = StageStruct(_decoder, _staging, _client, _clock, ref _values);
+            _clock += _staging.At(i).Length;
+            return i;
         }
 
         private void ReadSectionHeader()
@@ -419,6 +445,122 @@ internal static class EncodingUtils
 
         Limits.CheckRange(clock, str.Length);
         return str;
+    }
+
+    // ReadStruct, into the staging table. The reads and the checks are in ReadStruct's order, so a damaged update fails
+    // with the same exception at the same point; the struct is added once it is read whole, when its length is known.
+    private static int StageStruct(IUpdateDecoder decoder, StagingTable table, long client, long clock, ref object[] values)
+    {
+        var id = new ID(client, clock);
+        var info = decoder.ReadInfo();
+        switch (info & Bits.Bits5)
+        {
+            case GC.StructGCRefNumber:
+                var gcLength = decoder.ReadLength();
+                Limits.CheckRange(clock, gcLength);
+                return table.Add(StagedKind.GC, gcLength);
+            case Skip.StructSkipRefNumber:
+                // A range of clocks this update has no data for (written by mergeUpdates).
+                var skipLength = decoder.Reader.ReadVarUint();
+                Limits.CheckRange(clock, skipLength);
+                return table.Add(StagedKind.Skip, (int)skipLength);
+        }
+
+        var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ID?)CheckEarlier(decoder.ReadLeftId(), id) : null;
+        var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ID?)CheckEarlier(decoder.ReadRightId(), id) : null;
+
+        string parentName = null;
+        ID? parentId = null;
+        string parentSub = null;
+        if ((info & (Bit.Bit7 | Bit.Bit8)) == 0)
+        {
+            if (decoder.ReadParentInfo())
+            {
+                parentName = decoder.ReadString();
+            }
+            else
+            {
+                parentId = CheckEarlier(decoder.ReadLeftId(), id);
+            }
+
+            parentSub = (info & Bit.Bit6) == Bit.Bit6 ? decoder.ReadString() : null;
+        }
+
+        int i;
+        switch (info & Bits.Bits5)
+        {
+            case 1:
+                var deleted = decoder.ReadLength();
+                Limits.CheckRange(clock, deleted);
+                i = table.Add(StagedKind.Deleted, deleted, leftOrigin, rightOrigin);
+                break;
+            case 4:
+                var text = decoder.ReadStringSpan();
+                Limits.CheckRange(clock, text.Length);
+                i = table.Add(StagedKind.String, text.Length, leftOrigin, rightOrigin);
+                text.CopyTo(table.Chars(i));
+                break;
+            case 8:
+                var count = decoder.ReadLength();
+                values ??= new object[16];
+                for (var v = 0; v < count; v++)
+                {
+                    if (v == values.Length)
+                    {
+                        Array.Resize(ref values, v * 2);
+                    }
+
+                    values[v] = decoder.ReadAny();
+                }
+
+                Limits.CheckRange(clock, count);
+                i = table.Add(StagedKind.Any, count, leftOrigin, rightOrigin);
+                values.AsSpan(0, count).CopyTo(table.Values(i));
+                Array.Clear(values, 0, count);
+                break;
+            case 7:
+                var typeRef = decoder.ReadTypeRef();
+                string typeName = null;
+                switch (typeRef)
+                {
+                    case YXmlElement.YXmlElementRefId or YXmlHook.YXmlHookRefId:
+                        typeName = decoder.ReadKey();
+                        break;
+                    case YArray.YArrayRefId or YMap.YMapRefId or YText.YTextRefId or YXmlFragment.YXmlFragmentRefId or YXmlText.YXmlTextRefId:
+                        break;
+                    default:
+                        throw new YUpdateException($"Unknown shared type: {typeRef}.");
+                }
+
+                Limits.CheckRange(clock, 1);
+                i = table.Add(StagedKind.Type, 1, leftOrigin, rightOrigin);
+                table.SetType(i, (int)typeRef, typeName);
+                break;
+            case 2 or 3 or 5 or 6 or 9:
+                var cold = ReadItemContent(decoder, info);
+                Limits.CheckRange(clock, cold.Length);
+                i = table.Add((StagedKind)(info & Bits.Bits5), cold.Length, leftOrigin, rightOrigin);
+                table.SetCold(i, cold);
+                break;
+            default:
+                throw new YUpdateException($"Unknown content type: {info & Bits.Bits5}.");
+        }
+
+        if (parentName != null)
+        {
+            table.SetParentRoot(i, parentName);
+        }
+        else if (parentId is { } parent)
+        {
+            table.SetParentId(i, parent);
+        }
+
+        if (parentSub != null)
+        {
+            table.SetParentSub(i, parentSub);
+        }
+
+        return i;
     }
 
     private static ID CheckEarlier(ID reference, ID id)

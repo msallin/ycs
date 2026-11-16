@@ -51,31 +51,124 @@ internal sealed class LazyStructWriter
     public List<(int Written, int End)> ClientStructs { get; }
 
     /// <summary>
-    /// Writes one struct (with the given clock offset into it) to the lazy writer, starting a
-    /// new client fragment if needed.
+    /// Writes struct <paramref name="i"/> of <paramref name="table"/> from its staged fields, <paramref name="offset"/>
+    /// clocks in, starting a new client fragment if needed. The offset slices as Yjs' <c>write(encoder, offset)</c>
+    /// does: an item's origin becomes its own clock before the cut and a String or an Any starts at the offset, with
+    /// no replacement of a split surrogate pair (that is <see cref="StructStaging.CopyFrom"/>'s, as Yjs' <c>splice</c>).
     /// </summary>
-    public static void WriteStruct(LazyStructWriter lazyWriter, AbstractStruct str, int offset)
+    public static void WriteStruct(LazyStructWriter lazyWriter, StagingTable table, int i, int offset)
     {
+        var id = table.IdOf(i);
+
         // Flush curr if we start another client.
-        if (lazyWriter.Written > 0 && lazyWriter.CurrClient != str.Id.Client)
+        if (lazyWriter.Written > 0 && lazyWriter.CurrClient != id.Client)
         {
             Flush(lazyWriter);
         }
 
         if (lazyWriter.Written == 0)
         {
-            lazyWriter.CurrClient = str.Id.Client;
+            lazyWriter.CurrClient = id.Client;
 
             // Write next client.
-            lazyWriter.Encoder.WriteClient(str.Id.Client);
+            lazyWriter.Encoder.WriteClient(id.Client);
 
             // Write startClock.
-            lazyWriter.Encoder.RestWriter.WriteVarUint((uint)(str.Id.Clock + offset));
+            lazyWriter.Encoder.RestWriter.WriteVarUint((uint)(id.Clock + offset));
         }
 
-        str.Write(lazyWriter.Encoder, offset);
+        var encoder = lazyWriter.Encoder;
+        switch (table.At(i).Kind)
+        {
+            case StagedKind.GC:
+                encoder.WriteInfo(GC.StructGCRefNumber);
+                encoder.WriteLength(table.At(i).Length - offset);
+                break;
+            case StagedKind.Skip:
+                encoder.WriteInfo(Skip.StructSkipRefNumber);
+
+                // Write as VarUint because Skips can't make use of predictable length-encoding.
+                encoder.RestWriter.WriteVarUint((uint)(table.At(i).Length - offset));
+                break;
+            default:
+                WriteItem(encoder, table, i, id, offset);
+                break;
+        }
+
         lazyWriter.Written++;
         lazyWriter.TotalWritten++;
+    }
+
+    // Yjs' Item#write: the parent is written only when neither origin is, and an offset makes the left origin the id before it.
+    private static void WriteItem(IUpdateEncoder encoder, StagingTable table, int i, ID id, int offset)
+    {
+        ref readonly var s = ref table.At(i);
+        var origin = offset > 0 ? new ID(id.Client, id.Clock + offset - 1) : table.LeftOrigin(i);
+        var rightOrigin = table.RightOrigin(i);
+        var info = ((int)s.Kind & Bits.Bits5) |
+            (origin == null ? 0 : Bit.Bit8) |
+            (rightOrigin == null ? 0 : Bit.Bit7) |
+            (s.ParentSub < 0 ? 0 : Bit.Bit6);
+        encoder.WriteInfo((byte)info);
+
+        if (origin != null)
+        {
+            encoder.WriteLeftId(origin.Value);
+        }
+
+        if (rightOrigin != null)
+        {
+            encoder.WriteRightId(rightOrigin.Value);
+        }
+
+        if (origin == null && rightOrigin == null)
+        {
+            if (s.ParentKind == StagedParent.Root)
+            {
+                encoder.WriteParentInfo(true);
+                encoder.WriteString(table.ParentName(i));
+            }
+            else
+            {
+                encoder.WriteParentInfo(false);
+                encoder.WriteLeftId(table.ParentId(i));
+            }
+
+            if (s.ParentSub >= 0)
+            {
+                encoder.WriteString(table.ParentSub(i)!);
+            }
+        }
+
+        switch (s.Kind)
+        {
+            case StagedKind.Deleted:
+                encoder.WriteLength(s.Length - offset);
+                break;
+            case StagedKind.String:
+                encoder.WriteString(table.Chars(i)[offset..]);
+                break;
+            case StagedKind.Any:
+                var values = table.Values(i);
+                encoder.WriteLength(values.Length - offset);
+                for (var v = offset; v < values.Length; v++)
+                {
+                    encoder.WriteAny(values[v]!);
+                }
+
+                break;
+            case StagedKind.Type:
+                encoder.WriteTypeRef((uint)s.TypeRef);
+                if (s.TypeRef is YXmlElement.YXmlElementRefId or YXmlHook.YXmlHookRefId)
+                {
+                    encoder.WriteKey(table.TypeName(i)!);
+                }
+
+                break;
+            default:
+                ((IContentEx)table.Cold(i)).Write(encoder, offset);
+                break;
+        }
     }
 
     /// <summary>

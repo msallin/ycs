@@ -33,17 +33,28 @@ public readonly struct DeletedRange
 /// </summary>
 public sealed class DecodedUpdate
 {
-    internal DecodedUpdate(IReadOnlyList<AbstractStruct> structs, IReadOnlyDictionary<long, IReadOnlyList<DeletedRange>> deleteSet)
+    internal DecodedUpdate(StagingTable structs, IReadOnlyDictionary<long, IReadOnlyList<DeletedRange>> deleteSet)
     {
-        Raw = structs;
+        Staged = structs;
         DeleteSet = deleteSet;
     }
 
-    /// <summary>The structs as the store integrates them.</summary>
-    internal IReadOnlyList<AbstractStruct> Raw { get; }
+    /// <summary>The structs in the order of the update, held by a table of their own.</summary>
+    internal StagingTable Staged { get; }
 
     /// <summary>One <see cref="DecodedStruct"/> per struct, in the order of the update, Skip and GC included.</summary>
-    public IReadOnlyList<DecodedStruct> Structs => _decodedStructs ??= UpdateOperations.Detach(Raw);
+    public IReadOnlyList<DecodedStruct> Structs => _decodedStructs ??= Detach(Staged);
+
+    private static DecodedStruct[] Detach(StagingTable table)
+    {
+        var result = new DecodedStruct[table.Count];
+        for (var i = 0; i < result.Length; i++)
+        {
+            result[i] = StructStaging.Decoded(table, i);
+        }
+
+        return result;
+    }
 
     private IReadOnlyList<DecodedStruct> _decodedStructs;
 
@@ -91,12 +102,6 @@ public static class UpdateOperations
 
     /// <summary>A reader of <paramref name="update"/> whose values may be nested as deeply as <paramref name="limits"/> allow.</summary>
     private static Lib0Reader Reader(byte[] update, UpdateLimits limits) => new(update) { MaxDepth = (limits ?? UpdateLimits.Default).MaxDepth };
-
-    private sealed class WriteState
-    {
-        public AbstractStruct Struct;
-        public int Offset;
-    }
 
     #region MergeUpdates
 
@@ -164,22 +169,27 @@ public static class UpdateOperations
 
         var updateDecoders = new List<IUpdateDecoder>(updates.Count);
         var lazyStructDecoders = new List<LazyStructReader>(updates.Count);
-        foreach (var update in updates)
-        {
-            var reader = new Lib0Reader(update) { MaxDepth = maxDepth };
-            var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(reader, maxStructs) : new UpdateDecoderV1(reader, maxStructs);
-            updateDecoders.Add(decoder);
-            lazyStructDecoders.Add(new LazyStructReader(decoder, filterSkips: true));
-        }
-
+        var tables = new List<StagingTable>(updates.Count + 1);
         IUpdateEncoder updateEncoder = v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
         try
         {
+            foreach (var update in updates)
+            {
+                var reader = new Lib0Reader(update) { MaxDepth = maxDepth };
+                var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(reader, maxStructs) : new UpdateDecoderV1(reader, maxStructs);
+                updateDecoders.Add(decoder);
+                var table = StagingTable.Rent();
+                tables.Add(table);
+                lazyStructDecoders.Add(new LazyStructReader(decoder, filterSkips: true, table));
+            }
+
+            var pending = StagingTable.Rent();
+            tables.Add(pending);
             var writer = new LazyStructWriter(updateEncoder);
-            MergeStructs(lazyStructDecoders, writer);
+            MergeStructs(lazyStructDecoders, writer, pending);
             written = writer.TotalWritten;
 
-            // Every decoder above was drained (Curr == null) before the loop could exit, so
+            // Every decoder above was drained (Curr < 0) before the loop could exit, so
             // each one's stream is now positioned right at the start of its delete set.
             var deleteSets = new List<DeleteSet>(updateDecoders.Count);
             foreach (var decoder in updateDecoders)
@@ -193,6 +203,10 @@ public static class UpdateOperations
         finally
         {
             ReturnEncoder(updateEncoder);
+            foreach (var table in tables)
+            {
+                StagingTable.Return(table);
+            }
         }
     }
 
@@ -208,9 +222,61 @@ public static class UpdateOperations
         }
     }
 
-    private static void MergeStructs(List<LazyStructReader> lazyStructDecoders, LazyStructWriter lazyStructEncoder)
+    /// <summary>
+    /// The struct being written by <see cref="MergeStructs"/>, held in a one-struct table of its own: the readers hold
+    /// the current struct only, and it can grow (a GC), be trimmed or extended (a Skip) before it is written.
+    /// </summary>
+    private sealed class PendingStruct(LazyStructWriter writer, StagingTable table)
     {
-        WriteState currWrite = null;
+        public bool Has { get; private set; }
+        public long Client { get; private set; }
+        public long Clock { get; private set; }
+        public int Length { get; private set; }
+        public StagedKind Kind { get; private set; }
+        public long End => Clock + Length;
+
+        /// <summary>Takes <paramref name="reader"/>'s current struct, from <paramref name="cut"/> clocks in (Yjs' <c>splice</c>).</summary>
+        public void Set(LazyStructReader reader, int cut)
+        {
+            table.Reset();
+            StructStaging.CopyFrom(table, reader.Table, reader.Curr, cut);
+            Load();
+        }
+
+        public void SetSkip(long client, long clock, int length)
+        {
+            table.Reset();
+            table.BeginClient(client, clock);
+            table.Add(StagedKind.Skip, length);
+            Load();
+        }
+
+        public void SetLength(int length)
+        {
+            table.SetLength(0, length);
+            Length = length;
+        }
+
+        public void Write() => LazyStructWriter.WriteStruct(writer, table, 0, 0);
+
+        private void Load()
+        {
+            ref readonly var s = ref table.At(0);
+            Has = true;
+            Client = table.ClientAt(s.Client);
+            Clock = s.Clock;
+            Length = s.Length;
+            Kind = s.Kind;
+        }
+    }
+
+    // Item, GC and Skip merge only with their own kind (the classes of the structs Yjs merges).
+    private static bool SameShape(StagedKind a, StagedKind b) =>
+        a == b || a != StagedKind.GC && a != StagedKind.Skip && b != StagedKind.GC && b != StagedKind.Skip;
+
+    private static void MergeStructs(List<LazyStructReader> lazyStructDecoders, LazyStructWriter lazyStructEncoder, StagingTable pendingTable)
+    {
+        var currWrite = new PendingStruct(lazyStructEncoder, pendingTable);
 
         // Note: we need to ensure that all lazyStructDecoders are fully consumed.
         // Note: should merge document updates whenever possible - even from different updates.
@@ -218,22 +284,22 @@ public static class UpdateOperations
         while (true)
         {
             // Write higher clients first - sort by clientID & clock and remove decoders without content.
-            lazyStructDecoders.RemoveAll(static dec => dec.Curr == null);
+            lazyStructDecoders.RemoveAll(static dec => dec.Curr < 0);
             StableSort.Sort(lazyStructDecoders, static (dec1, dec2) =>
             {
-                if (dec1.Curr.Id.Client == dec2.Curr.Id.Client)
+                if (dec1.Client == dec2.Client)
                 {
-                    var clockCompare = dec1.Curr.Id.Clock.CompareTo(dec2.Curr.Id.Clock);
+                    var clockCompare = dec1.Clock.CompareTo(dec2.Clock);
                     if (clockCompare == 0)
                     {
                         // Remove references to Skip since the struct decoders must filter Skips anyway.
-                        return dec1.Curr.GetType() == dec2.Curr.GetType() ? 0 : (dec1.Curr is Skip ? 1 : -1);
+                        return SameShape(dec1.Kind, dec2.Kind) ? 0 : (dec1.Kind == StagedKind.Skip ? 1 : -1);
                     }
 
                     return clockCompare;
                 }
 
-                return dec2.Curr.Id.Client.CompareTo(dec1.Curr.Id.Client);
+                return dec2.Client.CompareTo(dec1.Client);
             });
 
             if (lazyStructDecoders.Count == 0)
@@ -245,73 +311,77 @@ public static class UpdateOperations
 
             // Write from currDecoder until the next operation is from another client or if
             // filler-struct, then we need to reorder the decoders and find the next operation to write.
-            var firstClient = currDecoder.Curr.Id.Client;
+            var firstClient = currDecoder.Client;
 
-            if (currWrite != null)
+            if (currWrite.Has)
             {
-                var curr = currDecoder.Curr;
                 var iterated = false;
 
                 // Iterate until we find something that we haven't written already.
                 // Remember: first the high client-ids are written.
-                while (curr != null &&
-                       curr.Id.Clock + curr.Length <= currWrite.Struct.Id.Clock + currWrite.Struct.Length &&
-                       curr.Id.Client >= currWrite.Struct.Id.Client)
+                while (currDecoder.Curr >= 0 &&
+                       currDecoder.Clock + currDecoder.Length <= currWrite.End &&
+                       currDecoder.Client >= currWrite.Client)
                 {
-                    curr = currDecoder.Next();
+                    currDecoder.Next();
                     iterated = true;
                 }
 
-                if (curr == null || // Current decoder is empty.
-                    curr.Id.Client != firstClient || // Check whether there is another decoder that has updates from 'firstClient'.
-                    (iterated && curr.Id.Clock > currWrite.Struct.Id.Clock + currWrite.Struct.Length)) // The above while loop was used and we are potentially missing updates.
+                if (currDecoder.Curr < 0 || // Current decoder is empty.
+                    currDecoder.Client != firstClient || // Check whether there is another decoder that has updates from 'firstClient'.
+                    (iterated && currDecoder.Clock > currWrite.End)) // The above while loop was used and we are potentially missing updates.
                 {
                     continue;
                 }
 
-                if (firstClient != currWrite.Struct.Id.Client)
+                if (firstClient != currWrite.Client)
                 {
-                    LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
-                    currWrite = new WriteState { Struct = curr, Offset = 0 };
+                    currWrite.Write();
+                    currWrite.Set(currDecoder, 0);
                     currDecoder.Next();
                 }
                 else
                 {
-                    if (currWrite.Struct.Id.Clock + currWrite.Struct.Length < curr.Id.Clock)
+                    if (currWrite.End < currDecoder.Clock)
                     {
-                        if (currWrite.Struct is Skip currSkip)
+                        if (currWrite.Kind == StagedKind.Skip)
                         {
                             // Extend existing skip.
-                            currSkip.SetLength((int)(curr.Id.Clock + curr.Length - currWrite.Struct.Id.Clock));
+                            currWrite.SetLength((int)(currDecoder.Clock + currDecoder.Length - currWrite.Clock));
                         }
                         else
                         {
-                            LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
-                            var gapLength = curr.Id.Clock - currWrite.Struct.Id.Clock - currWrite.Struct.Length;
-                            var skip = new Skip(new ID(firstClient, currWrite.Struct.Id.Clock + currWrite.Struct.Length), (int)gapLength);
-                            currWrite = new WriteState { Struct = skip, Offset = 0 };
+                            currWrite.Write();
+                            var gapLength = currDecoder.Clock - currWrite.Clock - currWrite.Length;
+                            currWrite.SetSkip(firstClient, currWrite.Clock + currWrite.Length, (int)gapLength);
                         }
                     }
                     else
                     {
-                        var diff = currWrite.Struct.Id.Clock + currWrite.Struct.Length - curr.Id.Clock;
+                        var diff = currWrite.End - currDecoder.Clock;
+                        var cut = 0;
                         if (diff > 0)
                         {
-                            if (currWrite.Struct is Skip skipToTrim)
+                            if (currWrite.Kind == StagedKind.Skip)
                             {
                                 // Prefer to slice Skip because the other struct might contain more information.
-                                skipToTrim.SetLength((int)(skipToTrim.Length - diff));
+                                currWrite.SetLength((int)(currWrite.Length - diff));
                             }
                             else
                             {
-                                curr = SliceStruct(curr, (int)diff);
+                                cut = (int)diff;
                             }
                         }
 
-                        if (!currWrite.Struct.MergeWith(curr))
+                        // Only a GC extends a GC; a decoded item has no neighbours (Yjs' Item#mergeWith needs this.right === right).
+                        if (currWrite.Kind == StagedKind.GC && currDecoder.Kind == StagedKind.GC)
                         {
-                            LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
-                            currWrite = new WriteState { Struct = curr, Offset = 0 };
+                            currWrite.SetLength(currWrite.Length + (currDecoder.Length - cut));
+                        }
+                        else
+                        {
+                            currWrite.Write();
+                            currWrite.Set(currDecoder, cut);
                             currDecoder.Next();
                         }
                     }
@@ -319,57 +389,28 @@ public static class UpdateOperations
             }
             else
             {
-                currWrite = new WriteState { Struct = currDecoder.Curr, Offset = 0 };
+                currWrite.Set(currDecoder, 0);
                 currDecoder.Next();
             }
 
-            for (var next = currDecoder.Curr;
-                 next != null &&
-                 next.Id.Client == firstClient &&
-                 next.Id.Clock == currWrite.Struct.Id.Clock + currWrite.Struct.Length &&
-                 !(next is Skip);
-                 next = currDecoder.Next())
+            for (;
+                 currDecoder.Curr >= 0 &&
+                 currDecoder.Client == firstClient &&
+                 currDecoder.Clock == currWrite.End &&
+                 currDecoder.Kind != StagedKind.Skip;
+                 currDecoder.Next())
             {
-                LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
-                currWrite = new WriteState { Struct = next, Offset = 0 };
+                currWrite.Write();
+                currWrite.Set(currDecoder, 0);
             }
         }
 
-        if (currWrite != null)
+        if (currWrite.Has)
         {
-            LazyStructWriter.WriteStruct(lazyStructEncoder, currWrite.Struct, currWrite.Offset);
+            currWrite.Write();
         }
 
         LazyStructWriter.Finish(lazyStructEncoder);
-    }
-
-    /// <summary>
-    /// Slices any kind of struct and retrieves the right-hand part starting <paramref name="diff"/>
-    /// clock ticks in. No side effects - only used by the lazy merge/diff algorithms above.
-    /// </summary>
-    private static AbstractStruct SliceStruct(AbstractStruct left, int diff)
-    {
-        switch (left)
-        {
-            case GC gc:
-                return new GC(new ID(gc.Id.Client, gc.Id.Clock + diff), gc.Length - diff);
-            case Skip skip:
-                return new Skip(new ID(skip.Id.Client, skip.Id.Clock + diff), skip.Length - diff);
-            case Item leftItem:
-                var client = leftItem.Id.Client;
-                var clock = leftItem.Id.Clock;
-                return new Item(
-                    new ID(client, clock + diff),
-                    null,
-                    new ID(client, clock + diff - 1),
-                    null,
-                    leftItem.RightOrigin,
-                    leftItem.Parent,
-                    leftItem.ParentSub,
-                    leftItem.Content.Splice(diff));
-            default:
-                throw new InvalidOperationException($"Unexpected struct type: {left.GetType()}");
-        }
     }
 
     #endregion
@@ -469,45 +510,52 @@ public static class UpdateOperations
 
     private static void DiffUpdateCore(IUpdateDecoder decoder, IDictionary<long, long> state, IUpdateEncoder encoder)
     {
-        var lazyStructWriter = new LazyStructWriter(encoder);
-        var reader = new LazyStructReader(decoder, filterSkips: false);
-
-        while (reader.Curr != null)
+        var table = StagingTable.Rent();
+        try
         {
-            var curr = reader.Curr;
-            var currClient = curr.Id.Client;
+            var lazyStructWriter = new LazyStructWriter(encoder);
+            var reader = new LazyStructReader(decoder, filterSkips: false, table);
 
-            if (curr is Skip)
+            while (reader.Curr >= 0)
             {
-                // The first written struct shouldn't be a Skip.
-                reader.Next();
-                continue;
-            }
+                var currClient = reader.Client;
 
-            state.TryGetValue(currClient, out var svClock);
-
-            if (curr.Id.Clock + curr.Length > svClock)
-            {
-                LazyStructWriter.WriteStruct(lazyStructWriter, curr, (int)Math.Max(svClock - curr.Id.Clock, 0));
-                reader.Next();
-
-                while (reader.Curr != null && reader.Curr.Id.Client == currClient)
+                if (reader.Kind == StagedKind.Skip)
                 {
-                    LazyStructWriter.WriteStruct(lazyStructWriter, reader.Curr, 0);
+                    // The first written struct shouldn't be a Skip.
                     reader.Next();
+                    continue;
+                }
+
+                state.TryGetValue(currClient, out var svClock);
+
+                if (reader.Clock + reader.Length > svClock)
+                {
+                    LazyStructWriter.WriteStruct(lazyStructWriter, table, reader.Curr, (int)Math.Max(svClock - reader.Clock, 0));
+                    reader.Next();
+
+                    while (reader.Curr >= 0 && reader.Client == currClient)
+                    {
+                        LazyStructWriter.WriteStruct(lazyStructWriter, table, reader.Curr, 0);
+                        reader.Next();
+                    }
+                }
+                else
+                {
+                    // Read until something new comes up.
+                    while (reader.Curr >= 0 && reader.Client == currClient && reader.Clock + reader.Length <= svClock)
+                    {
+                        reader.Next();
+                    }
                 }
             }
-            else
-            {
-                // Read until something new comes up.
-                while (reader.Curr != null && reader.Curr.Id.Client == currClient && reader.Curr.Id.Clock + reader.Curr.Length <= svClock)
-                {
-                    reader.Next();
-                }
-            }
+
+            LazyStructWriter.Finish(lazyStructWriter);
         }
-
-        LazyStructWriter.Finish(lazyStructWriter);
+        finally
+        {
+            StagingTable.Return(table);
+        }
 
         var ds = DeleteSet.Read(decoder);
         ds.Write(encoder);
@@ -539,48 +587,55 @@ public static class UpdateOperations
 
     private static byte[] EncodeStateVectorFromUpdateCore(IUpdateDecoder decoder)
     {
-        var reader = new LazyStructReader(decoder, filterSkips: false);
         var pairs = new List<(long Client, long Clock)>();
-        var curr = reader.Curr;
-
-        if (curr != null)
+        var table = StagingTable.Rent();
+        try
         {
-            var currClient = curr.Id.Client;
-            var stopCounting = curr.Id.Clock != 0; // Must start at 0.
-            var currClock = stopCounting ? 0 : curr.Id.Clock + curr.Length;
+            var reader = new LazyStructReader(decoder, filterSkips: false, table);
 
-            for (; curr != null; curr = reader.Next())
+            if (reader.Curr >= 0)
             {
-                if (currClient != curr.Id.Client)
+                var currClient = reader.Client;
+                var stopCounting = reader.Clock != 0; // Must start at 0.
+                var currClock = stopCounting ? 0 : reader.Clock + reader.Length;
+
+                for (; reader.Curr >= 0; reader.Next())
                 {
-                    if (currClock != 0)
+                    if (currClient != reader.Client)
                     {
-                        // We found a new client - remember what we have.
-                        pairs.Add((currClient, currClock));
+                        if (currClock != 0)
+                        {
+                            // We found a new client - remember what we have.
+                            pairs.Add((currClient, currClock));
+                        }
+
+                        currClient = reader.Client;
+                        currClock = 0;
+                        stopCounting = reader.Clock != 0;
                     }
 
-                    currClient = curr.Id.Client;
-                    currClock = 0;
-                    stopCounting = curr.Id.Clock != 0;
+                    // We ignore Skips.
+                    if (reader.Kind == StagedKind.Skip)
+                    {
+                        stopCounting = true;
+                    }
+
+                    if (!stopCounting)
+                    {
+                        currClock = reader.Clock + reader.Length;
+                    }
                 }
 
-                // We ignore Skips.
-                if (curr is Skip)
+                // Remember what we have.
+                if (currClock != 0)
                 {
-                    stopCounting = true;
-                }
-
-                if (!stopCounting)
-                {
-                    currClock = curr.Id.Clock + curr.Length;
+                    pairs.Add((currClient, currClock));
                 }
             }
-
-            // Remember what we have.
-            if (currClock != 0)
-            {
-                pairs.Add((currClient, currClock));
-            }
+        }
+        finally
+        {
+            StagingTable.Return(table);
         }
 
         var writer = new Lib0Writer();
@@ -622,31 +677,38 @@ public static class UpdateOperations
         var from = new Dictionary<long, long>();
         var to = new Dictionary<long, long>();
 
-        var reader = new LazyStructReader(decoder, filterSkips: false);
-        var curr = reader.Curr;
-
-        if (curr != null)
+        var table = StagingTable.Rent();
+        try
         {
-            var currClient = curr.Id.Client;
-            var currClock = curr.Id.Clock;
+            var reader = new LazyStructReader(decoder, filterSkips: false, table);
 
-            // Write the beginning to 'from'.
-            from[currClient] = currClock;
-
-            for (; curr != null; curr = reader.Next())
+            if (reader.Curr >= 0)
             {
-                if (currClient != curr.Id.Client)
+                var currClient = reader.Client;
+                var currClock = reader.Clock;
+
+                // Write the beginning to 'from'.
+                from[currClient] = currClock;
+
+                for (; reader.Curr >= 0; reader.Next())
                 {
-                    // We found a new client.
-                    to[currClient] = currClock;
-                    from[curr.Id.Client] = curr.Id.Clock;
-                    currClient = curr.Id.Client;
+                    if (currClient != reader.Client)
+                    {
+                        // We found a new client.
+                        to[currClient] = currClock;
+                        from[reader.Client] = reader.Clock;
+                        currClient = reader.Client;
+                    }
+
+                    currClock = reader.Clock + reader.Length;
                 }
 
-                currClock = curr.Id.Clock + curr.Length;
+                to[currClient] = currClock;
             }
-
-            to[currClient] = currClock;
+        }
+        finally
+        {
+            StagingTable.Return(table);
         }
 
         return new UpdateMeta(from, to);
@@ -704,15 +766,23 @@ public static class UpdateOperations
 
     private static void ConvertUpdateFormatCore(IUpdateDecoder decoder, IUpdateEncoder encoder)
     {
-        var reader = new LazyStructReader(decoder, filterSkips: false);
-        var writer = new LazyStructWriter(encoder);
-
-        for (var curr = reader.Curr; curr != null; curr = reader.Next())
+        var table = StagingTable.Rent();
+        try
         {
-            LazyStructWriter.WriteStruct(writer, curr, 0);
-        }
+            var reader = new LazyStructReader(decoder, filterSkips: false, table);
+            var writer = new LazyStructWriter(encoder);
 
-        LazyStructWriter.Finish(writer);
+            for (; reader.Curr >= 0; reader.Next())
+            {
+                LazyStructWriter.WriteStruct(writer, table, reader.Curr, 0);
+            }
+
+            LazyStructWriter.Finish(writer);
+        }
+        finally
+        {
+            StagingTable.Return(table);
+        }
 
         var ds = DeleteSet.Read(decoder);
         OrderRanges(ds);
@@ -782,107 +852,13 @@ public static class UpdateOperations
         return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits))));
     }
 
-    internal static DecodedStruct[] Detach(IReadOnlyList<AbstractStruct> structs)
-    {
-        var result = new DecodedStruct[structs.Count];
-        for (var i = 0; i < result.Length; i++)
-        {
-            result[i] = Detach(structs[i]);
-        }
-
-        return result;
-    }
-
-    private static DecodedStruct Detach(AbstractStruct s)
-    {
-        var none = Array.Empty<object>();
-        if (s is not Item item)
-        {
-            var kind = s is Skip ? ItemKind.Skip : ItemKind.GC;
-            return new DecodedStruct(s.Id, s.Length, kind, null, null, null, null, null, none, null, null, null, -1, null, null);
-        }
-
-        var content = item.Content;
-        IReadOnlyList<object> values = none;
-        string text = null, formatKey = null, typeName = null, docGuid = null;
-        object formatValue = null;
-        var typeRef = -1;
-        ItemKind itemKind;
-        switch (content)
-        {
-            case ContentDeleted:
-                itemKind = ItemKind.Deleted;
-                break;
-            case ContentJson:
-                itemKind = ItemKind.Json;
-                values = content.GetContent();
-                break;
-            case ContentBinary:
-                itemKind = ItemKind.Binary;
-                values = content.GetContent();
-                break;
-            case ContentString str:
-                itemKind = ItemKind.String;
-                text = str.GetString();
-                break;
-            case ContentEmbed:
-                itemKind = ItemKind.Embed;
-                values = content.GetContent();
-                break;
-            case ContentFormat format:
-                itemKind = ItemKind.Format;
-                formatKey = format.Key;
-                formatValue = format.Value;
-                break;
-            case ContentType type:
-                itemKind = ItemKind.Type;
-                (typeRef, typeName) = type.Type switch
-                {
-                    YXmlElement element => (YXmlElement.YXmlElementRefId, element.NodeName),
-                    YXmlHook hook => (YXmlHook.YXmlHookRefId, hook.HookName),
-                    YXmlText => (YXmlText.YXmlTextRefId, null),
-                    YXmlFragment => (YXmlFragment.YXmlFragmentRefId, null),
-                    YText => (YText.YTextRefId, null),
-                    YMap => (YMap.YMapRefId, null),
-                    _ => (YArray.YArrayRefId, null),
-                };
-                break;
-            case ContentAny:
-                itemKind = ItemKind.Any;
-                values = content.GetContent();
-                break;
-            default:
-                itemKind = ItemKind.Doc;
-                docGuid = ((ContentDoc)content).Doc.Guid;
-                break;
-        }
-
-        return new DecodedStruct(
-            item.Id,
-            item.Length,
-            itemKind,
-            item.LeftOrigin,
-            item.RightOrigin,
-            item.Parent as string,
-            item.Parent as ID?,
-            item.ParentSub,
-            values,
-            text,
-            formatKey,
-            formatValue,
-            typeRef,
-            typeName,
-            docGuid);
-    }
-
     private static DecodedUpdate DecodeUpdateCore(IUpdateDecoder decoder)
     {
-        var structs = new List<AbstractStruct>();
-        var reader = new LazyStructReader(decoder, filterSkips: false);
-
-        for (var curr = reader.Curr; curr != null; curr = reader.Next())
+        // The table is the result's: it keeps every struct and is not returned.
+        var structs = new StagingTable();
+        var cursor = new EncodingUtils.StructCursor(decoder, staging: structs);
+        while (cursor.NextStaged() >= 0)
         {
-            structs.Add(curr);
         }
 
         var ds = DeleteSet.Read(decoder);
@@ -938,10 +914,10 @@ public static class UpdateOperations
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine($"Structs ({decoded.Raw.Count}):");
-        foreach (var str in decoded.Raw)
+        sb.AppendLine($"Structs ({decoded.Staged.Count}):");
+        for (var i = 0; i < decoded.Staged.Count; i++)
         {
-            sb.Append("  ").AppendLine(DescribeStruct(str));
+            sb.Append("  ").AppendLine(DescribeStruct(decoded.Staged, i));
         }
 
         sb.AppendLine("DeleteSet:");
@@ -956,20 +932,19 @@ public static class UpdateOperations
         return sb.ToString();
     }
 
-    private static string DescribeStruct(AbstractStruct str)
+    private static string DescribeStruct(StagingTable table, int i)
     {
-        switch (str)
+        var id = table.IdOf(i);
+        var length = table.At(i).Length;
+        var kind = table.At(i).Kind;
+        return kind switch
         {
-            case Skip skip:
-                return $"Skip(client={skip.Id.Client}, clock={skip.Id.Clock}, length={skip.Length})";
-            case GC gc:
-                return $"GC(client={gc.Id.Client}, clock={gc.Id.Clock}, length={gc.Length})";
-            case Item item:
-                return $"Item(client={item.Id.Client}, clock={item.Id.Clock}, length={item.Length}, " +
-                       $"deleted={item.Deleted}, content={item.Content?.GetType().Name})";
-            default:
-                return str.ToString();
-        }
+            StagedKind.Skip => $"Skip(client={id.Client}, clock={id.Clock}, length={length})",
+            StagedKind.GC => $"GC(client={id.Client}, clock={id.Clock}, length={length})",
+
+            // A decoded item is never deleted: only a document's transaction marks one.
+            _ => $"Item(client={id.Client}, clock={id.Clock}, length={length}, deleted=False, content=Content{kind})",
+        };
     }
 
     #endregion

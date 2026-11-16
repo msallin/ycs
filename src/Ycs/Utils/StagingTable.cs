@@ -75,8 +75,13 @@ internal sealed class StagingTable
     /// <summary>The size of a <see cref="StagedStruct"/>: four longs and eight ints.</summary>
     internal const int StructBytes = 64;
 
-    private const int FirstCapacity = 16;
+    private const int FirstCapacity = 4;
     private const int MaxRetainedClients = 1024;
+
+    private const int MaxPooled = 64;
+
+    [ThreadStatic]
+    private static Stack<StagingTable>? t_pool;
 
     private StagedStruct[] _structs = [];
     private char[] _chars = [];
@@ -95,7 +100,24 @@ internal sealed class StagingTable
     private long _nextClock;
     private int _lastClientIndex = -1;
 
-    /// <summary>Bumped by every <see cref="Reset"/>.</summary>
+    /// <summary>An empty table: one kept by this thread, or a new one. Hand it back with <see cref="Return"/>.</summary>
+    public static StagingTable Rent() => t_pool is { Count: > 0 } pool ? pool.Pop() : new StagingTable();
+
+    /// <summary>
+    /// Resets <paramref name="table"/> and keeps it for the next <see cref="Rent"/> on this thread. The caller holds
+    /// no index, span or ref into it after.
+    /// </summary>
+    public static void Return(StagingTable table)
+    {
+        table.Reset();
+        var pool = t_pool ??= new Stack<StagingTable>();
+        if (pool.Count < MaxPooled)
+        {
+            pool.Push(table);
+        }
+    }
+
+    /// <summary>Bumped by every <see cref="Reset"/> and <see cref="Truncate"/>.</summary>
     public int Version { get; private set; }
 
     public int Count => _count;
@@ -256,6 +278,13 @@ internal sealed class StagingTable
     /// <summary>9.3, 9.5: a Type struct's node name, null for none.</summary>
     public string? TypeName(int i) => At(i).Payload < 0 ? null : (string)_refs[At(i).Payload]!;
 
+    /// <summary>9.3: sets the length of a GC or Skip struct (an extended or trimmed range).</summary>
+    public void SetLength(int i, int length)
+    {
+        Debug.Assert(At(i).Kind is StagedKind.GC or StagedKind.Skip);
+        _structs[i].Length = length;
+    }
+
     /// <summary>9.3, 9.4: the index of a client in this table, -1 when the table never saw it.</summary>
     public int FindClient(long client) => _clientIndex.TryGetValue(client, out var index) ? index : -1;
 
@@ -307,6 +336,29 @@ internal sealed class StagingTable
         {
             _rangeStart = [];
             _rangeCount = [];
+        }
+
+        Version++;
+    }
+
+    /// <summary>
+    /// Drops every struct but keeps the client list and the open client, whose next struct continues at the clock where
+    /// the last one ended: for a reader that holds one struct at a time. Only the open client's range stays
+    /// meaningful (the others are stale), so a client must not be begun twice. Bumps <see cref="Version"/>.
+    /// </summary>
+    public void Truncate()
+    {
+        Poison();
+        Array.Clear(_values, 0, _valuesUsed);
+        Array.Clear(_refs, 0, _refsUsed);
+        _count = 0;
+        _charsUsed = 0;
+        _valuesUsed = 0;
+        _refsUsed = 0;
+        if (_open >= 0)
+        {
+            _rangeStart[_open] = 0;
+            _rangeCount[_open] = 0;
         }
 
         Version++;
