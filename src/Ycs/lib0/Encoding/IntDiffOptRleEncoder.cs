@@ -28,9 +28,9 @@ namespace Ycs;
 /// <seealso cref="IntDiffOptRleDecoder"/>
 internal class IntDiffOptRleEncoder : AbstractStreamEncoder<long>
 {
-    private long _state = 0;
-    private long _diff = 0;
-    private uint _count = 0;
+    private long _state;
+    private long _diff;
+    private uint _count;
 
     public IntDiffOptRleEncoder(bool pooled = false)
         : base(pooled)

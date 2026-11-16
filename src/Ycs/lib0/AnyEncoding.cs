@@ -414,13 +414,13 @@ internal static class AnyEncoding
     private static long ToInt64(BigInteger bi) =>
         bi >= long.MinValue && bi <= long.MaxValue
             ? (long)bi
-            : throw new ArgumentOutOfRangeException("value", bi, "A BigInt value must fit into 64 bits.");
+            : throw new ArgumentOutOfRangeException(nameof(bi), bi, "A BigInt value must fit into 64 bits.");
 
     internal static ArgumentOutOfRangeException OutOfRange(object value) =>
         new(nameof(value), value, "Integers beyond ±(2^53 - 1) have no exact JavaScript number. Use System.Numerics.BigInteger for a BigInt.");
 
     private static ArgumentException NotAStringKey(object? key) =>
-        new($"Object keys must be strings, not '{key?.GetType().Name ?? "null"}'.", "value");
+        new($"Object keys must be strings, not '{key?.GetType().Name ?? "null"}'.", nameof(key));
 
     internal static ArgumentException TooDeep(int maxDepth, string paramName) =>
         new($"Values nested deeper than {maxDepth} levels (or a value that contains itself) cannot be stored in a Yjs document.", paramName);
