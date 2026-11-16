@@ -132,4 +132,28 @@ public class HostileSyncTests
 
         Assert.AreEqual(("azbcdef", "abcdezf"), (a.Text, joiner.Text));
     }
+
+    // After a restart the room is empty, and a client's step 2 is its whole document.
+    [TestMethod]
+    public void Receive_DocumentOfMoreStructsThanYcsAllowsPerUpdate_IsAccepted()
+    {
+        var structs = (int)UpdateLimits.Default.MaxStructsPerUpdate + 1;
+        var room = new Room("r");
+        var client = new TestClient(HonestA);
+        client.Doc.Transact(_ =>
+        {
+            var text = client.Doc.GetText("text");
+            for (var i = 0; i < structs; i++)
+            {
+                text.Insert(0, "x");
+            }
+        });
+
+        client.Connect(room);
+        TestClient.PumpAll(client);
+
+        var copy = new YDoc();
+        copy.ApplyUpdateV1(room.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
+        Assert.AreEqual((SessionCloseReason.None, structs), (client.Session!.CloseReason, copy.GetText("text").Length));
+    }
 }

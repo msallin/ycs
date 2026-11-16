@@ -28,11 +28,11 @@ internal sealed class HostilePeer
     /// <summary>The awareness states as this client sees them; a fresh view on every connect, as the provider's.</summary>
     public Server.Awareness.Awareness View { get; private set; }
 
-    public Session? Session => Client.Session ?? listening;
+    public Session? Session => Client.Session ?? Listening;
 
     public bool Connected => Session is { IsClosed: false };
 
-    private Session? listening;
+    private Session? Listening { get; set; }
 
     public void Connect(Room room)
     {
@@ -44,8 +44,8 @@ internal sealed class HostilePeer
     /// <summary>Joins without a step 1: the room then never sends a step 2, only what it broadcasts.</summary>
     public void Listen(Room room)
     {
-        listening = new Session(room);
-        listening.Start();
+        Listening = new Session(room);
+        Listening.Start();
     }
 
     public void Disconnect() => Client.Disconnect();
@@ -69,7 +69,7 @@ internal sealed class HostilePeer
             var (type, reader) = Messages.Split(message);
             switch (type)
             {
-                case MessageType.Sync when listening is null:
+                case MessageType.Sync when Listening is null:
                     var reply = new MemoryStream();
                     VarUint.Write(reply, MessageType.Sync);
                     SyncProtocol.ReadSyncMessage(reader, reply, Doc, Client);
