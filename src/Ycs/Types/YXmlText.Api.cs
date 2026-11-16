@@ -72,7 +72,7 @@ public sealed partial class YXmlText
                     var attrs = new List<(string Key, object? Value)>();
                     switch (kvp.Value.Stored())
                     {
-                        case IDictionary<string, object> valueMap:
+                        case IDictionary<string, object?> valueMap:
                             foreach (var akv in valueMap)
                             {
                                 attrs.Add((akv.Key, akv.Value));

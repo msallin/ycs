@@ -10,6 +10,7 @@ public sealed partial class YXmlHook
 {
     public YXmlHook(string hookName)
     {
+        ArgumentNullException.ThrowIfNull(hookName);
         HookName = hookName;
     }
 

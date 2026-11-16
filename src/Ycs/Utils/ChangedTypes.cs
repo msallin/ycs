@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Collections;
 
@@ -10,12 +9,12 @@ namespace Ycs;
 /// (one deleted in the transaction) leaves a hole that enumeration skips, so removing is O(1) and a
 /// type added later does not take its slot.
 /// </summary>
-internal sealed partial class ChangedTypes : IDictionary<AbstractType, ISet<string>>
+internal sealed partial class ChangedTypes : IDictionary<AbstractType, ISet<string?>>
 {
     private readonly Dictionary<AbstractType, int> _index = new();
 
     // Holes have a null key.
-    private List<KeyValuePair<AbstractType, ISet<string>>> _entries = new();
+    private List<KeyValuePair<AbstractType, ISet<string?>>> _entries = new();
 
     public int Count => _index.Count;
 
@@ -23,11 +22,11 @@ internal sealed partial class ChangedTypes : IDictionary<AbstractType, ISet<stri
 
     public ICollection<AbstractType> Keys => Pairs().Select(static kvp => kvp.Key).ToList();
 
-    public ICollection<ISet<string>> Values => Pairs().Select(static kvp => kvp.Value).ToList();
+    public ICollection<ISet<string?>> Values => Pairs().Select(static kvp => kvp.Value).ToList();
 
-    private IEnumerable<KeyValuePair<AbstractType, ISet<string>>> Pairs() => this;
+    private IEnumerable<KeyValuePair<AbstractType, ISet<string?>>> Pairs() => this;
 
-    public ISet<string> this[AbstractType key]
+    public ISet<string?> this[AbstractType key]
     {
         get => _index.TryGetValue(key, out var i) ? _entries[i].Value : throw new KeyNotFoundException();
         set
@@ -43,13 +42,13 @@ internal sealed partial class ChangedTypes : IDictionary<AbstractType, ISet<stri
         }
     }
 
-    public void Add(AbstractType key, ISet<string> value)
+    public void Add(AbstractType key, ISet<string?> value)
     {
         _index.Add(key, _entries.Count);
         _entries.Add(new(key, value));
     }
 
-    public bool TryGetValue(AbstractType key, out ISet<string> value)
+    public bool TryGetValue(AbstractType key, [System.Diagnostics.CodeAnalysis.MaybeNullWhen(false)] out ISet<string?> value)
     {
         if (_index.TryGetValue(key, out var i))
         {
@@ -89,16 +88,16 @@ internal sealed partial class ChangedTypes : IDictionary<AbstractType, ISet<stri
 
     public Enumerator GetEnumerator() => new(_entries);
 
-    IEnumerator<KeyValuePair<AbstractType, ISet<string>>> IEnumerable<KeyValuePair<AbstractType, ISet<string>>>.GetEnumerator() => GetEnumerator();
+    IEnumerator<KeyValuePair<AbstractType, ISet<string?>>> IEnumerable<KeyValuePair<AbstractType, ISet<string?>>>.GetEnumerator() => GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    void ICollection<KeyValuePair<AbstractType, ISet<string>>>.Add(KeyValuePair<AbstractType, ISet<string>> item) => Add(item.Key, item.Value);
+    void ICollection<KeyValuePair<AbstractType, ISet<string?>>>.Add(KeyValuePair<AbstractType, ISet<string?>> item) => Add(item.Key, item.Value);
 
-    bool ICollection<KeyValuePair<AbstractType, ISet<string>>>.Contains(KeyValuePair<AbstractType, ISet<string>> item) =>
-        TryGetValue(item.Key, out var value) && EqualityComparer<ISet<string>>.Default.Equals(value, item.Value);
+    bool ICollection<KeyValuePair<AbstractType, ISet<string?>>>.Contains(KeyValuePair<AbstractType, ISet<string?>> item) =>
+        TryGetValue(item.Key, out var value) && EqualityComparer<ISet<string?>>.Default.Equals(value, item.Value);
 
-    void ICollection<KeyValuePair<AbstractType, ISet<string>>>.CopyTo(KeyValuePair<AbstractType, ISet<string>>[] array, int arrayIndex)
+    void ICollection<KeyValuePair<AbstractType, ISet<string?>>>.CopyTo(KeyValuePair<AbstractType, ISet<string?>>[] array, int arrayIndex)
     {
         foreach (var kvp in this)
         {
@@ -106,23 +105,23 @@ internal sealed partial class ChangedTypes : IDictionary<AbstractType, ISet<stri
         }
     }
 
-    bool ICollection<KeyValuePair<AbstractType, ISet<string>>>.Remove(KeyValuePair<AbstractType, ISet<string>> item) =>
-        ((ICollection<KeyValuePair<AbstractType, ISet<string>>>)this).Contains(item) && Remove(item.Key);
+    bool ICollection<KeyValuePair<AbstractType, ISet<string?>>>.Remove(KeyValuePair<AbstractType, ISet<string?>> item) =>
+        ((ICollection<KeyValuePair<AbstractType, ISet<string?>>>)this).Contains(item) && Remove(item.Key);
 
     /// <summary>Visits the entries in order, also those added meanwhile (as a JavaScript Map's forEach).</summary>
-    public struct Enumerator : IEnumerator<KeyValuePair<AbstractType, ISet<string>>>
+    public struct Enumerator : IEnumerator<KeyValuePair<AbstractType, ISet<string?>>>
     {
-        private readonly List<KeyValuePair<AbstractType, ISet<string>>> _entries;
+        private readonly List<KeyValuePair<AbstractType, ISet<string?>>> _entries;
         private int _next;
 
-        internal Enumerator(List<KeyValuePair<AbstractType, ISet<string>>> entries)
+        internal Enumerator(List<KeyValuePair<AbstractType, ISet<string?>>> entries)
         {
             _entries = entries;
             _next = 0;
             Current = default;
         }
 
-        public KeyValuePair<AbstractType, ISet<string>> Current { get; private set; }
+        public KeyValuePair<AbstractType, ISet<string?>> Current { get; private set; }
 
         object IEnumerator.Current => Current;
 

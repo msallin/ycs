@@ -7,6 +7,7 @@
 #nullable enable
 
 using System.Buffers;
+using System.Diagnostics;
 using System.Text;
 
 namespace Ycs;
@@ -77,7 +78,7 @@ public partial class YText
 
                             break;
                         case Delta.Retain retain:
-                            FormatText(tr, ref curPos, retain.Length, StoredAttributes(op.Attributes) ?? new Dictionary<string, object>());
+                            FormatText(tr, ref curPos, retain.Length, StoredAttributes(op.Attributes) ?? new Dictionary<string, object?>());
                             break;
                         case Delta.Delete delete:
                             DeleteText(tr, ref curPos, delete.Length);
@@ -117,7 +118,7 @@ public partial class YText
     private List<Delta> ComputeDelta(Snapshot? snapshot, Snapshot? prevSnapshot, Func<YChangeKind, ItemId, YChange>? computeYChange)
     {
         var ops = new List<Delta>();
-        var currentAttributes = new Dictionary<string, object>();
+        var currentAttributes = new Dictionary<string, object?>();
         var doc = Doc;
         // Appending to a string is quadratic in the run's length.
         var str = new StringBuilder();
@@ -259,7 +260,7 @@ public partial class YText
             Doc.Transact((self: this, index, embed: embed.Stored(), attributes: StoredAttributes(attributes)), static (s, tr) =>
             {
                 var pos = s.self.FindPosition(tr, s.index, useSearchMarker: s.attributes == null);
-                s.self.InsertText(tr, ref pos, s.embed, s.attributes ?? new Dictionary<string, object>());
+                s.self.InsertText(tr, ref pos, s.embed, s.attributes ?? new Dictionary<string, object?>());
             });
         }
         else
@@ -431,6 +432,7 @@ public partial class YText
         var n = _start;
         while (!n.IsNull)
         {
+            Debug.Assert(Doc != null);
             var id = n.Id;
             var departures = Doc.Store.Departures;
             if (!n.Deleted && n.Countable && n.Content is ContentString cs)
@@ -453,6 +455,7 @@ public partial class YText
 
     public void RemoveAttribute(string name)
     {
+        ArgumentNullException.ThrowIfNull(name);
         if (Doc != null)
         {
             Doc.Transact((self: this, name), static (s, tr) => s.self.TypeMapDelete(tr, s.name));
@@ -465,6 +468,7 @@ public partial class YText
 
     public void SetAttribute(string name, YValue value)
     {
+        ArgumentNullException.ThrowIfNull(name);
         if (Doc != null)
         {
             Doc.Transact((self: this, name, value: value.Stored()), static (s, tr) => s.self.TypeMapSet(tr, s.name, s.value));
@@ -500,12 +504,13 @@ public partial class YText
     {
         var res = 0;
 
+        Debug.Assert(Doc != null);
         Doc.Transact(transaction =>
         {
             var start = _start;
             var end = _start;
-            OrderedDictionary<string, object>? startAttributes = null;
-            OrderedDictionary<string, object>? currentAttributes = null;
+            OrderedDictionary<string, object?>? startAttributes = null;
+            OrderedDictionary<string, object?>? currentAttributes = null;
 
             while (!end.IsNull)
             {

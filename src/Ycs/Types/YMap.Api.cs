@@ -5,6 +5,7 @@
 // ------------------------------------------------------------------------------
 
 using System.Collections;
+using System.Diagnostics;
 
 namespace Ycs;
 
@@ -22,17 +23,19 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
 
     public YMap()
     {
-        _prelimContent = new Dictionary<string, object>();
+        _prelimContent = new Dictionary<string, object?>();
     }
 
     public YMap(IEnumerable<KeyValuePair<string, YValue>> entries)
-        : this()
     {
         ArgumentNullException.ThrowIfNull(entries);
+        var prelimContent = new Dictionary<string, object?>();
         foreach (var entry in entries)
         {
-            _prelimContent[entry.Key] = entry.Value.Stored();
+            prelimContent[entry.Key] = entry.Value.Stored();
         }
+
+        _prelimContent = prelimContent;
     }
 
     public int Count => _prelimContent?.Count ?? _mapCount;
@@ -123,6 +126,7 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             _prelimContent.Remove(key);
         }
 
@@ -146,6 +150,7 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             _prelimContent.Clear();
         }
     }
@@ -193,10 +198,11 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             _prelimContent[key] = stored;
         }
     }
 
-    private protected IEnumerable<KeyValuePair<string, object>> EnumerateEntries() => _prelimContent ?? TypeMapEnumerateValues();
+    private protected IEnumerable<KeyValuePair<string, object?>> EnumerateEntries() => _prelimContent ?? TypeMapEnumerateValues();
 }
 #pragma warning restore CA1710

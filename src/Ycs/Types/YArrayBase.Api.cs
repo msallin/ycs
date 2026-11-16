@@ -4,7 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+using System.Diagnostics;
 
 namespace Ycs;
 
@@ -15,7 +15,7 @@ public abstract partial class YArrayBase
         _searchMarkers = useSearchMarkers ? new ArraySearchMarkerCollection() : null;
     }
 
-    private protected void InsertGenerics(Transaction transaction, int index, ICollection<object> content)
+    private protected void InsertGenerics(Transaction transaction, int index, ICollection<object?> content)
     {
         if (index > Length)
         {
@@ -157,10 +157,10 @@ public abstract partial class YArrayBase
     }
 
     /// <summary>The countable content from <paramref name="start"/> to <paramref name="end"/> (exclusive), as stored; the caller has checked the range.</summary>
-    private protected List<object> InternalSlice(int start, int end)
+    private protected List<object?> InternalSlice(int start, int end)
     {
         var length = end - start;
-        var cs = new List<object>(length);
+        var cs = new List<object?>(length);
         var n = _start;
 
         while (!n.IsNull && length > 0)
@@ -190,7 +190,7 @@ public abstract partial class YArrayBase
     }
 
     /// <summary>The value at <paramref name="index"/> of the document's list, as stored; false when no countable content is there.</summary>
-    private protected bool TryGetRawAt(int index, out object value)
+    private protected bool TryGetRawAt(int index, out object? value)
     {
         var marker = FindMarker(index);
         var n = _start;
@@ -210,6 +210,7 @@ public abstract partial class YArrayBase
             return false;
         }
 
+        Debug.Assert(Doc != null);
         var steps = 0;
         for (; !n.IsNull; n = n.Right.AsItem)
         {
@@ -235,11 +236,11 @@ public abstract partial class YArrayBase
     }
 
     /// <summary>The countable content visible in <paramref name="snapshot"/> (Yjs' <c>typeListToArraySnapshot</c>), as stored.</summary>
-    private protected List<object> ContentAtSnapshot(Snapshot snapshot)
+    private protected List<object?> ContentAtSnapshot(Snapshot snapshot)
     {
         // Visibility is decided per item, by its first clock: Yjs' items.
         Doc?.MaterializeRunExtensions();
-        var result = new List<object>();
+        var result = new List<object?>();
         for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
             if (n.Countable && n.IsVisible(snapshot))
@@ -255,8 +256,9 @@ public abstract partial class YArrayBase
     }
 
     /// <summary>The countable content of the document's list, as stored, in order; it survives the structs merging or leaving while the caller holds it.</summary>
-    private protected IEnumerable<object> EnumerateRaw()
+    private protected IEnumerable<object?> EnumerateRaw()
     {
+        Debug.Assert(Doc != null);
         var n = _start;
 
         while (!n.IsNull)

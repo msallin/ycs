@@ -431,7 +431,7 @@ class Ycs.YDoc
     UpdateLimits Limits { get; }
     YArray GetArray(string name = "")
     YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc? newDoc = null)
-    YDoc(YDocOptions options = null)
+    YDoc(YDocOptions? options = null)
     YMap GetMap(string name = "")
     YText GetText(string name = "")
     YValue Meta { get; }
@@ -445,20 +445,20 @@ class Ycs.YDoc
     bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = 0, UpdateLimits? limits = null)
     byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     byte[] EncodeStateVector()
-    event System.EventHandler BeforeAllTransactions
-    event System.EventHandler Destroyed
-    event System.EventHandler<PendingDrop> PendingDropped
-    event System.EventHandler<SubdocsEventArgs> SubdocsChanged
-    event System.EventHandler<System.Collections.Generic.IReadOnlyList<Transaction>> AfterAllTransactions
-    event System.EventHandler<Transaction> AfterTransaction
-    event System.EventHandler<Transaction> AfterTransactionCleanup
-    event System.EventHandler<Transaction> BeforeObserverCalls
-    event System.EventHandler<Transaction> BeforeTransaction
-    event System.EventHandler<UpdateEventArgs> Updated
-    event System.EventHandler<UpdateEventArgs> UpdatedV2
+    event System.EventHandler<PendingDrop>? PendingDropped
+    event System.EventHandler<SubdocsEventArgs>? SubdocsChanged
+    event System.EventHandler<System.Collections.Generic.IReadOnlyList<Transaction>>? AfterAllTransactions
+    event System.EventHandler<Transaction>? AfterTransaction
+    event System.EventHandler<Transaction>? AfterTransactionCleanup
+    event System.EventHandler<Transaction>? BeforeObserverCalls
+    event System.EventHandler<Transaction>? BeforeTransaction
+    event System.EventHandler<UpdateEventArgs>? Updated
+    event System.EventHandler<UpdateEventArgs>? UpdatedV2
+    event System.EventHandler? BeforeAllTransactions
+    event System.EventHandler? Destroyed
     long ClientId { get; }
-    string CollectionId { get; }
     string Guid { get; }
+    string? CollectionId { get; }
     void ApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = 0, UpdateLimits? limits = null)
     void Destroy()
     void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
@@ -545,8 +545,8 @@ sealed class Ycs.YTextEvent : YEvent
     override YChanges Changes { get; }
 abstract class Ycs.YType
     System.IDisposable ObserveDeep(System.Action<System.Collections.Generic.IReadOnlyList<YEvent>, Transaction> handler)
-    YDoc Doc { get; }
-    YType Parent { get; }
+    YDoc? Doc { get; }
+    YType? Parent { get; }
     abstract object ToJson()
 static class Ycs.YUpdate
     static DecodedUpdate Decode(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)

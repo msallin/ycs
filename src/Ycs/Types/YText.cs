@@ -4,9 +4,9 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Buffers;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -24,12 +24,12 @@ public sealed class YTextEvent : YEvent
         Retain
     }
 
-    private readonly ISet<string> _subs;
-    private IReadOnlySet<string> _keysChanged;
-    private List<Delta> _delta = null;
-    private YChanges _changes;
+    private readonly ISet<string?> _subs;
+    private IReadOnlySet<string>? _keysChanged;
+    private List<Delta>? _delta;
+    private YChanges? _changes;
 
-    internal YTextEvent(YText arr, Transaction transaction, ISet<string> subs)
+    internal YTextEvent(YText arr, Transaction transaction, ISet<string?> subs)
         : base(arr, transaction)
     {
         _subs = subs;
@@ -43,7 +43,7 @@ public sealed class YTextEvent : YEvent
     /// <summary>
     /// Gets whether the children keys changed.
     /// </summary>
-    public bool ChildListChanged => _subs?.Contains(null) ?? false;
+    public bool ChildListChanged => _subs.Contains(null);
 
     /// <summary>
     /// Yjs' <c>YTextEvent#changes</c>: the <see cref="Keys"/> and the text <see cref="Delta"/>; no
@@ -71,11 +71,11 @@ public sealed class YTextEvent : YEvent
                     var delta = _delta;
 
                     // Saves all current attributes for insert.
-                    var currentAttributes = new Dictionary<string, object>();
-                    var oldAttributes = new Dictionary<string, object>();
+                    var currentAttributes = new Dictionary<string, object?>();
+                    var oldAttributes = new Dictionary<string, object?>();
                     var item = Target._start;
                     ChangeType? action = null;
-                    var attributes = new Dictionary<string, object>();
+                    var attributes = new Dictionary<string, object?>();
 
                     // An embed, or null while the text inserted so far is in insertText: appending to a string is
                     // quadratic in the run's length.
@@ -88,7 +88,7 @@ public sealed class YTextEvent : YEvent
                     {
                         if (action != null)
                         {
-                            Delta op = null;
+                            Delta? op = null;
 
                             switch (action)
                             {
@@ -183,7 +183,7 @@ public sealed class YTextEvent : YEvent
                                             action = ChangeType.Insert;
                                         }
 
-                                        insertText.Append((item.Content as ContentString).GetString());
+                                        insertText.Append(((ContentString)item.Content).GetString());
                                     }
                                 }
                                 else if (Deletes(item))
@@ -301,7 +301,7 @@ public sealed class YTextEvent : YEvent
                                         addOp();
                                     }
 
-                                    YText.UpdateCurrentAttributes(currentAttributes, item.Content as ContentFormat);
+                                    YText.UpdateCurrentAttributes(currentAttributes, (ContentFormat)item.Content);
                                 }
                                 break;
                         }
@@ -351,7 +351,7 @@ public partial class YText : YArrayBase
         public ItemRef Left;
         public ItemRef Right;
         public int Index;
-        public OrderedDictionary<string, object> CurrentAttributes;
+        public OrderedDictionary<string, object?>? CurrentAttributes;
 
         public ItemTextListPosition(ItemRef left, ItemRef right, int index)
         {
@@ -444,7 +444,7 @@ public partial class YText : YArrayBase
         /// <summary>
         /// Negate applied formats.
         /// </summary>
-        public void InsertNegatedAttributes(Transaction transaction, YType parent, OrderedDictionary<string, object> negatedAttributes)
+        public void InsertNegatedAttributes(Transaction transaction, YType parent, OrderedDictionary<string, object?>? negatedAttributes)
         {
             // Check if we really need to remove attributes.
             while (
@@ -460,7 +460,8 @@ public partial class YText : YArrayBase
             {
                 if (!Right.Deleted)
                 {
-                    negatedAttributes.Remove((Right.Content as ContentFormat).Key);
+                    Debug.Assert(negatedAttributes != null);
+                    negatedAttributes.Remove(((ContentFormat)Right.Content).Key);
                 }
 
                 Forward();
@@ -485,7 +486,7 @@ public partial class YText : YArrayBase
             }
         }
 
-        public void MinimizeAttributeChanges(IDictionary<string, object> attributes)
+        public void MinimizeAttributeChanges(IDictionary<string, object?>? attributes)
         {
             // Go right while attributes[right.Key] == right.Value (or right is deleted).
             while (!Right.IsNull)
@@ -518,12 +519,12 @@ public partial class YText : YArrayBase
     }
 
     /// <summary>A change made before the text is in a document, replayed when it is integrated.</summary>
-    private readonly record struct PendingOperation(PendingKind Kind, int Index, int Length, string Name, object Value, IReadOnlyDictionary<string, YValue> Attributes);
+    private readonly record struct PendingOperation(PendingKind Kind, int Index, int Length, string? Name, object? Value, IReadOnlyDictionary<string, YValue>? Attributes);
 
-    private List<PendingOperation> _pending;
+    private List<PendingOperation>? _pending;
 
     // The last result of ToString, valid while the store's version and Length are as they were then.
-    private string _string;
+    private string? _string;
     private long _stringVersion;
     private int _stringLength;
 
@@ -538,13 +539,13 @@ public partial class YText : YArrayBase
         (_pending ??= new List<PendingOperation>()).Add(operation);
     }
 
-    private void InsertInTransaction(Transaction transaction, int index, string text, IDictionary<string, object> attributes)
+    private void InsertInTransaction(Transaction transaction, int index, string text, IDictionary<string, object?>? attributes)
     {
         var pos = FindPosition(transaction, index, useSearchMarker: attributes == null);
         if (attributes == null && pos.CurrentAttributes?.Count > 0)
         {
             // Without attributes, the text takes the attributes at its position.
-            attributes = new Dictionary<string, object>(pos.CurrentAttributes);
+            attributes = new Dictionary<string, object?>(pos.CurrentAttributes);
         }
 
         InsertText(transaction, ref pos, text, attributes);
@@ -587,24 +588,30 @@ public partial class YText : YArrayBase
             switch (op.Kind)
             {
                 case PendingKind.Insert:
+                    Debug.Assert(op.Value != null);
                     Insert(op.Index, (string)op.Value, op.Attributes);
                     break;
                 case PendingKind.InsertEmbed:
+                    Debug.Assert(op.Value != null);
                     InsertEmbed(op.Index, (YValue)op.Value, op.Attributes);
                     break;
                 case PendingKind.Delete:
                     Remove(op.Index, op.Length);
                     break;
                 case PendingKind.Format:
+                    Debug.Assert(op.Attributes != null);
                     Format(op.Index, op.Length, op.Attributes);
                     break;
                 case PendingKind.ApplyDelta:
+                    Debug.Assert(op.Value != null);
                     ApplyDelta((Delta[])op.Value, sanitize: op.Length != 0);
                     break;
                 case PendingKind.SetAttribute:
+                    Debug.Assert(op.Name != null && op.Value != null);
                     SetAttribute(op.Name, (YValue)op.Value);
                     break;
                 case PendingKind.RemoveAttribute:
+                    Debug.Assert(op.Name != null);
                     RemoveAttribute(op.Name);
                     break;
             }
@@ -622,7 +629,7 @@ public partial class YText : YArrayBase
         return text;
     }
 
-    internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
+    internal override void CallObserver(Transaction transaction, ISet<string?> parentSubs)
     {
         base.CallObserver(transaction, parentSubs);
 
@@ -659,7 +666,7 @@ public partial class YText : YArrayBase
     }
 
     /// <returns>The attributes to negate after the content (null for none).</returns>
-    private OrderedDictionary<string, object> InsertAttributes(Transaction transaction, ref ItemTextListPosition currPos, IDictionary<string, object> attributes)
+    private OrderedDictionary<string, object?>? InsertAttributes(Transaction transaction, ref ItemTextListPosition currPos, IDictionary<string, object?>? attributes)
     {
         if (attributes == null)
         {
@@ -668,7 +675,7 @@ public partial class YText : YArrayBase
 
         var doc = transaction.Doc;
         var ownClientId = doc.ClientId;
-        OrderedDictionary<string, object> negatedAttributes = null;
+        OrderedDictionary<string, object?>? negatedAttributes = null;
 
         // Insert format-start items.
         foreach (var kvp in InJavaScriptKeyOrder(attributes))
@@ -680,7 +687,7 @@ public partial class YText : YArrayBase
             if (!EqualAttrs(currentVal, value))
             {
                 // Save negated attribute (set null if currentVal is not set).
-                (negatedAttributes ??= new OrderedDictionary<string, object>())[key] = currentVal;
+                (negatedAttributes ??= new OrderedDictionary<string, object?>())[key] = currentVal;
 
                 currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, new ContentFormat(key, ValueFreezer.Freeze(value, doc.Limits.MaxDepth)));
                 currPos.Right.Integrate(transaction, 0);
@@ -692,7 +699,7 @@ public partial class YText : YArrayBase
     }
 
     /// <param name="attributes">The attributes of the text; null for none. Attributes at the position that are not in them are set to null in them, as in Yjs.</param>
-    private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, object text, IDictionary<string, object> attributes)
+    private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, object? text, IDictionary<string, object?>? attributes)
     {
         if (text is YType)
         {
@@ -701,7 +708,7 @@ public partial class YText : YArrayBase
 
         if (currPos.CurrentAttributes?.Count > 0)
         {
-            attributes ??= new Dictionary<string, object>();
+            attributes ??= new Dictionary<string, object?>();
             foreach (var kvp in currPos.CurrentAttributes)
             {
                 attributes.TryAdd(kvp.Key, null);
@@ -715,47 +722,51 @@ public partial class YText : YArrayBase
         var negatedAttributes = InsertAttributes(transaction, ref currPos, attributes);
 
         // Insert content (a text's content is made only when no run takes it).
-        var content = text switch
+        var str = text as string;
+        IContent? content = null;
+        int length;
+        if (str != null)
         {
-            string => null,
-            YType type => (IContent)new ContentType(type),
-            _ => new ContentEmbed(Validated(text, doc.Limits.MaxDepth)),
-        };
+            length = str.Length;
+        }
+        else
+        {
+            content = text is YType type ? new ContentType(type) : new ContentEmbed(Validated(text, doc.Limits.MaxDepth));
+            length = content.Length;
+        }
 
-        var length = content?.Length ?? ((string)text).Length;
         if (_searchMarkers?.Count > 0)
         {
             _searchMarkers.UpdateMarkerChanges(transaction, currPos.Index, length);
             currPos.Left = LeftOf(currPos.Left, currPos.Right);
         }
 
-        if (content == null && length > 0 && negatedAttributes == null && !currPos.Left.IsNull
+        if (str != null && length > 0 && negatedAttributes == null && !currPos.Left.IsNull
             && currPos.Left.CanExtendRun(transaction, this, currPos.Right, typeof(ContentString), ownClientId))
         {
             // Typing on at the end of this client's run: the run takes the text in place of a new item.
             var left = currPos.Left;
-            ((ContentString)left.Content).Append((string)text);
+            ((ContentString)left.Content).Append(str);
             left.ExtendRun(transaction, length);
             currPos.Index += length;
             currPos.InsertNegatedAttributes(transaction, this, null);
             return;
         }
 
-        content ??= new ContentString((string)text);
-        currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, content);
+        currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, str != null ? new ContentString(str) : content);
         currPos.Right.Integrate(transaction, 0);
         currPos.Forward();
 
         currPos.InsertNegatedAttributes(transaction, this, negatedAttributes);
     }
 
-    private void FormatText(Transaction transaction, ref ItemTextListPosition curPos, int length, Dictionary<string, object> attributes)
+    private void FormatText(Transaction transaction, ref ItemTextListPosition curPos, int length, Dictionary<string, object?> attributes)
     {
         var doc = transaction.Doc;
         var ownClientId = doc.ClientId;
 
         curPos.MinimizeAttributeChanges(attributes);
-        var negatedAttributes = InsertAttributes(transaction, ref curPos, attributes) ?? new OrderedDictionary<string, object>();
+        var negatedAttributes = InsertAttributes(transaction, ref curPos, attributes) ?? new OrderedDictionary<string, object?>();
 
         // Iterate until the first non-format or null is found, and delete all formats with
         // attributes[format.Key] != null. Also check the formats after the formatted range, so that
@@ -789,7 +800,7 @@ public partial class YText : YArrayBase
                         }
                         else
                         {
-                            (curPos.CurrentAttributes ??= new OrderedDictionary<string, object>())[cf.Key] = cf.Value;
+                            (curPos.CurrentAttributes ??= new OrderedDictionary<string, object?>())[cf.Key] = cf.Value;
                         }
 
                         break;
@@ -831,10 +842,10 @@ public partial class YText : YArrayBase
     /// <param name="startAttributes">The attributes at <paramref name="start"/>; null for none.</param>
     /// <param name="currAttributes">The attributes at <paramref name="curr"/>; null for none.</param>
     /// <returns>The number of formatting items deleted.</returns>
-    private static int CleanupFormattingGap(Transaction transaction, ItemRef start, ItemRef curr, OrderedDictionary<string, object> startAttributes, ref OrderedDictionary<string, object> currAttributes)
+    private static int CleanupFormattingGap(Transaction transaction, ItemRef start, ItemRef curr, OrderedDictionary<string, object?>? startAttributes, ref OrderedDictionary<string, object?>? currAttributes)
     {
         var end = start;
-        Dictionary<string, ContentFormat> endFormats = null;
+        Dictionary<string, ContentFormat>? endFormats = null;
         while (!end.IsNull && (!end.Countable || end.Deleted))
         {
             if (!end.Deleted && end.Content is ContentFormat format)
@@ -872,7 +883,7 @@ public partial class YText : YArrayBase
                         }
                         else
                         {
-                            (currAttributes ??= new OrderedDictionary<string, object>())[key] = startAttrValue;
+                            (currAttributes ??= new OrderedDictionary<string, object?>())[key] = startAttrValue;
                         }
                     }
                 }
@@ -901,7 +912,7 @@ public partial class YText : YArrayBase
             item = item.Right;
         }
 
-        HashSet<string> attrs = null;
+        HashSet<string>? attrs = null;
 
         // Iterate back until a content item is found.
         while (!item.IsNull && (item.Deleted || !item.Countable))
@@ -927,7 +938,7 @@ public partial class YText : YArrayBase
         var doc = transaction.Doc;
         var store = doc.Store;
         // Enumerated in the order of adding, as Yjs' Set: nothing is removed.
-        HashSet<YText> needFullCleanup = null;
+        HashSet<YText>? needFullCleanup = null;
 
         // Check if another formatting item was inserted.
         foreach (var (client, afterClock) in transaction.AfterState)
@@ -988,7 +999,7 @@ public partial class YText : YArrayBase
             }
         });
 
-        static void AddOnce(ref HashSet<YText> texts, YText text) => (texts ??= new HashSet<YText>()).Add(text);
+        static void AddOnce(ref HashSet<YText>? texts, YText text) => (texts ??= new HashSet<YText>()).Add(text);
     }
 
     private static void DeleteText(Transaction transaction, ref ItemTextListPosition curPos, int length)
@@ -1036,7 +1047,7 @@ public partial class YText : YArrayBase
     internal static YValue EmbedOf(IContent content) => content is ContentEmbed embed ? YValue.FromStored(embed.Embed) : YValue.FromStored(((ContentType)content).Type);
 
     /// <summary>The attributes as a delta carries them; a change (<see cref="ChangeKey"/>) as the object it is in Yjs.</summary>
-    internal static IReadOnlyDictionary<string, YValue> AttributeValues(Dictionary<string, object> attributes, bool skipNull)
+    internal static IReadOnlyDictionary<string, YValue> AttributeValues(Dictionary<string, object?> attributes, bool skipNull)
     {
         var values = new AttributeSet(attributes.Count);
         foreach (var kvp in attributes)
@@ -1062,17 +1073,18 @@ public partial class YText : YArrayBase
 
     // The attributes of the operation being made, as the document stores them. The text's insert and format code changes the
     // dictionary it is given and does not keep it, so one is reused: each operation is finished before the next converts.
-    private Dictionary<string, object> _storedAttributes;
+    private Dictionary<string, object?>? _storedAttributes;
 
     /// <summary>The attributes of an operation of the caller's as the document stores them, in a dictionary the text may change; null for none.</summary>
-    private Dictionary<string, object> StoredAttributes(IReadOnlyDictionary<string, YValue> attributes)
+    [return: NotNullIfNotNull(nameof(attributes))]
+    private Dictionary<string, object?>? StoredAttributes(IReadOnlyDictionary<string, YValue>? attributes)
     {
         if (attributes == null)
         {
             return null;
         }
 
-        var stored = _storedAttributes ??= new Dictionary<string, object>();
+        var stored = _storedAttributes ??= new Dictionary<string, object?>();
         stored.Clear();
         if (attributes is Dictionary<string, YValue> dictionary)
         {
@@ -1093,14 +1105,14 @@ public partial class YText : YArrayBase
         return stored;
     }
 
-    private static Dictionary<string, YValue> Copy(IReadOnlyDictionary<string, YValue> attributes) =>
+    private static Dictionary<string, YValue>? Copy(IReadOnlyDictionary<string, YValue>? attributes) =>
         attributes == null ? null : new Dictionary<string, YValue>(attributes);
 
-    private static OrderedDictionary<string, object> Copy(OrderedDictionary<string, object> attributes) =>
-        attributes?.Count > 0 ? new OrderedDictionary<string, object>(attributes) : null;
+    private static OrderedDictionary<string, object?>? Copy(OrderedDictionary<string, object?>? attributes) =>
+        attributes?.Count > 0 ? new OrderedDictionary<string, object?>(attributes) : null;
 
     /// <summary>The value of <paramref name="key"/> in <paramref name="attributes"/> (null for none), or null.</summary>
-    private static object GetAttribute(OrderedDictionary<string, object> attributes, string key) =>
+    private static object? GetAttribute(OrderedDictionary<string, object?>? attributes, string key) =>
         attributes != null && attributes.TryGetValue(key, out var value) ? value : null;
 
     internal override void Write(IUpdateEncoder encoder)
@@ -1118,19 +1130,19 @@ public partial class YText : YArrayBase
     /// same own properties, each compared with <c>===</c>; a list's properties are its indexes, so
     /// <c>[1, 2]</c> equals <c>{ "0": 1, "1": 2 }</c>.
     /// </summary>
-    private static object Validated(object embed, int maxDepth)
+    private static object Validated(object? embed, int maxDepth)
     {
         return ValueFreezer.Freeze(embed, maxDepth)!;
     }
 
-    internal static bool EqualAttrs(object attr1, object attr2) =>
+    internal static bool EqualAttrs(object? attr1, object? attr2) =>
         JsValue.StrictEquals(attr1, attr2) ||
-        (attr1 is IDictionary<string, object> map1 && attr2 is IDictionary<string, object> map2 && EqualFlat(map1, map2)) ||
+        (attr1 is IDictionary<string, object?> map1 && attr2 is IDictionary<string, object?> map2 && EqualFlat(map1, map2)) ||
         (attr1 is System.Collections.IList list1 && attr2 is System.Collections.IList list2 && EqualFlat(list1, list2)) ||
-        (attr1 is IDictionary<string, object> map && attr2 is System.Collections.IList list && EqualFlat(map, list)) ||
-        (attr1 is System.Collections.IList list3 && attr2 is IDictionary<string, object> map3 && EqualFlat(map3, list3));
+        (attr1 is IDictionary<string, object?> map && attr2 is System.Collections.IList list && EqualFlat(map, list)) ||
+        (attr1 is System.Collections.IList list3 && attr2 is IDictionary<string, object?> map3 && EqualFlat(map3, list3));
 
-    private static bool EqualFlat(IDictionary<string, object> a, IDictionary<string, object> b)
+    private static bool EqualFlat(IDictionary<string, object?> a, IDictionary<string, object?> b)
     {
         if (a.Count != b.Count)
         {
@@ -1166,7 +1178,7 @@ public partial class YText : YArrayBase
         return true;
     }
 
-    private static bool EqualFlat(IDictionary<string, object> map, System.Collections.IList list)
+    private static bool EqualFlat(IDictionary<string, object?> map, System.Collections.IList list)
     {
         if (map.Count != list.Count)
         {
@@ -1218,7 +1230,7 @@ public partial class YText : YArrayBase
     /// indexes first, ascending, then the others in insertion order. The dictionary itself when it
     /// has no array index (nothing is allocated).
     /// </summary>
-    private static IEnumerable<KeyValuePair<string, object>> InJavaScriptKeyOrder(IDictionary<string, object> attributes)
+    private static IEnumerable<KeyValuePair<string, object?>> InJavaScriptKeyOrder(IDictionary<string, object?> attributes)
     {
         foreach (var key in attributes.Keys)
         {
@@ -1232,7 +1244,7 @@ public partial class YText : YArrayBase
     }
 
     /// <summary>Applies <paramref name="format"/> to <paramref name="attributes"/>, which is created when a value is set.</summary>
-    private static void UpdateCurrentAttributes(ref OrderedDictionary<string, object> attributes, ContentFormat format)
+    private static void UpdateCurrentAttributes(ref OrderedDictionary<string, object?>? attributes, ContentFormat format)
     {
         if (format.Value == null)
         {
@@ -1240,11 +1252,11 @@ public partial class YText : YArrayBase
         }
         else
         {
-            (attributes ??= new OrderedDictionary<string, object>())[format.Key] = format.Value;
+            (attributes ??= new OrderedDictionary<string, object?>())[format.Key] = format.Value;
         }
     }
 
-    internal static void UpdateCurrentAttributes(IDictionary<string, object> attributes, ContentFormat format)
+    internal static void UpdateCurrentAttributes(IDictionary<string, object?> attributes, ContentFormat format)
     {
         if (format.Value == null)
         {

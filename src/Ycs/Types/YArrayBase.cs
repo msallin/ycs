@@ -4,8 +4,6 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Diagnostics;
 
 namespace Ycs;
@@ -170,14 +168,14 @@ public abstract partial class YArrayBase : YType
     /// Yjs only enables them for Y.Array and Y.Text, and disables them for a text as soon as it
     /// holds formatting (see <see cref="ContentFormat"/>).
     /// </summary>
-    private protected ArraySearchMarkerCollection _searchMarkers;
+    private protected ArraySearchMarkerCollection? _searchMarkers;
 
     // An item of this list (any: a push walks from it to the end), or null. Items leave a list only by merging into
     // their left neighbour (OnMerge moves the hint there) or when the whole type is collected (ForgetList).
     private ItemRef _pushHint;
 
     // An empty list for the values of the next insert (see InsertGenericsAfterReturningLast), or null.
-    private List<object> _spareValues;
+    private List<object?>? _spareValues;
 
     internal void ClearSearchMarkers()
     {
@@ -240,7 +238,7 @@ public abstract partial class YArrayBase : YType
     /// <see cref="YType._start"/>) whose index (the countable, undeleted length before it) is the marker's.
     /// Walks the whole list: for tests and Debug checks.
     /// </summary>
-    internal string SearchMarkerViolations()
+    internal string? SearchMarkerViolations()
     {
         if (_searchMarkers == null || _searchMarkers.Count == 0)
         {
@@ -277,7 +275,7 @@ public abstract partial class YArrayBase : YType
     /// <summary>
     /// Creates YArrayEvent and calls observers.
     /// </summary>
-    internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
+    internal override void CallObserver(Transaction transaction, ISet<string?> parentSubs)
     {
         if (!transaction.Local)
         {
@@ -289,7 +287,7 @@ public abstract partial class YArrayBase : YType
     /// Appends after the last item, deleted ones included (Yjs' <c>typeListPushGenerics</c>): the new
     /// item has no right origin, unlike an insert at <see cref="YType.Length"/>.
     /// </summary>
-    private protected void PushGenerics(Transaction transaction, ICollection<object> content)
+    private protected void PushGenerics(Transaction transaction, ICollection<object?> content)
     {
         // Yjs walks to the end from the marker with the highest index (its reduce starts from { index: 0, p: _start }),
         // which is the start when only pushes were made: quadratic in pushes. The walk starts from the item the last
@@ -326,25 +324,28 @@ public abstract partial class YArrayBase : YType
     /// (<see cref="StructStore.SeekRight"/>), with <paramref name="index"/> lowered by what was passed; or
     /// <paramref name="n"/> with the reference walk.
     /// </summary>
-    private protected ItemRef SeekRight(ItemRef n, ref int index) =>
-        Doc.RunHeadIndexDisabledForTests ? n : Doc.Store.SeekRight(n, ref index, stopAtFormats: false);
+    private protected ItemRef SeekRight(ItemRef n, ref int index)
+    {
+        Debug.Assert(Doc != null);
+        return Doc.RunHeadIndexDisabledForTests ? n : Doc.Store.SeekRight(n, ref index, stopAtFormats: false);
+    }
 
     /// <summary>JavaScript's <c>splice(index, 0, ...content)</c>, on the content of a type not in a document yet.</summary>
-    private protected static void PrelimInsert(List<object> list, int index, ICollection<object> content) =>
+    private protected static void PrelimInsert(List<object?> list, int index, ICollection<object?> content) =>
         list.InsertRange(SpliceStart(list, index), content.Select(ValueFreezer.Detach));
 
     /// <summary>JavaScript's <c>splice(index, length)</c>, on the content of a type not in a document yet.</summary>
-    private protected static void PrelimDelete(List<object> list, int index, int length)
+    private protected static void PrelimDelete(List<object?> list, int index, int length)
     {
         var start = SpliceStart(list, index);
         list.RemoveRange(start, Math.Clamp(length, 0, list.Count - start));
     }
 
-    private static int SpliceStart(List<object> list, int index) =>
+    private static int SpliceStart(List<object?> list, int index) =>
         index < 0 ? Math.Max(list.Count + index, 0) : Math.Min(index, list.Count);
 
     /// <returns>The last item inserted, or <paramref name="referenceItem"/> when there was no content.</returns>
-    private protected ItemRef InsertGenericsAfterReturningLast(Transaction transaction, ItemRef referenceItem, ICollection<object> content)
+    private protected ItemRef InsertGenericsAfterReturningLast(Transaction transaction, ItemRef referenceItem, ICollection<object?> content)
     {
         var left = referenceItem;
         var doc = transaction.Doc;
@@ -353,7 +354,7 @@ public abstract partial class YArrayBase : YType
         var right = referenceItem.IsNull ? _start : referenceItem.Right.AsItem;
 
         // Indexed where the content allows it: a foreach over the interface boxes the enumerator.
-        var list = content as IList<object>;
+        var list = content as IList<object?>;
         var count = content.Count;
         if (list != null)
         {
@@ -373,7 +374,7 @@ public abstract partial class YArrayBase : YType
 
         // The values between the other kinds of content, packed into one item each. The list goes to the item, or,
         // when the run before takes the values (Item.ExtendRun), back to _spareValues for the next insert.
-        var jsonContent = _spareValues ?? new List<object>();
+        var jsonContent = _spareValues ?? new List<object?>();
         _spareValues = null;
 
         void packJsonContent()
@@ -389,7 +390,7 @@ public abstract partial class YArrayBase : YType
             {
                 left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, ContentAny.Own(jsonContent));
                 left.Integrate(transaction, 0);
-                jsonContent = new List<object>();
+                jsonContent = new List<object?>();
             }
         }
 
@@ -416,7 +417,7 @@ public abstract partial class YArrayBase : YType
 
         return left;
 
-        void Insert(object c)
+        void Insert(object? c)
         {
             switch (c)
             {
@@ -453,8 +454,9 @@ public abstract partial class YArrayBase : YType
     /// <br/>
     /// This function always returns a refreshed marker (updated timestamp).
     /// </summary>
-    private protected ArraySearchMarker FindMarker(int index)
+    private protected ArraySearchMarker? FindMarker(int index)
     {
+        Debug.Assert(Doc != null);
         if (_start.IsNull || index == 0 || _searchMarkers == null || Doc.SearchMarkersDisabledForTests)
         {
             return null;
@@ -462,12 +464,16 @@ public abstract partial class YArrayBase : YType
 
         // The marker closest to index; as Yjs' reduce, a tie goes to the later one.
         var markers = _searchMarkers._searchMarkers;
-        var marker = markers.Count == 0 ? null : markers[0];
-        for (var i = 1; i < markers.Count; i++)
+        ArraySearchMarker? marker = null;
+        if (markers.Count > 0)
         {
-            if (!(Math.Abs(index - marker.Index) < Math.Abs(index - markers[i].Index)))
+            marker = markers[0];
+            for (var i = 1; i < markers.Count; i++)
             {
-                marker = markers[i];
+                if (!(Math.Abs(index - marker.Index) < Math.Abs(index - markers[i].Index)))
+                {
+                    marker = markers[i];
+                }
             }
         }
 
@@ -489,7 +495,7 @@ public abstract partial class YArrayBase : YType
         Debug.Assert(!indexed || Walk(start, startIndex, index, null, 0) == (p, pIndex), "The run-head index ends the marker walk where Yjs' loops end.");
         Doc.MarkerLookupsForTests?.Add((p.Id, pIndex));
 
-        if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as YType).Length / (double)MaxSearchMarkers)
+        if (marker != null && Math.Abs(marker.Index - pIndex) < ((YType)p.Parent).Length / (double)MaxSearchMarkers)
         {
             // Adjust existing marker.
             marker.Update(p, pIndex, _searchMarkers.NextTimestamp());
@@ -510,7 +516,7 @@ public abstract partial class YArrayBase : YType
     /// through the run-head index (<see cref="ClientStructs.SeekRight"/>, <see cref="ClientStructs.SeekLeft"/>,
     /// <see cref="ClientStructs.RunHead"/>), over what the loop would pass; without, item by item (the reference).
     /// </summary>
-    private static (ItemRef P, int Index) Walk(ItemRef p, int pIndex, int index, StructStore store, int literalSteps)
+    private static (ItemRef P, int Index) Walk(ItemRef p, int pIndex, int index, StructStore? store, int literalSteps)
     {
         // Iterate to right if possible. Within a run the index jumps over what the loop passes (ClientStructs.SeekRight),
         // and the loop takes the last steps: when the visible length reaches index exactly at an item's end, it steps

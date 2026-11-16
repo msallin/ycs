@@ -4,7 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+using System.Diagnostics;
 
 namespace Ycs;
 
@@ -15,19 +15,19 @@ namespace Ycs;
 internal static class ChangedKeys
 {
     /// <summary>An empty set, for a type that is not in <see cref="Transaction.Changed"/>.</summary>
-    public static readonly ISet<string> None = new System.Collections.ObjectModel.ReadOnlySet<string>(new HashSet<string>());
+    public static readonly ISet<string?> None = new System.Collections.ObjectModel.ReadOnlySet<string?>(new HashSet<string?>());
 
     /// <summary>
     /// The set of a type whose children changed and none of its keys: most changed types are lists
     /// (a text, an array), and they all share this one, read-only, instead of a set each.
     /// </summary>
-    public static readonly ISet<string> ChildList = new System.Collections.ObjectModel.ReadOnlySet<string>(new HashSet<string> { null });
+    public static readonly ISet<string?> ChildList = new System.Collections.ObjectModel.ReadOnlySet<string?>(new HashSet<string?> { null });
 
     /// <summary>
     /// Returns the set that records <paramref name="parentSub"/> on top of <paramref name="changed"/>
     /// (null for none yet): <see cref="ChildList"/>, <paramref name="changed"/> itself, or a new set.
     /// </summary>
-    public static ISet<string> Add(ISet<string> changed, string parentSub)
+    public static ISet<string?> Add(ISet<string?>? changed, string? parentSub)
     {
         if (changed == null)
         {
@@ -37,7 +37,7 @@ internal static class ChangedKeys
         // The shared sets are read-only: a second key makes a set of its own.
         if (changed.IsReadOnly)
         {
-            return changed.Contains(parentSub) ? changed : new HashSet<string>(changed) { parentSub };
+            return changed.Contains(parentSub) ? changed : new HashSet<string?>(changed) { parentSub };
         }
 
         changed.Add(parentSub);
@@ -49,64 +49,64 @@ internal static class ChangedKeys
     /// HashSet, which costs several times its size, until the set is changed: by a second key, or by a handler (Yjs'
     /// set is a mutable Set). Then it holds a HashSet and is one.
     /// </summary>
-    private sealed class SingleKey : ISet<string>, IReadOnlySet<string>
+    private sealed class SingleKey : ISet<string?>, IReadOnlySet<string?>
     {
         private readonly string _key;
-        private HashSet<string> _set;
+        private HashSet<string?>? _set;
 
         public SingleKey(string key) => _key = key;
 
-        private HashSet<string> Set => _set ??= new HashSet<string> { _key };
+        private HashSet<string?> Set => _set ??= new HashSet<string?> { _key };
 
         public int Count => _set?.Count ?? 1;
 
         public bool IsReadOnly => false;
 
-        public bool Contains(string item) => _set?.Contains(item) ?? string.Equals(item, _key, StringComparison.Ordinal);
+        public bool Contains(string? item) => _set?.Contains(item) ?? string.Equals(item, _key, StringComparison.Ordinal);
 
-        public IEnumerator<string> GetEnumerator() => _set?.GetEnumerator() ?? One();
+        public IEnumerator<string?> GetEnumerator() => _set?.GetEnumerator() ?? One();
 
-        private IEnumerator<string> One()
+        private IEnumerator<string?> One()
         {
             yield return _key;
         }
 
         System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator() => GetEnumerator();
 
-        public void CopyTo(string[] array, int arrayIndex) => Set.CopyTo(array, arrayIndex);
+        public void CopyTo(string?[] array, int arrayIndex) => Set.CopyTo(array, arrayIndex);
 
-        public bool IsProperSubsetOf(IEnumerable<string> other) => Set.IsProperSubsetOf(other);
+        public bool IsProperSubsetOf(IEnumerable<string?> other) => Set.IsProperSubsetOf(other);
 
-        public bool IsProperSupersetOf(IEnumerable<string> other) => Set.IsProperSupersetOf(other);
+        public bool IsProperSupersetOf(IEnumerable<string?> other) => Set.IsProperSupersetOf(other);
 
-        public bool IsSubsetOf(IEnumerable<string> other) => Set.IsSubsetOf(other);
+        public bool IsSubsetOf(IEnumerable<string?> other) => Set.IsSubsetOf(other);
 
-        public bool IsSupersetOf(IEnumerable<string> other) => Set.IsSupersetOf(other);
+        public bool IsSupersetOf(IEnumerable<string?> other) => Set.IsSupersetOf(other);
 
-        public bool Overlaps(IEnumerable<string> other) => Set.Overlaps(other);
+        public bool Overlaps(IEnumerable<string?> other) => Set.Overlaps(other);
 
-        public bool SetEquals(IEnumerable<string> other) => Set.SetEquals(other);
+        public bool SetEquals(IEnumerable<string?> other) => Set.SetEquals(other);
 
         // The key again (a map entry set again in the transaction) changes nothing and makes no set.
-        public bool Add(string item) => (_set != null || !Contains(item)) && Set.Add(item);
+        public bool Add(string? item) => (_set != null || !Contains(item)) && Set.Add(item);
 
-        void ICollection<string>.Add(string item) => Add(item);
+        void ICollection<string?>.Add(string? item) => Add(item);
 
         public void Clear() => Set.Clear();
 
-        public bool Remove(string item) => Set.Remove(item);
+        public bool Remove(string? item) => Set.Remove(item);
 
-        public void ExceptWith(IEnumerable<string> other) => Set.ExceptWith(other);
+        public void ExceptWith(IEnumerable<string?> other) => Set.ExceptWith(other);
 
-        public void IntersectWith(IEnumerable<string> other) => Set.IntersectWith(other);
+        public void IntersectWith(IEnumerable<string?> other) => Set.IntersectWith(other);
 
-        public void SymmetricExceptWith(IEnumerable<string> other) => Set.SymmetricExceptWith(other);
+        public void SymmetricExceptWith(IEnumerable<string?> other) => Set.SymmetricExceptWith(other);
 
-        public void UnionWith(IEnumerable<string> other) => Set.UnionWith(other);
+        public void UnionWith(IEnumerable<string?> other) => Set.UnionWith(other);
     }
 
     /// <summary>The keys in <paramref name="changed"/> other than <c>null</c>, as a new set.</summary>
-    public static HashSet<string> WithoutChildList(ISet<string> changed)
+    public static HashSet<string> WithoutChildList(ISet<string?>? changed)
     {
         var keys = new HashSet<string>();
         if (changed != null)
@@ -126,8 +126,8 @@ internal static class ChangedKeys
 
 public abstract partial class YEvent
 {
-    private YChanges _changes = null;
-    private IReadOnlyDictionary<string, KeyChange> _keys = null;
+    private YChanges? _changes;
+    private IReadOnlyDictionary<string, KeyChange>? _keys;
 
     /// <summary>
     /// Every event, when it is made (the observers are called right after), compares the views of the structs of its
@@ -175,7 +175,7 @@ public abstract partial class YEvent
                 if (key != null)
                 {
                     KeyChangeAction action;
-                    object oldValue;
+                    object? oldValue;
                     var item = target._map[key];
 
                     if (Adds(item))
@@ -237,7 +237,10 @@ public abstract partial class YEvent
         return _keys;
     }
 
-    private static object LastValue(ItemRef item) => AbstractType.ValueAt(item.Content, item.Length - 1);
+    private static object? LastValue(ItemRef item) => AbstractType.ValueAt(item.Content, item.Length - 1);
+
+    // What a run that is not an insertion carries; nothing is ever added to it.
+    private static readonly StoredItems NoItems = new();
 
     private enum DeltaRun
     {
@@ -268,6 +271,8 @@ public abstract partial class YEvent
         if (_changes == null)
         {
             var target = Target;
+            var doc = target.Doc;
+            Debug.Assert(doc != null);
             var added = new HashSet<ItemView>();
             var deleted = new HashSet<ItemView>();
             var delta = new List<Delta>();
@@ -284,7 +289,7 @@ public abstract partial class YEvent
                 // The run being collected: none, a deletion or a retain (counted), or an insertion (its items).
                 var run = DeltaRun.None;
                 var count = 0;
-                StoredItems inserted = null;
+                var inserted = NoItems;
 
                 for (var item = Target._start; !item.IsNull; item = item.Right.AsItem)
                 {
@@ -300,7 +305,7 @@ public abstract partial class YEvent
                             }
 
                             count += item.Length;
-                            deleted.Add(ItemView.Of(Target.Doc, item));
+                            deleted.Add(ItemView.Of(doc, item));
                         }
                     }
                     else if (Adds(item))
@@ -314,7 +319,7 @@ public abstract partial class YEvent
 
                         inserted.AddRange(item.Content.GetContent());
 
-                        added.Add(ItemView.Of(Target.Doc, item));
+                        added.Add(ItemView.Of(doc, item));
                     }
                     else
                     {

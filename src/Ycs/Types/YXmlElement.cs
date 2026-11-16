@@ -4,8 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Ycs;
@@ -19,7 +18,7 @@ public sealed partial class YXmlElement : YXmlFragment
 {
     internal const int YXmlElementRefId = 3;
 
-    private Dictionary<string, object> _prelimAttrs;
+    private Dictionary<string, object?>? _prelimAttrs;
 
     internal override void Integrate(YDoc doc, ItemRef item)
     {
@@ -27,12 +26,13 @@ public sealed partial class YXmlElement : YXmlFragment
         RuntimeHelpers.EnsureSufficientExecutionStack();
         base.Integrate(doc, item);
 
-        foreach (var kvp in _prelimAttrs)
+        var prelimAttrs = _prelimAttrs;
+        Debug.Assert(prelimAttrs != null);
+        _prelimAttrs = null;
+        foreach (var kvp in prelimAttrs)
         {
             SetAttributeRaw(kvp.Key, kvp.Value);
         }
-
-        _prelimAttrs = null;
     }
 
     internal override YType InternalCopy()
@@ -51,7 +51,7 @@ public sealed partial class YXmlElement : YXmlFragment
             el.SetAttributeRaw(kvp.Key, kvp.Value);
         }
 
-        var children = new List<object>();
+        var children = new List<object?>();
         foreach (var v in EnumerateValues())
         {
             children.Add(v is YType at ? at.InternalClone() : v);

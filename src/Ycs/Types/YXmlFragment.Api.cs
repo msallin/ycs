@@ -5,6 +5,7 @@
 // ------------------------------------------------------------------------------
 
 using System.Collections;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -26,7 +27,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     public YXmlFragment()
         : base(useSearchMarkers: false)
     {
-        _prelimContent = new List<object>();
+        _prelimContent = new List<object?>();
     }
 
     public int Count => Length;
@@ -142,6 +143,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             var index = 0;
             if (reference != null)
             {
@@ -241,7 +243,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     /// <summary>The values in order, as stored; those of a fragment not in a document yet too.</summary>
-    internal IEnumerable<object> EnumerateValues() => _prelimContent ?? EnumerateRaw();
+    internal IEnumerable<object?> EnumerateValues() => _prelimContent ?? EnumerateRaw();
 
     internal void InsertRaw(int index, ICollection<object?> content)
     {
@@ -251,6 +253,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             PrelimInsert(_prelimContent, index, content);
         }
     }
@@ -281,6 +284,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             PrelimDelete(_prelimContent, index, count);
         }
     }
@@ -309,19 +313,21 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     // GC struct then).
     private static IEnumerable<YType> Walk(YType root, Func<YType, bool> filter)
     {
+        var doc = root.Doc;
+        Debug.Assert(doc != null);
         var n = root._start;
         var id = n.IsNull ? default : n.Id;
-        var departures = n.IsNull ? 0 : root.Doc.Store.Departures;
+        var departures = n.IsNull ? 0 : doc.Store.Departures;
         var first = true;
 
         while (true)
         {
-            if (!n.IsNull && departures != root.Doc.Store.Departures)
+            if (!n.IsNull && departures != doc.Store.Departures)
             {
-                n = root.Doc.Store.Find(id).AsItem;
+                n = doc.Store.Find(id).AsItem;
             }
 
-            if (!n.IsNull && (!first || n.Deleted || !filter(YXmlNodeHelpers.ContentTypeOf(n))))
+            if (!n.IsNull && (!first || n.Deleted || !filter(YXmlNodeHelpers.NodeOf(n))))
             {
                 do
                 {
@@ -349,12 +355,12 @@ public partial class YXmlFragment : IReadOnlyList<YType>
                             }
                             else
                             {
-                                n = (n.Parent as YType)!._item;
+                                n = ((YType)n.Parent)._item;
                             }
                         }
                     }
                 }
-                while (!n.IsNull && (n.Deleted || !filter(YXmlNodeHelpers.ContentTypeOf(n))));
+                while (!n.IsNull && (n.Deleted || !filter(YXmlNodeHelpers.NodeOf(n))));
             }
 
             first = false;
@@ -364,8 +370,8 @@ public partial class YXmlFragment : IReadOnlyList<YType>
             }
 
             id = n.Id;
-            departures = root.Doc.Store.Departures;
-            yield return YXmlNodeHelpers.ContentTypeOf(n);
+            departures = doc.Store.Departures;
+            yield return YXmlNodeHelpers.NodeOf(n);
         }
     }
 }

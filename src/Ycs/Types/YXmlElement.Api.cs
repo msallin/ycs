@@ -4,6 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Ycs;
@@ -18,8 +19,9 @@ public sealed partial class YXmlElement
 
     public YXmlElement(string nodeName)
     {
+        ArgumentNullException.ThrowIfNull(nodeName);
         NodeName = nodeName;
-        _prelimAttrs = new Dictionary<string, object>();
+        _prelimAttrs = new Dictionary<string, object?>();
     }
 
     public string NodeName { get; }
@@ -55,12 +57,14 @@ public sealed partial class YXmlElement
     /// </summary>
     public void RemoveAttribute(string attributeName)
     {
+        ArgumentNullException.ThrowIfNull(attributeName);
         if (Doc != null)
         {
             Doc.Transact((self: this, attributeName), static (s, tr) => s.self.TypeMapDelete(tr, s.attributeName));
         }
         else
         {
+            Debug.Assert(_prelimAttrs != null);
             _prelimAttrs.Remove(attributeName);
         }
     }
@@ -76,6 +80,7 @@ public sealed partial class YXmlElement
     /// </summary>
     public YValue GetAttribute(string attributeName)
     {
+        ArgumentNullException.ThrowIfNull(attributeName);
         if (_prelimAttrs != null)
         {
             return _prelimAttrs.TryGetValue(attributeName, out var stored) ? YValue.FromStored(stored) : default;
@@ -141,9 +146,10 @@ public sealed partial class YXmlElement
         }
         else
         {
+            Debug.Assert(_prelimAttrs != null);
             _prelimAttrs[attributeName] = stored;
         }
     }
 
-    private IEnumerable<KeyValuePair<string, object>> EnumerateAttributes() => _prelimAttrs ?? TypeMapEnumerateValues();
+    private IEnumerable<KeyValuePair<string, object?>> EnumerateAttributes() => _prelimAttrs ?? TypeMapEnumerateValues();
 }

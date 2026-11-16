@@ -4,14 +4,12 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 namespace Ycs;
 
 public abstract partial class YType
 {
-    public YDoc Doc { get; private protected set; }
-    public YType Parent => ParentType;
+    public YDoc? Doc { get; private protected set; }
+    public YType? Parent => ParentType;
 
     internal virtual int Length { get; set; }
 
@@ -50,7 +48,7 @@ public abstract partial class YType
         }
     }
 
-    private protected void TypeMapSet(Transaction transaction, string key, object value)
+    private protected void TypeMapSet(Transaction transaction, string key, object? value)
     {
         if (!_map.TryGetValue(key, out var left))
         {
@@ -89,7 +87,7 @@ public abstract partial class YType
         newItem.Integrate(transaction, 0);
     }
 
-    private protected bool TryTypeMapGet(string key, out object value)
+    private protected bool TryTypeMapGet(string key, out object? value)
     {
         if (_map.TryGetValue(key, out var val) && !val.Deleted)
         {
@@ -101,7 +99,7 @@ public abstract partial class YType
         return false;
     }
 
-    private protected IEnumerable<KeyValuePair<string, object>> TypeMapEnumerateValues()
+    private protected IEnumerable<KeyValuePair<string, object?>> TypeMapEnumerateValues()
     {
         foreach (var kvp in _map)
         {
@@ -112,7 +110,7 @@ public abstract partial class YType
 
             var key = kvp.Key;
             var value = ValueAt(kvp.Value.Content, kvp.Value.Length - 1);
-            yield return new KeyValuePair<string, object>(key, value);
+            yield return new KeyValuePair<string, object?>(key, value);
         }
     }
 }

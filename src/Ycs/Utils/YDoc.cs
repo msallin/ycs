@@ -4,10 +4,9 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Buffers;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Ycs;
 
@@ -17,16 +16,16 @@ namespace Ycs;
 public partial class YDoc
 {
     private readonly YDocOptions _opts;
-    private string _guid;
+    private string? _guid;
 
     internal List<Transaction> _transactionCleanups;
     // The list of the batch before, kept for the next one (see Transaction.CleanupTransactions).
-    internal List<Transaction> _spareTransactionCleanups;
-    internal Transaction _transaction;
+    internal List<Transaction>? _spareTransactionCleanups;
+    internal Transaction? _transaction;
     internal readonly HashSet<YDoc> Subdocs;
 
     // Ended transactions for reuse, linked by Transaction._nextFree.
-    private Transaction _freeTransactions;
+    private Transaction? _freeTransactions;
     private int _freeTransactionCount;
 
     // If this document is a subdocument - a document integrated into another document - them _item is defined.
@@ -35,7 +34,7 @@ public partial class YDoc
     // A collected subdocument's item is deleted and its struct can merge away, its slot be reused, while user code holds
     // the document: ContentDoc.Gc (CollectItem) keeps the parent document, and nothing reads _item afterwards.
     private bool _itemCollected;
-    private YDoc _collectedParentDoc;
+    private YDoc? _collectedParentDoc;
 
     internal void SetItem(ItemRef item)
     {
@@ -51,7 +50,7 @@ public partial class YDoc
             return;
         }
 
-        _collectedParentDoc = (_item.Parent as AbstractType).Doc;
+        _collectedParentDoc = ((AbstractType)_item.Parent).Doc;
         _itemCollected = true;
         if (AbstractType.PoisonCollectedHandleForTests)
         {
@@ -75,7 +74,7 @@ public partial class YDoc
 
     internal StructStore Store { get; private set; }
 
-    private Transaction RentTransaction(object origin, bool local)
+    private Transaction RentTransaction(object? origin, bool local)
     {
         var transaction = _freeTransactions;
         if (transaction != null)
@@ -105,7 +104,7 @@ public partial class YDoc
         }
     }
 
-    private bool TryApply(ReadOnlySpan<byte> update, bool v2, object transactionOrigin, UpdateLimits limits)
+    private bool TryApply(ReadOnlySpan<byte> update, bool v2, object? transactionOrigin, UpdateLimits? limits)
     {
         try
         {
@@ -123,7 +122,7 @@ public partial class YDoc
     /// it (<see cref="StructStore.ApplyUpdate"/>), which checks what depends on the document before it
     /// changes anything.
     /// </summary>
-    private void ApplyUpdate(byte[] buffer, int count, bool v2, object transactionOrigin, UpdateLimits limits)
+    private void ApplyUpdate(byte[] buffer, int count, bool v2, object? transactionOrigin, UpdateLimits? limits)
     {
         limits ??= _opts.Limits;
         UpdateReader.Lease update;
@@ -166,7 +165,7 @@ public partial class YDoc
     /// decoded keeps a reference to the input once the lease is disposed, so the array can be
     /// returned afterwards.
     /// </summary>
-    private void ApplyPooledCopy(ReadOnlySpan<byte> update, bool v2, object transactionOrigin, UpdateLimits limits)
+    private void ApplyPooledCopy(ReadOnlySpan<byte> update, bool v2, object? transactionOrigin, UpdateLimits? limits)
     {
         var buffer = ArrayPool<byte>.Shared.Rent(update.Length);
         try
@@ -193,10 +192,10 @@ public partial class YDoc
     internal int LiteralWalkStepsForTests = 32;
 
     /// <summary>When set, every marker lookup adds the item and index it ends at (the tests compare them).</summary>
-    internal List<(ID Item, int Index)> MarkerLookupsForTests;
+    internal List<(ID Item, int Index)>? MarkerLookupsForTests;
 
     /// <summary>The root type named <paramref name="name"/>, if it was defined (without defining it).</summary>
-    internal bool TryGetRoot(string name, out AbstractType type) => _share.TryGetValue(name, out type);
+    internal bool TryGetRoot(string name, [MaybeNullWhen(false)] out AbstractType type) => _share.TryGetValue(name, out type);
 
     internal void InvokeSubdocsChanged(IReadOnlySet<YDoc> loaded, IReadOnlySet<YDoc> added, IReadOnlySet<YDoc> removed)
     {
@@ -237,12 +236,12 @@ public partial class YDoc
 
     internal void InvokeBeforeAllTransactions()
     {
-        BeforeAllTransactions?.Invoke(this, null);
+        BeforeAllTransactions?.Invoke(this, EventArgs.Empty);
     }
 
     internal void InvokeDestroyed()
     {
-        Destroyed?.Invoke(this, null);
+        Destroyed?.Invoke(this, EventArgs.Empty);
     }
 
     internal void InvokeUpdateV1(Transaction transaction)
@@ -251,7 +250,7 @@ public partial class YDoc
         if (handler != null)
         {
             // The encoder goes back before the handler runs, which may encode updates itself.
-            byte[] update = null;
+            byte[]? update = null;
             var encoder = UpdateEncoderV1.Rent();
             try
             {
@@ -278,7 +277,7 @@ public partial class YDoc
         if (handler != null)
         {
             // The encoder goes back before the handler runs, which may encode updates itself.
-            byte[] update = null;
+            byte[]? update = null;
             var encoder = UpdateEncoderV2.Rent();
             try
             {
@@ -308,7 +307,7 @@ public partial class YDoc
     {
         foreach (var kvp in _share)
         {
-            if (type?.Equals(kvp.Value) ?? false)
+            if (type.Equals(kvp.Value))
             {
                 return kvp.Key;
             }

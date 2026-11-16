@@ -258,7 +258,7 @@ internal sealed class UpdateEncoderV2 : DSEncoderV2, IUpdateEncoder
     /// generic 'any' encoding rather than as a JSON string (see Yjs'
     /// UpdateEncoderV2#writeJSON).
     /// </summary>
-    public void WriteJson(object any) => RestWriter.WriteAny(any);
+    public void WriteJson(object? any) => RestWriter.WriteAny(any);
 
     /// <summary>Where <see cref="WriteAll"/> puts the bytes; a struct, so the generic code is specialized per sink.</summary>
     private interface IByteSink
