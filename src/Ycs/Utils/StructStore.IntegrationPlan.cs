@@ -474,19 +474,13 @@ internal sealed partial class StructStore
             {
                 // Collected when a type above it is deleted now and collected (it, or one between them).
                 var collected = false;
-                for (var ancestor = KeyOf(part).Parent; IsType(ancestor); ancestor = Above(ancestor))
+                // The walk stops at a collected type: the collection of a type above it does not enter it.
+                for (var ancestor = KeyOf(part).Parent; ancestor is PlanItem type; ancestor = KeyOf(type).Parent)
                 {
-                    if (ancestor is PlanItem type)
+                    collected |= !type.Keep && doc.GcFilter(type.GcView(doc));
+                    if (collected && deleted.ContainsKey(type))
                     {
-                        collected |= !type.Keep && doc.GcFilter(type.GcView(doc));
-                        if (collected && deleted.ContainsKey(type))
-                        {
-                            throw MapValueSplit();
-                        }
-                    }
-                    else
-                    {
-                        collected = true;
+                        throw MapValueSplit();
                     }
                 }
             }
@@ -763,9 +757,9 @@ internal sealed partial class StructStore
 
                 // When the value is replaced, or a type above it is deleted, its last part (then the key's value) is deleted.
                 var typeDeleted = deleted.TryGetValue(target, out var replacedAt) ? replacedAt : int.MaxValue;
-                for (var ancestor = KeyOf(target).Parent; IsType(ancestor); ancestor = Above(ancestor))
+                for (var ancestor = KeyOf(target).Parent; ancestor is PlanItem type; ancestor = KeyOf(type).Parent)
                 {
-                    if (ancestor is PlanItem type && deleted.TryGetValue(type, out var time))
+                    if (deleted.TryGetValue(type, out var time))
                     {
                         typeDeleted = Math.Min(typeDeleted, time);
                     }
@@ -948,21 +942,7 @@ internal sealed partial class StructStore
         }
 
         // A type as the parent of an item: its item (a collected type has none), else the type (a root, or collected).
-        private static object ParentOf(AbstractType type) => type.IsCollected || type._item.IsNull ? type : PlanItem.Store(type._item);
-
-        /// <summary>Whether <paramref name="parent"/> (from <see cref="KeyOf"/>) is a type below the roots, whose own parent <see cref="Above"/> gives.</summary>
-        private static bool IsType(object parent) => parent is PlanItem or AbstractType { IsCollected: true };
-
-        private object Above(object type)
-        {
-            if (type is PlanItem item)
-            {
-                return KeyOf(item).Parent;
-            }
-
-            var parent = ((AbstractType)type).ParentType;
-            return parent == null ? null : ParentOf(parent);
-        }
+        private static object ParentOf(AbstractType type) => type.IsCollected || type._item.IsNull ? type : PlanItem.Store(type._item).Boxed;
 
         private List<AbstractStruct> _plannedHintList;
         private int _plannedHint;

@@ -171,7 +171,7 @@ absolute positions.
 | `Item.LastId`, `Item.Next`, `Item.Prev`, `Item.SplitItem` | `Item.cs` (`ItemRef.Of(this)`, `ToStruct`/`ToItem` of the result) |
 | `YEvent.Adds(AbstractStruct)`, `YEvent.Deletes(AbstractStruct)` | `YEvent.cs` (`ItemRef.Of`; the library calls the internal overloads) |
 | `ChangesCollection.Added`, `ChangesCollection.Deleted` | `YEvent.CollectChanges` (`ToItem`, 2) |
-| `YDoc.GcFilter` / `YDocOptions.GcFilter` | `DeleteSet.TryGcDeleteSet`, `IntegrationPlan.HasLiveNonValue` (`ToItem`, 2); the plan's other calls pass its decoded-form items |
+| `YDoc.GcFilter` / `YDocOptions.GcFilter` | `DeleteSet.TryGcDeleteSet`; the integration plan's calls (`PlanItem.GcView`): a store view (`ItemView.At`) for a store item, as the cleanup passes, a detached view for a planned one |
 | `UndoManagerOptions.DeleteFilter` | `UndoManager.PopStackItem` (`ToItem`) |
 | `AbstractType.TypeMapEnumerate` (protected) | `AbstractType.cs` (`ToItem`) |
 | `YArrayBase.InsertGenericsAfter(Transaction, Item, ...)` (protected) | `YArrayBase.cs` (`ItemRef.Of`) |

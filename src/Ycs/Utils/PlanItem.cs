@@ -64,5 +64,6 @@ internal readonly struct PlanItem : IEquatable<PlanItem>
 
     public override bool Equals(object obj) => obj is PlanItem other && Equals(other);
 
-    public override int GetHashCode() => _decoded is null ? _stored.Id.GetHashCode() : RuntimeHelpers.GetHashCode(_decoded);
+    // A store item hashes by its id, which stays while a plan lives; the identity hash of an ItemRef will not once a reference is a slot.
+    public override int GetHashCode() => _decoded is null ? HashCode.Combine(_stored.Id.Client, _stored.Id.Clock) : RuntimeHelpers.GetHashCode(_decoded);
 }
