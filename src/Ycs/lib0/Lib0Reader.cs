@@ -183,6 +183,13 @@ internal sealed class Lib0Reader
         return (sign * (long)num, sign);
     }
 
+    // A declared length beyond int.MaxValue can never fit in the input: the same error as a length beyond its end.
+    private int ReadVarLength()
+    {
+        var length = ReadVarUint();
+        return length > int.MaxValue ? throw EndOfInput() : (int)length;
+    }
+
     private static YUpdateException EndOfInput() => new("The input ended early.");
 
     // lib0 decodes with a fatal TextDecoder (ignoreBOM: a byte order mark is kept as U+FEFF).
@@ -191,7 +198,7 @@ internal sealed class Lib0Reader
     /// <summary>UTF-8 string prefixed by its byte length (lib0 <c>readVarString</c>); invalid UTF-8 is rejected, as lib0 does.</summary>
     public string ReadVarString()
     {
-        var length = (int)ReadVarUint();
+        var length = ReadVarLength();
         if (length == 0)
         {
             return string.Empty;
@@ -214,7 +221,7 @@ internal sealed class Lib0Reader
     /// </summary>
     public ReadOnlySpan<char> ReadVarStringSpan(ref char[] buffer)
     {
-        var length = (int)ReadVarUint();
+        var length = ReadVarLength();
         if (length == 0)
         {
             return default;
@@ -240,7 +247,7 @@ internal sealed class Lib0Reader
     }
 
     /// <summary>Length-prefixed byte array (lib0 <c>readVarUint8Array</c>), as a span over the input.</summary>
-    public ReadOnlySpan<byte> ReadVarUint8ArraySpan() => ReadBytes((int)ReadVarUint());
+    public ReadOnlySpan<byte> ReadVarUint8ArraySpan() => ReadBytes(ReadVarLength());
 
     /// <summary>Length-prefixed byte array (lib0 <c>readVarUint8Array</c>), copied.</summary>
     public byte[] ReadVarUint8Array() => ReadVarUint8ArraySpan().ToArray();

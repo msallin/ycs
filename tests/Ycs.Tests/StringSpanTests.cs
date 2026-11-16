@@ -50,8 +50,8 @@ public class StringSpanTests
         byte[] input = [0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 1];
         var chars = Array.Empty<char>();
 
-        var expected = Assert.Throws<OverflowException>(() => new Lib0Reader(input).ReadVarString());
-        var actual = Assert.Throws<OverflowException>(() => new Lib0Reader(input).ReadVarStringSpan(ref chars));
+        var expected = Assert.Throws<YUpdateException>(() => new Lib0Reader(input).ReadVarString());
+        var actual = Assert.Throws<YUpdateException>(() => new Lib0Reader(input).ReadVarStringSpan(ref chars));
 
         Assert.AreEqual(expected.Message, actual.Message);
     }
