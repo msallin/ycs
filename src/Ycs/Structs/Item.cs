@@ -142,7 +142,17 @@ internal partial class Item : AbstractStruct
     /// If 'parentSub = null', type._start is the list in which to insert to.
     /// Otherwise, it is 'parent._map'.
     /// </summary>
-    public string ParentSub { get; internal set; }
+    public string ParentSub
+    {
+        get => _parentSub;
+        internal set
+        {
+            _parentSub = value;
+            WriteKey();
+        }
+    }
+
+    private string _parentSub;
 
     /// <summary>
     /// Refers to the type that undid this operation.
@@ -180,6 +190,7 @@ internal partial class Item : AbstractStruct
         {
             _content = value;
             WriteInfo();
+            WriteContent();
         }
     }
 

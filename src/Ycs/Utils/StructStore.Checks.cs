@@ -163,7 +163,7 @@ internal sealed partial class StructStore
 
     /// <summary>
     /// What is wrong with the slot of one struct, or null: its handle is not a live slot of this store's slab, or the slot
-    /// differs from the object in clock, client, length, origins, info (the flags and the content's kind), the handles
+    /// differs from the object in clock, client, length, origins, info (the flags and the content's kind), content object (by reference), key, the handles
     /// of its left and right neighbours, or its parent (the index of the parent type in the type table, whose entry is
     /// that type until it is collected).
     /// </summary>
@@ -178,6 +178,16 @@ internal sealed partial class StructStore
         if (slot.IsFree)
         {
             return $"{s.Id.Client}:{s.Id.Clock} names a free slot";
+        }
+
+        if (!ReferenceEquals(Slab.GetRef(s.Handle), s.IsItem ? s.Content : null))
+        {
+            return $"the slot of {s.Id.Client}:{s.Id.Clock} holds another content object than the struct";
+        }
+
+        if (!ReferenceEquals(Slab.GetKey(s.Handle), s.IsItem ? s.ParentSub : null))
+        {
+            return $"the slot of {s.Id.Client}:{s.Id.Clock} holds another key than the struct";
         }
 
         var left = s.IsItem ? s.LeftOrigin : null;
