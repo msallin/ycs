@@ -8,6 +8,10 @@ internal partial class Item
 
     private protected override int SlotInfo => ((int)_info & SlotFlagMask) | (_content?.Ref ?? 0) << 8;
 
+    private protected override object SlotContent => _content;
+
+    private protected override string SlotKey => _parentSub;
+
     // The slot's links are the neighbours' handles, -1 for none. A neighbour that had no slot when the link was written is
     // -1 there: when this struct gets its slot, the neighbours that point at it are written too.
     private protected override void WriteLinks()

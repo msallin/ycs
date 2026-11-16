@@ -81,11 +81,39 @@ internal abstract partial class AbstractStruct
     {
     }
 
+    // The content object and the map key sit in the slab's object pages, null for a struct that has none (a GC struct).
+    private void WriteObjects()
+    {
+        SlotStore.Slab.SetRef(Handle, SlotContent);
+        SlotStore.Slab.SetKey(Handle, SlotKey);
+    }
+
+    private protected void WriteContent()
+    {
+        if (Handle >= 0)
+        {
+            SlotStore.Slab.SetRef(Handle, SlotContent);
+        }
+    }
+
+    private protected void WriteKey()
+    {
+        if (Handle >= 0)
+        {
+            SlotStore.Slab.SetKey(Handle, SlotKey);
+        }
+    }
+
+    private protected virtual object SlotContent => null;
+
+    private protected virtual string SlotKey => null;
+
     private void WriteSlot()
     {
         WriteId();
         WriteOrigins();
         WriteLinks();
+        WriteObjects();
         ref var slot = ref SlotStore.Slab.At(Handle);
         slot.Length = Length;
         slot.Info = SlotInfo;
