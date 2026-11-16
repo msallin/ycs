@@ -30,12 +30,12 @@ jobs:
       - name: Sync server
         run: dotnet test tests/Ycs.Server.Tests -c Release --no-build
 
-      - name: Sync server against y-websocket clients
+      - name: Sync server against y-websocket and SignalR clients
         run: |
           (cd interop/server && npm ci)
+          (cd interop/signalr && npm ci)
           bash interop/server/smoke.sh
           bash interop/server/converge.sh
-          (cd interop/signalr && npm ci)
           bash interop/signalr/smoke.sh
           cmp interop/signalr/provider.mjs samples/Ycs.Server/demo/src/signalr-provider.mjs
 
