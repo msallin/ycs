@@ -12,7 +12,7 @@ readonly struct Ycs.AbsolutePosition : System.IEquatable<AbsolutePosition>
     void Deconstruct(out YType Type, out int Index, out int Assoc)
 sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
     DecodedStruct <Clone>$()
-    DecodedStruct(ItemId Id, int Length, ItemKind Kind, ItemId? LeftOrigin, ItemId? RightOrigin, string? ParentName, ItemId? ParentId, string? ParentSub, System.Collections.Generic.IReadOnlyList<object?> Content, string? Text, string? FormatKey, object? FormatValue, int TypeRef, string? TypeName, string? DocGuid)
+    DecodedStruct()
     ItemId Id { get; init; }
     ItemId? LeftOrigin { get; init; }
     ItemId? ParentId { get; init; }
@@ -20,8 +20,8 @@ sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
     ItemKind Kind { get; init; }
     System.Collections.Generic.IReadOnlyList<object?> Content { get; init; }
     bool Equals(DecodedStruct? other)
-    int Length { get; init; }
     int TypeRef { get; init; }
+    long Length { get; init; }
     object? FormatValue { get; init; }
     override bool Equals(object? obj)
     override int GetHashCode()
@@ -34,7 +34,6 @@ sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
     string? ParentSub { get; init; }
     string? Text { get; init; }
     string? TypeName { get; init; }
-    void Deconstruct(out ItemId Id, out int Length, out ItemKind Kind, out ItemId? LeftOrigin, out ItemId? RightOrigin, out string? ParentName, out ItemId? ParentId, out string? ParentSub, out System.Collections.Generic.IReadOnlyList<object?> Content, out string? Text, out string? FormatKey, out object? FormatValue, out int TypeRef, out string? TypeName, out string? DocGuid)
 sealed class Ycs.DecodedUpdate
     System.Collections.Generic.IReadOnlyDictionary<long, System.Collections.Generic.IReadOnlyList<DeletedRange>> DeleteSet { get; }
     System.Collections.Generic.IReadOnlyList<DecodedStruct> Structs { get; }
@@ -149,21 +148,21 @@ readonly struct Ycs.ItemView : System.IEquatable<ItemView>
     ItemKind Kind { get; }
     ItemView? Left { get; }
     ItemView? Right { get; }
-    System.Collections.Generic.IReadOnlyList<object> Content { get; }
-    YDoc Doc { get; }
-    YType Parent { get; }
+    System.Collections.Generic.IReadOnlyList<object?> Content { get; }
+    YDoc? Doc { get; }
+    YType? Parent { get; }
     bool Countable { get; }
     bool Deleted { get; }
     bool Equals(ItemView other)
     bool IsDefault { get; }
     bool Keep { get; }
-    int Length { get; }
-    override bool Equals(object obj)
+    long Length { get; }
+    override bool Equals(object? obj)
     override int GetHashCode()
     override string ToString()
     static bool op_Equality(ItemView left, ItemView right)
     static bool op_Inequality(ItemView left, ItemView right)
-    string ParentSub { get; }
+    string? ParentSub { get; }
 readonly struct Ycs.KeyChange : System.IEquatable<KeyChange>
     KeyChange(KeyChangeAction Action, object? OldValue)
     KeyChangeAction Action { get; init; }

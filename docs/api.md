@@ -65,13 +65,13 @@ exposes the storage, which is internal.
 | --- | --- |
 | `ItemView` | a `readonly struct`: a document and an id. It reads the struct that holds the id now, as if split at the id. Valid as long as the document, across splits, merges and garbage collection. `default(ItemView)` (`IsDefault`) names nothing: every member throws `InvalidOperationException` |
 | `ItemKind` | what a struct holds: `String`, `Any`, `Json`, `Binary`, `Embed`, `Format`, `Type`, `Doc`, `Deleted`, `GC`, `Skip` (the numbers of the update format) |
-| `DecodedStruct` | a record: one struct of a decoded update, in the update's order, detached from any document |
+| `DecodedStruct` | a `sealed record` of `init` properties (`Id`, `Length` and `Kind` are `required`): one struct of a decoded update, in the update's order, detached from any document |
 
 `ItemView` members: `Id`, `LastId`, `Length`, `Kind`, `Content` (the values, a read-only list), `Deleted`,
 `Countable`, `Keep`, `LeftOrigin`, `RightOrigin`, `Left`, `Right` (`ItemView?`), `Parent`, `ParentSub`, `Redone`,
-`Doc`. A GC struct reads `Parent` null, empty `Content`, `Deleted` true.
+`Doc` (null for a view of a decoded struct that has no document). `Length` is a `long`. `Content` is `IReadOnlyList<object?>`, a diagnostic read of the stored values. A GC struct reads `Parent` null, empty `Content`, `Deleted` true.
 
-`DecodedStruct` members: `Id`, `Length`, `Kind`, `LeftOrigin`, `RightOrigin`, `ParentName` (a root type) or
+`DecodedStruct` members: `Id`, `Length` (a `long`), `Kind`, `LeftOrigin`, `RightOrigin`, `ParentName` (a root type) or
 `ParentId`, `ParentSub`, and what the kind carries, in exactly one place: `Content` (Any, Json, Binary, Embed), `Text`
 (String), `FormatKey` and `FormatValue` (Format), `TypeRef` and `TypeName` (Type), `DocGuid` (Doc). The others are
 empty, null or -1.

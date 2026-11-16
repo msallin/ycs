@@ -69,7 +69,7 @@ internal static class StagingDifferential
         var none = Array.Empty<object>();
         if (s is not Item item)
         {
-            return new DecodedStruct(s.Id, s.Length, s is Skip ? ItemKind.Skip : ItemKind.GC, null, null, null, null, null, none, null, null, null, -1, null, null);
+            return new DecodedStruct { Id = s.Id, Length = s.Length, Kind = s is Skip ? ItemKind.Skip : ItemKind.GC };
         }
 
         var content = item.Content;
@@ -106,22 +106,24 @@ internal static class StagingDifferential
                 break;
         }
 
-        return new DecodedStruct(
-            item.Id,
-            item.Length,
-            (ItemKind)content.Ref,
-            item.LeftOrigin,
-            item.RightOrigin,
-            item.Parent as string,
-            item.Parent as ItemId?,
-            item.ParentSub,
-            values,
-            text,
-            formatKey,
-            formatValue,
-            typeRef,
-            typeName,
-            docGuid);
+        return new DecodedStruct
+        {
+            Id = item.Id,
+            Length = item.Length,
+            Kind = (ItemKind)content.Ref,
+            LeftOrigin = item.LeftOrigin,
+            RightOrigin = item.RightOrigin,
+            ParentName = item.Parent as string,
+            ParentId = item.Parent as ItemId?,
+            ParentSub = item.ParentSub,
+            Content = values,
+            Text = text,
+            FormatKey = formatKey,
+            FormatValue = formatValue,
+            TypeRef = typeRef,
+            TypeName = typeName,
+            DocGuid = docGuid,
+        };
     }
 
     public static void AssertEqual(DecodedStruct expected, DecodedStruct actual)

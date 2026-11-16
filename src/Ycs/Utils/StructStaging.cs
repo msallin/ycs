@@ -138,7 +138,7 @@ internal static class StructStaging
         var kind = (ItemKind)(int)s.Kind;
         if (kind is ItemKind.GC or ItemKind.Skip)
         {
-            return new DecodedStruct(id, s.Length, kind, null, null, null, null, null, [], null, null, null, -1, null, null);
+            return new DecodedStruct { Id = id, Length = s.Length, Kind = kind };
         }
 
         IReadOnlyList<object?> values = [];
@@ -170,22 +170,24 @@ internal static class StructStaging
                 break;
         }
 
-        return new DecodedStruct(
-            id,
-            s.Length,
-            kind,
-            table.LeftOrigin(i),
-            table.RightOrigin(i),
-            s.ParentKind == StagedParent.Root ? table.ParentName(i) : null,
-            s.ParentKind == StagedParent.Id ? table.ParentId(i) : null,
-            table.ParentSub(i),
-            values,
-            text,
-            formatKey,
-            formatValue,
-            typeRef,
-            typeName,
-            docGuid);
+        return new DecodedStruct
+        {
+            Id = id,
+            Length = s.Length,
+            Kind = kind,
+            LeftOrigin = table.LeftOrigin(i),
+            RightOrigin = table.RightOrigin(i),
+            ParentName = s.ParentKind == StagedParent.Root ? table.ParentName(i) : null,
+            ParentId = s.ParentKind == StagedParent.Id ? table.ParentId(i) : null,
+            ParentSub = table.ParentSub(i),
+            Content = values,
+            Text = text,
+            FormatKey = formatKey,
+            FormatValue = formatValue,
+            TypeRef = typeRef,
+            TypeName = typeName,
+            DocGuid = docGuid,
+        };
     }
 
     private static StagedKind KindOf(IContent content) => content switch

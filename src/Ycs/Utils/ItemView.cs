@@ -1,5 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Collections;
 
 namespace Ycs;
@@ -29,12 +27,12 @@ namespace Ycs;
 /// </remarks>
 public readonly partial struct ItemView : IEquatable<ItemView>
 {
-    private readonly YDoc _doc;
+    private readonly YDoc? _doc;
     private readonly ID _id;
     private readonly ItemRef _hint;
     private readonly bool _detached;
 
-    private ItemView(YDoc doc, ID id, ItemRef hint, bool detached)
+    private ItemView(YDoc? doc, ID id, ItemRef hint, bool detached)
     {
         _doc = doc;
         _id = id;
@@ -52,13 +50,13 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     /// The view of a decoded struct that is in no store, which it reads as it is. <paramref name="doc"/> only lets
     /// <see cref="Left"/> and <see cref="Right"/> name the store structs a planned item points at (null when there is none).
     /// </summary>
-    internal static ItemView Detached(YDoc doc, AbstractStruct decoded) => new(doc, decoded.Id, ItemRef.Decoded(decoded), true);
+    internal static ItemView Detached(YDoc? doc, AbstractStruct decoded) => new(doc, decoded.Id, ItemRef.Decoded(decoded), true);
 
     public bool IsDefault => _doc == null && !_detached;
 
     internal bool IsDetached => _detached;
 
-    public YDoc Doc => _doc;
+    public YDoc? Doc => _doc;
 
     public ID Id => Checked() ? _id : default;
 
@@ -71,12 +69,12 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         }
     }
 
-    public int Length
+    public long Length
     {
         get
         {
             var s = Resolve(out var o);
-            return s.Length - o;
+            return (long)s.Length - o;
         }
     }
 
@@ -96,17 +94,17 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     public bool Keep => Resolve(out _).AsItem is { IsNull: false } item && item.Keep;
 
     /// <summary>What <c>GetContent()</c> gives from the view's offset on: a read-only slice, never a <c>Splice</c>.</summary>
-    public IReadOnlyList<object> Content
+    public IReadOnlyList<object?> Content
     {
         get
         {
             var item = Resolve(out var o);
             if (!item.IsItem)
             {
-                return Array.Empty<object>();
+                return Array.Empty<object?>();
             }
 
-            var content = item.Content.GetContent();
+            IReadOnlyList<object?> content = item.Content.GetContent();
             return o == 0 ? content : new Slice(content, o);
         }
     }
@@ -134,9 +132,9 @@ public readonly partial struct ItemView : IEquatable<ItemView>
 
     public ItemView? Right => Neighbour(Resolve(out _).AsItem is { IsNull: false } item ? item.Right : default);
 
-    public AbstractType Parent => (Resolve(out _).AsItem is { IsNull: false } item ? item.Parent : null) as AbstractType;
+    public AbstractType? Parent => (Resolve(out _).AsItem is { IsNull: false } item ? item.Parent : null) as AbstractType;
 
-    public string ParentSub => Resolve(out _).AsItem is { IsNull: false } item ? item.ParentSub : null;
+    public string? ParentSub => Resolve(out _).AsItem is { IsNull: false } item ? item.ParentSub : null;
 
     /// <summary>S's, moved by the offset as Yjs' <c>splitItem</c> moves it.</summary>
     public ID? Redone
@@ -151,7 +149,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     public bool Equals(ItemView other) =>
         ReferenceEquals(_doc, other._doc) && _id.Equals(other._id) && _detached == other._detached && (!_detached || _hint == other._hint);
 
-    public override bool Equals(object obj) => obj is ItemView other && Equals(other);
+    public override bool Equals(object? obj) => obj is ItemView other && Equals(other);
 
     public override int GetHashCode() => HashCode.Combine(_id.Client, _id.Clock);
 
@@ -186,17 +184,17 @@ public readonly partial struct ItemView : IEquatable<ItemView>
             }
         }
 
-        var found = _doc.Store.Find(_id);
+        var found = _doc!.Store.Find(_id);
         offset = (int)(_id.Clock - found.Id.Clock);
         return found;
     }
 
-    private sealed class Slice : IReadOnlyList<object>
+    private sealed class Slice : IReadOnlyList<object?>
     {
-        private readonly IReadOnlyList<object> _source;
+        private readonly IReadOnlyList<object?> _source;
         private readonly int _offset;
 
-        public Slice(IReadOnlyList<object> source, int offset)
+        public Slice(IReadOnlyList<object?> source, int offset)
         {
             _source = source;
             _offset = offset;
@@ -204,9 +202,9 @@ public readonly partial struct ItemView : IEquatable<ItemView>
 
         public int Count => _source.Count - _offset;
 
-        public object this[int index] => index >= 0 && index < Count ? _source[_offset + index] : throw new ArgumentOutOfRangeException(nameof(index));
+        public object? this[int index] => index >= 0 && index < Count ? _source[_offset + index] : throw new ArgumentOutOfRangeException(nameof(index));
 
-        public IEnumerator<object> GetEnumerator()
+        public IEnumerator<object?> GetEnumerator()
         {
             for (var i = _offset; i < _source.Count; i++)
             {

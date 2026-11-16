@@ -54,7 +54,7 @@ public class UpdateOperationsStagedTests
         var merged = Merge(v2, first, gc);
 
         CollectionAssert.AreEqual(
-            new[] { (ItemKind.Deleted, 1), (ItemKind.Skip, 1), (ItemKind.GC, 2) },
+            new[] { (ItemKind.Deleted, 1L), (ItemKind.Skip, 1L), (ItemKind.GC, 2L) },
             Decode(v2, merged).Select(s => (s.Kind, s.Length)).ToArray());
     }
 
