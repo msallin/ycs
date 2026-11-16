@@ -1,5 +1,5 @@
 // Updates that Yjs 13.6.33 leaves pending although the set is complete (see README.md). Writes the fixtures
-// tests/Ycs.Tests/PendingRetryParityTests.cs replays:
+// tests/Ycs.Tests/PendingRetryTests.cs replays:
 //
 //   node gen.mjs            # writes ../../tests/Ycs.Tests/Fixtures/pending-retry.json and pending-retry-random.json.gz
 //
