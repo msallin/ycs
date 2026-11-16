@@ -34,6 +34,8 @@ jobs:
         run: |
           (cd interop/server && npm ci)
           bash interop/server/smoke.sh
+          (cd interop/signalr && npm ci)
+          bash interop/signalr/smoke.sh
 
       - name: Fuzz the decoders
         run: dotnet test tests/Ycs.Fuzz -c Release --no-build
