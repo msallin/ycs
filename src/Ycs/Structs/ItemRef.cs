@@ -14,7 +14,8 @@ namespace Ycs;
 /// A struct of the store (an item or a GC struct) as the library holds it: the members of Yjs' <c>Item</c> and
 /// <c>AbstractStruct</c>, so that ported code reads like Yjs. It wraps today's object; <c>default</c> is Yjs' null
 /// (<see cref="IsNull"/>), and two references are equal when they name the same struct (by reference while it wraps
-/// an object). The members of an item throw on a GC struct as a cast to <see cref="Ycs.Item"/> throws.
+/// an object). The members of an item throw <see cref="NullReferenceException"/> on a GC struct, as
+/// <c>(str as Item).Member</c> does: a type test, which the walks take faster than a cast.
 /// </summary>
 /// <remarks>
 /// Valid until its struct is merged away or its type collected: a holder may keep one across a split (the left part
@@ -106,7 +107,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     private Item ItemObject
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => (Item)_struct;
+        get => _struct as Item;
     }
 
     public ItemRef Left

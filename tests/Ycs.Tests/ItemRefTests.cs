@@ -71,7 +71,7 @@ public class ItemRefTests
         var reference = ItemRef.Of(new GC(new ID(2, 5), 3));
 
         Assert.AreEqual((true, false, true, new ID(2, 5), 3), (reference.IsGC, reference.IsItem, reference.Deleted, reference.Id, reference.Length));
-        Assert.ThrowsExactly<InvalidCastException>(() => reference.Right);
+        Assert.ThrowsExactly<NullReferenceException>(() => reference.Right);
     }
 
     [TestMethod]
