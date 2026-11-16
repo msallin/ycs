@@ -27,6 +27,12 @@ internal sealed class UpdateReader
     /// <summary>At most this many spare lists of each kind are kept.</summary>
     private const int MaxSpareLists = 64;
 
+    /// <summary>
+    /// Whether reads fill a <see cref="StagingTable"/> (<see cref="Lease.Staging"/>); the tests switch it on. Off, no table
+    /// is allocated and the cursor stages nothing. Set before the first read.
+    /// </summary>
+    internal static bool StageForTests;
+
     [ThreadStatic]
     private static UpdateReader t_free;
 
@@ -35,7 +41,7 @@ internal sealed class UpdateReader
     private readonly Stack<List<AbstractStruct>> _spareStructLists = new();
     private readonly HashSet<long> _clients = new();
     private readonly DeleteSet _deleteSet = new();
-    private readonly StagingTable _staging = new();
+    private StagingTable _staging;
     private readonly Stack<List<DeleteSet.DeleteItem>> _spareDeleteLists = new();
     private UpdateDecoderV1 _v1;
     private UpdateDecoderV2 _v2;
@@ -95,6 +101,11 @@ internal sealed class UpdateReader
         }
 
         _input.MaxDepth = maxDepth;
+        if (StageForTests)
+        {
+            _staging ??= new StagingTable();
+        }
+
         EncodingUtils.ReadClientStructRefs(decoder, _structs, _clients, _spareStructLists, _staging);
         DeleteSet.ReadInto(decoder, _deleteSet, _spareDeleteLists);
     }
@@ -122,7 +133,7 @@ internal sealed class UpdateReader
         _structs.Clear();
         _deleteSet.Clients.Clear();
         _clients.Clear();
-        _staging.Reset();
+        _staging?.Reset();
         _input.Clear();
         _v2?.Clear();
         t_free = this;
@@ -159,7 +170,8 @@ internal sealed class UpdateReader
 
         /// <summary>
         /// The shadow of <see cref="Structs"/>, one table per reader and so per lease: a read while another lease is
-        /// open gets another reader and another table. Reset when the lease is released.
+        /// open gets another reader and another table. Reset when the lease is released. Null unless
+        /// <see cref="StageForTests"/> is on.
         /// </summary>
         public StagingTable Staging => Valid()._staging;
 

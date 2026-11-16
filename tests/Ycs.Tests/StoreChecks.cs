@@ -16,6 +16,7 @@ public static class StoreChecks
     {
         StructStore.CheckAfterTransactionsForTests = true;
         YEvent.CheckViewsForTests = true;
+        UpdateReader.StageForTests = true;
         if (Environment.GetEnvironmentVariable("YCS_LEAF_CAPACITY") is { Length: > 0 } capacity)
         {
             ClientStructs.LeafCapacityForTests = int.Parse(capacity, CultureInfo.InvariantCulture);
