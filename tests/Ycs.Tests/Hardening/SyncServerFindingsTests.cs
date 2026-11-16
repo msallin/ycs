@@ -194,4 +194,56 @@ public class SyncServerFindingsTests
 
         Assert.AreEqual("amb", joiner.GetText("text").ToString());
     }
+
+    // Two structs under one id, the first waiting for a client nobody sends (an update cannot hold two: a client is listed
+    // once): the structs that follow the first stay waiting, also once the second is integrated.
+    [TestMethod]
+    public void ApplyUpdate_TwoStructsUnderOneId_AJoinerIsNotAheadOfTheRoom()
+    {
+        var a = new YDoc(new YDocOptions { ClientId = 1L << 40 });
+        a.GetText("text").Insert(0, "ab");
+        var unknown = new YDoc(new YDocOptions { ClientId = 999 });
+        unknown.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        unknown.GetText("text").Insert(1, "z");
+        var waiting = new YDoc(new YDocOptions { ClientId = 7 });
+        waiting.ApplyUpdateV1(unknown.EncodeStateAsUpdateV1());
+        var first = Edit(waiting, d => d.GetText("text").Insert(1, "u"));
+        var behind = Edit(waiting, d => d.GetMap("map").Set("k", 1));
+        var integrating = new YDoc(new YDocOptions { ClientId = 7 });
+        integrating.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        var second = Edit(integrating, d => d.GetText("text").Insert(1, "u"));
+        var room = new YDoc();
+        room.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        room.ApplyUpdateV1(behind);
+        room.ApplyUpdateV1(first);
+
+        var e = Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(second));
+        var joiner = new YDoc();
+        joiner.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
+
+        Assert.AreEqual((true, 1L, 1L, false), (e.PartlyApplied, room.Store.GetState(7), joiner.Store.GetState(7), room.HasPending));
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_StructWaitingUnderTheIdOfOneTheDocumentHas_IsRefusedAndTheDocumentIsUnchanged()
+    {
+        var a = new YDoc(new YDocOptions { ClientId = 1L << 40 });
+        a.GetText("text").Insert(0, "ab");
+        var unknown = new YDoc(new YDocOptions { ClientId = 999 });
+        unknown.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        unknown.GetText("text").Insert(1, "z");
+        var waiting = new YDoc(new YDocOptions { ClientId = 7 });
+        waiting.ApplyUpdateV1(unknown.EncodeStateAsUpdateV1());
+        var first = Edit(waiting, d => d.GetText("text").Insert(1, "u"));
+        var integrating = new YDoc(new YDocOptions { ClientId = 7 });
+        integrating.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        var room = new YDoc();
+        room.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        room.ApplyUpdateV1(Edit(integrating, d => d.GetText("text").Insert(1, "u")));
+        var before = Convert.ToHexString(room.EncodeStateAsUpdateV1());
+
+        Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(first));
+
+        Assert.AreEqual((before, false), (Convert.ToHexString(room.EncodeStateAsUpdateV1()), room.HasPending));
+    }
 }

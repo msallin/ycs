@@ -125,6 +125,14 @@ before anything changes:
   rejected, the document unchanged. Only that case is told from the honest ones (an item between two typed backwards has
   a right origin of a lower clock than its origin, in two items); a crafted update with the origins in two items
   that way is applied, as Yjs does;
+* no struct that waits for structs the document lacks while the document has a struct under its id already (a part
+  of an item is there, so everything the item refers to was). Yjs keeps it waiting, and the structs of its client that
+  follow with it, also once the other struct under that id integrated; a client that joins reads the document's
+  state, where they no longer wait, and is ahead of the document for good. An update cannot hold two structs under one
+  id (a client is listed once, and its structs follow one another by clock), so the two come in updates
+  of their own, one waiting. A deliberate divergence: the update that makes the waiting one retry drops it
+  (see [pending structs](#pending-structs-retried), reported as partly applied), and the one planned with such a
+  struct is rejected, the document unchanged;
 * nesting: 'any' and JSON values, and shared types inside each other, at most
   `UpdateLimits.MaxDepth` levels deep (3,000 by default, each counted on its own: about as deep as Yjs'
   recursive walks go before the JavaScript stack runs out, so no Yjs peer writes a deeper document; a

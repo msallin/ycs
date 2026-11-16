@@ -210,6 +210,17 @@ internal sealed partial class StructStore
                         var missing = (stackHead as Item)?.FindMissing(_getState);
                         if (missing != null)
                         {
+                            if (offset > 0)
+                            {
+                                // What an item refers to is there when it is integrated, and a part of it that is there was
+                                // integrated by an item of the same id: a second struct under that id (no update holds two:
+                                // a client is listed once, so one was waiting). Waiting, it would hold up what follows it
+                                // in its client for good, which the document, having the id, no longer lacks.
+                                throw new YUpdateException(
+                                    $"The struct {stackHead.Id.Client}:{stackHead.Id.Clock} refers to structs this document does not have, " +
+                                    "but the document has a struct under its id already. The document is unchanged.");
+                            }
+
                             stack.Add(stackHead);
 
                             // Get the struct reader that has the missing struct.
