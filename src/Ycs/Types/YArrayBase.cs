@@ -670,7 +670,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 }
             }
 
-            n = n.Right.AsItem;
+            n = Doc.Store.NextAfter(n, id, departures);
         }
     }
 
@@ -698,8 +698,6 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     protected IEnumerable<object> EnumerateContent()
     {
-        // ItemRef lifetime (docs/design-item-layout.md, 3.1): n is held across the caller's code between two values,
-        // which can end transactions that merge it away or collect the type; to become an id with a hint.
         var n = _start;
         while (!n.IsNull)
         {
@@ -714,6 +712,8 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 yield break;
             }
 
+            var id = n.Id;
+            var departures = Doc.Store.Departures;
             var currentContent = n.Content.GetContent();
             foreach (var c in currentContent)
             {
@@ -721,7 +721,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
 
             // We used content of n, now iterate to next.
-            n = n.Right.AsItem;
+            n = Doc.Store.NextAfter(n, id, departures);
         }
     }
 

@@ -983,15 +983,18 @@ public partial class YText : YArrayBase
     {
         ArgumentNullException.ThrowIfNull(writer);
 
-        // ItemRef lifetime (docs/design-item-layout.md, 3.1): n is held across the writer's code, which can end
-        // transactions that merge it away or collect the type.
-        for (var n = _start; !n.IsNull; n = n.Right.AsItem)
+        var n = _start;
+        while (!n.IsNull)
         {
+            var id = n.Id;
+            var departures = Doc.Store.Departures;
             if (!n.Deleted && n.Countable && n.Content is ContentString cs)
             {
                 cs.CopyTo(writer.GetSpan(cs.Length));
                 writer.Advance(cs.Length);
             }
+
+            n = Doc.Store.NextAfter(n, id, departures);
         }
     }
 

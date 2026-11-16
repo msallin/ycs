@@ -130,6 +130,7 @@ internal readonly partial struct ItemRef
                 "Ycs). Nothing was changed.");
         }
 
+        (Parent as AbstractType)?.Doc?.Store.NoteDeparture();
         (Parent as YArrayBase)?.OnMerge(this, right);
 
         if (right.Keep)
