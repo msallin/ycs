@@ -251,11 +251,6 @@ neighbour they read (`Item` is not sealed, so a cast or a test is a compare wher
 variable it was +3 % (an experiment, not kept: it would hold the object step 7 removes). Step 7's slab reads a slot by
 index and has no test; see bench/Ycs.Compare/README.md, "ItemRef", for the experiments.
 
-### 1.5 Known gaps of what is built
-
-* The obligation to call `StructStore.Refresh` is stated there, not at `Item.Left` and `Item.MarkDeleted` (N6), a
-  small task of its own.
-
 ## 2. The layout still to build
 
 ### 2.1 A slot
