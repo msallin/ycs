@@ -48,7 +48,7 @@ internal static class Properties
             seed => Generator.Generate(seed, BmpOnly), Idempotence),
         new("commutativity", "applying two updates in either order gives the same state",
             CommutativityScript, Commutativity),
-        new("rejects-cleanly", "a structured (fuzzed) update is applied, or rejected with YUpdateException leaving the document as it was; nothing else is thrown",
+        new("rejects-cleanly", "a structured (fuzzed) update is applied, or rejected with YUpdateException leaving the document as it was (or, with PartlyApplied, a complete part of it); nothing else is thrown",
             seed => UpdateFuzzer.Generate(seed).Script, RejectsCleanly),
         new("markers-invisible", "search markers change no observation (content, encodings, results, events) against the same script with them off, and after every step every marker points at an item of its list with the right index",
             ListsOrGeneral, MarkersInvisible),

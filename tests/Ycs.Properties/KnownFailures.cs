@@ -60,6 +60,17 @@ internal static class KnownFailures
             Documented = true,
             Matches = (m, script) => m.Op == "raw" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal) && RejectedByGcCheck(script, m.Step),
         },
+        new("right-origin-precedes-origin", "documented",
+            "Not a Ycs bug (docs/api.md, Untrusted input): an item whose right origin precedes its origin within one item of their " +
+            "client (Yjs never writes one; a fuzzer does): Yjs applies it, splitting the item of the origin at the right origin, so " +
+            "that the new item lands between the halves, where a client that reads the whole state in one update, which does not " +
+            "split there, places it elsewhere: a document and a client that joins it disagree for good. Ycs rejects the update " +
+            "(or, when it was waiting for what arrived, drops it and reports PartlyApplied).",
+            """{"clients":[{"gc":false,"id":2}],"roots":[],"steps":[{"op":"raw","to":0,"u":"AQULAAcADAEDA2RpdsYKAgoBBGJvbGQEdHJ1ZQcACgMDAXAEAKwCAQJiY4QKAAFhA6wCAQIGCgEFAgwBAQI=","via":"v1to2"},{"op":"raw","to":0,"u":"AwP4+v//BwAEAQF0A2RlZgoBh/j6//8HAgEDDAAHAQF4AwFwxwwADAADAXCHDAAGAgoAAQEBdAMnAAwAAW0DA2RpdgIMAQEBCgIDAwAD","via":"v1to2"}]}""")
+        {
+            Documented = true,
+            Matches = (m, script) => m.Op == "raw" && m.Signature.EndsWith(" / ycs threw", StringComparison.Ordinal) && Rejected(script, m.Step, "right origin that precedes its origin"),
+        },
         new("yjs-throws", "documented",
             "Not a Ycs bug: Yjs 13.6.32 throws where Ycs does not: an UndoManager whose scope is a list holding the Y.Doc " +
             "(it takes typeScope[0].doc, undefined for a Doc: 'Cannot read properties of undefined'); XmlFragment.toString " +
@@ -88,7 +99,10 @@ internal static class KnownFailures
     private static bool Threw(string observation) => Json.Parse(observation) is Dictionary<string, object> o && o.Get("err") is true;
 
     // Whether Ycs' rejection at step `step` is the garbage collection check's (StructStore.IntegrationPlan.CheckGarbageCollection).
-    private static bool RejectedByGcCheck(Dictionary<string, object> script, int step)
+    private static bool RejectedByGcCheck(Dictionary<string, object> script, int step) => Rejected(script, step, "garbage collection cannot remove");
+
+    // Whether Ycs' rejection at step `step` has `reason` in its message.
+    private static bool Rejected(Dictionary<string, object> script, int step, string reason)
     {
         var run = new ScriptRun(script);
         var steps = script.List("steps");
@@ -97,7 +111,7 @@ internal static class KnownFailures
             run.Step((Dictionary<string, object>)steps[i]);
         }
 
-        return run.LastException?.Message.Contains("garbage collection cannot remove", StringComparison.Ordinal) == true;
+        return run.LastException?.Message.Contains(reason, StringComparison.Ordinal) == true;
     }
 
     private static Dictionary<string, object> Step(Dictionary<string, object> script, Mismatch m) =>

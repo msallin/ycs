@@ -357,7 +357,7 @@ namespace Ycs.Properties
         }
 
         /// <summary>
-        /// Violations of "a rejected update leaves the document as it was, and only YUpdateException rejects one",
+        /// Violations of "a rejected update leaves the document as it was (unless it says it was applied in part), and only YUpdateException rejects one",
         /// seen by raw steps (the structure-aware fuzzer checks this list; it is not part of the observation).
         /// </summary>
         internal readonly List<string> RejectionViolations = new();
@@ -393,7 +393,7 @@ namespace Ycs.Properties
                 {
                     RejectionViolations.Add($"threw {e.GetType().Name}: {e.Message}");
                 }
-                else if (before != after)
+                else if (before != after && e is not YUpdateException { PartlyApplied: true })
                 {
                     RejectionViolations.Add($"rejected ({e.Message}) but the document changed");
                 }
