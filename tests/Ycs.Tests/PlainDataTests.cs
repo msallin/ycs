@@ -73,6 +73,20 @@ public class PlainDataTests
     }
 
     [TestMethod]
+    public void Snapshot_GetHashCode_ManyClientsWithLargeValues_DoesNotThrowUnderCheckedArithmetic()
+    {
+        var vector = new Dictionary<long, long>();
+        for (var i = 0; i < 200; i++)
+        {
+            vector[uint.MaxValue - i] = int.MaxValue - i;
+        }
+
+        var snapshot = new Snapshot(new DeleteSet(), vector);
+
+        Assert.AreEqual(snapshot.GetHashCode(), new Snapshot(new DeleteSet(), new Dictionary<long, long>(vector)).GetHashCode());
+    }
+
+    [TestMethod]
     public void Snapshot_Equals_ObjectOverloadAgreesWithTypedAndHash()
     {
         var doc = new YDoc(new YDocOptions { Gc = false });

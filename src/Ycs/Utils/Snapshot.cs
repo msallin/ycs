@@ -200,12 +200,13 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     public override bool Equals(object? obj) => obj is Snapshot other && Equals(other);
 
     // Order-independent over the clients, as Equals; order-dependent within a client's ranges.
+    // The per-client hashes are summed modulo 2^32 on purpose.
     public override int GetHashCode()
     {
         var hash = 0;
         foreach (var kvp in StateVector)
         {
-            hash += HashCode.Combine(kvp.Key, kvp.Value);
+            hash = unchecked(hash + HashCode.Combine(kvp.Key, kvp.Value));
         }
 
         foreach (var kvp in DeleteSet.Clients)
@@ -218,7 +219,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
                 client.Add(item.Length);
             }
 
-            hash += client.ToHashCode();
+            hash = unchecked(hash + client.ToHashCode());
         }
 
         return hash;
