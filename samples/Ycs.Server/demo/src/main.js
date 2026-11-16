@@ -86,7 +86,7 @@ show('connecting');
 provider.on('status', ({ status: s }) => {
   if (s === 'disconnected') show('offline');
   else if (s === 'connecting') show('connecting');
-  else if (s === 'connected') awareness.setLocalState(awareness.getLocalState()); // the server dropped this state with the old connection at clock+1; a higher clock re-announces it
+  else if (s === 'connected') awareness.setLocalState(awareness.getLocalState()); // y-websocket re-announces the state at the clock its disconnect removed it with, which peers ignore until the 15 s renewal; a higher clock shows it at once
 });
 provider.on('sync', (synced) => { if (synced) show('synced'); });
 toggle.addEventListener('click', () => {
