@@ -30,6 +30,9 @@ jobs:
       - name: Sync server
         run: dotnet test tests/Ycs.Server.Tests -c Release --no-build
 
+      - name: Sync client (the Blazor client's provider)
+        run: dotnet test tests/Ycs.Client.Tests -c Release --no-build
+
       - name: Sync server against y-websocket and SignalR clients
         run: |
           (cd interop/server && npm ci)
@@ -57,6 +60,9 @@ jobs:
         run: |
           dotnet publish samples/Ycs.AotSample -c Release -o out/aot
           ./out/aot/Ycs.AotSample
+
+      - name: Blazor client publishes without trim warnings
+        run: dotnet publish samples/Ycs.Blazor -c Release -o out/blazor -warnaserror
 
       - name: Browser-wasm sample (no workload)
         run: |
