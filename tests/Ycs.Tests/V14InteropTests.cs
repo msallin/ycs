@@ -134,13 +134,13 @@ public class V14InteropTests
             var index = p.GetProperty("index").GetInt32();
             var assoc = p.GetProperty("assoc").GetInt32();
             var encoded = p.GetProperty("encoded").GetString();
-            var rpos = RelativePosition.DecodeRelativePosition(Convert.FromBase64String(encoded));
-            var own = RelativePosition.FromTypeIndex(RootOf(doc, root, kinds[root]), index, assoc);
-            var resolved = AbsolutePosition.TryCreateFromRelativePosition(rpos, doc)?.Index;
+            var rpos = RelativePosition.Decode(Convert.FromBase64String(encoded));
+            var own = RelativePosition.FromIndex(RootOf(doc, root, kinds[root]), index, assoc);
+            var resolved = rpos.TryResolve(doc, out var absolute) ? absolute.Index : (int?)null;
 
             expected.Add($"{root}@{index},{assoc}: {encoded} {encoded} {p.GetProperty("resolved").GetInt32()}");
-            actual.Add($"{root}@{index},{assoc}: {Convert.ToBase64String(RelativePosition.EncodeRelativePosition(rpos))} " +
-                $"{Convert.ToBase64String(RelativePosition.EncodeRelativePosition(own))} {resolved}");
+            actual.Add($"{root}@{index},{assoc}: {Convert.ToBase64String(rpos.Encode())} " +
+                $"{Convert.ToBase64String(own.Encode())} {resolved}");
         }
 
         Assert.AreEqual(string.Join("\n", expected), string.Join("\n", actual));

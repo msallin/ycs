@@ -1,11 +1,15 @@
-class Ycs.AbsolutePosition
-    AbsolutePosition(AbstractType type, int index, int assoc = 0)
-    readonly AbstractType Type
-    readonly int Assoc
-    readonly int Index
-    static AbsolutePosition CreateAbsolutePosition(AbstractType type, int index, int assoc = 0)
-    static AbsolutePosition CreateAbsolutePositionFromRelativePosition(RelativePosition rpos, YDoc doc, bool followUndoneDeletions = true)
-    static AbsolutePosition TryCreateFromRelativePosition(RelativePosition rpos, YDoc doc, bool followUndoneDeletions = true)
+readonly struct Ycs.AbsolutePosition : System.IEquatable<AbsolutePosition>
+    AbsolutePosition(AbstractType Type, int Index, int Assoc = 0)
+    AbstractType Type { get; init; }
+    bool Equals(AbsolutePosition other)
+    int Assoc { get; init; }
+    int Index { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(AbsolutePosition left, AbsolutePosition right)
+    static bool op_Inequality(AbsolutePosition left, AbsolutePosition right)
+    void Deconstruct(out AbstractType Type, out int Index, out int Assoc)
 class Ycs.AbstractType
     AbstractType Parent { get; }
     AbstractType()
@@ -143,24 +147,26 @@ sealed class Ycs.PermanentUserData
     string GetUserByClientId(long clientId)
     string GetUserByDeletedId(ItemId id)
     void SetUserMapping(YDoc doc, long clientId, string userDescription, System.Func<Transaction, bool> filter = null)
-class Ycs.RelativePosition : System.IEquatable<RelativePosition>
-    RelativePosition(AbstractType type, ItemId? item, int assoc = 0)
-    System.Collections.Generic.IDictionary<string, object> RelativePositionToJSON()
-    bool Equals(RelativePosition? other)
-    byte[] ToArray()
-    int Assoc
-    override bool Equals(object? obj)
+readonly struct Ycs.RelativePosition : System.IEquatable<RelativePosition>
+    ItemId? Item { get; init; }
+    ItemId? TypeId { get; init; }
+    RelativePosition(ItemId? TypeId, string? RootName, ItemId? Item, int Assoc = 0)
+    bool Equals(RelativePosition other)
+    bool TryResolve(YDoc doc, out AbsolutePosition position, bool followUndoneDeletions = true)
+    byte[] Encode()
+    int Assoc { get; init; }
+    override bool Equals(object obj)
     override int GetHashCode()
-    readonly ItemId? Item
-    readonly ItemId? TypeId
-    readonly string? TName
-    static RelativePosition CreateRelativePositionFromJSON(System.Collections.Generic.IDictionary<string, object> json)
-    static RelativePosition CreateRelativePositionFromTypeIndex(AbstractType type, int index, int assoc = 0)
-    static RelativePosition DecodeRelativePosition(byte[] encoded)
-    static RelativePosition FromTypeIndex(AbstractType type, int index, int assoc = 0)
-    static RelativePosition Read(byte[] encodedPosition)
-    static bool CompareRelativePositions(RelativePosition a, RelativePosition b)
-    static byte[] EncodeRelativePosition(RelativePosition rpos)
+    override string ToString()
+    static RelativePosition Decode(System.ReadOnlySpan<byte> encoded)
+    static RelativePosition FromIndex(AbstractType type, int index, int assoc = 0)
+    static RelativePosition FromJson(System.Text.Json.JsonElement json)
+    static bool op_Equality(RelativePosition left, RelativePosition right)
+    static bool op_Inequality(RelativePosition left, RelativePosition right)
+    string? RootName { get; init; }
+    void Deconstruct(out ItemId? TypeId, out string? RootName, out ItemId? Item, out int Assoc)
+    void Encode(System.Buffers.IBufferWriter<byte> destination)
+    void WriteJson(System.Text.Json.Utf8JsonWriter writer)
 sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
     YDoc RestoreDocument(YDoc originDoc, YDocOptions? opts = null)
     bool Equals(Snapshot? other)

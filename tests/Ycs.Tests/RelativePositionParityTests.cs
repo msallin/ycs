@@ -5,7 +5,10 @@
 // ------------------------------------------------------------------------------
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Text;
+using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -73,11 +76,10 @@ public class RelativePositionParityTests
         var doc = BuildDoc();
         var type = typeName == "text" ? (AbstractType)doc.GetText("text") : doc.GetArray("array");
 
-        var rpos = RelativePosition.DecodeRelativePosition(B(base64));
+        var rpos = RelativePosition.Decode(B(base64));
         Assert.AreEqual(expectedAssoc, rpos.Assoc);
 
-        var abs = AbsolutePosition.CreateAbsolutePositionFromRelativePosition(rpos, doc);
-        Assert.IsNotNull(abs);
+        Assert.IsTrue(rpos.TryResolve(doc, out var abs));
         Assert.AreSame(type, abs.Type);
         Assert.AreEqual(expectedIndex, abs.Index);
         Assert.AreEqual(expectedAssoc, abs.Assoc);
@@ -95,93 +97,98 @@ public class RelativePositionParityTests
     [DataRow(ArrayEndRight, DisplayName = "array, end index, right-assoc")]
     public void RoundTripsYjsRelativePositionBytes(string base64)
     {
-        var rpos = RelativePosition.DecodeRelativePosition(B(base64));
-        CollectionAssert.AreEqual(B(base64), RelativePosition.EncodeRelativePosition(rpos));
+        var rpos = RelativePosition.Decode(B(base64));
+        CollectionAssert.AreEqual(B(base64), rpos.Encode());
     }
 
-    [TestMethod]
-    public void RelativePositionToJsonMatchesYjsShape()
+    private static string JsonOf(RelativePosition position)
     {
-        // Y.decodeRelativePosition(base64ToBuf(TextRight0)) then Y.relativePositionToJSON(...) gives
-        // {"item":{"client":1,"clock":0},"assoc":0} - no 'tname', because the wire format only ever
-        // carries one of item/tname/type (see RelativePosition.Write): a decoded position has
-        // exactly one of them set, even though an in-memory position built straight from
-        // createRelativePositionFromTypeIndex against a root-level type would have both 'item' and
-        // 'tname' populated (createRelativePosition always fills 'tname' for a root type, in
-        // addition to 'item' when one was found).
-        var withItem = RelativePosition.DecodeRelativePosition(B(TextRight0));
-        var json = withItem.RelativePositionToJSON();
-        Assert.IsFalse(json.ContainsKey("tname"));
-        Assert.IsFalse(json.ContainsKey("type"));
-        var item = (IDictionary<string, object>)json["item"];
-        Assert.AreEqual(1L, Convert.ToInt64(item["client"]));
-        Assert.AreEqual(0L, Convert.ToInt64(item["clock"]));
-        Assert.AreEqual(0, json["assoc"]);
+        using var stream = new System.IO.MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+        {
+            position.WriteJson(writer);
+        }
 
-        // Y.decodeRelativePosition(base64ToBuf(TextLeft0)) then toJSON gives
-        // {"tname":"text","assoc":-1} - no 'item'/'type' key at all, matching Yjs only setting the
-        // properties that are actually present.
-        var tnameOnly = RelativePosition.DecodeRelativePosition(B(TextLeft0));
-        var json2 = tnameOnly.RelativePositionToJSON();
-        Assert.AreEqual("text", json2["tname"]);
-        Assert.IsFalse(json2.ContainsKey("item"));
-        Assert.IsFalse(json2.ContainsKey("type"));
-        Assert.AreEqual(-1, json2["assoc"]);
+        return Encoding.UTF8.GetString(stream.ToArray());
     }
 
     [TestMethod]
-    public void RelativePositionJsonRoundTrips()
+    [DataRow(TextRight0, """{"item":{"client":1,"clock":0},"assoc":0}""")]
+    [DataRow(TextLeft0, """{"tname":"text","assoc":-1}""")]
+    [DataRow(ArrayRight1, """{"item":{"client":1,"clock":13},"assoc":0}""")]
+    public void WriteJson_DecodedFromYjs_IsTheObjectOfRelativePositionToJSON(string base64, string yjsJson)
+    {
+        // What Y.relativePositionToJSON(Y.decodeRelativePosition(bytes)) gives: the wire format carries one
+        // of item/tname/type, so a decoded position has exactly one set.
+        Assert.AreEqual(yjsJson, JsonOf(RelativePosition.Decode(B(base64))));
+    }
+
+    [TestMethod]
+    public void WriteJson_PositionInRootText_NamesItemAndRoot()
+    {
+        // createRelativePosition fills tname for a root type in addition to the item.
+        var rpos = RelativePosition.FromIndex(BuildDoc().GetText("text"), 5);
+
+        Assert.AreEqual("""{"tname":"text","item":{"client":1,"clock":8},"assoc":0}""", JsonOf(rpos));
+    }
+
+    [TestMethod]
+    public void FromJson_OfWriteJson_IsEqualAndEncodesTheSameBytes()
     {
         foreach (var base64 in new[] { TextRight0, TextLeft0, TextRight5, TextLeft5, TextEndRight, TextEndLeft, ArrayRight1, ArrayLeft1, ArrayEndRight })
         {
-            var rpos = RelativePosition.DecodeRelativePosition(B(base64));
-            var json = rpos.RelativePositionToJSON();
-            var roundTripped = RelativePosition.CreateRelativePositionFromJSON(json);
+            var rpos = RelativePosition.Decode(B(base64));
+            using var json = JsonDocument.Parse(JsonOf(rpos));
+            var roundTripped = RelativePosition.FromJson(json.RootElement);
 
-            Assert.IsTrue(RelativePosition.CompareRelativePositions(rpos, roundTripped), $"Mismatch for {base64}");
-            CollectionAssert.AreEqual(B(base64), RelativePosition.EncodeRelativePosition(roundTripped));
+            Assert.AreEqual(rpos, roundTripped, $"Mismatch for {base64}");
+            CollectionAssert.AreEqual(B(base64), roundTripped.Encode());
         }
     }
 
     [TestMethod]
-    public void CompareRelativePositionsIsNullSafeAndStructural()
+    public void Equals_StructuralAndHashAgrees()
     {
-        Assert.IsTrue(RelativePosition.CompareRelativePositions(null, null));
+        var a = RelativePosition.Decode(B(TextRight0));
+        var b = RelativePosition.Decode(B(TextRight0));
+        var c = RelativePosition.Decode(B(TextRight5));
 
-        var a = RelativePosition.DecodeRelativePosition(B(TextRight0));
-        var b = RelativePosition.DecodeRelativePosition(B(TextRight0));
-        var c = RelativePosition.DecodeRelativePosition(B(TextRight5));
-
-        Assert.IsFalse(RelativePosition.CompareRelativePositions(a, null));
-        Assert.IsFalse(RelativePosition.CompareRelativePositions(null, a));
-        Assert.IsTrue(RelativePosition.CompareRelativePositions(a, b));
-        Assert.IsFalse(RelativePosition.CompareRelativePositions(a, c));
+        Assert.AreEqual((true, true, false), (a == b, a.GetHashCode() == b.GetHashCode(), a == c));
     }
 
     [TestMethod]
-    public void CreateRelativePositionFromTypeIndexIsAnAliasForFromTypeIndex()
+    public void FromIndex_OfTheSamePlace_IsEqualToTheDecodedBytesOnceEncoded()
     {
-        var doc = BuildDoc();
-        var text = doc.GetText("text");
+        var text = BuildDoc().GetText("text");
 
-        var viaAlias = RelativePosition.CreateRelativePositionFromTypeIndex(text, 3, -1);
-        var viaOriginal = RelativePosition.FromTypeIndex(text, 3, -1);
-
-        Assert.IsTrue(RelativePosition.CompareRelativePositions(viaAlias, viaOriginal));
+        CollectionAssert.AreEqual(B(TextLeft5), RelativePosition.FromIndex(text, 5, -1).Encode());
     }
 
     [TestMethod]
-    public void CreateAbsolutePositionFromRelativePositionIsAnAliasForTryCreate()
+    public void EncodeToBufferWriter_WritesTheBytesOfEncode()
+    {
+        var rpos = RelativePosition.Decode(B(TextRight5));
+        var buffer = new ArrayBufferWriter<byte>();
+
+        rpos.Encode(buffer);
+
+        CollectionAssert.AreEqual(rpos.Encode(), buffer.WrittenSpan.ToArray());
+    }
+
+    [TestMethod]
+    public void DefaultPosition_LocatesNothing()
     {
         var doc = BuildDoc();
-        var rpos = RelativePosition.DecodeRelativePosition(B(TextRight5));
 
-        var viaAlias = AbsolutePosition.CreateAbsolutePositionFromRelativePosition(rpos, doc);
-        var viaOriginal = AbsolutePosition.TryCreateFromRelativePosition(rpos, doc);
+        Assert.IsFalse(default(RelativePosition).TryResolve(doc, out var absolute));
+        Assert.AreEqual(default, absolute);
+        Assert.ThrowsExactly<InvalidOperationException>(() => default(RelativePosition).Encode());
+    }
 
-        Assert.AreEqual(viaOriginal.Index, viaAlias.Index);
-        Assert.AreEqual(viaOriginal.Assoc, viaAlias.Assoc);
-        Assert.AreSame(viaOriginal.Type, viaAlias.Type);
+    [TestMethod]
+    public void Decode_EmptyBytes_ThrowsYUpdateException()
+    {
+        Assert.ThrowsExactly<YUpdateException>(() => RelativePosition.Decode([]));
     }
 
     [TestMethod]
@@ -190,14 +197,12 @@ public class RelativePositionParityTests
         // Sanity coverage for the new 'followUndoneDeletions' parameter: with no undo/redo in play,
         // both modes must agree (the divergence only matters once 'Redone' chains exist).
         var doc = BuildDoc();
-        var rpos = RelativePosition.DecodeRelativePosition(B(TextRight5));
+        var rpos = RelativePosition.Decode(B(TextRight5));
 
-        var following = AbsolutePosition.TryCreateFromRelativePosition(rpos, doc, followUndoneDeletions: true);
-        var notFollowing = AbsolutePosition.TryCreateFromRelativePosition(rpos, doc, followUndoneDeletions: false);
+        Assert.IsTrue(rpos.TryResolve(doc, out var following, followUndoneDeletions: true));
+        Assert.IsTrue(rpos.TryResolve(doc, out var notFollowing, followUndoneDeletions: false));
 
-        Assert.AreEqual(following.Index, notFollowing.Index);
-        Assert.AreEqual(following.Assoc, notFollowing.Assoc);
-        Assert.AreSame(following.Type, notFollowing.Type);
+        Assert.AreEqual(following, notFollowing);
     }
 
     [TestMethod]

@@ -92,14 +92,14 @@ internal static class Scenarios
         new("position.relative-from-index-deep-100k", 500, () =>
         {
             var (_, text) = LargeText();
-            return i => RelativePosition.FromTypeIndex(text, 90_000 + (i % 1000));
+            return i => RelativePosition.FromIndex(text, 90_000 + (i % 1000));
         }),
 
         new("position.absolute-from-relative-deep-100k", 500, () =>
         {
             var (doc, text) = LargeText();
-            var positions = Enumerable.Range(0, 1000).Select(i => RelativePosition.FromTypeIndex(text, 90_000 + i)).ToArray();
-            return i => AbsolutePosition.CreateAbsolutePositionFromRelativePosition(positions[i % positions.Length], doc);
+            var positions = Enumerable.Range(0, 1000).Select(i => RelativePosition.FromIndex(text, 90_000 + i)).ToArray();
+            return i => positions[i % positions.Length].TryResolve(doc, out _);
         }),
 
         new("map.set-existing-key", 500, () =>

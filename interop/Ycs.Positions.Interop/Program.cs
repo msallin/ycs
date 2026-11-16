@@ -26,10 +26,9 @@ var positions = input["positions"].AsArray().Select(p =>
     var label = p["label"].GetValue<string>();
     var encoded = Convert.FromBase64String(p["encoded"].GetValue<string>());
 
-    var rpos = RelativePosition.DecodeRelativePosition(encoded);
-    var abs = AbsolutePosition.CreateAbsolutePositionFromRelativePosition(rpos, doc);
+    var rpos = RelativePosition.Decode(encoded);
 
-    if (abs == null)
+    if (!rpos.TryResolve(doc, out var abs))
     {
         throw new Exception($"'{label}': could not resolve to an absolute position");
     }
@@ -39,7 +38,7 @@ var positions = input["positions"].AsArray().Select(p =>
         label,
         resolvedIndex = abs.Index,
         resolvedAssoc = abs.Assoc,
-        reencoded = Convert.ToBase64String(RelativePosition.EncodeRelativePosition(rpos))
+        reencoded = Convert.ToBase64String(rpos.Encode())
     };
 }).ToList();
 
