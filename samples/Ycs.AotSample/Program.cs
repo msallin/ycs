@@ -30,6 +30,14 @@ doc.GetMap("map").Set("added", new Dictionary<string, object> { ["n"] = 42, ["li
 doc.GetMap("map").Set("observed", 1);
 Check(observed > 0 && deepObserved == 2 && !kept.IsEmpty, $"events: observed {observed}, deep {deepObserved}, update {kept.Length} bytes");
 
+// Undo with a time provider and a subdocument's meta (options records, the capture timeout, the stack event payload).
+using var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero, TimeProvider = TimeProvider.System });
+var undone = 0;
+undo.StackItemPopped += (_, e) => undone += e.ChangedParentTypes.Count;
+text.Insert(0, "!");
+Check(undo.CanUndo && undo.Undo() != null && undone == 1 && text.ToString() == "AOT plain bold tail", $"undo: {text}");
+doc.GetMap("map").Set("sub", new YDoc(new YDocOptions { Meta = YValue.FromObject(new Dictionary<string, object> { ["k"] = 1 }) }));
+
 foreach (var v2 in new[] { false, true })
 {
     var update = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();

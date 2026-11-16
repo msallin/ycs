@@ -129,7 +129,7 @@ public class SubdocumentOptionTests
         doc.ApplyUpdate(SubdocumentWith(OneOption(key, Undefined)));
 
         var sub = (YDoc)doc.GetMap("m").Get("d");
-        Assert.AreEqual((false, false, null, null), (sub.AutoLoad, sub.ShouldLoad, sub.Meta, sub.CollectionId));
+        Assert.AreEqual((false, false, YValue.Null, null), (sub.AutoLoad, sub.ShouldLoad, sub.Meta, sub.CollectionId));
     }
 
     [TestMethod]

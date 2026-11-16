@@ -136,7 +136,7 @@ internal static class Scenarios
         new("undo.undo-redo-typing-100k", 500, () =>
         {
             var (doc, text) = LargeText();
-            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
             for (var i = 0; i < 1000; i++)
             {
                 text.Insert(TextLength / 2 + i, "x");
@@ -153,7 +153,7 @@ internal static class Scenarios
         {
             // Every redo splits the undone run (merged while deleted) at its front.
             var (_, text) = LargeText();
-            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
             const int typed = 20_000;
             for (var i = 0; i < typed; i++)
             {
@@ -172,7 +172,7 @@ internal static class Scenarios
         {
             // Backspace with an UndoManager whose capture never ends: the deleted characters are kept.
             var (_, text) = LargeText();
-            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = int.MaxValue });
+            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.MaxValue });
             var caret = TextLength / 2;
             return _ => text.Remove(--caret, 1);
         }),

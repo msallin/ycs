@@ -62,7 +62,7 @@ public class PlanItemKeysTests
 
     private static (YDoc Doc, byte[] Update) Scenario()
     {
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = true });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = true });
         doc.ApplyUpdate(SplitValueSetup());
         var r = doc.GetMap("r");
         var m = new YMap();
@@ -108,7 +108,7 @@ public class PlanItemKeysTests
     [TestMethod]
     public void ApplyUpdate_StoreItemAndOverlappingResendBothCut_AppliesAsYjs()
     {
-        var doc = new YDoc(new YDocOptions { Gc = true });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = true });
         doc.ApplyUpdate(Convert.FromBase64String(U1));
 
         doc.ApplyUpdate(Convert.FromBase64String(U2));
@@ -125,7 +125,7 @@ public class PlanItemKeysTests
     [TestMethod]
     public void ApplyUpdate_OverlappingResendSplitInADeletedMap_RejectsAndLeavesTheDocumentUnchanged()
     {
-        var doc = new YDoc(new YDocOptions { Gc = true });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = true });
         doc.ApplyUpdate(Convert.FromBase64String(OverlapStore));
         var before = Convert.ToBase64String(doc.EncodeStateAsUpdate());
 

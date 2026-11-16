@@ -37,7 +37,7 @@ Editor documents written by `y-prosemirror`, `y-quill`, Tiptap and BlockNote dec
 | Versions and positions | `Snapshot` (`EncodeSnapshot`, `DecodeSnapshot`, `EqualSnapshots`, `SnapshotContainsUpdate`, `YDoc.CreateDocFromSnapshot`), `RelativePosition` and `AbsolutePosition` (binary and JSON forms), `PermanentUserData`; all byte-compatible |
 | Undo | `UndoManager` with Yjs 13.6's behaviour |
 
-Snapshots are only meaningful on a document created with `Gc = false` (`new YDoc(new YDocOptions { Gc = false })`),
+Snapshots are only meaningful on a document created with `GarbageCollection = false` (`new YDoc(new YDocOptions { GarbageCollection = false })`),
 as in Yjs.
 
 ## Not supported

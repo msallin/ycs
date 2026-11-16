@@ -189,7 +189,7 @@ public class YTextTests : YTestBase
     [TestMethod]
     public void TestSnapshot()
     {
-        Init(users: 1, options: new YDocOptions { Gc = false });
+        Init(users: 1, options: new YDocOptions { GarbageCollection = false });
         var text0 = Texts[Users[0]];
         var doc0 = text0.Doc;
 
@@ -242,7 +242,7 @@ public class YTextTests : YTestBase
     [TestMethod]
     public void TestSnapshotDeleteAfter()
     {
-        Init(users: 1, options: new YDocOptions { Gc = false });
+        Init(users: 1, options: new YDocOptions { GarbageCollection = false });
         var text0 = Texts[Users[0]];
         var doc0 = text0.Doc;
 

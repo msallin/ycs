@@ -509,12 +509,12 @@ public class RunExtensionFuzzTests
             {
                 if (um == null)
                 {
-                    um = new UndoManager(new object[] { t, a }, new UndoManagerOptions { CaptureTimeout = rng.Chance(0.5) ? 0 : 100000 });
+                    um = new UndoManager(new YType[] { t, a }, new UndoManagerOptions { CaptureTimeout = TimeSpan.FromMilliseconds(rng.Chance(0.5) ? 0 : 100000) });
                     c.L("+um");
                 }
                 else if (rng.Chance(0.3))
                 {
-                    um.Destroy();
+                    um.Dispose();
                     um = null;
                     c.L("-um");
                 }

@@ -203,12 +203,12 @@ readonly struct Ycs.PendingDrop : System.IEquatable<PendingDrop>
     static bool op_Inequality(PendingDrop left, PendingDrop right)
     void Deconstruct(out long Structs, out System.Collections.Generic.IReadOnlyList<long> Clients)
 sealed class Ycs.PermanentUserData
-    PermanentUserData(YDoc doc, YMap storeType = null)
+    PermanentUserData(YDoc doc, YMap? store = null)
     YDoc Doc { get; }
-    YMap YUsers { get; }
-    string GetUserByClientId(long clientId)
-    string GetUserByDeletedId(ItemId id)
-    void SetUserMapping(YDoc doc, long clientId, string userDescription, System.Func<Transaction, bool> filter = null)
+    YMap Users { get; }
+    string? GetUserByClientId(long clientId)
+    string? GetUserByDeletedId(ItemId id)
+    void SetUserMapping(long clientId, string user, System.Func<Transaction, bool>? filter = null)
 readonly struct Ycs.RelativePosition : System.IEquatable<RelativePosition>
     ItemId? Item { get; init; }
     ItemId? TypeId { get; init; }
@@ -239,7 +239,7 @@ sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
     static readonly Snapshot Empty
     void Encode(System.Buffers.IBufferWriter<byte> destination, UpdateFormat format = 0)
 sealed class Ycs.StackItem
-    System.Collections.Generic.IDictionary<string, object> Meta { get; }
+    System.Collections.Generic.IDictionary<string, object?> Meta { get; }
 readonly struct Ycs.SubdocsEventArgs : System.IEquatable<SubdocsEventArgs>
     SubdocsEventArgs(System.Collections.Generic.IReadOnlySet<YDoc> Loaded, System.Collections.Generic.IReadOnlySet<YDoc> Added, System.Collections.Generic.IReadOnlySet<YDoc> Removed)
     System.Collections.Generic.IReadOnlySet<YDoc> Added { get; init; }
@@ -274,52 +274,75 @@ class Ycs.Transaction
     YDoc Doc { get; }
     bool Local { get; }
     object Origin { get; }
-class Ycs.UndoManager
-    StackItem CurrentStackItem { get; }
-    StackItem Redo()
-    StackItem Undo()
+sealed class Ycs.UndoManager : System.IDisposable
+    StackItem? CurrentStackItem { get; }
+    StackItem? Redo()
+    StackItem? Undo()
     System.Collections.Generic.IReadOnlyList<StackItem> RedoStack { get; }
     System.Collections.Generic.IReadOnlyList<StackItem> UndoStack { get; }
-    System.Collections.Generic.IReadOnlyList<object> Scope { get; }
-    UndoManager(System.Collections.Generic.IReadOnlyList<object> typeScope, UndoManagerOptions options = null)
-    UndoManager(YDoc doc, UndoManagerOptions options = null)
-    UndoManager(YType typeScope, UndoManagerOptions options = null)
+    System.Collections.Generic.IReadOnlyList<YType> Scope { get; }
+    UndoManager(System.Collections.Generic.IEnumerable<YType> scope, UndoManagerOptions? options = null)
+    UndoManager(YDoc doc, UndoManagerOptions? options = null)
+    UndoManager(YType scope, UndoManagerOptions? options = null)
     YDoc Doc { get; }
-    bool CanRedo()
-    bool CanUndo()
+    bool CanRedo { get; }
+    bool CanUndo { get; }
     bool IgnoreRemoteMapChanges { get; set; }
-    event System.EventHandler<UndoManager.StackClearedEventArgs> StackCleared
-    event System.EventHandler<UndoManager.StackEventArgs> StackItemAdded
-    event System.EventHandler<UndoManager.StackEventArgs> StackItemPopped
-    event System.EventHandler<UndoManager.StackEventArgs> StackItemUpdated
-    void AddToScope(System.Collections.Generic.IEnumerable<object> scopeEntries)
-    void AddToScope(object scopeEntry)
-    void AddTrackedOrigin(object origin)
-    void Clear()
-    void Clear(bool clearUndoStack, bool clearRedoStack)
-    void Destroy()
-    void RemoveTrackedOrigin(object origin)
+    bool TracksWholeDocument { get; }
+    event System.EventHandler<UndoStackClearedEventArgs>? StackCleared
+    event System.EventHandler<UndoStackEventArgs>? StackItemAdded
+    event System.EventHandler<UndoStackEventArgs>? StackItemPopped
+    event System.EventHandler<UndoStackEventArgs>? StackItemUpdated
+    void AddToScope(System.Collections.Generic.IEnumerable<YType> types)
+    void AddToScope(YDoc doc)
+    void AddToScope(YType type)
+    void AddTrackedOrigin(object? origin)
+    void Clear(bool undoStack = true, bool redoStack = true)
+    void Dispose()
+    void RemoveTrackedOrigin(object? origin)
     void StopCapturing()
-enum Ycs.UndoManager.OperationType : int
+sealed class Ycs.UndoManagerOptions : System.IEquatable<UndoManagerOptions>
+    System.Collections.Generic.IReadOnlyCollection<object?>? TrackedOrigins { get; init; }
+    System.Func<ItemView, bool>? DeleteFilter { get; init; }
+    System.Func<Transaction, bool>? CaptureTransaction { get; init; }
+    System.TimeProvider? TimeProvider { get; init; }
+    System.TimeSpan CaptureTimeout { get; init; }
+    UndoManagerOptions <Clone>$()
+    UndoManagerOptions()
+    bool Equals(UndoManagerOptions? other)
+    bool IgnoreRemoteMapChanges { get; init; }
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(UndoManagerOptions? left, UndoManagerOptions? right)
+    static bool op_Inequality(UndoManagerOptions? left, UndoManagerOptions? right)
+enum Ycs.UndoOperation : int
     Redo = 1
     Undo = 0
-class Ycs.UndoManager.StackClearedEventArgs : System.EventArgs
-    StackClearedEventArgs(bool undoStackCleared, bool redoStackCleared)
-    bool RedoStackCleared { get; }
-    bool UndoStackCleared { get; }
-class Ycs.UndoManager.StackEventArgs : System.EventArgs
-    StackItem StackItem { get; }
-    System.Collections.Generic.IDictionary<YType, System.Collections.Generic.IList<YEvent>> ChangedParentTypes { get; }
-    UndoManager.OperationType Type { get; }
-    object Origin { get; }
-sealed class Ycs.UndoManagerOptions
-    System.Collections.Generic.ISet<object> TrackedOrigins { get; set; }
-    System.Func<ItemView, bool> DeleteFilter { get; set; }
-    System.Func<Transaction, bool> CaptureTransaction { get; set; }
-    UndoManagerOptions()
-    YDoc Doc { get; set; }
-    bool IgnoreRemoteMapChanges { get; set; }
-    int CaptureTimeout { get; set; }
+readonly struct Ycs.UndoStackClearedEventArgs : System.IEquatable<UndoStackClearedEventArgs>
+    UndoStackClearedEventArgs(bool UndoStackCleared, bool RedoStackCleared)
+    bool Equals(UndoStackClearedEventArgs other)
+    bool RedoStackCleared { get; init; }
+    bool UndoStackCleared { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(UndoStackClearedEventArgs left, UndoStackClearedEventArgs right)
+    static bool op_Inequality(UndoStackClearedEventArgs left, UndoStackClearedEventArgs right)
+    void Deconstruct(out bool UndoStackCleared, out bool RedoStackCleared)
+readonly struct Ycs.UndoStackEventArgs : System.IEquatable<UndoStackEventArgs>
+    StackItem StackItem { get; init; }
+    System.Collections.Generic.IReadOnlyDictionary<YType, System.Collections.Generic.IReadOnlyList<YEvent>> ChangedParentTypes { get; init; }
+    UndoOperation Operation { get; init; }
+    UndoStackEventArgs(StackItem StackItem, UndoOperation Operation, System.Collections.Generic.IReadOnlyDictionary<YType, System.Collections.Generic.IReadOnlyList<YEvent>> ChangedParentTypes, object? Origin)
+    bool Equals(UndoStackEventArgs other)
+    object? Origin { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(UndoStackEventArgs left, UndoStackEventArgs right)
+    static bool op_Inequality(UndoStackEventArgs left, UndoStackEventArgs right)
+    void Deconstruct(out StackItem StackItem, out UndoOperation Operation, out System.Collections.Generic.IReadOnlyDictionary<YType, System.Collections.Generic.IReadOnlyList<YEvent>> ChangedParentTypes, out object? Origin)
 readonly struct Ycs.UpdateEventArgs : System.IEquatable<UpdateEventArgs>
     System.ReadOnlyMemory<byte> Update { get; init; }
     Transaction Transaction { get; init; }
@@ -409,18 +432,18 @@ sealed class Ycs.YChanges
 class Ycs.YDoc
     Snapshot CreateSnapshot()
     System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
-    System.Predicate<ItemView> GcFilter { get; }
     UpdateLimits Limits { get; }
     YArray GetArray(string name = "")
     YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc? newDoc = null)
-    YDoc(YDocOptions opts = null)
+    YDoc(YDocOptions options = null)
     YMap GetMap(string name = "")
     YText GetText(string name = "")
+    YValue Meta { get; }
     YXmlElement GetXmlElement(string name = "")
     YXmlFragment GetXmlFragment(string name = "")
     YXmlText GetXmlText(string name = "")
     bool AutoLoad { get; }
-    bool Gc { get; }
+    bool GarbageCollection { get; }
     bool HasPending { get; }
     bool ShouldLoad { get; }
     bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = 0, UpdateLimits? limits = null)
@@ -438,7 +461,6 @@ class Ycs.YDoc
     event System.EventHandler<UpdateEventArgs> Updated
     event System.EventHandler<UpdateEventArgs> UpdatedV2
     long ClientId { get; }
-    object Meta { get; }
     string CollectionId { get; }
     string Guid { get; }
     void ApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = 0, UpdateLimits? limits = null)
@@ -448,17 +470,24 @@ class Ycs.YDoc
     void Load()
     void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
     void Transact<TState>(TState state, System.Action<TState, Transaction> action, object origin = null, bool local = true)
-class Ycs.YDocOptions
-    System.Predicate<ItemView> GcFilter { get; set; }
-    UpdateLimits Limits { get; set; }
+sealed class Ycs.YDocOptions : System.IEquatable<YDocOptions>
+    System.Func<ItemView, bool>? GarbageCollectionFilter { get; init; }
+    UpdateLimits Limits { get; init; }
+    YDocOptions <Clone>$()
     YDocOptions()
-    bool AutoLoad { get; set; }
-    bool Gc { get; set; }
-    bool ShouldLoad { get; set; }
-    long? ClientId { get; set; }
-    object Meta { get; set; }
-    string CollectionId { get; set; }
-    string Guid { get; set; }
+    YValue Meta { get; init; }
+    bool AutoLoad { get; init; }
+    bool Equals(YDocOptions? other)
+    bool GarbageCollection { get; init; }
+    bool ShouldLoad { get; init; }
+    long? ClientId { get; init; }
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(YDocOptions? left, YDocOptions? right)
+    static bool op_Inequality(YDocOptions? left, YDocOptions? right)
+    string? CollectionId { get; init; }
+    string? Guid { get; init; }
 abstract class Ycs.YEvent
     System.Collections.Generic.IReadOnlyDictionary<string, KeyChange> Keys { get; }
     System.Collections.Generic.IReadOnlyList<PathSegment> Path { get; }

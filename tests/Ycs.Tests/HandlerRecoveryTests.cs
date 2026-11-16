@@ -331,7 +331,7 @@ public class HandlerRecoveryTests
     {
         var doc = new YDoc();
         var text = doc.GetText("t");
-        var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+        var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
         ThrowOnce(doc, evt);
         var announced = 0;
         doc.Updated += (_, _) => announced++;

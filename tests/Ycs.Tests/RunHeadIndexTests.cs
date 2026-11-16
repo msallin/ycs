@@ -416,7 +416,7 @@ public class RunHeadIndexTests
 
     private static YDoc Doc(long client, string walk, bool gc = true)
     {
-        var doc = new YDoc(new YDocOptions { ClientId = client, Gc = gc });
+        var doc = new YDoc(new YDocOptions { ClientId = client, GarbageCollection = gc });
         doc.LiteralWalkStepsForTests = walk == "eager" ? 1 : doc.LiteralWalkStepsForTests;
         doc.RunHeadIndexDisabledForTests = walk == "plain";
         doc.MarkerLookupsForTests = [];

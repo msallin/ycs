@@ -246,7 +246,7 @@ public class DecodedStructTests
         var result = new List<byte[]>();
         foreach (var gc in new[] { true, false })
         {
-            var doc = new YDoc(new YDocOptions { ClientId = 7, Gc = gc });
+            var doc = new YDoc(new YDocOptions { ClientId = 7, GarbageCollection = gc });
             doc.GetText("t").Insert(0, "hello é😀 world");
             doc.GetText("t").Format(1, 3, new Dictionary<string, YValue> { ["bold"] = true });
             doc.GetText("t").InsertEmbed(2, YValue.FromObject(new Dictionary<string, object> { ["img"] = "x" }));
@@ -265,7 +265,7 @@ public class DecodedStructTests
             xml.Insert(0, new List<object> { element, new YXmlText("t"), new YXmlHook("hk"), new YXmlFragment() });
             doc.GetText("t").Remove(4, 5);
             doc.GetArray("a").Delete(0, 2);
-            var peer = new YDoc(new YDocOptions { ClientId = 8, Gc = gc });
+            var peer = new YDoc(new YDocOptions { ClientId = 8, GarbageCollection = gc });
             peer.ApplyUpdate(doc.EncodeStateAsUpdate());
             peer.GetText("t").Insert(1, "peer");
             doc.ApplyUpdate(peer.EncodeStateAsUpdate());

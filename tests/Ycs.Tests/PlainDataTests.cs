@@ -60,7 +60,7 @@ public class PlainDataTests
     [TestMethod]
     public void Snapshot_InHashSetAndDictionary_EqualSnapshotsCollapse()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var text = doc.GetText("t");
         text.Insert(0, "abc");
         var (first, second) = (doc.CreateSnapshot(), doc.CreateSnapshot());
@@ -89,7 +89,7 @@ public class PlainDataTests
     [TestMethod]
     public void Snapshot_Equals_ObjectOverloadAgreesWithTypedAndHash()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetText("t").Insert(0, "abc");
         var a = doc.CreateSnapshot();
         var b = doc.CreateSnapshot();

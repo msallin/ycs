@@ -88,7 +88,7 @@ public class SnapshotParityTests
         Assert.AreEqual(0, Snapshot.Empty.DeleteSet.Clients.Count);
         Assert.IsTrue(Snapshot.Equals(Snapshot.Empty, Snapshot.Empty));
 
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetText().Insert(0, "x");
         var nonEmpty = doc.CreateSnapshot();
 
@@ -106,7 +106,7 @@ public class SnapshotParityTests
     [TestMethod]
     public void SnapshotContainsUpdate_TrueForAPrefixFalseOnceMoreIsWritten()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetText().Insert(0, "abc");
         var prefixUpdate = doc.EncodeStateAsUpdate();
 
@@ -122,7 +122,7 @@ public class SnapshotParityTests
     [TestMethod]
     public void SnapshotContainsUpdate_FalseWhenUpdateDeletesSomethingTheSnapshotDidNotSee()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new object[] { "a", "b", "c" });
 
         // Same ids the snapshot below will cover, no deletes yet: must be contained.
@@ -140,7 +140,7 @@ public class SnapshotParityTests
     [TestMethod]
     public void SnapshotContainsUpdateV2_MirrorsV1()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetText().Insert(0, "abc");
         var prefixUpdate = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
 
@@ -156,7 +156,7 @@ public class SnapshotParityTests
     [TestMethod]
     public void CreateDocFromSnapshot_CanTargetAnExistingDoc()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new[] { "hello" });
         var snap = doc.CreateSnapshot();
         doc.GetArray("array").Insert(1, new[] { "world" });
@@ -181,7 +181,7 @@ public class SnapshotParityTests
     [TestMethod]
     public void MapGetSnapshotAndGetAllSnapshot()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var map = doc.GetMap("map");
         map.Set("a", 1);
         map.Set("b", 2);
@@ -210,7 +210,7 @@ public class SnapshotParityTests
     [TestMethod]
     public void ArrayToArraySnapshot()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var array = doc.GetArray("array");
         array.Insert(0, new object[] { "x", "y", "z" });
 
@@ -228,7 +228,7 @@ public class SnapshotParityTests
     [TestMethod]
     public void SnapshotReads_ItemMergedAcrossTheSnapshotAfterALoneHighSurrogate_LeaveTheDocumentUnchanged()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var text = doc.GetText("text");
         var array = doc.GetArray("array");
         var map = doc.GetMap("map");
@@ -251,7 +251,7 @@ public class SnapshotParityTests
     {
         // Yjs 13.6.32: toDelta(snapshot) splits at the snapshot, and ContentString.splice replaces the
         // high surrogate and the next character with U+FFFD (yjs#248): [{insert: 'c\ufffd'}], 'c\ufffd\ufffd'.
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var text = doc.GetText("text");
         text.Insert(0, "c\ud800");
         var snap = doc.CreateSnapshot();

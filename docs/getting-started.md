@@ -155,7 +155,7 @@ doc.Transact(tr =>
 ```csharp
 var doc = new YDoc();
 var text = doc.GetText("content");
-var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
 
 text.Insert(0, "one");
 text.Insert(3, " two");
@@ -167,7 +167,13 @@ Console.WriteLine(text); // one two
 
 The `UndoManager` tracks changes to its scope made in transactions whose origin is in `TrackedOrigins` (by default:
 no origin). Apply peers' updates with an origin, as above, and it never undoes another user's edits. Changes within
-`CaptureTimeout` (500 ms by default) form one step.
+`CaptureTimeout` (500 ms by default, read from `UndoManagerOptions.TimeProvider`) form one step. `StopCapturing()`
+ends the current step. The manager is `IDisposable`: dispose it to unhook it from the document.
+
+`new UndoManager(type)`, `new UndoManager(types)` and `new UndoManager(doc)` choose the scope: a type with its children, a
+list of types, or every change of the document. `AddToScope` extends it; adding the document (`AddToScope(doc)`) makes
+the manager track the whole document, as a document in Yjs' scope list does (`TracksWholeDocument`; `Scope` lists the types
+only). `CanUndo` and `CanRedo` are properties; `Undo()` and `Redo()` return the stack item, or null when nothing changed.
 
 ## Saving and loading
 

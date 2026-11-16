@@ -15,11 +15,32 @@ names; everything is in the namespace `Ycs`.
 | Update format | v1 (`applyUpdate`) by default, v2 (`applyUpdateV2`) | `ApplyV1`/`ApplyV2`, `StateDiffV1`/`StateDiffV2` | v1 by default, `UpdateFormat.V2` as a `format` argument (`ApplyUpdate`, `EncodeStateAsUpdate`, `YUpdate`, `Snapshot`, `SyncProtocol`) |
 | Subscriptions | `observe(f)` / `unobserve(f)`, `doc.on('update', f)` | `IDisposable Observe(Action<T>)` | typed `Observe(Action<TEvent>)` and `ObserveDeep` returning `IDisposable`; .NET events on `YDoc` (`Updated`, `UpdatedV2`, `SubdocsChanged`, the transaction events) |
 | Positions that survive edits | `RelativePosition` | `StickyIndex` | `RelativePosition` / `AbsolutePosition` |
-| Undo | `UndoManager(scope, { trackedOrigins, captureTimeout })` | `UndoManager(doc, branch, options)` | `UndoManager(scope, new UndoManagerOptions { TrackedOrigins, CaptureTimeout })` |
+| Undo | `UndoManager(scope, { trackedOrigins, captureTimeout })` | `UndoManager(doc, branch, options)` | `UndoManager(scope, new UndoManagerOptions { TrackedOrigins, CaptureTimeout })` (`CaptureTimeout` a `TimeSpan`, `IDisposable`) |
 | Threading | single-threaded | the native document is locked per transaction | the caller's job, as in Yjs ([Thread safety](#thread-safety)) |
 
 YDotNet's explicit transactions and tagged values come from the Rust borrow model and the native
 boundary; they would make Ycs harder to use without making it safer, so Ycs keeps the Yjs shape.
+
+## Options and undo
+
+`YDocOptions`, `UndoManagerOptions` and `UpdateLimits` are sealed records with `init` properties (`with` copies one). A
+document keeps what it was made with and shows it as read-only properties (`GarbageCollection`, `Limits`, `Guid`,
+`Meta`, ...). `ClientId` is checked when it is set. Without a `Guid` the document makes a random one when it is first
+read, so two documents made from one options object differ.
+
+```csharp
+var doc = new YDoc(new YDocOptions { GarbageCollection = false });
+var undo = new UndoManager(doc.GetText("t"), new UndoManagerOptions
+{
+    CaptureTimeout = TimeSpan.FromSeconds(1),
+    TimeProvider = timeProvider, // a test moves the capture timeout's clock by hand
+});
+```
+
+An `UndoManager` is `IDisposable`; its events (`StackItemAdded`, `StackItemUpdated`, `StackItemPopped`) carry an
+`UndoStackEventArgs` (the stack item, the `UndoOperation`, the changed types with their events, the origin) and
+`StackCleared` an `UndoStackClearedEventArgs`. `PermanentUserData(doc)` maps client ids to users of that document:
+`SetUserMapping(clientId, user)`, `GetUserByClientId`, `GetUserByDeletedId`; `Users` is the map that stores them.
 
 ## Events
 
@@ -80,7 +101,7 @@ empty, null or -1.
 | --- | --- |
 | `YChanges.Added`, `.Deleted` | `IReadOnlySet<ItemView>` |
 | `YEvent.Adds(view)`, `Deletes(view)` | whether the event added or deleted it, also when both |
-| `YDocOptions.GcFilter` | `Predicate<ItemView>`: true lets a deleted item be collected |
+| `YDocOptions.GarbageCollectionFilter` | `Func<ItemView, bool>`: true lets a deleted item be collected |
 | `UndoManagerOptions.DeleteFilter` | `Func<ItemView, bool>`: false keeps an undo or redo from deleting the item |
 | `YUpdate.Decode` | `DecodedUpdate.Structs`: `IReadOnlyList<DecodedStruct>` |
 
@@ -91,7 +112,7 @@ var doc = new YDoc(new YDocOptions
 {
     ClientId = 1,
     // Collect deleted text; keep deleted shared types (true collects).
-    GcFilter = item => item.Kind != ItemKind.Type,
+    GarbageCollectionFilter = item => item.Kind != ItemKind.Type,
 });
 var list = doc.GetArray("list");
 

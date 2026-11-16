@@ -53,9 +53,9 @@ public class SubdocumentParityTests
         doc.GetMap("m").Set("s", new YDoc(new YDocOptions
         {
             Guid = "g2",
-            Gc = false,
+            GarbageCollection = false,
             AutoLoad = true,
-            Meta = new Dictionary<string, object> { ["a"] = 1 },
+            Meta = YValue.FromObject(new Dictionary<string, object> { ["a"] = 1 }),
         }));
 
         Assert.AreEqual("AQEBACkBAW0BcwJnMnYDAmdjeQhhdXRvTG9hZHgEbWV0YXYBAWF9AQA=", S(doc.EncodeStateAsUpdate()));
@@ -162,7 +162,7 @@ public class SubdocumentParityTests
     [TestMethod]
     public void Destroy_DeletedSubdocument_LeavesAFreshDocumentInTheContent()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var map = doc.GetMap("m");
         var subdoc = new YDoc(new YDocOptions { Guid = "del" });
         map.Set("s", subdoc);
@@ -242,7 +242,7 @@ public class SubdocumentParityTests
         // and encodeStateAsUpdate (documents as guid:shouldLoad:clientID).
         var doc = new YDoc(new YDocOptions { ClientId = 7 });
         var array = doc.GetArray("a");
-        var undoManager = new UndoManager(array, new UndoManagerOptions { CaptureTimeout = 0 });
+        var undoManager = new UndoManager(array, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
         var events = new List<string>();
         static string Docs(IEnumerable<object> docs) =>
             string.Join(",", docs.Cast<YDoc>().Select(d => $"{d.Guid}:{(d.ShouldLoad ? "true" : "false")}:{d.ClientId}").Order(StringComparer.Ordinal));

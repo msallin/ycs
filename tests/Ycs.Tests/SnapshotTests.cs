@@ -15,7 +15,7 @@ public class SnapshotTests : YTestBase
     [TestMethod]
     public void TestBasicRestoreSnapshot()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new[] { "hello" });
 
         var snap = doc.CreateSnapshot();
@@ -30,7 +30,7 @@ public class SnapshotTests : YTestBase
     [TestMethod]
     public void TestEmptyRestoreSnapshot()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var snap = doc.CreateSnapshot();
 
         snap.StateVector[9999] = 0;
@@ -49,7 +49,7 @@ public class SnapshotTests : YTestBase
     [TestMethod]
     public void TestRestoreSnapshotWithSubType()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new[] { new YMap() });
         var subMap = doc.GetArray("array").Get(0) as YMap;
         subMap.Set("key1", "value1");
@@ -72,7 +72,7 @@ public class SnapshotTests : YTestBase
     [TestMethod]
     public void TestRestoreDeletedItem1()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new[] { "item1", "item2" });
 
         var snap = doc.CreateSnapshot();
@@ -86,7 +86,7 @@ public class SnapshotTests : YTestBase
     [TestMethod]
     public void TestRestoreLeftItem()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new[] { "item1" });
         doc.GetMap("map").Set("test", 1);
         doc.GetArray("array").Insert(0, new[] { "item0" });
@@ -102,7 +102,7 @@ public class SnapshotTests : YTestBase
     [TestMethod]
     public void TestDeletedItemsBase()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new[] { "item1" });
         doc.GetArray("array").Delete(0);
 
@@ -117,7 +117,7 @@ public class SnapshotTests : YTestBase
     [TestMethod]
     public void TestDeletedItems2()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new[] { "item1", "item2", "item3" });
         doc.GetArray("array").Delete(1);
 
@@ -132,7 +132,7 @@ public class SnapshotTests : YTestBase
     [TestMethod]
     public void TestDependentChanges()
     {
-        Init(users: 2, new YDocOptions { Gc = false });
+        Init(users: 2, new YDocOptions { GarbageCollection = false });
         var array0 = Arrays[Users[0]];
         var array1 = Arrays[Users[1]];
 

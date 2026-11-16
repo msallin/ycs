@@ -80,7 +80,7 @@ public class CodecPathTests
     /// <summary>Like <see cref="CorpusTests.Build"/>, through the reused reader and the store, as <see cref="YDoc"/> will.</summary>
     private static YDoc BuildWithReader(CorpusCase c, bool v2)
     {
-        var doc = new YDoc(new YDocOptions { Gc = c.Gc });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = c.Gc });
         foreach (var update in c.Updates)
         {
             var bytes = update.Get(v2);

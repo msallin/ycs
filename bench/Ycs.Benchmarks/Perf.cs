@@ -18,7 +18,7 @@ internal static class Perf
         Case("P1 delete 40,000 characters backwards, UndoManager attached", () =>
         {
             var (doc, text) = Typed(40_000);
-            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = int.MaxValue });
+            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.MaxValue });
             return () =>
             {
                 for (var i = 40_000 - 1; i >= 0; i--)
@@ -32,7 +32,7 @@ internal static class Perf
         {
             var doc = new YDoc(new YDocOptions { ClientId = 1 });
             var text = doc.GetText("t");
-            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
             for (var i = 0; i < 40_000; i++)
             {
                 text.Insert(i, "a");
@@ -51,7 +51,7 @@ internal static class Perf
         {
             var doc = new YDoc(new YDocOptions { ClientId = 1 });
             var text = doc.GetText("t");
-            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+            var undoManager = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
             for (var i = 0; i < 40_000; i++)
             {
                 text.Insert(i, "a");
@@ -75,7 +75,7 @@ internal static class Perf
         Case("P2 40,000 edits at random places in one capture", () =>
         {
             var (doc, text) = Typed(40_000);
-            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = int.MaxValue });
+            _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.MaxValue });
             var random = new Random(1);
             return () =>
             {

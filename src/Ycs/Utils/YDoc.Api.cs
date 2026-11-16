@@ -12,11 +12,13 @@ namespace Ycs;
 
 public partial class YDoc
 {
-    public string Guid => _opts.Guid;
-    public bool Gc => _opts.Gc;
-    public Predicate<ItemView> GcFilter => _opts.GcFilter;
+    /// <summary>The one the options named, or a random one made when it is first read (a document that never reads it costs none).</summary>
+    public string Guid => _guid ??= _opts.Guid ?? System.Guid.NewGuid().ToString("D");
+    public bool GarbageCollection => _opts.GarbageCollection;
     public bool AutoLoad => _opts.AutoLoad;
-    public object Meta => _opts.Meta;
+    public YValue Meta => _opts.Meta;
+
+    internal Func<ItemView, bool> GcFilter => _opts.GarbageCollectionFilter ?? YDocOptions.DefaultGcFilter;
 
     /// <summary>What an applied update may cost (<see cref="YDocOptions.Limits"/>).</summary>
     public UpdateLimits Limits => _opts.Limits;
@@ -25,11 +27,9 @@ public partial class YDoc
     /// <summary>Whether the document should be synced by the provider now (Yjs' <c>shouldLoad</c>); <see cref="Load"/> sets it.</summary>
     public bool ShouldLoad { get; private set; }
 
-    /// <param name="gc">Disable garbage collection.</param>
-    /// <param name="gcFilter">WIll be called before an Item is garbage collected. Return false to keep the item.</param>
-    public YDoc(YDocOptions opts = null)
+    public YDoc(YDocOptions options = null)
     {
-        _opts = opts ?? new YDocOptions();
+        _opts = options ?? new YDocOptions();
         _transactionCleanups = new List<Transaction>();
 
         ClientId = _opts.ClientId ?? GenerateNewClientId();

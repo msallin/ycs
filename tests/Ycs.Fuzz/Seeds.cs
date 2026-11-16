@@ -39,7 +39,7 @@ internal static class Seeds
                 .Select(u => (V1: Convert.FromBase64String(u.GetProperty("v1").GetString()!), V2: Convert.FromBase64String(u.GetProperty("v2").GetString()!)))
                 .ToList();
 
-            var doc = new YDoc(new YDocOptions { Gc = gc, ClientId = 1 });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = 1 });
             for (var i = 0; i < updates.Count; i++)
             {
                 var baseState = i == 0 ? [] : doc.EncodeStateAsUpdate();
@@ -56,8 +56,8 @@ internal static class Seeds
         {
             foreach (var (name, roots, edits) in Scenarios())
             {
-                var a = new YDoc(new YDocOptions { Gc = gc, ClientId = 10 });
-                var b = new YDoc(new YDocOptions { Gc = gc, ClientId = 20 });
+                var a = new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = 10 });
+                var b = new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = 20 });
                 var recorded = new List<(byte[] V1, byte[] V2)>();
                 byte[]? v1 = null;
                 a.Updated += (_, e) => v1 = e.Update.ToArray();
@@ -66,7 +66,7 @@ internal static class Seeds
                 edits(a, b);
 
                 // One seed per incremental update, and one for the whole document as a single update.
-                var replica = new YDoc(new YDocOptions { Gc = gc, ClientId = 1 });
+                var replica = new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = 1 });
                 for (var i = 0; i < recorded.Count; i++)
                 {
                     var baseState = i == 0 ? [] : replica.EncodeStateAsUpdate();

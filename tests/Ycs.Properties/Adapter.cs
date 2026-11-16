@@ -670,7 +670,7 @@ namespace Ycs.Properties
                             default: um.Clear(); break;
                         }
 
-                        return Obj(("r", r), ("u", um.CanUndo()), ("d", um.CanRedo()), ("n", (long)um.UndoStack.Count));
+                        return Obj(("r", r), ("u", um.CanUndo), ("d", um.CanRedo), ("n", (long)um.UndoStack.Count));
                     }
                 case "snap":
                     {
@@ -1009,12 +1009,13 @@ namespace Ycs.Properties
 
         private object NewUndoManager(Dictionary<string, object> s)
         {
-            var scope = new List<object>();
+            var scope = new List<YType>();
+            var wholeDoc = false;
             foreach (var p in s.List("scope"))
             {
                 if (p is "$doc")
                 {
-                    scope.Add(Doc);
+                    wholeDoc = true;
                 }
                 else if (Replica.Resolve(p as List<object>) is { } t)
                 {
@@ -1022,25 +1023,21 @@ namespace Ycs.Properties
                 }
             }
 
-            if (scope.Count == 0)
+            if (scope.Count == 0 && !wholeDoc)
             {
                 return "skip";
             }
 
             var origins = s.List("origins") is { } list ? new HashSet<object>(list) : null;
-            var options = new UndoManagerOptions { CaptureTimeout = s.Str("timeout") == "inf" ? int.MaxValue : 0 };
-            if (origins != null)
-            {
-                options.TrackedOrigins = origins;
-            }
-
-            var um = new UndoManager(scope, options);
+            var options = new UndoManagerOptions { CaptureTimeout = TimeSpan.FromMilliseconds(s.Str("timeout") == "inf" ? int.MaxValue : 0), TrackedOrigins = origins };
+            var um = wholeDoc ? new UndoManager(Doc, options) : new UndoManager(scope, options);
+            um.AddToScope(scope);
             var id = $"{Index}.{ScriptRun.IdText(s.Get("id"))}";
             _run.UndoIds[um] = id;
             UndoManagers[ScriptRun.IdText(s.Get("id"))] = um;
-            um.StackItemAdded += (_, e) => Push(Obj(("w", "um+"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
-            um.StackItemUpdated += (_, e) => Push(Obj(("w", "um~"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
-            um.StackItemPopped += (_, e) => Push(Obj(("w", "um-"), ("id", id), ("type", e.Type == UndoManager.OperationType.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
+            um.StackItemAdded += (_, e) => Push(Obj(("w", "um+"), ("id", id), ("type", e.Operation == UndoOperation.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
+            um.StackItemUpdated += (_, e) => Push(Obj(("w", "um~"), ("id", id), ("type", e.Operation == UndoOperation.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
+            um.StackItemPopped += (_, e) => Push(Obj(("w", "um-"), ("id", id), ("type", e.Operation == UndoOperation.Undo ? "undo" : "redo"), ("origin", _run.OriginLabel(e.Origin))));
             um.StackCleared += (_, e) => Push(Obj(("w", "umclear"), ("id", id), ("u", e.UndoStackCleared), ("r", e.RedoStackCleared)));
             return Missing.Value;
         }
@@ -1134,7 +1131,7 @@ namespace Ycs.Properties
                     if (o.Has("$doc"))
                     {
                         var d = (Dictionary<string, object>)o["$doc"];
-                        return new YDoc(new YDocOptions { Guid = d.Str("g"), Gc = d.Get("gc") is not false, AutoLoad = d.Bool("autoLoad") });
+                        return new YDoc(new YDocOptions { Guid = d.Str("g"), GarbageCollection = d.Get("gc") is not false, AutoLoad = d.Bool("autoLoad") });
                     }
 
                     return o.ToDictionary(kv => kv.Key, kv => Val(kv.Value));
@@ -1211,11 +1208,12 @@ namespace Ycs.Properties
 
         public Replica(long? clientId, bool gc, IEnumerable<(string Name, string Kind)> roots, Predicate<ItemView> gcFilter = null)
         {
-            var options = new YDocOptions { Gc = gc, ClientId = clientId };
-            if (gcFilter != null)
+            var options = new YDocOptions
             {
-                options.GcFilter = gcFilter;
-            }
+                GarbageCollection = gc,
+                ClientId = clientId,
+                GarbageCollectionFilter = gcFilter == null ? null : item => gcFilter(item),
+            };
 
             Doc = new YDoc(options);
             _roots = roots.ToList();
@@ -1227,7 +1225,7 @@ namespace Ycs.Properties
 
         public IReadOnlyList<(string Name, string Kind)> Roots => _roots;
 
-        public bool Gc => Doc.Gc;
+        public bool Gc => Doc.GarbageCollection;
 
         public long ClientId => Doc.ClientId;
 

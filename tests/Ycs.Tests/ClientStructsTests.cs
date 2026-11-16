@@ -39,7 +39,7 @@ public class ClientStructsTests
         var random = new Random(11);
         for (var round = 0; round < 60; round++)
         {
-            var doc = new YDoc(new YDocOptions { Gc = round % 2 == 0 });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = round % 2 == 0 });
             var text = doc.GetText("t");
             var array = doc.GetArray("a");
             var remote = new YDoc();
@@ -144,7 +144,7 @@ public class ClientStructsTests
     [DataRow(3)]
     public void FindIndex_ClockBelowTheFirstStartWithLeaves_ThrowsAsWithoutLeaves(int leaves) => WithLeafCapacity(2, () =>
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var text = doc.GetText("t");
         for (var i = 0; i < 10 + (2 * leaves); i++)
         {

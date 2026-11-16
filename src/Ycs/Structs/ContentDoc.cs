@@ -23,7 +23,7 @@ internal class ContentDoc : IContentEx
     internal ContentDoc(YDoc doc)
     {
         _doc = doc;
-        Opts = OptsOf(doc.Gc, doc.AutoLoad, doc.Meta);
+        Opts = OptsOf(doc.GarbageCollection, doc.AutoLoad, doc.Meta.ToObject());
     }
 
     private ContentDoc(Options read)
@@ -178,9 +178,9 @@ internal class ContentDoc : IContentEx
         public YDoc Create(UpdateLimits? limits) => new(new YDocOptions
         {
             Guid = Guid,
-            Gc = Gc,
+            GarbageCollection = Gc,
             AutoLoad = AutoLoad,
-            Meta = Meta,
+            Meta = YValue.FromObject(Meta),
             CollectionId = CollectionId,
             ShouldLoad = ShouldLoad,
             Limits = limits ?? UpdateLimits.Default,

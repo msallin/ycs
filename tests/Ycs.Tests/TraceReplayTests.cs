@@ -532,7 +532,7 @@ public class TraceReplayTests
         public new string Run(JsonElement trace)
         {
             var clients = trace.GetProperty("clients").EnumerateArray().Select(c => c.GetInt64()).ToList();
-            Doc = new YDoc(new YDocOptions { ClientId = clients[0], Gc = false });
+            Doc = new YDoc(new YDocOptions { ClientId = clients[0], GarbageCollection = false });
             _text = Doc.GetText("t");
             return base.Run(trace);
         }

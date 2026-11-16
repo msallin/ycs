@@ -36,7 +36,7 @@ internal sealed class CorpusDoc
     /// <summary>A fresh document; <paramref name="clientId"/> pins the id for reproducible conflict resolution.</summary>
     public static CorpusDoc Create(bool gc = true, int? clientId = null)
     {
-        return new CorpusDoc(new YDoc(new YDocOptions { Gc = gc, ClientId = clientId }));
+        return new CorpusDoc(new YDoc(new YDocOptions { GarbageCollection = gc, ClientId = clientId }));
     }
 
     /// <summary>Raised with the v1 update of every transaction made on this doc (not of applied remote updates).</summary>

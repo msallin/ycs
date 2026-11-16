@@ -467,7 +467,7 @@ public partial class Transaction
             // collection filter (once per item); when nobody is, the runs stay as they are, which is what the merge
             // below would make of them.
             if (doc.HasTransactionListeners || doc.HasBeforeObserverCallsListeners || AnyObserved(transaction)
-                || (doc.Gc && doc.GcFilter != YDocOptions.DefaultGcFilter && ds.Clients.Count > 0))
+                || (doc.GarbageCollection && doc.GcFilter != YDocOptions.DefaultGcFilter && ds.Clients.Count > 0))
             {
                 transaction.MaterializeRunExtensions();
             }
@@ -618,7 +618,7 @@ public partial class Transaction
         // What follows is Yjs' 'finally' part.
         // Replace deleted items with ItemDeleted / GC.
         // This is where content is actually removed from the Yjs Doc.
-        if (doc.Gc)
+        if (doc.GarbageCollection)
         {
             ds.TryGcDeleteSet(store, doc);
         }

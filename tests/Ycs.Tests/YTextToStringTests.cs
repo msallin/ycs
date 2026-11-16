@@ -113,7 +113,7 @@ public class YTextToStringTests
         // "a" + high surrogate, a snapshot, then the low surrogate merged into the same item. Reading
         // the snapshot splits the item between the two halves, which replaces both: the only change
         // to the text that adds and deletes nothing.
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var text = doc.GetText("text");
         text.Insert(0, "a\uD83D");
         var snapshot = doc.CreateSnapshot();

@@ -284,7 +284,7 @@ public class RunExtensionScenarioTests
             um.Undo(); c.L(t.ToString()); c.L(ReferenceRun.Dump(doc));
             um.Undo(); c.L(t.ToString());
             um.Redo(); c.L(t.ToString());
-            um.Destroy();
+            um.Dispose();
             doc.Transact(tr => { t.Insert(t.Length, "h"); t.Insert(t.Length, "i"); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -295,10 +295,10 @@ public class RunExtensionScenarioTests
             var um = new UndoManager(u);
             u.Insert(0, "uu");
             um.StopCapturing();
-            um.Destroy(); // listener gone? keep a second manager unobserving
-            var um2 = new UndoManager(u, new UndoManagerOptions { CaptureTimeout = 0 });
+            um.Dispose(); // listener gone? keep a second manager unobserving
+            var um2 = new UndoManager(u, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
             u.Insert(2, "v");
-            c.L("can " + um2.CanUndo());
+            c.L("can " + um2.CanUndo);
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
         Add("s12-snapshot-todelta-inside", c =>

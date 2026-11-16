@@ -15,7 +15,7 @@ public partial class YDoc
     /// A snapshot that holds a client or clock this document does not have throws <see cref="YUpdateException"/>.
     /// </summary>
     /// <example>
-    ///   var doc = new YDoc(new YDocOptions { Gc = false });
+    ///   var doc = new YDoc(new YDocOptions { GarbageCollection = false });
     ///   doc.GetText().Insert(0, "world!");
     ///   var snapshot = doc.CreateSnapshot();
     ///   doc.GetText().Insert(0, "hello ");
@@ -26,7 +26,7 @@ public partial class YDoc
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        if (Gc)
+        if (GarbageCollection)
         {
             // Restoring a GC-ed document is not possible: some of the restored items would have
             // had their content collected already.

@@ -10,7 +10,7 @@ public class EncodingEntryPointTests
 {
     private static YDoc Doc(int clientId, string text)
     {
-        var doc = new YDoc(new YDocOptions { ClientId = clientId, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = clientId, GarbageCollection = false });
         doc.GetText("t").Insert(0, text);
         return doc;
     }
