@@ -28,6 +28,12 @@ internal sealed class Room
     {
         lock (gate)
         {
+            // A close that ran first has already left; Close sets the reason before it takes the lock in Leave.
+            if (session.IsClosed)
+            {
+                return;
+            }
+
             sessions = [.. sessions, session];
             var message = new MemoryStream();
             VarUint.Write(message, MessageType.Sync);
