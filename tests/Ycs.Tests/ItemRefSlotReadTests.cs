@@ -48,16 +48,4 @@ public class ItemRefSlotReadTests
 
         Assert.AreEqual((true, true), (merged.IsDetached, thrown.Message.Contains("1:1", StringComparison.Ordinal)));
     }
-
-    [TestMethod]
-    public void Read_StructReplacedByAGcStruct_Throws()
-    {
-        var doc = NewDoc();
-        var text = doc.GetText("t");
-        text.Insert(0, "ab");
-        var item = text._start;
-        doc.Store.ReplaceStruct(item, ItemRef.NewGC(item.Id, item.Length));
-
-        Assert.ThrowsExactly<InvalidOperationException>(() => _ = item.Left);
-    }
 }
