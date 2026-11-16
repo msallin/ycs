@@ -11,16 +11,16 @@ internal class ContentFormat : IContentEx
     internal const int _ref = 6;
 
     public readonly string Key;
-    private readonly object _value;
+    private readonly object? _value;
 
-    internal ContentFormat(string key, object value)
+    internal ContentFormat(string key, object? value)
     {
         Key = key;
         _value = value;
     }
 
     /// <summary>The attribute's value; a byte array as a copy.</summary>
-    public object Value => ValueFreezer.OnRead(_value)!;
+    public object? Value => ValueFreezer.OnRead(_value);
 
     int IContentEx.Ref => _ref;
 

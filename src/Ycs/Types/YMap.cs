@@ -4,9 +4,8 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Collections;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Ycs;
@@ -18,7 +17,7 @@ public sealed class YMapEvent : YEvent
 {
     public IReadOnlySet<string> KeysChanged { get; }
 
-    internal YMapEvent(YMap map, Transaction transaction, ISet<string> subs)
+    internal YMapEvent(YMap map, Transaction transaction, ISet<string?> subs)
         : base(map, transaction)
     {
         KeysChanged = (IReadOnlySet<string>)subs;
@@ -32,12 +31,12 @@ public partial class YMap : YType
 {
     internal const int YMapRefId = 1;
 
-    private Dictionary<string, object> _prelimContent;
+    private Dictionary<string, object?>? _prelimContent;
 
     /// <summary>The JSON object of this map with each nested type left null and listed in <paramref name="nested"/>.</summary>
-    internal override object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested)
+    internal override object ShallowJson(List<(YType Type, object Container, string? Key, int Index)> nested)
     {
-        var result = new Dictionary<string, object>();
+        var result = new Dictionary<string, object?>();
         foreach (var kvp in EnumerateEntries())
         {
             if (kvp.Value is YType at)
@@ -83,15 +82,16 @@ public partial class YMap : YType
         RuntimeHelpers.EnsureSufficientExecutionStack();
         base.Integrate(doc, item);
 
-        foreach (var kvp in _prelimContent)
+        var prelimContent = _prelimContent;
+        Debug.Assert(prelimContent != null);
+        _prelimContent = null;
+        foreach (var kvp in prelimContent)
         {
             SetRaw(kvp.Key, kvp.Value);
         }
-
-        _prelimContent = null;
     }
 
-    internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
+    internal override void CallObserver(Transaction transaction, ISet<string?> parentSubs)
     {
         if (IsObserved(transaction))
         {

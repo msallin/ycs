@@ -5,6 +5,7 @@
 // ------------------------------------------------------------------------------
 
 using System.Collections;
+using System.Diagnostics;
 
 namespace Ycs;
 
@@ -22,12 +23,12 @@ public sealed partial class YArray : IReadOnlyList<YValue>
 
     public YArray()
     {
-        _prelimContent = new List<object>();
+        _prelimContent = new List<object?>();
     }
 
     public YArray(params ReadOnlySpan<YValue> values)
     {
-        _prelimContent = new List<object>(values.Length);
+        _prelimContent = new List<object?>(values.Length);
         foreach (var value in values)
         {
             _prelimContent.Add(value.Stored());
@@ -187,6 +188,7 @@ public sealed partial class YArray : IReadOnlyList<YValue>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             PrelimInsert(_prelimContent, index, content);
         }
     }
@@ -199,6 +201,7 @@ public sealed partial class YArray : IReadOnlyList<YValue>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             _prelimContent.AddRange(content);
         }
     }
@@ -246,6 +249,7 @@ public sealed partial class YArray : IReadOnlyList<YValue>
         }
         else
         {
+            Debug.Assert(_prelimContent != null);
             PrelimDelete(_prelimContent, index, count);
         }
     }

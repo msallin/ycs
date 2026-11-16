@@ -4,8 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Ycs;
@@ -23,7 +22,7 @@ public sealed partial class YArray : YArrayBase
 {
     internal const byte YArrayRefId = 0;
 
-    private List<object> _prelimContent;
+    private List<object?>? _prelimContent;
 
     internal override void Integrate(YDoc doc, ItemRef item)
     {
@@ -42,6 +41,7 @@ public sealed partial class YArray : YArrayBase
         // unaffected; only the cached counter was wrong). Nulling first makes the getter fall
         // through to `base.Length` for the whole duration of the flush, exactly as intended.
         var prelimContent = _prelimContent;
+        Debug.Assert(prelimContent != null);
         _prelimContent = null;
         InsertRaw(0, prelimContent);
     }
@@ -78,7 +78,7 @@ public sealed partial class YArray : YArrayBase
     /// <summary>
     /// Creates YArrayEvent and calls observers.
     /// </summary>
-    internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
+    internal override void CallObserver(Transaction transaction, ISet<string?> parentSubs)
     {
         base.CallObserver(transaction, parentSubs);
         if (IsObserved(transaction))
@@ -88,9 +88,9 @@ public sealed partial class YArray : YArrayBase
     }
 
     /// <summary>The JSON list of this array with each nested type left null and listed in <paramref name="nested"/>.</summary>
-    internal override object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested)
+    internal override object ShallowJson(List<(YType Type, object Container, string? Key, int Index)> nested)
     {
-        var result = new List<object>();
+        var result = new List<object?>();
         foreach (var c in EnumerateValues())
         {
             if (c is YType at)
@@ -108,5 +108,5 @@ public sealed partial class YArray : YArrayBase
     }
 
     /// <summary>The values in order, as stored; those of an array not in a document yet too.</summary>
-    private IEnumerable<object> EnumerateValues() => _prelimContent ?? EnumerateRaw();
+    private IEnumerable<object?> EnumerateValues() => _prelimContent ?? EnumerateRaw();
 }

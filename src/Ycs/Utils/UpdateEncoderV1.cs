@@ -146,5 +146,5 @@ internal sealed class UpdateEncoderV1 : DSEncoderV1, IUpdateEncoder
 
     public void WriteKey(string key) => RestWriter.WriteVarString(key);
 
-    public void WriteJson(object any) => RestWriter.WriteVarString(YJson.Stringify(any));
+    public void WriteJson(object? any) => RestWriter.WriteVarString(YJson.Stringify(any));
 }

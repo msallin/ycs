@@ -4,8 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
+using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;
@@ -41,7 +40,10 @@ internal static class YXmlNodeHelpers
         return n;
     }
 
-    internal static YType ContentTypeOf(ItemRef item)
+    /// <summary>The type a visible (not deleted) node item holds.</summary>
+    internal static YType NodeOf(ItemRef item) => (YType)item.Content.GetContent()[0];
+
+    internal static YType? ContentTypeOf(ItemRef item)
     {
         if (item.IsNull)
         {
@@ -62,7 +64,7 @@ public partial class YXmlFragment : YArrayBase
 {
     internal const int YXmlFragmentRefId = 4;
 
-    private List<object> _prelimContent;
+    private List<object?>? _prelimContent;
 
     internal override void Integrate(YDoc doc, ItemRef item)
     {
@@ -75,6 +77,7 @@ public partial class YXmlFragment : YArrayBase
         // virtual getter, so a stale prelim count makes every integrated item count twice.
         // Same fix as YArray.Integrate.
         var prelimContent = _prelimContent;
+        Debug.Assert(prelimContent != null);
         _prelimContent = null;
         InsertRaw(0, prelimContent);
     }
@@ -89,7 +92,7 @@ public partial class YXmlFragment : YArrayBase
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
         var el = new YXmlFragment();
-        var children = new List<object>();
+        var children = new List<object?>();
         foreach (var v in EnumerateValues())
         {
             children.Add(v is YType at ? at.InternalClone() : v);
@@ -102,7 +105,7 @@ public partial class YXmlFragment : YArrayBase
     /// <summary>
     /// Creates YXmlEvent and calls observers.
     /// </summary>
-    internal override void CallObserver(Transaction transaction, ISet<string> parentSubs)
+    internal override void CallObserver(Transaction transaction, ISet<string?> parentSubs)
     {
         base.CallObserver(transaction, parentSubs);
         if (IsObserved(transaction))

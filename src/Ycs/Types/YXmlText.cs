@@ -4,8 +4,6 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text;

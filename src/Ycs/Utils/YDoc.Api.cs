@@ -4,9 +4,8 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Buffers;
+using System.Diagnostics;
 
 namespace Ycs;
 
@@ -22,12 +21,12 @@ public partial class YDoc
 
     /// <summary>What an applied update may cost (<see cref="YDocOptions.Limits"/>).</summary>
     public UpdateLimits Limits => _opts.Limits;
-    public string CollectionId { get; internal set; }
+    public string? CollectionId { get; internal set; }
 
     /// <summary>Whether the document should be synced by the provider now (Yjs' <c>shouldLoad</c>); <see cref="Load"/> sets it.</summary>
     public bool ShouldLoad { get; private set; }
 
-    public YDoc(YDocOptions options = null)
+    public YDoc(YDocOptions? options = null)
     {
         _opts = options ?? new YDocOptions();
         _transactionCleanups = new List<Transaction>();
@@ -49,7 +48,7 @@ public partial class YDoc
     {
         if (!ShouldLoad)
         {
-            var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : (_item.Parent as AbstractType).Doc;
+            var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : ((AbstractType)_item.Parent).Doc;
             parentDoc?.Transact(this, static (doc, tr) => tr.LoadedSubdocs.Add(doc));
         }
         ShouldLoad = true;
@@ -75,7 +74,7 @@ public partial class YDoc
         {
             _itemCollected = false;
             _item = default;
-            _collectedParentDoc.Transact(this, static (doc, tr) => tr.RemovedSubdocs.Add(doc));
+            _collectedParentDoc!.Transact(this, static (doc, tr) => tr.RemovedSubdocs.Add(doc));
         }
         else if (!item.IsNull)
         {
@@ -88,11 +87,13 @@ public partial class YDoc
                 content.Doc._item = item;
             }
 
-            ((AbstractType)item.Parent).Doc.Transact((doc: this, item, content), static (s, tr) =>
+            var parentDoc = ((AbstractType)item.Parent).Doc;
+            Debug.Assert(parentDoc != null);
+            parentDoc.Transact((doc: this, item), static (s, tr) =>
             {
                 if (!s.item.Deleted)
                 {
-                    tr.AddedSubdocs.Add(s.content.Doc);
+                    tr.AddedSubdocs.Add(((ContentDoc)s.item.Content).Doc);
                 }
 
                 tr.RemovedSubdocs.Add(s.doc);
@@ -102,12 +103,12 @@ public partial class YDoc
         InvokeDestroyed();
     }
 
-    public event EventHandler<Transaction> BeforeObserverCalls;
-    public event EventHandler<Transaction> BeforeTransaction;
-    public event EventHandler<Transaction> AfterTransaction;
-    public event EventHandler<Transaction> AfterTransactionCleanup;
-    public event EventHandler BeforeAllTransactions;
-    public event EventHandler<IReadOnlyList<Transaction>> AfterAllTransactions;
+    public event EventHandler<Transaction>? BeforeObserverCalls;
+    public event EventHandler<Transaction>? BeforeTransaction;
+    public event EventHandler<Transaction>? AfterTransaction;
+    public event EventHandler<Transaction>? AfterTransactionCleanup;
+    public event EventHandler? BeforeAllTransactions;
+    public event EventHandler<IReadOnlyList<Transaction>>? AfterAllTransactions;
     /// <summary>
     /// Fires after each transaction that changed the document, with the change as an update in the
     /// original ('v1') format: Yjs' <c>doc.on('update')</c>, what every y-protocols provider sends.
@@ -115,13 +116,13 @@ public partial class YDoc
     /// resync (send the state, or a diff by state vector). Unlike Yjs, the document still finishes the cleanup and
     /// stays usable; the exception escapes from the outermost <c>Transact</c> or <c>ApplyUpdate</c> afterwards.
     /// </summary>
-    public event EventHandler<UpdateEventArgs> Updated;
+    public event EventHandler<UpdateEventArgs>? Updated;
 
     /// <summary>
     /// Like <see cref="Updated"/>, with the update in the v2 format: Yjs' <c>doc.on('updateV2')</c>.
     /// </summary>
-    public event EventHandler<UpdateEventArgs> UpdatedV2;
-    public event EventHandler Destroyed;
+    public event EventHandler<UpdateEventArgs>? UpdatedV2;
+    public event EventHandler? Destroyed;
 
     /// <summary>
     /// Raised, inside the transaction of an <c>ApplyUpdate</c> that returns normally, when that update let waiting
@@ -129,8 +130,8 @@ public partial class YDoc
     /// (kept, every later retry would fail again), the update itself stands whole. Clients that were handed them as
     /// waiting structs may integrate them under other limits. No user content is passed.
     /// </summary>
-    public event EventHandler<PendingDrop> PendingDropped;
-    public event EventHandler<SubdocsEventArgs> SubdocsChanged;
+    public event EventHandler<PendingDrop>? PendingDropped;
+    public event EventHandler<SubdocsEventArgs>? SubdocsChanged;
 
     public long ClientId { get; internal set; }
 
@@ -142,7 +143,6 @@ public partial class YDoc
     /// </summary>
     public bool HasPending => Store.HasPending;
 
-#nullable enable
     /// <summary>
     /// Changes that happen inside of a transaction are bundled.
     /// This means that the observer fires _after_ the transaction is finished and that
@@ -245,7 +245,6 @@ public partial class YDoc
     public void Transact<TState>(TState state, Func<TState, Transaction, Task> _, object? origin = null, bool local = true)
         where TState : allows ref struct =>
         throw new NotSupportedException("Transactions are synchronous.");
-#nullable disable
 
     public YArray GetArray(string name = "")
     {
