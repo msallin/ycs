@@ -14,14 +14,14 @@ public class PlanItemTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         doc.GetText("t").Insert(0, "abc");
-        return (doc, new Item(new ID(1, 0), null, null, null, null, "t", null, new ContentString("abcd")));
+        return (doc, new Item(new ItemId(1, 0), null, null, null, null, "t", null, new ContentString("abcd")));
     }
 
     [TestMethod]
     public void Equals_StoreItemAndDecodedItemOfOneId_AreDifferentKeys()
     {
         var (doc, decoded) = SameIdPair();
-        var stored = PlanItem.Store(doc.Store.Find(new ID(1, 0)));
+        var stored = PlanItem.Store(doc.Store.Find(new ItemId(1, 0)));
         var keys = new Dictionary<PlanItem, int> { [stored] = 1 };
 
         keys[PlanItem.Decoded(decoded)] = 2;
@@ -33,12 +33,12 @@ public class PlanItemTests
     public void Equals_TheSameItemTwice_IsOneKey()
     {
         var (doc, decoded) = SameIdPair();
-        var keys = new Dictionary<PlanItem, int> { [PlanItem.Store(doc.Store.Find(new ID(1, 0)))] = 1, [PlanItem.Decoded(decoded)] = 2 };
+        var keys = new Dictionary<PlanItem, int> { [PlanItem.Store(doc.Store.Find(new ItemId(1, 0)))] = 1, [PlanItem.Decoded(decoded)] = 2 };
 
-        keys[PlanItem.Store(doc.Store.Find(new ID(1, 1)))] = 3;
+        keys[PlanItem.Store(doc.Store.Find(new ItemId(1, 1)))] = 3;
         keys[PlanItem.Decoded(decoded)] = 4;
 
-        Assert.AreEqual((2, 3, 4), (keys.Count, keys[PlanItem.Store(doc.Store.Find(new ID(1, 2)))], keys[PlanItem.Decoded(decoded)]));
+        Assert.AreEqual((2, 3, 4), (keys.Count, keys[PlanItem.Store(doc.Store.Find(new ItemId(1, 2)))], keys[PlanItem.Decoded(decoded)]));
     }
 
     [TestMethod]
@@ -46,6 +46,6 @@ public class PlanItemTests
     {
         var (doc, decoded) = SameIdPair();
 
-        Assert.AreEqual((true, false, false), (default(PlanItem).IsNull, default(PlanItem) == PlanItem.Store(doc.Store.Find(new ID(1, 0))), default(PlanItem) == PlanItem.Decoded(decoded)));
+        Assert.AreEqual((true, false, false), (default(PlanItem).IsNull, default(PlanItem) == PlanItem.Store(doc.Store.Find(new ItemId(1, 0))), default(PlanItem) == PlanItem.Decoded(decoded)));
     }
 }
