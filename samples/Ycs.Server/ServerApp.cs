@@ -8,7 +8,8 @@ internal static class ServerApp
 {
     /// <summary>
     /// The server, built and not started. It listens where the standard ASP.NET settings say (<c>--urls</c>,
-    /// <c>ASPNETCORE_URLS</c>); the WebSocket settings come from the section <c>WebSocket</c>.
+    /// <c>ASPNETCORE_URLS</c>); the WebSocket settings come from the section <c>WebSocket</c>. It serves the files of
+    /// its web root (<c>wwwroot</c>, or <c>--webroot</c>, e.g. a published Blazor client) as static files.
     /// </summary>
     public static WebApplication Create(string[] args)
     {
@@ -25,6 +26,8 @@ internal static class ServerApp
             KeepAliveInterval = options.KeepAliveInterval,
             KeepAliveTimeout = options.KeepAliveTimeout,
         });
+        app.UseDefaultFiles();
+        app.UseStaticFiles();
         app.MapWebSocketEndpoint();
         return app;
     }
