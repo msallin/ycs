@@ -1,0 +1,280 @@
+{
+ "scenario": "fanout",
+ "date": "2026-11-16T15:27:44.615Z",
+ "options": {
+  "_": [
+   "all"
+  ],
+  "server-cpus": "0-3",
+  "trace": "/home/claude/projects/ycs-server-p6/bench/server/.trace/automerge-paper.json.gz"
+ },
+ "machineBefore": {
+  "cpu": "AMD EPYC-Genoa Processor",
+  "logicalCores": 8,
+  "memoryBytes": 33648422912,
+  "kernel": "7.0.0-43-generic",
+  "node": "v24.22.3",
+  "dotnet": "11.0.100",
+  "serverCpus": "0-3",
+  "driverCpus": "4-7",
+  "driverWorkers": 4,
+  "loadAverage": [
+   60.5,
+   54.77,
+   35.12
+  ]
+ },
+ "servers": {
+  "ycs": [
+   {
+    "perRoom": 10,
+    "rooms": 100,
+    "ratePerClient": 4,
+    "durationS": 20,
+    "warmupS": 5,
+    "updatesSent": 80000,
+    "offeredUpdatesPerS": 4000,
+    "deliveriesExpected": 720000,
+    "deliveries": 720000,
+    "echoes": 0,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 3971.863320239424,
+    "deliveriesPerS": 35746.76988215481,
+    "typingS": 20.02873,
+    "drainS": 0.11295,
+    "latency": {
+     "count": 539784,
+     "p50Ms": 26.07,
+     "p95Ms": 83.61,
+     "p99Ms": 115.07,
+     "maxMs": 193.14
+    },
+    "server": {
+     "cores": 0.6980549785320788,
+     "cpuSeconds": 14.06,
+     "cpuUsPerDelivery": 19.52777777777778,
+     "runQueueWaitS": 99.38586731599999,
+     "rssPeakMiB": 193.80078125,
+     "rssEndMiB": 193.7578125
+    },
+    "driver": {
+     "processCores": 0.44925393512358447,
+     "busiestWorkerCore": 0.10780649876276456,
+     "loopDelayP99Ms": 47.742975,
+     "loopDelayMaxMs": 85.524479
+    },
+    "valid": true,
+    "problems": []
+   },
+   {
+    "perRoom": 100,
+    "rooms": 10,
+    "ratePerClient": 1,
+    "durationS": 20,
+    "warmupS": 5,
+    "updatesSent": 20000,
+    "offeredUpdatesPerS": 1000,
+    "deliveriesExpected": 1980000,
+    "deliveries": 1980000,
+    "echoes": 0,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 996.4973119485011,
+    "deliveriesPerS": 98653.23388290161,
+    "typingS": 20.03679,
+    "drainS": 0.03351,
+    "latency": {
+     "count": 1485099,
+     "p50Ms": 50.96,
+     "p95Ms": 141.03,
+     "p99Ms": 198.93,
+     "maxMs": 486.72
+    },
+    "server": {
+     "cores": 0.8270927689172558,
+     "cpuSeconds": 16.599999999999998,
+     "cpuUsPerDelivery": 8.383838383838382,
+     "runQueueWaitS": 165.765279856,
+     "rssPeakMiB": 195.453125,
+     "rssEndMiB": 193.42578125
+    },
+    "driver": {
+     "processCores": 0.39867201785723183,
+     "busiestWorkerCore": 0.09444801522647893,
+     "loopDelayP99Ms": 57.507839,
+     "loopDelayMaxMs": 106.758143
+    },
+    "valid": true,
+    "problems": []
+   },
+   {
+    "perRoom": 1000,
+    "rooms": 1,
+    "ratePerClient": 0.1,
+    "durationS": 20,
+    "warmupS": 5,
+    "updatesSent": 2000,
+    "offeredUpdatesPerS": 100,
+    "deliveriesExpected": 1998000,
+    "deliveries": 1998000,
+    "echoes": 0,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 99.38925304006877,
+    "deliveriesPerS": 99289.8637870287,
+    "typingS": 20.01744,
+    "drainS": 0.10546,
+    "latency": {
+     "count": 1518480,
+     "p50Ms": 45.8,
+     "p95Ms": 124.2,
+     "p99Ms": 180.73,
+     "maxMs": 320.55
+    },
+    "server": {
+     "cores": 0.7648003021433292,
+     "cpuSeconds": 15.39,
+     "cpuUsPerDelivery": 7.702702702702703,
+     "runQueueWaitS": 116.769480181,
+     "rssPeakMiB": 204.23046875,
+     "rssEndMiB": 204.23046875
+    },
+    "driver": {
+     "processCores": 0.4742773655884589,
+     "busiestWorkerCore": 0.11309875813128326,
+     "loopDelayP99Ms": 42.139647,
+     "loopDelayMaxMs": 81.592319
+    },
+    "valid": true,
+    "problems": []
+   }
+  ],
+  "node": [
+   {
+    "perRoom": 10,
+    "rooms": 100,
+    "ratePerClient": 4,
+    "durationS": 20,
+    "warmupS": 5,
+    "updatesSent": 80000,
+    "offeredUpdatesPerS": 4000,
+    "deliveriesExpected": 720000,
+    "deliveries": 720000,
+    "echoes": 80000,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 1280.4384221157325,
+    "deliveriesPerS": 11523.945799041592,
+    "typingS": 20.01156,
+    "drainS": 42.46704,
+    "latency": {
+     "count": 539982,
+     "p50Ms": 25008.34,
+     "p95Ms": 44667.47,
+     "p99Ms": 46857.6,
+     "maxMs": 53979.79
+    },
+    "server": {
+     "cores": 0.15013140499306962,
+     "cpuSeconds": 9.379999999999999,
+     "cpuUsPerDelivery": 13.027777777777775,
+     "runQueueWaitS": 57.008827788000005,
+     "rssPeakMiB": 162.4921875,
+     "rssEndMiB": 162.4921875
+    },
+    "driver": {
+     "processCores": 0.12891911790597102,
+     "busiestWorkerCore": 0.030608464338189395,
+     "loopDelayP99Ms": 17.940479,
+     "loopDelayMaxMs": 59.015167
+    },
+    "valid": true,
+    "problems": []
+   },
+   {
+    "perRoom": 100,
+    "rooms": 10,
+    "ratePerClient": 1,
+    "durationS": 20,
+    "warmupS": 5,
+    "updatesSent": 20000,
+    "offeredUpdatesPerS": 1000,
+    "deliveriesExpected": 1980000,
+    "deliveries": 1980000,
+    "echoes": 20000,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 174.45535691777857,
+    "deliveriesPerS": 17271.08033486008,
+    "typingS": 20.00529,
+    "drainS": 94.63722,
+    "latency": {
+     "count": 1484703,
+     "p50Ms": 48951.59,
+     "p95Ms": 96718.62,
+     "p99Ms": 104247.45,
+     "maxMs": 109520.36
+    },
+    "server": {
+     "cores": 0.2632531335889279,
+     "cpuSeconds": 30.18,
+     "cpuUsPerDelivery": 15.242424242424242,
+     "runQueueWaitS": 86.792931412,
+     "rssPeakMiB": 225.05859375,
+     "rssEndMiB": 225.05859375
+    },
+    "driver": {
+     "processCores": 0.17300924412768004,
+     "busiestWorkerCore": 0.04167212493864623,
+     "loopDelayP99Ms": 17.547263,
+     "loopDelayMaxMs": 78.708735
+    },
+    "valid": true,
+    "problems": []
+   },
+   {
+    "perRoom": 1000,
+    "rooms": 1,
+    "ratePerClient": 0.1,
+    "durationS": 20,
+    "warmupS": 5,
+    "updatesSent": 2000,
+    "offeredUpdatesPerS": 100,
+    "deliveriesExpected": 1998000,
+    "deliveries": 1998000,
+    "echoes": 2000,
+    "closedEarly": 62,
+    "deliveredUpdatesPerS": 21.22892326158205,
+    "deliveriesPerS": 21207.694338320467,
+    "typingS": 20.00215,
+    "drainS": 74.20894,
+    "latency": {
+     "count": 1500498,
+     "p50Ms": 46159.15,
+     "p95Ms": 80984.37,
+     "p99Ms": 82431.25,
+     "maxMs": 82927.21
+    },
+    "server": {
+     "cores": 0.2643000946066965,
+     "cpuSeconds": 24.9,
+     "cpuUsPerDelivery": 12.462462462462462,
+     "runQueueWaitS": 70.7640264,
+     "rssPeakMiB": 225.08984375,
+     "rssEndMiB": 225.08984375
+    },
+    "driver": {
+     "processCores": 0.317033238868163,
+     "busiestWorkerCore": 0.07666446699640138,
+     "loopDelayP99Ms": 26.820607,
+     "loopDelayMaxMs": 74.579967
+    },
+    "valid": false,
+    "problems": [
+     "62 connections closed by the server"
+    ]
+   }
+  ]
+ },
+ "loadAverageAfter": [
+  41.82,
+  51.91,
+  41.21
+ ]
+}
