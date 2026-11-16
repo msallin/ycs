@@ -4,16 +4,16 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+using System.Diagnostics;
 
 namespace Ycs;
 
 /// <summary>
-/// Reads one struct (<see cref="Item"/>, <see cref="GC"/>, or <see cref="Skip"/>) at a time
-/// from an update, across client boundaries, without materializing the whole update or
-/// integrating anything into a document (Yjs' <c>LazyStructReader</c>, src/utils/updates.js).
-/// An <see cref="Item"/>'s parent stays unresolved: a root type's name or the id of the
-/// parent's item. Used by the update-manipulation utilities in <see cref="UpdateOperations"/>.
+/// Reads one struct (an item, a GC or a Skip) at a time from an update, across client boundaries, without
+/// materializing the whole update or integrating anything into a document (Yjs' <c>LazyStructReader</c>,
+/// src/utils/updates.js). The struct is staged into the reader's <see cref="StagingTable"/> straight from the decoder
+/// (no struct object); an item's parent stays unresolved, a root type's name or the id of the parent's item. Used by
+/// the update-manipulation utilities in <see cref="UpdateOperations"/>.
 /// </summary>
 internal sealed class LazyStructReader
 {
@@ -21,33 +21,75 @@ internal sealed class LazyStructReader
     private EncodingUtils.StructCursor _cursor;
     private readonly bool _filterSkips;
 
-    /// <param name="staging">An empty table the structs read are also staged into, Skips included; null for none.</param>
-    public LazyStructReader(IUpdateDecoder decoder, bool filterSkips, StagingTable staging = null)
+    /// <param name="table">An empty table, the reader's own until the update is read.</param>
+    /// <remarks>
+    /// The table holds the current struct only (it is <see cref="StagingTable.Truncate"/>d before each read), so what a
+    /// caller needs of an earlier one it copies first.
+    /// </remarks>
+    public LazyStructReader(IUpdateDecoder decoder, bool filterSkips, StagingTable table)
     {
-        _cursor = new EncodingUtils.StructCursor(decoder, staging: staging);
+        _cursor = new EncodingUtils.StructCursor(decoder, staging: table);
         _filterSkips = filterSkips;
-        Curr = null;
+        Table = table;
+        Curr = -1;
 
         Next();
     }
 
-    /// <summary>
-    /// The struct last read by <see cref="Next"/>, or <c>null</c> once the update is exhausted.
-    /// </summary>
-    public AbstractStruct Curr { get; private set; }
+    public StagingTable Table { get; private set; }
+
+    /// <summary>The index in <see cref="Table"/> of the struct last read by <see cref="Next"/>, or -1 once the update is exhausted.</summary>
+    public int Curr { get; private set; }
+
+    /// <summary>The fields of the current struct, kept off the table's rows for the merge's comparisons.</summary>
+    public long Client { get; private set; }
+
+    public long Clock { get; private set; }
+
+    public int Length { get; private set; }
+
+    public StagedKind Kind { get; private set; }
 
     /// <summary>
-    /// Advances to (and returns) the next struct, skipping over 'Skip' structs when
-    /// <c>filterSkips</c> was requested in the constructor.
+    /// Gives away the table, which holds the current struct (at index 0) and nothing else, and reads on into
+    /// <paramref name="spare"/>. The caller must call <see cref="Next"/> before it reads this reader again.
     /// </summary>
-    public AbstractStruct Next()
+    public StagingTable SwapTable(StagingTable spare)
+    {
+        Debug.Assert(Curr == 0 && Table.Count == 1);
+        var table = Table;
+        spare.Truncate();
+        spare.BeginClient(Client, Clock + Length);
+        _cursor.UseStaging(spare);
+        Table = spare;
+        return table;
+    }
+
+    /// <summary>
+    /// Advances to the next struct, skipping over 'Skip' structs when <c>filterSkips</c> was requested in the
+    /// constructor. Returns whether there is one.
+    /// </summary>
+    public bool Next()
     {
         do
         {
-            Curr = _cursor.Next();
-        }
-        while (_filterSkips && Curr != null && Curr is Skip);
+            if (Table.Count > 0)
+            {
+                Table.Truncate();
+            }
 
-        return Curr;
+            Curr = _cursor.NextStaged();
+            if (Curr >= 0)
+            {
+                ref readonly var s = ref Table.At(Curr);
+                Client = Table.ClientAt(s.Client);
+                Clock = s.Clock;
+                Length = s.Length;
+                Kind = s.Kind;
+            }
+        }
+        while (_filterSkips && Curr >= 0 && Kind == StagedKind.Skip);
+
+        return Curr >= 0;
     }
 }

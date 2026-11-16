@@ -106,21 +106,28 @@ public class DecodedStructTests
         {
             foreach (var v2 in new[] { false, true })
             {
+                var raw = ReadObjects(input, v2, out var rawError);
                 DecodedUpdate decoded;
                 try
                 {
                     decoded = v2 ? UpdateOperations.DecodeUpdateV2(input) : UpdateOperations.DecodeUpdate(input);
                 }
-                catch (YUpdateException)
+                catch (YUpdateException e)
                 {
+                    if (rawError != null)
+                    {
+                        Assert.AreEqual(rawError, e.Message, "the same exception as the struct objects' read");
+                    }
+
                     continue;
                 }
 
+                Assert.IsNull(rawError, "decoding succeeds where the struct objects' read fails");
                 var detached = decoded.Structs;
-                Assert.HasCount(decoded.Structs.Count, detached);
+                Assert.HasCount(raw.Count, detached);
                 for (var i = 0; i < detached.Count; i++)
                 {
-                    AssertEqual(decoded.Raw[i], detached[i]);
+                    AssertEqual(raw[i], detached[i]);
                 }
 
                 updates++;
@@ -129,6 +136,30 @@ public class DecodedStructTests
         }
 
         return (updates, structs);
+    }
+
+    // The structs as objects, in the order of the update, up to the one that fails.
+    private static List<AbstractStruct> ReadObjects(byte[] input, bool v2, out string rawError)
+    {
+        var limits = UpdateLimits.Default;
+        var reader = new Lib0Reader(input) { MaxDepth = limits.MaxDepth };
+        var result = new List<AbstractStruct>();
+        rawError = null;
+        try
+        {
+            IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader, limits.MaxStructsPerUpdate) : new UpdateDecoderV1(reader, limits.MaxStructsPerUpdate);
+            var cursor = new EncodingUtils.StructCursor(decoder);
+            while (cursor.Next() is { } str)
+            {
+                result.Add(str);
+            }
+        }
+        catch (Exception e) when (e is YUpdateException || YUpdateException.IsDecodingFailure(e))
+        {
+            rawError = YUpdateException.Wrap(e).Message;
+        }
+
+        return result;
     }
 
     // The oracle reads the objects with the wire's own numbers (IContentEx.Ref) and their public members.
@@ -159,7 +190,13 @@ public class DecodedStructTests
             Assert.AreEqual(item.Length, d.Content.Count);
         }
 
-        CollectionAssert.AreEqual(holdsValues ? content.GetContent().ToList() : new List<object>(), d.Content.ToList());
+        var expectedValues = holdsValues ? content.GetContent().ToList() : new List<object>();
+        Assert.HasCount(expectedValues.Count, d.Content);
+        for (var i = 0; i < expectedValues.Count; i++)
+        {
+            Assert.IsTrue(StagingDifferential.DeepEqual(expectedValues[i], d.Content[i]), $"value {i} of {s.Id}");
+        }
+
         Assert.AreEqual(d.Kind == ItemKind.String ? ((ContentString)content).GetString() : null, d.Text);
         Assert.AreEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Key : null, d.FormatKey);
         Assert.AreEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Value : null, d.FormatValue);

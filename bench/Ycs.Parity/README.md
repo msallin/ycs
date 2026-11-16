@@ -7,6 +7,8 @@ fuzzer (`tests/Ycs.Properties/UpdateFuzz.cs`, seeds 1 to N):
 * `MergeUpdates`, `MergeUpdatesV2` (forward, reversed, pairwise);
 * `DiffUpdate`, `DiffUpdateV2` against the state vector of every prefix, applied in order and reversed;
 * the v1 to v2 and v2 to v1 conversions of every update;
+* `DescribeUpdate`, `DecodeUpdate` (every record of every struct and the delete set, as text), `ParseUpdateMeta` and
+  `EncodeStateVectorFromUpdate` of every update, as v1 and v2 (the text outputs hashed);
 * the encodings of documents with structs pending (updates applied in order, reversed, every other one, all but the
   first), as v1 and v2, with and without a state vector.
 
@@ -24,4 +26,4 @@ dotnet /path/to/scratch/change/Ycs.Parity.dll change.txt 4000 interop/corpus/cas
 cmp base.txt change.txt && echo identical
 ```
 
-With 4,000 seeds the file has 707,144 lines and a run takes a few seconds. The output is deterministic.
+With 4,000 seeds the file has 813,550 lines and a run takes a few seconds. The output is deterministic.

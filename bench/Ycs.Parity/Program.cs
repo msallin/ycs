@@ -35,6 +35,47 @@ string H(Func<byte[]> f)
     }
 }
 
+string Show(object o) => o switch
+{
+    null => "null",
+    string t => "\"" + t + "\"",
+    byte[] b => Convert.ToHexString(b),
+    System.Collections.IDictionary d => "{" + string.Join(",", d.Keys.Cast<object>().Select(k => k + ":" + Show(d[k]))) + "}",
+    System.Collections.IEnumerable e => "[" + string.Join(",", e.Cast<object>().Select(Show)) + "]",
+    _ => o.GetType().Name + ":" + Convert.ToString(o, System.Globalization.CultureInfo.InvariantCulture),
+};
+
+string Dump(DecodedUpdate u)
+{
+    var sb = new System.Text.StringBuilder();
+    foreach (var s in u.Structs)
+    {
+        sb.Append($"{s.Id} {s.Length} {s.Kind} {s.LeftOrigin} {s.RightOrigin} {s.ParentName} {s.ParentId} {s.ParentSub} {Show(s.Content)} {s.Text} {s.FormatKey} {Show(s.FormatValue)} {s.TypeRef} {s.TypeName} {s.DocGuid}\n");
+    }
+
+    foreach (var (client, ranges) in u.DeleteSet)
+    {
+        sb.Append($"ds {client} {string.Join(",", ranges.Select(r => r.Clock + "+" + r.Length))}\n");
+    }
+
+    return sb.ToString();
+}
+
+string Meta(UpdateMeta m) => string.Join(",", m.From.OrderBy(p => p.Key).Select(p => p.Key + ":" + p.Value)) + "|" + string.Join(",", m.To.OrderBy(p => p.Key).Select(p => p.Key + ":" + p.Value));
+
+string HS(Func<string> f)
+{
+    try
+    {
+        return Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(f())));
+    }
+    catch (Exception e)
+    {
+        Note(e);
+        return "EX:" + e.GetType().Name;
+    }
+}
+
 void Do(string label, IList<byte[]> v1)
 {
     current = label;
@@ -46,6 +87,23 @@ void Do(string label, IList<byte[]> v1)
         if (v2[i] != null)
         {
             lines.Add($"{label} conv21[{i}] {H(() => UpdateOperations.ConvertUpdateFormatV2ToV1(v2[i]))}");
+        }
+    }
+
+    for (var i = 0; i < v1.Count; i++)
+    {
+        var u = v1[i];
+        lines.Add($"{label} describe1[{i}] {HS(() => UpdateOperations.DescribeUpdate(u))}");
+        lines.Add($"{label} decode1[{i}] {HS(() => Dump(UpdateOperations.DecodeUpdate(u)))}");
+        lines.Add($"{label} meta1[{i}] {HS(() => Meta(UpdateOperations.ParseUpdateMeta(u)))}");
+        lines.Add($"{label} sv1[{i}] {H(() => UpdateOperations.EncodeStateVectorFromUpdate(u))}");
+        if (v2[i] != null)
+        {
+            var u2 = v2[i];
+            lines.Add($"{label} describe2[{i}] {HS(() => UpdateOperations.DescribeUpdateV2(u2))}");
+            lines.Add($"{label} decode2[{i}] {HS(() => Dump(UpdateOperations.DecodeUpdateV2(u2)))}");
+            lines.Add($"{label} meta2[{i}] {HS(() => Meta(UpdateOperations.ParseUpdateMetaV2(u2)))}");
+            lines.Add($"{label} sv2[{i}] {H(() => UpdateOperations.EncodeStateVectorFromUpdateV2(u2))}");
         }
     }
 

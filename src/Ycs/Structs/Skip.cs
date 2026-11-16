@@ -24,17 +24,6 @@ internal sealed class Skip : AbstractStruct
 
     public override bool Deleted => true;
 
-    /// <summary>
-    /// Lets <see cref="UpdateOperations"/> grow/shrink a Skip in place while it is being
-    /// merged with newly-seen structs. <see cref="AbstractStruct.Length"/> only has a
-    /// 'protected' setter, so this is exposed here instead.
-    /// </summary>
-    internal void SetLength(int length)
-    {
-        System.Diagnostics.Debug.Assert(length >= 0);
-        Length = length;
-    }
-
     internal override bool CanMergeWith(AbstractStruct right) => right is Skip;
 
     internal override bool MergeWith(AbstractStruct right)
