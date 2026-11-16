@@ -93,7 +93,7 @@ internal class ContentDoc : IContentEx
 
     void IContentEx.Gc(StructStore store)
     {
-        // Do nothing.
+        Doc.CollectItem();
     }
 
     void IContentEx.Write(IUpdateEncoder encoder, int offset)

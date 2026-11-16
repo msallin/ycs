@@ -375,6 +375,18 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
 * **Type table**: an entry is never reused; a collected type's `AbstractType` gets index -1, and its search markers
   are cleared at collection (`_start` and the markers are, since step 5: `ContentType.cs`), so a user-held collected `YArray` writes no
   marker flag through a handle that now names another type's item (H5).
+* **A collected type keeps its item's facts** (7.0e). The struct that held a collected type can merge away and its slot
+  be reused while user code holds the type (or, for a subdocument, the `YDoc`); a handle read after that names another
+  struct. So the facts that survive are copied at collection, before the struct is replaced, and read from the copy:
+
+  | holder | read after collection | kept as |
+  | --- | --- | --- |
+  | `AbstractType._item` | `Parent`, `IsRoot`, the item's id (relative positions, `WriteItem`'s parent id), whether the item is deleted (`Transaction`, `CanExtendRun`, `Integrate`) | `_collectedParent`, `_collectedId`; deleted is always true |
+  | `YDoc._item` (a subdocument) | the parent document (`Load`, `Destroy`) | `_collectedParentDoc` |
+
+  The rule: code that may meet a collected type asks `IsRoot`, `ParentType`, `ItemId` and `ItemDeleted`, never `_item`.
+  What a collected type's `_item` still serves is its siblings' links (XML `NextSibling`, `PrevSibling`,
+  `InsertAfter`), which step 7.3a settles with the slot's `Left` and `Right`.
 
 ### 2.5 Decoding, and the operations without a document
 

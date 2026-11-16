@@ -36,6 +36,8 @@ public class YDeepEventArgs
 
 public partial class AbstractType
 {
+    // The item the type is in. Once the type is collected (Collect), only the siblings' links may be read through it
+    // (XML NextSibling, PrevSibling, InsertAfter); the rest asks IsRoot, ParentType, ItemId or ItemDeleted.
     internal ItemRef _item;
     internal ItemRef _start;
     internal Dictionary<string, ItemRef> _map = new Dictionary<string, ItemRef>();
@@ -44,6 +46,34 @@ public partial class AbstractType
     internal Item StartForTests => _start.ToItem();
 
     internal Item ItemForTests => _item.ToItem();
+
+    // The facts of the item a collected type was in. Its struct can merge away once the type is collected, and its slot
+    // be reused, while user code still holds the type: Collect sets them before the struct is replaced; none changes later.
+    private bool _collected;
+    private AbstractType _collectedParent;
+    private ID _collectedId;
+
+    internal bool IsRoot => !_collected && _item.IsNull;
+
+    internal AbstractType ParentType => _collected ? _collectedParent : _item.IsNull ? null : _item.Parent as AbstractType;
+
+    /// <summary>The id of the item the type is in; a root type has none.</summary>
+    internal ID ItemId => _collected ? _collectedId : _item.Id;
+
+    /// <summary>Whether the type's item is deleted: a collected type's is, and a root type has none.</summary>
+    internal bool ItemDeleted => _collected || (!_item.IsNull && _item.Deleted);
+
+    internal void Collect()
+    {
+        if (_collected || _item.IsNull)
+        {
+            return;
+        }
+
+        _collectedParent = _item.Parent as AbstractType;
+        _collectedId = _item.Id;
+        _collected = true;
+    }
 
     internal IEnumerable<KeyValuePair<string, Item>> MapForTests() => _map.Select(kv => new KeyValuePair<string, Item>(kv.Key, kv.Value.ToItem()));
 
@@ -54,7 +84,7 @@ public partial class AbstractType
     public event EventHandler<YDeepEventArgs> DeepEventHandler;
 
     public YDoc Doc { get; protected set; }
-    public AbstractType Parent => !_item.IsNull ? _item.Parent as AbstractType : null;
+    public AbstractType Parent => ParentType;
 
     public virtual int Length { get; internal set; }
 
@@ -201,7 +231,7 @@ public partial class AbstractType
             return true;
         }
 
-        for (var type = this; type != null; type = type._item.IsNull ? null : type._item.Parent as AbstractType)
+        for (var type = this; type != null; type = type.ParentType)
         {
             if (type.DeepEventHandler != null)
             {
@@ -230,12 +260,12 @@ public partial class AbstractType
 
             values.Add(evt);
 
-            if (type._item.IsNull)
+            if (type.IsRoot)
             {
                 break;
             }
 
-            type = type._item.Parent as AbstractType;
+            type = type.ParentType;
         }
 
         InvokeEventHandlers(evt, transaction);

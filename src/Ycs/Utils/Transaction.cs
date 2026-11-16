@@ -317,8 +317,7 @@ public partial class Transaction
     /// </summary>
     internal void AddChangedTypeToTransaction(AbstractType type, string parentSub)
     {
-        var item = type._item;
-        if (item.IsNull || (_beforeState.TryGetValue(item.Id.Client, out var clock) && item.Id.Clock < clock && !item.Deleted))
+        if (type.IsRoot || (_beforeState.TryGetValue(type.ItemId.Client, out var clock) && type.ItemId.Clock < clock && !type.ItemDeleted))
         {
             // Most changed types are lists, which share one read-only set (ChangedKeys.ChildList).
             _changed.TryGetValue(type, out var set);
@@ -342,7 +341,7 @@ public partial class Transaction
         foreach (var kvp in transaction._changed)
         {
             var type = kvp.Key;
-            if ((type._item.IsNull || !type._item.Deleted) && !HasOwnEvent(transaction, type) && type.IsObserved(transaction))
+            if (!type.ItemDeleted && !HasOwnEvent(transaction, type) && type.IsObserved(transaction))
             {
                 (skipped ??= new()).Add(kvp);
             }
@@ -397,7 +396,7 @@ public partial class Transaction
                 continue;
             }
 
-            for (var type = kvp.Key; type != null; type = type._item.IsNull ? null : type._item.Parent as AbstractType)
+            for (var type = kvp.Key; type != null; type = type.ParentType)
             {
                 if (seen.Add(type) && changedParentTypes.TryGetValue(type, out var events))
                 {
@@ -542,7 +541,7 @@ public partial class Transaction
                 foreach (var kvp in transaction._changed)
                 {
                     var itemType = kvp.Key;
-                    if (itemType._item.IsNull || !itemType._item.Deleted)
+                    if (!itemType.ItemDeleted)
                     {
                         try
                         {
@@ -580,16 +579,16 @@ public partial class Transaction
                     var events = kvp.Value;
 
                     // We need to think about the possibility that the user transforms the YDoc in the event.
-                    if (type.HasDeepObservers && (type._item.IsNull || !type._item.Deleted))
+                    if (type.HasDeepObservers && !type.ItemDeleted)
                     {
                         // As Yjs: the events whose target was deleted meanwhile are left out (the
                         // observer is still called when none is left).
                         var delivered = events;
                         for (var i = 0; i < events.Count; i++)
                         {
-                            if (!events[i].Target._item.IsNull && events[i].Target._item.Deleted)
+                            if (events[i].Target.ItemDeleted)
                             {
-                                delivered = events.Where(static e => e.Target._item.IsNull || !e.Target._item.Deleted).ToList();
+                                delivered = events.Where(static e => !e.Target.ItemDeleted).ToList();
                                 break;
                             }
                         }

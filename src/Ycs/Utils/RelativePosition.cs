@@ -48,13 +48,14 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         Item = item;
         Assoc = assoc;
 
-        if (type._item.IsNull)
+        if (type.IsRoot)
         {
             TName = type.FindRootTypeKey();
         }
         else
         {
-            TypeId = new ID(type._item.Id.Client, type._item.Id.Clock);
+            var id = type.ItemId;
+            TypeId = new ID(id.Client, id.Clock);
         }
     }
 

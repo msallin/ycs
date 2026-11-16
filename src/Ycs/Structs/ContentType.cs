@@ -146,6 +146,7 @@ public class ContentType : IContentEx
                 (frame.Type as YArrayBase)?.ForgetList();
                 frame.Type._map.Clear();
                 frame.Type._mapCount = 0;
+                frame.Type.Collect();
                 open.RemoveAt(open.Count - 1);
                 if (!frame.Owner.IsNull)
                 {
