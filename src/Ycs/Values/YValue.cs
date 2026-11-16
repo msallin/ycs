@@ -342,13 +342,7 @@ public readonly struct YValue : IEquatable<YValue>
         return _kind == YValueKind.Bytes;
     }
 
-    public bool TryGetShared([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AbstractType? value)
-    {
-        value = _object as AbstractType;
-        return value != null;
-    }
-
-    /// <summary>The shared type, when the value is one of type <typeparamref name="T"/>.</summary>
+    /// <summary>The shared type, when the value is one of type <typeparamref name="T"/> (<c>YType</c> for any).</summary>
     public bool TryGetSharedType<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? value)
         where T : YType
     {

@@ -299,7 +299,7 @@ public class YValueTests
         var map = new YMap();
         var doc = new YDoc();
 
-        Assert.AreEqual((true, true), (YValue.FromObject(map).TryGetShared(out var t) && ReferenceEquals(t, map), YValue.FromObject(doc).TryGetDocument(out var d) && ReferenceEquals(d, doc)));
+        Assert.AreEqual((true, true), (YValue.FromObject(map).TryGetSharedType(out YType? t) && ReferenceEquals(t, map), YValue.FromObject(doc).TryGetDocument(out var d) && ReferenceEquals(d, doc)));
     }
 
     [TestMethod]
