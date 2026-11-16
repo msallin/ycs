@@ -61,4 +61,40 @@ public class HostileSyncTests
 
         Assert.AreEqual(("abcX", "abcX", "abcX"), Views(room, a, b));
     }
+
+    [TestMethod]
+    public void Receive_UpdateBeyondTheIntegrationSteps_ClosesItsSessionAndEveryoneHasThePartApplied()
+    {
+        var room = new Room("r", null, new UpdateLimits { MaxIntegrationSteps = 10_000 });
+        var a = new TestClient(HonestA);
+        var b = new TestClient(HonestB);
+        a.Connect(room);
+        b.Connect(room);
+        TestClient.PumpAll(a, b);
+        // Typed backwards, every character is its own item; each of the second run passes all of the first: n * m steps.
+        var first = new YDoc(new YDocOptions { ClientId = 100 });
+        var second = new YDoc(new YDocOptions { ClientId = 200 });
+        var hostile = Join(room);
+        hostile.Receive(Messages.Update(HostileUpdates.Edit(first, d =>
+        {
+            for (var i = 0; i < 150; i++)
+            {
+                d.GetText("text").Insert(0, "f");
+            }
+        })));
+
+        hostile.Receive(Messages.Update(HostileUpdates.Edit(second, d =>
+        {
+            for (var i = 0; i < 150; i++)
+            {
+                d.GetText("text").Insert(0, "b");
+            }
+        })));
+        TestClient.PumpAll(a, b);
+
+        var text = Messages.TextOf(room.EncodeStateAsUpdate());
+        Assert.AreEqual(
+            (SessionCloseReason.ProtocolError, true, 150 + 66, text, text, Convert.ToHexString(room.EncodeStateVector()), Convert.ToHexString(room.EncodeStateVector())),
+            (hostile.CloseReason, text.Contains('b', StringComparison.Ordinal), text.Length, a.Text, b.Text, Convert.ToHexString(a.Doc.EncodeStateVectorV1()), Convert.ToHexString(b.Doc.EncodeStateVectorV1())));
+    }
 }
