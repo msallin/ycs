@@ -27,6 +27,21 @@ jobs:
       - name: Yjs corpus
         run: dotnet test tests/Ycs.Corpus -c Release --no-build
 
+      - name: Sync server
+        run: dotnet test tests/Ycs.Server.Tests -c Release --no-build
+
+      - name: Sync client (the Blazor client's provider)
+        run: dotnet test tests/Ycs.Client.Tests -c Release --no-build
+
+      - name: Sync server against y-websocket and SignalR clients
+        run: |
+          (cd interop/server && npm ci)
+          (cd interop/signalr && npm ci)
+          bash interop/server/smoke.sh
+          bash interop/server/converge.sh
+          bash interop/signalr/smoke.sh
+          cmp interop/signalr/provider.mjs samples/Ycs.Server/demo/src/signalr-provider.mjs
+
       - name: Fuzz the decoders
         run: dotnet test tests/Ycs.Fuzz -c Release --no-build
 
@@ -45,6 +60,9 @@ jobs:
         run: |
           dotnet publish samples/Ycs.AotSample -c Release -o out/aot
           ./out/aot/Ycs.AotSample
+
+      - name: Blazor client publishes without trim warnings
+        run: dotnet publish samples/Ycs.Blazor -c Release -o out/blazor
 
       - name: Browser-wasm sample (no workload)
         run: |

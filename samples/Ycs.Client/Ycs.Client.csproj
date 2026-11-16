@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The client side of the Yjs sync server (docs/plan-server.md, P8): a y-websocket provider over ClientWebSocket,
+    the client half of awareness, and the binding of a Y.Text to a textarea. No Blazor types: the Blazor sample and
+    the tests reference it; it runs in the browser and on the .NET test host.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <!-- The server's awareness, as shared source: the remote states with y-protocols' clock rules (decision 5). -->
+  <ItemGroup>
+    <Compile Include="..\Ycs.Server\Awareness\Awareness.cs" Link="Awareness\Awareness.cs" />
+    <Compile Include="..\Ycs.Server\Awareness\AwarenessChange.cs" Link="Awareness\AwarenessChange.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ycs.Blazor" />
+    <InternalsVisibleTo Include="Ycs.Client.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ycs\Ycs.csproj" />
+  </ItemGroup>
+
+</Project>

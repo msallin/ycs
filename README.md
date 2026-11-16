@@ -180,11 +180,14 @@ to accept a public API change and how to update the budgets.
 Demo
 -------
 
-`samples/YcsSample` is a SignalR server with a React/Monaco client. The server targets .NET 11 and
-starts; the client (`ClientApp`, 2021 dependencies built with yarn) was not updated or tested.
+`samples/Ycs.Server` is a Yjs sync server (y-protocols over WebSocket and SignalR) with one Ycs
+document per room, built as a test bed: [`docs/plan-server.md`](docs/plan-server.md).
 
-Client: [`Yjs`](https://github.com/yjs/yjs), [`MonacoEditor`](https://github.com/microsoft/monaco-editor), [`SignalR`](https://github.com/dotnet/aspnetcore/tree/master/src/SignalR).
+Run it with `dotnet run --project samples/Ycs.Server` and open `http://localhost:5000/` (the port is in the
+server's output): a CodeMirror 6 Markdown editor on a `Y.Text` named `content`, with the other editors' cursors and
+names, a status line, a link to the room (the URL fragment) and a button to go offline and come back. The page is
+`samples/Ycs.Server/wwwroot`; its bundle is committed, and
+[`samples/Ycs.Server/demo`](samples/Ycs.Server/demo/README.md) rebuilds it.
+`interop/demo/check.sh` drives two browsers through it (Playwright).
 
-Server: `Ycs`, `SignalR`, [`AspNetCore`](https://github.com/dotnet/aspnetcore).
-
-![img](https://github.com/yjs/ycs/blob/main/docs/ycs.gif)
+![Two browsers editing one room](interop/demo/screenshot.png)
