@@ -27,6 +27,7 @@ public class ItemRefSignatureTests
         "AbstractType.MapForTests",
         "Lease.*",
         "StructCursor.Next",
+        "StructStaging.Stage",
         "WriteState.Struct",
         "YDocOptions.DefaultGcFilter",
         "ClientStructs..ctor",

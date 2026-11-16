@@ -14,7 +14,7 @@ namespace Ycs;
 /// readers, the dictionary, the per-client lists and the delete set. The checks are those of
 /// <see cref="EncodingUtils.ReadClientStructRefs(IUpdateDecoder)"/> and <see cref="DeleteSet.Read"/>.
 /// <br/>
-/// <see cref="Read"/> hands out a <see cref="Lease"/>; disposing it clears the lists (dropping the
+/// <see cref="Read"/> hands out a <see cref="Lease"/>; disposing it clears the lists and the staging table (dropping the
 /// references to the structs and the input) and makes the reader available again. Thread-local
 /// rather than per document: a server holding many documents keeps one per thread. A read while
 /// another lease is open on the thread (re-entrancy) simply gets a new reader.
@@ -35,6 +35,7 @@ internal sealed class UpdateReader
     private readonly Stack<List<AbstractStruct>> _spareStructLists = new();
     private readonly HashSet<long> _clients = new();
     private readonly DeleteSet _deleteSet = new();
+    private readonly StagingTable _staging = new();
     private readonly Stack<List<DeleteSet.DeleteItem>> _spareDeleteLists = new();
     private UpdateDecoderV1 _v1;
     private UpdateDecoderV2 _v2;
@@ -94,7 +95,7 @@ internal sealed class UpdateReader
         }
 
         _input.MaxDepth = maxDepth;
-        EncodingUtils.ReadClientStructRefs(decoder, _structs, _clients, _spareStructLists);
+        EncodingUtils.ReadClientStructRefs(decoder, _structs, _clients, _spareStructLists, _staging);
         DeleteSet.ReadInto(decoder, _deleteSet, _spareDeleteLists);
     }
 
@@ -121,6 +122,7 @@ internal sealed class UpdateReader
         _structs.Clear();
         _deleteSet.Clients.Clear();
         _clients.Clear();
+        _staging.Reset();
         _input.Clear();
         _v2?.Clear();
         t_free = this;
@@ -154,6 +156,12 @@ internal sealed class UpdateReader
         public Dictionary<long, List<AbstractStruct>> Structs => Valid()._structs;
 
         public DeleteSet DeleteSet => Valid()._deleteSet;
+
+        /// <summary>
+        /// The shadow of <see cref="Structs"/>, one table per reader and so per lease: a read while another lease is
+        /// open gets another reader and another table. Reset when the lease is released.
+        /// </summary>
+        public StagingTable Staging => Valid()._staging;
 
         public void Dispose() => _reader?.Release(_version);
 

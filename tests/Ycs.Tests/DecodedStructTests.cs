@@ -179,7 +179,7 @@ public class DecodedStructTests
         Assert.AreEqual(d.Kind == ItemKind.Doc ? ((ContentDoc)content).Doc.Guid : null, d.DocGuid);
     }
 
-    private static List<byte[]> CorpusUpdates()
+    internal static List<byte[]> CorpusUpdates()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "interop", "corpus", "cases")))
@@ -204,7 +204,7 @@ public class DecodedStructTests
         return result;
     }
 
-    private static List<byte[]> RichUpdates()
+    internal static List<byte[]> RichUpdates()
     {
         var result = new List<byte[]>();
         foreach (var gc in new[] { true, false })
@@ -248,7 +248,7 @@ public class DecodedStructTests
         return result;
     }
 
-    private static byte[] Damage(byte[] update, Random random)
+    internal static byte[] Damage(byte[] update, Random random)
     {
         var bytes = update.ToList();
         for (var n = 1 + random.Next(3); n > 0 && bytes.Count > 0; n--)

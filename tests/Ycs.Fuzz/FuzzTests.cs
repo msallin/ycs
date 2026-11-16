@@ -46,6 +46,32 @@ public sealed class FuzzTests
     }
 
     [TestMethod]
+    public void MutatedUpdates_StagingShadowsTheObjectsAndFailsAtTheSameStruct()
+    {
+        var iterations = Environment.GetEnvironmentVariable("YCS_FUZZ_ITERATIONS") is { Length: > 0 } n
+            ? int.Parse(n, CultureInfo.InvariantCulture)
+            : DefaultIterations;
+        var random = new Random(7);
+        var seeds = Seeds.All;
+        var structs = 0;
+        for (var i = 0; i < iterations; i++)
+        {
+            var seed = seeds[random.Next(seeds.Count)];
+            structs += StagingDifferential.Check(Mutator.Mutate(seed.Update, random), seed.V2, Harness.Limits.MaxStructsPerUpdate);
+        }
+
+        Assert.IsGreaterThan(iterations / 10, structs);
+    }
+
+    [TestMethod]
+    public void Seeds_Unmutated_StagingShadowsTheObjects()
+    {
+        var structs = Seeds.All.Concat(Hostile.All).Sum(seed => StagingDifferential.Check(seed.Update, seed.V2, Harness.Limits.MaxStructsPerUpdate));
+
+        Assert.IsGreaterThan(1000, structs);
+    }
+
+    [TestMethod]
     public void MutatedUpdates_FailCleanly()
     {
         var iterations = Environment.GetEnvironmentVariable("YCS_FUZZ_ITERATIONS") is { Length: > 0 } n
