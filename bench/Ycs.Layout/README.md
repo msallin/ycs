@@ -90,8 +90,9 @@ What the numbers say:
   is a slice of a string the decoder made. The prototype has no such difference: the characters are copied into the
   arena (not modelled: decoding straight into it, see below).
 * **Find by id** is 1.6-1.9× faster on a dense array of start clocks, independent of the rest of the layout.
-* **Split** is 2.5× faster with no allocation, but still O(n): inserting into a client's order shifts 8 bytes per
-  later struct, as `List<T>.Insert` shifts 8 today. The B-tree order of the design removes that; not modelled.
+* **Split** was 2.5× faster against the code before the leaf order (step 3), with no allocation, but O(n): inserting
+  into a flat order shifts 8 bytes per later struct. Against today's leaf order the flat prototype is slower (333 ns
+  against 636 ns on `trace-replay`, "Editing" below); the slab keeps the leaf order.
 * **The walk-left** is 8× faster as Yjs' literal loop over the slab (2.6 ns a step against 21-29 ns: the slots are
   contiguous, the items are not), and constant time with the run-head index, with the same end and index on all 2,000
   walks.
