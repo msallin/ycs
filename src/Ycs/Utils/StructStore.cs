@@ -17,6 +17,9 @@ internal sealed partial class StructStore
 
     internal readonly ClientTable ClientTable = new();
 
+    /// <summary>The types that items of this store name as their parent, by the index a slot holds.</summary>
+    internal readonly TypeTable Types = new();
+
     // TODO: [alekseyk] To private?
     public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
 

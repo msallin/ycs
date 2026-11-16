@@ -35,6 +35,11 @@ internal partial class Item : AbstractStruct
     private ID _rightOrigin;
     private ID _redone;
 
+    // A neighbour without a slot yet (an item not attached) is -1 in this slot; its AttachSlot writes the handle here.
+    private AbstractStruct _left;
+    private AbstractStruct _right;
+    private object _parent;
+
     internal Item(ID id, AbstractStruct left, ID? leftOrigin, AbstractStruct right, ID? rightOrigin, object parent, string parentSub, IContent content)
         : base(id, content.Length)
     {
@@ -70,7 +75,18 @@ internal partial class Item : AbstractStruct
     /// </summary>
     // Whether it is this item's predecessor by clock is in the run-head index: a writer of an item the store holds
     // calls StructStore.Refresh (Integrate); a split and a merge go through ClientStructs, which keeps it.
-    public AbstractStruct Left { get; internal set; }
+    public AbstractStruct Left
+    {
+        get => _left;
+        internal set
+        {
+            _left = value;
+            if (Handle >= 0)
+            {
+                SlotStore.Slab.At(Handle).Left = value?.Handle ?? -1;
+            }
+        }
+    }
 
     /// <summary>
     /// The item that was originally to the right of this item.
@@ -91,12 +107,34 @@ internal partial class Item : AbstractStruct
     /// <summary>
     /// The item that is currently to the right of this item.
     /// </summary>
-    public AbstractStruct Right { get; internal set; }
+    public AbstractStruct Right
+    {
+        get => _right;
+        internal set
+        {
+            _right = value;
+            if (Handle >= 0)
+            {
+                SlotStore.Slab.At(Handle).Right = value?.Handle ?? -1;
+            }
+        }
+    }
 
     /// <summary>
     /// AbstractType or ID.
     /// </summary>
-    public object Parent { get; internal set; }
+    public object Parent
+    {
+        get => _parent;
+        internal set
+        {
+            _parent = value;
+            if (Handle >= 0)
+            {
+                WriteParent();
+            }
+        }
+    }
 
     /// <summary>
     /// If the parent refers to this item with some kind of key (e.g. YMap).

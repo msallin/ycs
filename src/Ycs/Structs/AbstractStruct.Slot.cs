@@ -77,10 +77,15 @@ internal abstract partial class AbstractStruct
     {
     }
 
+    private protected virtual void WriteLinks()
+    {
+    }
+
     private void WriteSlot()
     {
         WriteId();
         WriteOrigins();
+        WriteLinks();
         ref var slot = ref SlotStore.Slab.At(Handle);
         slot.Length = Length;
         slot.Info = SlotInfo;
