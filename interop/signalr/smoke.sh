@@ -8,7 +8,7 @@ export MSBUILDDISABLENODEREUSE=1
 [ -d "$here/node_modules" ] || (cd "$here" && npm ci --silent)
 dotnet build "$root/samples/Ycs.Server" -c Release --nologo -v quiet
 port="$(node -e "const s=require('net').createServer().listen(0,'127.0.0.1',()=>{console.log(s.address().port);s.close()})")"
-dotnet "$root/samples/Ycs.Server/bin/Release/net11.0/Ycs.Server.dll" --urls "http://127.0.0.1:$port" \
+dotnet "$root/samples/Ycs.Server/bin/Release/net11.0/Ycs.Server.dll" --contentRoot "$root/samples/Ycs.Server" --urls "http://127.0.0.1:$port" \
   --Logging:LogLevel:Default Warning &
 server=$!
 trap 'kill $server 2>/dev/null; wait $server 2>/dev/null || true' EXIT

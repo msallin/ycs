@@ -31,7 +31,7 @@ wait_for_port() {
 start_ycs_server() {
   local port
   port="$(free_port)"
-  dotnet "$root/samples/Ycs.Server/bin/Release/net11.0/Ycs.Server.dll" --urls "http://127.0.0.1:$port" \
+  dotnet "$root/samples/Ycs.Server/bin/Release/net11.0/Ycs.Server.dll" --contentRoot "$root/samples/Ycs.Server" --urls "http://127.0.0.1:$port" \
     --Logging:LogLevel:Default Warning &
   pids+=($!)
   wait_for_port "$port" $!
