@@ -11,7 +11,6 @@ internal sealed partial class StructStore
         public List<AbstractStruct> Refs { get; set; }
     }
 
-    private static readonly Dictionary<long, long> EmptyStateVector = new();
     private static readonly List<AbstractStruct> NoRefs = new();
 
     // The plan of the last update, kept for the next one (null while one is in use).
@@ -65,8 +64,8 @@ internal sealed partial class StructStore
             _getState = GetState;
         }
 
-        /// <summary>The structs set aside, by client, or null.</summary>
-        public StructStore Rest { get; private set; }
+        /// <summary>The decoded structs set aside, by client, each list contiguous and ascending by clock, or null.</summary>
+        public Dictionary<long, List<AbstractStruct>> Rest { get; private set; }
 
         /// <summary>Per client, the lowest clock the structs set aside wait for (set with <see cref="Rest"/>).</summary>
         public Dictionary<long, long> Missing { get; private set; }
@@ -96,7 +95,7 @@ internal sealed partial class StructStore
             }
 
             long structs = 0;
-            foreach (var list in Rest.Clients.Values)
+            foreach (var list in Rest.Values)
             {
                 structs += list.Count;
             }
@@ -104,7 +103,7 @@ internal sealed partial class StructStore
             var encoder = UpdateEncoderV2.Rent();
             try
             {
-                EncodingUtils.WriteClientsStructs(encoder, Rest, EmptyStateVector);
+                WriteRest(encoder, Rest);
 
                 // Write an empty delete set: there is no need for an extra function call, just write 0 deletes.
                 encoder.RestWriter.WriteVarUint(0);
@@ -297,7 +296,7 @@ internal sealed partial class StructStore
 
         private void AddStackToRestSS()
         {
-            Rest ??= new StructStore();
+            Rest ??= new Dictionary<long, List<AbstractStruct>>();
             foreach (var item in _stack)
             {
                 var client = item.Id.Client;
@@ -305,7 +304,7 @@ internal sealed partial class StructStore
                 {
                     // Decrement because we weren't able to apply previous operation.
                     inapplicableItems.NextReadOperation--;
-                    Rest.Clients[client] = new ClientStructs(inapplicableItems.Refs, inapplicableItems.NextReadOperation, inapplicableItems.Refs.Count - inapplicableItems.NextReadOperation);
+                    Rest[client] = inapplicableItems.Refs.GetRange(inapplicableItems.NextReadOperation, inapplicableItems.Refs.Count - inapplicableItems.NextReadOperation);
                     _clientsStructRefs.Remove(client);
 
                     // The plan may still read it as its current target: it is empty now.
@@ -316,9 +315,7 @@ internal sealed partial class StructStore
                 else
                 {
                     // Item was the last item on clientsStructRefs and the field was already cleared. Add item to restStructs and continue.
-                    var single = new ClientStructs(1);
-                    single.Add(ItemRef.Of(item));
-                    Rest.Clients[client] = single;
+                    Rest[client] = new List<AbstractStruct>(1) { item };
                 }
 
                 // Remove client from clientsStructRefsIds to prevent users from applying the same update again.

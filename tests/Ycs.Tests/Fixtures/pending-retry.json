@@ -1,0 +1,181 @@
+{
+ "yjs": "13.6.33",
+ "repro": {
+  "updates": [
+   "AQGC34r0DgGE1ZKNWQABdQA=",
+   "AQL+lNwkBCcBA21hcAJrMAEoAP6U3CQEAXYBfacGAA==",
+   "AQPfkaCADACI/pTcJAIBfZQJh9+RoIAMAAEoAN+RoIAMAQF2AXgA",
+   "AQHVko1ZAAQBBHRleHQBagA=",
+   "AQGC34r0DgAoAQNtYXACazEBfgA=",
+   "AQH+lNwkAAgBBWFycmF5A3UCfQJ3BHRyYW12AgFrfQIBc3cEc2dhdX27AQA=",
+   "AQH+lNwkAygA35GggAwBAmszAX2WAwH2maWoBAEBAQ=="
+  ],
+  "stuckOrder": [
+   0,
+   1,
+   2,
+   3,
+   4,
+   5,
+   6
+  ],
+  "creationOrder": [
+   3,
+   4,
+   0,
+   5,
+   2,
+   6,
+   1
+  ],
+  "stuck": {
+   "pendingStructs": true,
+   "pendingDs": true,
+   "pendingStructsUpdate": "AAAcn6PAgBi+qbhJ36PAgBgAvqm4SZ+jwIAYvqm4SQUERAIABgAJiACHACgBJwAoDwl2azNtYXBrMHYBAgMCAQUAAQEAAAJBAAJBAgIDAH2UCXgDA32WA32nBgA=",
+   "stateVector": "A4LfivQOAtWSjVkB/pTcJAM=",
+   "stateV2": "AAArgr6V6B2VpZqyAZ+jwIAYvqm4Sd+jwIAYAJWlmrIBvqm4SZ+jwIAYvqm4SQYABEQCAAYAEygAhACIAIcAKAAEAAgAKAAnACglGW1hcGsxdXZ0ZXh0amFycmF5azNtYXBrMHYDAkEABAEFAgMCAQsBAAAAAQEAAAEAAAJBAAVBAQNBAAQCAH4DAH2UCXgBAAQAdQJ9AncEdHJhbXYCAWt9AgFzdwRzZ2F1fbsBfZYDfacGAfaZpagEAQEA",
+   "text": "ju",
+   "array": "[[2,\"tram\"],{\"k\":2,\"s\":\"sgau\"},123]",
+   "map": "{\"k1\":null}"
+  },
+  "creation": {
+   "pendingStructs": false,
+   "pendingDs": true,
+   "pendingStructsUpdate": null,
+   "stateVector": "BILfivQOAt+RoIAMA9WSjVkB/pTcJAY=",
+   "stateV2": "AAArgr6V6B2VpZqyAZ+jwIAYvqm4Sd+jwIAYAJWlmrIBvqm4SZ+jwIAYvqm4SQYABEQCAAYAEygAhACIAIcAKAAEAAgAKAAnACglGW1hcGsxdXZ0ZXh0amFycmF5azNtYXBrMHYDAkEABAEFAgMCAQsBAAAAAQEAAAEAAAJBAAVBAQNBAAQCAH4DAH2UCXgBAAQAdQJ9AncEdHJhbXYCAWt9AgFzdwRzZ2F1fbsBfZYDfacGAfaZpagEAQEA",
+   "text": "ju",
+   "array": "[[2,\"tram\"],{\"k\":2,\"s\":\"sgau\"},123,596,{\"v\":true,\"k3\":214}]",
+   "map": "{\"k1\":null,\"k0\":{\"v\":423}}"
+  },
+  "healing": {
+   "empty": {
+    "pendingStructs": true,
+    "pendingDs": true,
+    "pendingStructsUpdate": "AAAcn6PAgBi+qbhJ36PAgBgAvqm4SZ+jwIAYvqm4SQUERAIABgAJiACHACgBJwAoDwl2azNtYXBrMHYBAgMCAQUAAQEAAAJBAAJBAgIDAH2UCXgDA32WA32nBgA=",
+    "stateVector": "A4LfivQOAtWSjVkB/pTcJAM=",
+    "stateV2": "AAArgr6V6B2VpZqyAZ+jwIAYvqm4Sd+jwIAYAJWlmrIBvqm4SZ+jwIAYvqm4SQYABEQCAAYAEygAhACIAIcAKAAEAAgAKAAnACglGW1hcGsxdXZ0ZXh0amFycmF5azNtYXBrMHYDAkEABAEFAgMCAQsBAAAAAQEAAAEAAAJBAAVBAQNBAAQCAH4DAH2UCXgBAAQAdQJ9AncEdHJhbXYCAWt9AgFzdwRzZ2F1fbsBfZYDfacGAfaZpagEAQEA",
+    "text": "ju",
+    "array": "[[2,\"tram\"],{\"k\":2,\"s\":\"sgau\"},123]",
+    "map": "{\"k1\":null}"
+   },
+   "unrelated": {
+    "pendingStructs": true,
+    "pendingDs": true,
+    "pendingStructsUpdate": "AAAcn6PAgBi+qbhJ36PAgBgAvqm4SZ+jwIAYvqm4SQUERAIABgAJiACHACgBJwAoDwl2azNtYXBrMHYBAgMCAQUAAQEAAAJBAAJBAgIDAH2UCXgDA32WA32nBgA=",
+    "stateVector": "BILfivQOAtWSjVkB/pTcJAPnBwE=",
+    "stateV2": "AAAtgr6V6B2VpZqyAZ+jwIAYvqm4Sd+jwIAYAJWlmrIBvqm4SZ+jwIAYvqm4SacPBgAERAIABgAVKACEAIgAhwAoAAQACAAoACcAKAAEMSNtYXBrMXV2dGV4dGphcnJheWszbWFwazB2dW5yZWxhdGVkdQMCQQAEAQUCAwIBCQENAQAAAAEBAAABAAAAAQJBAAVBAQNBAAUCAH4DAH2UCXgBAAQAdQJ9AncEdHJhbXYCAWt9AgFzdwRzZ2F1fbsBfZYDfacGAQAB9pmlqAQBAQA=",
+    "text": "ju",
+    "array": "[[2,\"tram\"],{\"k\":2,\"s\":\"sgau\"},123]",
+    "map": "{\"k1\":null}"
+   },
+   "pendingUpdateApplied": {
+    "pendingStructs": false,
+    "pendingDs": true,
+    "pendingStructsUpdate": null,
+    "stateVector": "BILfivQOAt+RoIAMA9WSjVkB/pTcJAY=",
+    "stateV2": "AAArgr6V6B2VpZqyAZ+jwIAYvqm4Sd+jwIAYAJWlmrIBvqm4SZ+jwIAYvqm4SQYABEQCAAYAEygAhACIAIcAKAAEAAgAKAAnACglGW1hcGsxdXZ0ZXh0amFycmF5azNtYXBrMHYDAkEABAEFAgMCAQsBAAAAAQEAAAEAAAJBAAVBAQNBAAQCAH4DAH2UCXgBAAQAdQJ9AncEdHJhbXYCAWt9AgFzdwRzZ2F1fbsBfZYDfacGAfaZpagEAQEA",
+    "text": "ju",
+    "array": "[[2,\"tram\"],{\"k\":2,\"s\":\"sgau\"},123,596,{\"v\":true,\"k3\":214}]",
+    "map": "{\"k1\":null,\"k0\":{\"v\":423}}"
+   },
+   "resent": {
+    "pendingStructs": false,
+    "pendingDs": true,
+    "pendingStructsUpdate": null,
+    "stateVector": "BILfivQOAt+RoIAMA9WSjVkB/pTcJAY=",
+    "stateV2": "AAArgr6V6B2VpZqyAZ+jwIAYvqm4Sd+jwIAYAJWlmrIBvqm4SZ+jwIAYvqm4SQYABEQCAAYAEygAhACIAIcAKAAEAAgAKAAnACglGW1hcGsxdXZ0ZXh0amFycmF5azNtYXBrMHYDAkEABAEFAgMCAQsBAAAAAQEAAAEAAAJBAAVBAQNBAAQCAH4DAH2UCXgBAAQAdQJ9AncEdHJhbXYCAWt9AgFzdwRzZ2F1fbsBfZYDfacGAfaZpagEAQEA",
+    "text": "ju",
+    "array": "[[2,\"tram\"],{\"k\":2,\"s\":\"sgau\"},123,596,{\"v\":true,\"k3\":214}]",
+    "map": "{\"k1\":null,\"k0\":{\"v\":423}}"
+   }
+  },
+  "yjs14Stuck": false
+ },
+ "minimal": {
+  "updates": [
+   "AQEBAAgBBWFycmF5AXcBYQA=",
+   "AQEBAYgBAAF3AWIA",
+   "AQECAIcBAQEA",
+   "AQEBAigAAgABawF9AQA=",
+   "AQEBAwQBBHRleHQBeAA="
+  ],
+  "stuckOrder": [
+   4,
+   2,
+   0,
+   1,
+   3
+  ],
+  "creationOrder": [
+   0,
+   1,
+   2,
+   3,
+   4
+  ],
+  "stuck": {
+   "pendingStructs": true,
+   "pendingDs": false,
+   "pendingStructsUpdate": "AAAEAkEAAgICQgAFhwAoAAQKBmt0ZXh0eAEEAQMAAAEBAQEBAgEAAgJ9AQA=",
+   "stateVector": "AQEC",
+   "stateV2": "AAAEAkEAAgICQgAHhwAIACgABBALYXJyYXlrdGV4dHgFAQQBBQEAAAABAQECAgECAQADAHcBYXcBYn0BAA==",
+   "text": "",
+   "array": "[\"a\",\"b\"]",
+   "map": "{}"
+  },
+  "creation": {
+   "pendingStructs": false,
+   "pendingDs": false,
+   "pendingStructsUpdate": null,
+   "stateVector": "AgIBAQQ=",
+   "stateV2": "AAAEAkEAAgICQgAHhwAIACgABBALYXJyYXlrdGV4dHgFAQQBBQEAAAABAQECAgECAQADAHcBYXcBYn0BAA==",
+   "text": "x",
+   "array": "[\"a\",\"b\",{\"k\":1}]",
+   "map": "{}"
+  },
+  "healing": {
+   "empty": {
+    "pendingStructs": true,
+    "pendingDs": false,
+    "pendingStructsUpdate": "AAAEAkEAAgICQgAFhwAoAAQKBmt0ZXh0eAEEAQMAAAEBAQEBAgEAAgJ9AQA=",
+    "stateVector": "AQEC",
+    "stateV2": "AAAEAkEAAgICQgAHhwAIACgABBALYXJyYXlrdGV4dHgFAQQBBQEAAAABAQECAgECAQADAHcBYXcBYn0BAA==",
+    "text": "",
+    "array": "[\"a\",\"b\"]",
+    "map": "{}"
+   },
+   "unrelated": {
+    "pendingStructs": true,
+    "pendingDs": false,
+    "pendingStructsUpdate": "AAAEAkEAAgICQgAFhwAoAAQKBmt0ZXh0eAEEAQMAAAEBAQEBAgEAAgJ9AQA=",
+    "stateVector": "AucHAQEC",
+    "stateV2": "AAAGpw8CQQACAgJCAAkEAIcACAAoAAQcFXVucmVsYXRlZHVhcnJheWt0ZXh0eAkBBQEEAQUBAQAAAQEBAgIBAwEAAQADAHcBYXcBYn0BAA==",
+    "text": "",
+    "array": "[\"a\",\"b\"]",
+    "map": "{}"
+   },
+   "pendingUpdateApplied": {
+    "pendingStructs": false,
+    "pendingDs": false,
+    "pendingStructsUpdate": null,
+    "stateVector": "AgIBAQQ=",
+    "stateV2": "AAAEAkEAAgICQgAHhwAIACgABBALYXJyYXlrdGV4dHgFAQQBBQEAAAABAQECAgECAQADAHcBYXcBYn0BAA==",
+    "text": "x",
+    "array": "[\"a\",\"b\",{\"k\":1}]",
+    "map": "{}"
+   },
+   "resent": {
+    "pendingStructs": false,
+    "pendingDs": false,
+    "pendingStructsUpdate": null,
+    "stateVector": "AgIBAQQ=",
+    "stateV2": "AAAEAkEAAgICQgAHhwAIACgABBALYXJyYXlrdGV4dHgFAQQBBQEAAAABAQECAgECAQADAHcBYXcBYn0BAA==",
+    "text": "x",
+    "array": "[\"a\",\"b\",{\"k\":1}]",
+    "map": "{}"
+   }
+  },
+  "yjs14Stuck": false
+ }
+}

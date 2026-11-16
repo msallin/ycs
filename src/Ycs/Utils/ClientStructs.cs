@@ -34,16 +34,6 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         _single = new Leaf(Math.Clamp(capacity, 1, _leafCapacity));
     }
 
-    /// <summary>A copy of <paramref name="count"/> structs of <paramref name="source"/> from <paramref name="start"/>.</summary>
-    public ClientStructs(List<AbstractStruct> source, int start, int count)
-        : this(count)
-    {
-        for (var i = 0; i < count; i++)
-        {
-            Add(ItemRef.Of(source[start + i]));
-        }
-    }
-
     public int Count => _count;
 
     /// <summary>The clock after the last struct (the client's state).</summary>
