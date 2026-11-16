@@ -3,6 +3,7 @@
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import WebSocket from 'ws'
+import { waitFor } from './wait.mjs'
 
 const url = process.argv[2] ?? process.env.YCS_SERVER_URL
 if (!url) {
@@ -17,19 +18,6 @@ const connect = () => {
   const provider = new WebsocketProvider(url, room, doc, { WebSocketPolyfill: WebSocket, disableBc: true })
   return { doc, provider }
 }
-
-const waitFor = (what, condition, ms) => new Promise((resolve, reject) => {
-  const started = Date.now()
-  const timer = setInterval(() => {
-    if (condition()) {
-      clearInterval(timer)
-      resolve(Date.now() - started)
-    } else if (Date.now() - started > ms) {
-      clearInterval(timer)
-      reject(new Error(`timed out after ${ms} ms: ${what}`))
-    }
-  }, 10)
-})
 
 const check = async (name, run) => {
   const ms = await run()
