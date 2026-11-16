@@ -51,7 +51,7 @@ public sealed partial class YArray : IReadOnlyList<YValue>
     /// <summary>The value at <paramref name="index"/>; false, and null, when the array has none.</summary>
     public bool TryGetValue(int index, out YValue value)
     {
-        if ((uint)index >= (uint)Count)
+        if (unchecked((uint)index >= (uint)Count))
         {
             value = default;
             return false;
@@ -69,7 +69,7 @@ public sealed partial class YArray : IReadOnlyList<YValue>
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is beyond <see cref="Count"/>; nothing is inserted.</exception>
     public void Insert(int index, params ReadOnlySpan<YValue> values)
     {
-        if ((uint)index > (uint)Count)
+        if (unchecked((uint)index > (uint)Count))
         {
             throw new ArgumentOutOfRangeException(nameof(index), index, $"The index is beyond the count ({Count}). Nothing was inserted.");
         }
@@ -255,7 +255,7 @@ public sealed partial class YArray : IReadOnlyList<YValue>
 
     private void CheckIndex(int index)
     {
-        if ((uint)index >= (uint)Count)
+        if (unchecked((uint)index >= (uint)Count))
         {
             throw new ArgumentOutOfRangeException(nameof(index), index, $"The index is not within the array (count {Count}).");
         }

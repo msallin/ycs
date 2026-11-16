@@ -46,7 +46,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     /// <summary>The child at <paramref name="index"/>; false when there is none.</summary>
     public bool TryGetValue(int index, out YType? value)
     {
-        if ((uint)index >= (uint)Count)
+        if (unchecked((uint)index >= (uint)Count))
         {
             value = null;
             return false;
@@ -120,7 +120,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     /// <exception cref="ArgumentException">A child is not a <see cref="YXmlFragment"/> (an element is one), a <see cref="YXmlText"/> or a <see cref="YXmlHook"/>.</exception>
     public void Insert(int index, params ReadOnlySpan<YType> children)
     {
-        if ((uint)index > (uint)Count)
+        if (unchecked((uint)index > (uint)Count))
         {
             throw new ArgumentOutOfRangeException(nameof(index), index, $"The index is beyond the count ({Count}). Nothing was inserted.");
         }
@@ -290,7 +290,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
 
     private void CheckIndex(int index)
     {
-        if ((uint)index >= (uint)Count)
+        if (unchecked((uint)index >= (uint)Count))
         {
             throw new ArgumentOutOfRangeException(nameof(index), index, $"The index is not within the children (count {Count}).");
         }
