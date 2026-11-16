@@ -60,7 +60,7 @@ internal sealed class ReferenceRun
         return run.Log.ToString();
     }
 
-    public YDoc NewDoc(long client, bool gc = true, Predicate<Item> gcFilter = null)
+    public YDoc NewDoc(long client, bool gc = true, Predicate<ItemView> gcFilter = null)
     {
         var options = new YDocOptions { ClientId = client, Gc = gc };
         if (gcFilter != null)
@@ -214,7 +214,7 @@ internal sealed class ReferenceRun
         doc.UpdateV2 += (_, e) => L($"{label} updateV2 {Hex(e.Item1)}");
     }
 
-    public static string Items(IEnumerable<Item> items) =>
+    public static string Items(IEnumerable<ItemView> items) =>
         string.Join(",", items.Select(i => i.Id.Client + ":" + i.Id.Clock + "+" + i.Length).OrderBy(x => x, StringComparer.Ordinal));
 
     public EventHandler<YEventArgs> TextObserver(string label) => (_, e) =>

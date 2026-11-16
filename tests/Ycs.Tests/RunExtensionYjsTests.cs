@@ -387,7 +387,7 @@ public class RunExtensionYjsTests
         return (result, Hex(doc.EncodeStateAsUpdateV1()));
     }
 
-    private static (string Calls, string Updates, string V1) Filtered(Func<Item, bool> keep, Action<YDoc> body)
+    private static (string Calls, string Updates, string V1) Filtered(Func<ItemView, bool> keep, Action<YDoc> body)
     {
         var calls = new List<string>();
         var doc = new YDoc(new YDocOptions

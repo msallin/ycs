@@ -27,7 +27,7 @@ namespace Ycs;
 /// </para>
 /// <para><c>default</c> is no view: every member throws <see cref="InvalidOperationException"/>.</para>
 /// </remarks>
-internal readonly partial struct ItemView : IEquatable<ItemView>
+public readonly partial struct ItemView : IEquatable<ItemView>
 {
     private readonly YDoc _doc;
     private readonly ID _id;
@@ -43,20 +43,20 @@ internal readonly partial struct ItemView : IEquatable<ItemView>
     }
 
     /// <summary>The view of the struct <paramref name="str"/> of <paramref name="doc"/>'s store, which it names by its id.</summary>
-    public static ItemView Of(YDoc doc, AbstractStruct str) => new(doc ?? throw new ArgumentNullException(nameof(doc)), str.Id, str, false);
+    internal static ItemView Of(YDoc doc, AbstractStruct str) => new(doc ?? throw new ArgumentNullException(nameof(doc)), str.Id, str, false);
 
     /// <summary>The view of the id <paramref name="id"/> of <paramref name="doc"/>, with no hint: the first read looks it up.</summary>
-    public static ItemView At(YDoc doc, ID id) => new(doc ?? throw new ArgumentNullException(nameof(doc)), id, null, false);
+    internal static ItemView At(YDoc doc, ID id) => new(doc ?? throw new ArgumentNullException(nameof(doc)), id, null, false);
 
     /// <summary>
     /// The view of a decoded struct that is in no store, which it reads as it is. <paramref name="doc"/> only lets
     /// <see cref="Left"/> and <see cref="Right"/> name the store structs a planned item points at (null when there is none).
     /// </summary>
-    public static ItemView Detached(YDoc doc, AbstractStruct decoded) => new(doc, decoded.Id, decoded, true);
+    internal static ItemView Detached(YDoc doc, AbstractStruct decoded) => new(doc, decoded.Id, decoded, true);
 
     public bool IsDefault => _doc == null && !_detached;
 
-    public bool IsDetached => _detached;
+    internal bool IsDetached => _detached;
 
     public YDoc Doc => _doc;
 

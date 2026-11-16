@@ -14,10 +14,10 @@ namespace Ycs;
 public class YDocOptions
 {
     // Collects everything; another filter is called once per item (see Transaction.CleanupTransaction).
-    internal static readonly Predicate<Item> DefaultGcFilter = static item => true;
+    internal static readonly Predicate<ItemView> DefaultGcFilter = static item => true;
 
     public bool Gc { get; set; } = true;
-    public Predicate<Item> GcFilter { get; set; } = DefaultGcFilter;
+    public Predicate<ItemView> GcFilter { get; set; } = DefaultGcFilter;
     /// <summary>A random one unless set (only when first read, so that one that is set costs nothing).</summary>
     public string Guid
     {
@@ -94,7 +94,7 @@ public partial class YDoc
 
     public string Guid => _opts.Guid;
     public bool Gc => _opts.Gc;
-    public Predicate<Item> GcFilter => _opts.GcFilter;
+    public Predicate<ItemView> GcFilter => _opts.GcFilter;
     public bool AutoLoad => _opts.AutoLoad;
     public object Meta => _opts.Meta;
 

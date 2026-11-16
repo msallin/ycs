@@ -10,7 +10,7 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-public class ContentJson : IContentEx
+internal class ContentJson : IContentEx
 {
     internal const int _ref = 2;
 

@@ -12,7 +12,7 @@ namespace Ycs;
 /// merging/diffing raw update byte streams (see <see cref="UpdateOperations"/>), where a
 /// client's structs might not be contiguous because we only have part of its history.
 /// </summary>
-public sealed class Skip : AbstractStruct
+internal sealed class Skip : AbstractStruct
 {
     internal const byte StructSkipRefNumber = 10;
 
