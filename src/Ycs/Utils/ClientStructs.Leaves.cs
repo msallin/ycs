@@ -12,7 +12,7 @@ using System.Numerics;
 namespace Ycs;
 
 /// <summary>
-/// The leaf order of a client's structs (docs/design-item-layout.md, step 3): the structs in leaves of at most
+/// The leaf order of a client's structs (docs/design-item-layout.md, section 1.3): the structs in leaves of at most
 /// <see cref="LeafCapacityForTests"/> positions, and from two leaves on a directory of them.
 /// </summary>
 /// <remarks>
@@ -58,6 +58,15 @@ internal sealed partial class ClientStructs
     // The leaf the last lookup by position or clock found, where the next lookup looks first; below _leafCount.
     private int _cursor;
 
+    // The cursor's leaf's structs, first position and count, for the lookup by position (the indexer): valid while
+    // _cursorCount is not 0. A change of the leaves' positions sets it to 0 (ForgetCursor); one that only appends
+    // leaves it valid, the count it holds then being at most the leaf's.
+    private AbstractStruct[] _cursorStructs;
+    private int _cursorFirst;
+    private int _cursorCount;
+
+    private void ForgetCursor() => _cursorCount = 0;
+
     private Leaf LeafAt(int k) => _leaves == null ? _single : _leaves[k];
 
     private int FirstPosition(int k) => _leaves == null ? 0 : _firstPositions[k];
@@ -81,15 +90,20 @@ internal sealed partial class ClientStructs
 
     private int LeafOf(int position)
     {
-        var k = _cursor;
-        if (unchecked((uint)(position - _firstPositions[k])) < (uint)_leaves[k].Count)
+        if (unchecked((uint)(position - _cursorFirst)) < (uint)_cursorCount)
         {
-            return k;
+            return _cursor;
         }
 
+        var k = _cursor;
         if (k + 1 < _leafCount && unchecked((uint)(position - _firstPositions[k + 1])) < (uint)_leaves[k + 1].Count)
         {
-            return _cursor = k + 1;
+            return SetCursor(k + 1);
+        }
+
+        if (unchecked((uint)(position - _firstPositions[k])) < (uint)_leaves[k].Count)
+        {
+            return SetCursor(k);
         }
 
         var low = 0;
@@ -107,31 +121,63 @@ internal sealed partial class ClientStructs
             }
         }
 
-        return _cursor = low;
+        return SetCursor(low);
+    }
+
+    private int SetCursor(int k)
+    {
+        var leaf = _leaves[k];
+        _cursor = k;
+        _cursorStructs = leaf.Structs;
+        _cursorFirst = _firstPositions[k];
+        _cursorCount = leaf.Count;
+        return k;
     }
 
     /// <summary>The leaf that holds <paramref name="clock"/> (in the list), with a directory.</summary>
     private int LeafOfClock(long clock)
     {
-        // Integrating in clock order mostly asks for the last leaf, an ordered lookup for the one of the last lookup.
+        // Integrating in clock order mostly asks for the last leaf, an ordered lookup for the one of the last lookup
+        // or the next.
+        var starts = _firstStarts;
         var last = _leafCount - 1;
-        if (_firstStarts[last] <= clock)
+        if (starts[last] <= clock)
         {
-            return last;
+            return SetCursor(last);
         }
 
         var k = _cursor;
-        if (_firstStarts[k] <= clock && clock < _firstStarts[k + 1])
+        if (starts[k] <= clock)
         {
-            return k;
+            // k < last, and k + 1 < last when clock is at or after k + 1's start (it is before the last's).
+            if (clock < starts[k + 1])
+            {
+                return k;
+            }
+
+            if (clock < starts[k + 2])
+            {
+                return SetCursor(k + 1);
+            }
         }
 
+        // The leaves before the last, from a pivot as Yjs' (the clocks are spread about evenly over the leaves).
         var low = 0;
         var high = last - 1;
+        var mid = (int)Math.Min((clock - starts[0]) * last / (_end - starts[0]), high);
+        if (starts[mid] <= clock)
+        {
+            low = mid;
+        }
+        else
+        {
+            high = mid - 1;
+        }
+
         while (low < high)
         {
-            var mid = (low + high + 1) >> 1;
-            if (_firstStarts[mid] <= clock)
+            mid = (low + high + 1) >> 1;
+            if (starts[mid] <= clock)
             {
                 low = mid;
             }
@@ -141,7 +187,7 @@ internal sealed partial class ClientStructs
             }
         }
 
-        return _cursor = low;
+        return SetCursor(low);
     }
 
     /// <summary>The one leaf grown to hold at least <paramref name="min"/> structs (at most a leaf's capacity).</summary>
@@ -237,6 +283,7 @@ internal sealed partial class ClientStructs
         Array.Copy(_firstPositions, k + 1, _firstPositions, k, _leafCount - k);
         _leaves[_leafCount] = null;
         _cursor = 0;
+        ForgetCursor();
         if (_leafCount == 1)
         {
             _single = _leaves[0];
@@ -522,6 +569,11 @@ internal sealed partial class ClientStructs
         if (_leafCount < 2 || _leafCount > _leaves.Length || _single != null || _cursor >= _leafCount)
         {
             return $"a directory of {_leafCount} leaves (room for {_leaves.Length}, cursor {_cursor})";
+        }
+
+        if (_cursorCount != 0 && (_cursorStructs != _leaves[_cursor].Structs || _cursorFirst != _firstPositions[_cursor] || _cursorCount > _leaves[_cursor].Count))
+        {
+            return $"the cursor's leaf {_cursor} is cached at position {_cursorFirst} with {_cursorCount} structs, it is at {_firstPositions[_cursor]} with {_leaves[_cursor].Count}";
         }
 
         var position = 0;

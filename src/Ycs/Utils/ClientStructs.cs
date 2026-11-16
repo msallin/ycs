@@ -63,6 +63,12 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
                 return _single.Structs[index];
             }
 
+            var offset = index - _cursorFirst;
+            if (unchecked((uint)offset) < (uint)_cursorCount)
+            {
+                return _cursorStructs[offset];
+            }
+
             var k = LeafOf(index);
             return _leaves[k].Structs[index - _firstPositions[k]];
         }
@@ -161,6 +167,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
         }
 
         var tail = leaf.Count - offset;
+        ForgetCursor();
         Array.Copy(leaf.Structs, offset, leaf.Structs, offset + 1, tail);
         Array.Copy(leaf.Starts, offset, leaf.Starts, offset + 1, tail);
         Array.Copy(leaf.Flags, offset, leaf.Flags, offset + 1, tail);
@@ -217,6 +224,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
             remaining -= n;
         }
 
+        ForgetCursor();
         var lastLeaf = k0;
         var emptied = false;
         k = k0;
@@ -361,9 +369,16 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
             return right;
         }
 
-        // clock < end and clock != midClock, so end > 1: no division by zero, and the pivot is at most right. Every
-        // probe is below the last position (the last starts after clock), so position mid + 1 exists.
-        int midIndex = (int)((clock * right) / (end - 1));
+        // Yjs' pivot, from the order's first start (a leaf's starts do not begin at 0): first <= clock < end and
+        // clock != midClock, so end - 1 > first: no division by zero, and the pivot is at most right. Every probe is
+        // below the last position (the last starts after clock), so position mid + 1 exists.
+        var first = order.StartAt(0);
+        if (clock < first)
+        {
+            throw new InvalidOperationException($"Clock {clock} is not in the store.");
+        }
+
+        int midIndex = (int)(((clock - first) * right) / (end - 1 - first));
         while (left <= right)
         {
             midClock = order.StartAt(midIndex);
