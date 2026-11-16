@@ -1,0 +1,165 @@
+diff --git a/src/Ycs/Utils/ClientStructs.Leaves.cs b/src/Ycs/Utils/ClientStructs.Leaves.cs
+index 674072c..1d6894e 100644
+--- a/src/Ycs/Utils/ClientStructs.Leaves.cs
++++ b/src/Ycs/Utils/ClientStructs.Leaves.cs
+@@ -43,6 +43,19 @@ internal sealed partial class ClientStructs
+     // The one leaf while there is no directory; null while there is one (the directory's leaf 0 then).
+     private Leaf _single;
+ 
++    // The arrays of _single while there is no directory, else null: what the hot operations read without the leaf.
++    private ItemRef[] _flatStructs;
++    private long[] _flatStarts;
++    private byte[] _flatFlags;
++
++    private void SetSingle(Leaf leaf)
++    {
++        _single = leaf;
++        _flatStructs = leaf?.Structs;
++        _flatStarts = leaf?.Starts;
++        _flatFlags = leaf?.Flags;
++    }
++
+     // The directory, null up to one leaf: the leaves in clock order (entries from _leafCount on are null), per leaf the
+     // start of its first struct and its first position, a bit per leaf "has a break" and "has a live format" in 64-bit
+     // words (bits from _leafCount on are 0), and a Fenwick tree of the leaves' visible sums (1-based: _sumTree[i]
+@@ -197,7 +210,7 @@ internal sealed partial class ClientStructs
+         grown.Sum = old.Sum;
+         grown.Breaks = old.Breaks;
+         grown.Formats = old.Formats;
+-        _single = grown;
++        SetSingle(grown);
+     }
+ 
+     /// <summary>
+@@ -244,7 +257,7 @@ internal sealed partial class ClientStructs
+         _hasFormat = hasFormat;
+         _sumTree = sumTree;
+         _sumTreeStale = true;
+-        _single = null;
++        SetSingle(null);
+     }
+ 
+     /// <summary>
+@@ -281,7 +294,7 @@ internal sealed partial class ClientStructs
+         ForgetCursor();
+         if (_leafCount == 1)
+         {
+-            _single = _leaves[0];
++            SetSingle(_leaves[0]);
+             _leaves = null;
+             _firstStarts = null;
+             _firstPositions = null;
+diff --git a/src/Ycs/Utils/ClientStructs.RunHeads.cs b/src/Ycs/Utils/ClientStructs.RunHeads.cs
+index 63c2ac7..1639452 100644
+--- a/src/Ycs/Utils/ClientStructs.RunHeads.cs
++++ b/src/Ycs/Utils/ClientStructs.RunHeads.cs
+@@ -139,6 +139,40 @@ internal sealed partial class ClientStructs
+     /// </summary>
+     internal void Refresh(int index)
+     {
++        if (_flatStructs != null)
++        {
++            var item = _flatStructs[index];
++            byte f;
++            if (!item.IsItem)
++            {
++                f = Break;
++            }
++            else
++            {
++                var before = index > 0 ? _flatStructs[index - 1] : default;
++                f = before.IsItem && item.Left == before ? (byte)0 : Break;
++                if (!item.Deleted)
++                {
++                    f |= item.Countable ? Visible : Format;
++                }
++            }
++
++            var was = _flatFlags[index];
++            if (was == f)
++            {
++                return;
++            }
++
++            var length = (index + 1 < _count ? _flatStarts[index + 1] : _end) - _flatStarts[index];
++            SetFlags(0, index, f);
++            if (((was ^ f) & Visible) != 0)
++            {
++                AddSum(0, (f & Visible) != 0 ? length : -length);
++            }
++
++            return;
++        }
++
+         var k = Locate(index, out var i);
+         var old = ValueAt(k, i);
+         SetFlags(k, i, FlagsAt(k, i));
+diff --git a/src/Ycs/Utils/ClientStructs.cs b/src/Ycs/Utils/ClientStructs.cs
+index 21740be..9a036cc 100644
+--- a/src/Ycs/Utils/ClientStructs.cs
++++ b/src/Ycs/Utils/ClientStructs.cs
+@@ -31,7 +31,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
+ 
+     public ClientStructs(int capacity = 4)
+     {
+-        _single = new Leaf(Math.Clamp(capacity, 1, _leafCapacity));
++        SetSingle(new Leaf(Math.Clamp(capacity, 1, _leafCapacity)));
+     }
+ 
+     /// <summary>A copy of <paramref name="count"/> structs of <paramref name="source"/> from <paramref name="start"/>.</summary>
+@@ -58,9 +58,9 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
+                 ThrowOutOfRange(index, _count);
+             }
+ 
+-            if (_leaves == null)
++            if (_flatStructs != null)
+             {
+-                return _single.Structs[index];
++                return _flatStructs[index];
+             }
+ 
+             var offset = index - _cursorFirst;
+@@ -108,6 +108,19 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
+     /// <summary>Appends <paramref name="str"/>, which starts where the last struct ends (the caller checked).</summary>
+     public void Add(ItemRef str)
+     {
++        if (_flatStructs != null && _count < _flatStructs.Length)
++        {
++            var at = _count;
++            _flatStructs[at] = str;
++            _flatStarts[at] = str.Id.Clock;
++            _flatFlags[at] = 0;
++            _single.Count = ++_count;
++            _end = str.Id.Clock + str.Length;
++            SetFlags(0, at, FlagsAt(0, at));
++            AddSum(0, ValueAt(0, at));
++            return;
++        }
++
+         var k = _leafCount - 1;
+         var leaf = LeafAt(k);
+         if (leaf.Count == leaf.Capacity)
+@@ -322,9 +335,9 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
+     /// </summary>
+     public int FindIndex(long clock)
+     {
+-        if (_leaves == null)
++        if (_flatStarts != null)
+         {
+-            return FindIndex(new Starts(_single.Starts, _single.Count, _end), clock);
++            return FindIndex(new Starts(_flatStarts, _count, _end), clock);
+         }
+ 
+         CheckInList(clock);
+@@ -336,9 +349,9 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
+     /// <inheritdoc cref="FindIndex{T}(T, long, ref int)"/>
+     public int FindIndex(long clock, ref int hint)
+     {
+-        if (_leaves == null)
++        if (_flatStarts != null)
+         {
+-            return FindIndex(new Starts(_single.Starts, _single.Count, _end), clock, ref hint);
++            return FindIndex(new Starts(_flatStarts, _count, _end), clock, ref hint);
+         }
+ 
+         CheckInList(clock);

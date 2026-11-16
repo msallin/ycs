@@ -543,9 +543,12 @@ decided (it is: open question 2), right before 7; 7 to 9 are the rewrite (7 alon
 4. **Leaf capacity**: decided, 128 (measured against 64 and 256 in step 3, bench/Ycs.Compare/README.md).
 5. **Plenum's client** (`SharedText.cs` reads `Structs` as `Item`/`Skip`). Recommendation: change it in the Plenum
    commit that moves the ycs submodule past step 6, with `Plenum.Blazor.Tests` as the check.
-6. **What the leaf order costs where nothing splits** (open): `apply-state-v1` +7 %, `apply-state-v2` +9 %,
-   `concurrent-20` +10 % against c9f673a; per call `FindIndex` 8 to 12 ns and `Add` 9 to 15 ns more, half of it even
-   with a single leaf (every operation goes through the leaf object). Six variants (the cursor not rewritten when
-   unchanged, a plain binary search in the leaf, no pivot among the leaves, the pivot from 8 leaves on, a 32-bit
-   division, the indexer's cursor test inlined) gave nothing beyond 2 %. Candidates not tried: a flat list without a
-   leaf object below 128 structs, and the slab's own layout (step 7), which replaces the lists.
+6. **What the leaf order costs where nothing splits** (open, one candidate closed): `apply-state-v1` +7 %,
+   `apply-state-v2` +9 %, `concurrent-20` +10 % against c9f673a; per call `FindIndex` 8 to 12 ns and `Add` 9 to 15 ns
+   more, half of it even with a single leaf. Six variants (the cursor not rewritten when unchanged, a plain binary
+   search in the leaf, no pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor
+   test inlined) gave nothing beyond 2 %, and a seventh, a flat form below one leaf (the hot operations reading the
+   leaf's arrays without the leaf object), gave 0 to +1 % on the three, and at best 1 to 3 % with every client one flat
+   leaf: not built. Its cases (clients of at most 128 structs) are not the workloads that lose, whose clients hold
+   hundreds to thousands (bench/Ycs.Compare/README.md, "The leaf order"). Remaining candidate: the slab's own layout
+   (step 7), which replaces the lists.
