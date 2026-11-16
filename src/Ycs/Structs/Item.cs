@@ -55,7 +55,14 @@ internal partial class Item : AbstractStruct
     public ID? LeftOrigin
     {
         get => (_info & InfoEnum.HasLeftOrigin) != 0 ? _leftOrigin : null;
-        internal set => SetId(ref _leftOrigin, InfoEnum.HasLeftOrigin, value);
+        internal set
+        {
+            SetId(ref _leftOrigin, InfoEnum.HasLeftOrigin, value);
+            if (Handle >= 0)
+            {
+                WriteOrigins();
+            }
+        }
     }
 
     /// <summary>
@@ -71,7 +78,14 @@ internal partial class Item : AbstractStruct
     public ID? RightOrigin
     {
         get => (_info & InfoEnum.HasRightOrigin) != 0 ? _rightOrigin : null;
-        internal set => SetId(ref _rightOrigin, InfoEnum.HasRightOrigin, value);
+        internal set
+        {
+            SetId(ref _rightOrigin, InfoEnum.HasRightOrigin, value);
+            if (Handle >= 0)
+            {
+                WriteOrigins();
+            }
+        }
     }
 
     /// <summary>
@@ -98,7 +112,11 @@ internal partial class Item : AbstractStruct
     public ID? Redone
     {
         get => (_info & InfoEnum.HasRedone) != 0 ? _redone : null;
-        internal set => SetId(ref _redone, InfoEnum.HasRedone, value);
+        internal set
+        {
+            SetId(ref _redone, InfoEnum.HasRedone, value);
+            WriteInfo();
+        }
     }
 
     private void SetId(ref ID field, InfoEnum flag, ID? value)
@@ -115,7 +133,17 @@ internal partial class Item : AbstractStruct
         }
     }
 
-    internal IContentEx Content { get; set; }
+    private IContentEx _content;
+
+    internal IContentEx Content
+    {
+        get => _content;
+        set
+        {
+            _content = value;
+            WriteInfo();
+        }
+    }
 
     public bool Marker
     {
@@ -130,6 +158,8 @@ internal partial class Item : AbstractStruct
             {
                 _info &= ~InfoEnum.Marker;
             }
+
+            WriteInfo();
         }
     }
 
@@ -149,6 +179,8 @@ internal partial class Item : AbstractStruct
             {
                 _info &= ~InfoEnum.Keep;
             }
+
+            WriteInfo();
         }
     }
 
@@ -165,6 +197,8 @@ internal partial class Item : AbstractStruct
             {
                 _info &= ~InfoEnum.Countable;
             }
+
+            WriteInfo();
         }
     }
 
@@ -172,7 +206,11 @@ internal partial class Item : AbstractStruct
 
     internal bool Detached => (_info & InfoEnum.Detached) != 0;
 
-    internal void MarkDetached() => _info |= InfoEnum.Detached;
+    internal void MarkDetached()
+    {
+        _info |= InfoEnum.Detached;
+        FreeSlot();
+    }
 
     /// <summary>
     /// Computes the last content address of this Item.
@@ -188,6 +226,7 @@ internal partial class Item : AbstractStruct
     internal void MarkDeleted()
     {
         _info |= InfoEnum.Deleted;
+        WriteInfo();
     }
 
     // An item of the store is ItemRef's (ItemRef.Operations.cs). A decoded item (MergeUpdates, DiffUpdate, the conversions,

@@ -13,14 +13,16 @@ internal sealed partial class StructStore
     private long _checks;
 
     /// <summary>
-    /// What <see cref="CheckAfterTransactionsForTests"/> checks: every list (<see cref="ClientStructs.Violations"/>) and
-    /// the links and holders around its structs (<c>ConsistencyViolation</c>); a list of more than 1,024 structs only
-    /// every count/256th time, so that a test stays linear in its edits.
+    /// What <see cref="CheckAfterTransactionsForTests"/> checks: every list (<see cref="ClientStructs.Violations"/>), the
+    /// links and holders around its structs (<c>ConsistencyViolation</c>), the slot of every struct (<c>SlotViolation</c>)
+    /// and the slab; a list of more than 1,024 structs only every count/256th time, so that a test stays linear in its
+    /// edits.
     /// </summary>
     internal void CheckForTests()
     {
         _checks++;
         HashSet<AbstractType> visited = null;
+        HashSet<int> handles = [];
         foreach (var (client, structs) in Clients)
         {
             if (structs.Count > 1024 && _checks % (structs.Count / 256) != 0)
@@ -33,11 +35,25 @@ internal sealed partial class StructStore
                 throw new InvalidOperationException($"The structs of client {client} differ from a recount: {violation}.");
             }
 
-            // Two lookups a struct: a list of more than 1,024 is walked every count/32nd time.
-            if ((structs.Count <= 1024 || _checks % (structs.Count / 32) == 0) && ConsistencyViolation(structs, ref visited) is { } inconsistency)
+            // Two lookups a struct, and as many to compare it with its slot: a list of more than 1,024 is walked every
+            // count/32nd time.
+            if (structs.Count <= 1024 || _checks % (structs.Count / 32) == 0)
             {
-                throw new InvalidOperationException($"The structs of client {client} are inconsistent: {inconsistency}.");
+                if (ConsistencyViolation(structs, ref visited) is { } inconsistency)
+                {
+                    throw new InvalidOperationException($"The structs of client {client} are inconsistent: {inconsistency}.");
+                }
+
+                if (SlotViolation(structs, handles) is { } slotViolation)
+                {
+                    throw new InvalidOperationException($"The slots of client {client} differ from its structs: {slotViolation}.");
+                }
             }
+        }
+
+        if (SlabViolation() is { } slab)
+        {
+            throw new InvalidOperationException($"The slab differs from the store: {slab}.");
         }
 
         if (CollectedTypeViolation() is { } collected)

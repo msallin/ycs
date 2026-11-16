@@ -18,11 +18,17 @@ internal partial class GC : AbstractStruct
 
     public override bool Deleted => true;
 
+    private protected override int SlotInfo => SlotDeleted;
+
     // Set once, on the right part of a merge and on a GC struct a later one replaced: it is in no list, and its Id and
     // Length are the range it held (an ItemView's hint is stale).
     internal bool Detached { get; private set; }
 
-    internal void MarkDetached() => Detached = true;
+    internal void MarkDetached()
+    {
+        Detached = true;
+        FreeSlot();
+    }
 
     // MergeUpdates offers any neighbour, as Yjs does; only a GC extends a GC.
     internal override bool CanMergeWith(AbstractStruct right) => right is GC;

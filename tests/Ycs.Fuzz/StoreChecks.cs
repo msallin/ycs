@@ -11,5 +11,10 @@ public static class StoreChecks
     {
         StructStore.CheckAfterTransactionsForTests = true;
         UpdateReader.StageForTests = true;
+
+        if (Environment.GetEnvironmentVariable("YCS_SLAB_FIRST") is { Length: > 0 } first)
+        {
+            Slab.FirstPageSlotsForTests = int.Parse(first, System.Globalization.CultureInfo.InvariantCulture);
+        }
     }
 }

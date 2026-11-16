@@ -37,12 +37,14 @@ public class SlabTests
         var slab = new Slab();
         slab.Allocate();
 
-        Assert.AreEqual(16, slab.FirstPageCapacity);
+        // A run mode (YCS_SLAB_FIRST) sets the hook for the whole run.
+        Assert.AreEqual(Slab.FirstPageSlotsForTests != 0 ? Slab.FirstPageSlotsForTests : 16, slab.FirstPageCapacity);
     }
 
     [TestMethod]
     public void Constructor_HookSet_StartsPageZeroThere()
     {
+        var before = Slab.FirstPageSlotsForTests;
         Slab.FirstPageSlotsForTests = 1;
         try
         {
@@ -53,7 +55,7 @@ public class SlabTests
         }
         finally
         {
-            Slab.FirstPageSlotsForTests = 0;
+            Slab.FirstPageSlotsForTests = before;
         }
     }
 
