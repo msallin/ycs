@@ -107,7 +107,7 @@ public partial class YDoc
     public event EventHandler<Transaction> AfterTransaction;
     public event EventHandler<Transaction> AfterTransactionCleanup;
     public event EventHandler BeforeAllTransactions;
-    public event EventHandler<IList<Transaction>> AfterAllTransactions;
+    public event EventHandler<IReadOnlyList<Transaction>> AfterAllTransactions;
     /// <summary>
     /// Fires after each transaction that changed the document, with the change as an update in the
     /// original ('v1') format: Yjs' <c>doc.on('update')</c>, what every y-protocols provider sends.
@@ -115,12 +115,12 @@ public partial class YDoc
     /// resync (send the state, or a diff by state vector). Unlike Yjs, the document still finishes the cleanup and
     /// stays usable; the exception escapes from the outermost <c>Transact</c> or <c>ApplyUpdate</c> afterwards.
     /// </summary>
-    public event EventHandler<(byte[] data, object origin, Transaction transaction)> Update;
+    public event EventHandler<UpdateEventArgs> Updated;
 
     /// <summary>
-    /// Like <see cref="Update"/>, with the update in the v2 format: Yjs' <c>doc.on('updateV2')</c>.
+    /// Like <see cref="Updated"/>, with the update in the v2 format: Yjs' <c>doc.on('updateV2')</c>.
     /// </summary>
-    public event EventHandler<(byte[] data, object origin, Transaction transaction)> UpdateV2;
+    public event EventHandler<UpdateEventArgs> UpdatedV2;
     public event EventHandler Destroyed;
 
     /// <summary>
@@ -130,7 +130,7 @@ public partial class YDoc
     /// waiting structs may integrate them under other limits. No user content is passed.
     /// </summary>
     public event EventHandler<PendingDrop> PendingDropped;
-    public event EventHandler<(ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed)> SubdocsChanged;
+    public event EventHandler<SubdocsEventArgs> SubdocsChanged;
 
     public long ClientId { get; internal set; }
 

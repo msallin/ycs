@@ -37,13 +37,13 @@ public class EventParityTests
         var nestedMap = new YMap();
         arr.Insert(3, new object[] { nestedMap });
 
-        IReadOnlyCollection<object> capturedPath = null;
-        arr.ObserveDeep((s, e) => { capturedPath = e.Events[0].Path; });
+        IReadOnlyList<PathSegment> capturedPath = null;
+        arr.ObserveDeep((deepEvents, _) => { capturedPath = deepEvents[0].Path; });
 
         nestedMap.Set("x", 1);
 
         Assert.IsNotNull(capturedPath);
-        CollectionAssert.AreEqual(new object[] { 3 }, capturedPath.ToList());
+        CollectionAssert.AreEqual(new[] { new PathSegment(null, 3) }, capturedPath.ToList());
     }
 
     [TestMethod]
@@ -56,13 +56,13 @@ public class EventParityTests
         var nested = new YMap();
         map.Set(string.Empty, nested);
 
-        IReadOnlyCollection<object> capturedPath = null;
-        map.ObserveDeep((s, e) => { capturedPath = e.Events[0].Path; });
+        IReadOnlyList<PathSegment> capturedPath = null;
+        map.ObserveDeep((deepEvents, _) => { capturedPath = deepEvents[0].Path; });
 
         nested.Set("x", 1);
 
         Assert.IsNotNull(capturedPath);
-        CollectionAssert.AreEqual(new object[] { string.Empty }, capturedPath.ToList());
+        CollectionAssert.AreEqual(new[] { new PathSegment(string.Empty, 0) }, capturedPath.ToList());
     }
 
     [TestMethod]
@@ -77,11 +77,11 @@ public class EventParityTests
 
         // An event's changes are computed in its handler (afterwards the transaction has ended).
         YMapEvent evt = null;
-        map.EventHandler += (s, e) =>
+        map.Observe(e =>
         {
-            evt = e.Event as YMapEvent;
+            evt = e as YMapEvent;
             _ = evt.Changes;
-        };
+        });
 
         doc.Transact(_ =>
         {
@@ -100,7 +100,7 @@ public class EventParityTests
         foreach (var k in new[] { "b", "c", "d" })
         {
             Assert.IsTrue(keys.ContainsKey(k));
-            Assert.AreEqual(ChangeAction.Add, keys[k].Action);
+            Assert.AreEqual(KeyChangeAction.Add, keys[k].Action);
         }
     }
 
@@ -112,17 +112,17 @@ public class EventParityTests
 
         // An event's changes are computed in its handler (afterwards the transaction has ended).
         YMapEvent evt = null;
-        map.EventHandler += (s, e) =>
+        map.Observe(e =>
         {
-            evt = e.Event as YMapEvent;
+            evt = e as YMapEvent;
             _ = evt.Changes;
-        };
+        });
 
         map.Set("a", 1);
 
         Assert.IsNotNull(evt);
         Assert.AreSame(evt.Changes.Keys, evt.Keys, "YEvent.Keys must be the very same cached map exposed via Changes.Keys.");
-        Assert.AreEqual(ChangeAction.Add, evt.Keys["a"].Action);
+        Assert.AreEqual(KeyChangeAction.Add, evt.Keys["a"].Action);
     }
 
     [TestMethod]
@@ -132,11 +132,11 @@ public class EventParityTests
         var arr = doc.GetArray("array");
 
         YArrayEvent evt = null;
-        arr.EventHandler += (s, e) =>
+        arr.Observe(e =>
         {
-            evt = e.Event as YArrayEvent;
+            evt = e as YArrayEvent;
             _ = evt.Changes;
-        };
+        });
 
         arr.Insert(0, new object[] { 1, 2, 3 });
 
@@ -154,12 +154,12 @@ public class EventParityTests
         var text = doc.GetText("text");
 
         YTextEvent evt = null;
-        text.EventHandler += (s, e) =>
+        text.Observe(e =>
         {
-            evt = e.Event as YTextEvent;
+            evt = e as YTextEvent;
             _ = evt.Changes;
             _ = evt.Delta;
-        };
+        });
 
         text.Insert(0, "abc");
 
@@ -184,11 +184,11 @@ public class EventParityTests
         // and run as *public* members by invoking them through the event's own added set, in the
         // handler (afterwards the transaction has ended).
         (bool Adds, bool Deletes)? result = null;
-        arr.EventHandler += (s, e) =>
+        arr.Observe(e =>
         {
-            var addedItem = e.Event.Changes.Added.Single();
-            result = (e.Event.Adds(addedItem), e.Event.Deletes(addedItem));
-        };
+            var addedItem = e.Changes.Added.Single();
+            result = (e.Adds(addedItem), e.Deletes(addedItem));
+        });
 
         arr.Insert(0, new object[] { "x" });
 

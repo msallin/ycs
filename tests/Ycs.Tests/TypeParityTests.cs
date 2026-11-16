@@ -215,34 +215,27 @@ public class TypeParityTests
     }
 
     [TestMethod]
-    public void TestObserveUnobserveAreSymmetricWithEventHandler()
+    public void TestObserveDisposeStopsTheHandler()
     {
         var doc = new YDoc();
         var map = doc.GetMap("map");
 
         int callCount = 0;
-        void Handler(object sender, YEventArgs e) => callCount++;
-
-        map.Observe(Handler);
+        var subscription = map.Observe(_ => callCount++);
         map.Set("a", 1);
         Assert.AreEqual(1, callCount);
 
-        map.Unobserve(Handler);
+        subscription.Dispose();
         map.Set("b", 2);
-        Assert.AreEqual(1, callCount, "Unobserve must remove the same handler Observe registered.");
+        Assert.AreEqual(1, callCount, "Disposing the subscription must remove the handler.");
 
-        // Observe/Unobserve are thin wrappers over the EventHandler event: a handler subscribed
-        // via '+=' must be removable via Unobserve, and vice versa.
-        map.EventHandler += Handler;
+        subscription.Dispose();
         map.Set("c", 3);
-        Assert.AreEqual(2, callCount);
-        map.Unobserve(Handler);
-        map.Set("d", 4);
-        Assert.AreEqual(2, callCount);
+        Assert.AreEqual(1, callCount, "Disposing twice changes nothing.");
     }
 
     [TestMethod]
-    public void TestObserveDeepUnobserveDeepAreSymmetricWithDeepEventHandler()
+    public void TestObserveDeepDisposeStopsTheHandler()
     {
         var doc = new YDoc();
         var map = doc.GetMap("map");
@@ -250,14 +243,12 @@ public class TypeParityTests
         map.Set("nested", nested);
 
         int callCount = 0;
-        void Handler(object sender, YDeepEventArgs e) => callCount++;
-
-        map.ObserveDeep(Handler);
+        var subscription = map.ObserveDeep((_, _) => callCount++);
         nested.Set("x", 1);
         Assert.AreEqual(1, callCount);
 
-        map.UnobserveDeep(Handler);
+        subscription.Dispose();
         nested.Set("y", 2);
-        Assert.AreEqual(1, callCount, "UnobserveDeep must remove the same handler ObserveDeep registered.");
+        Assert.AreEqual(1, callCount, "Disposing the subscription must remove the deep handler.");
     }
 }

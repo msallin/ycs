@@ -15,6 +15,11 @@ namespace Ycs;
 
 public partial class YXmlFragment
 {
+    /// <summary>
+    /// Observes the events of this fragment or element (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
+    /// </summary>
+    public IDisposable Observe(Action<YXmlEvent> handler) => AddObserver(handler);
+
     // Yjs only enables search markers for Y.Array and Y.Text (and so Y.XmlText).
     public YXmlFragment()
         : base(useSearchMarkers: false)

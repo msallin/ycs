@@ -108,10 +108,13 @@ public class RunExtensionFuzzTests
         var relpos = new List<RelativePosition>();
         var snapshots = new List<Snapshot>();
         UndoManager um = null;
-        EventHandler<YEventArgs> tObs = null, aObs = null, reactor = null;
-        EventHandler<YDeepEventArgs> mDeep = null;
+        Action<YTextEvent> tObs = null;
+        Action<YArrayEvent> aObs = null;
+        Action<YMapEvent> reactor = null;
+        Action<IReadOnlyList<YEvent>, Transaction> mDeep = null;
+        IDisposable tSub = null, aSub = null, rSub = null, mSub = null;
         EventHandler<Transaction> atx = null, boc = null;
-        EventHandler<(byte[], object, Transaction)> onUpdate = null;
+        EventHandler<UpdateEventArgs> onUpdate = null;
         var caret = 0;
         var slot = 0;
         var armed = 0;
@@ -190,12 +193,12 @@ public class RunExtensionFuzzTests
                     if (tObs == null)
                     {
                         tObs = c.TextObserver("t");
-                        t.EventHandler += tObs;
+                        tSub = t.Observe(tObs);
                         c.L("+tObs");
                     }
                     else
                     {
-                        t.EventHandler -= tObs;
+                        tSub.Dispose();
                         tObs = null;
                         c.L("-tObs");
                     }
@@ -204,22 +207,22 @@ public class RunExtensionFuzzTests
                 case 1:
                     if (aObs == null)
                     {
-                        aObs = (_, e) =>
+                        aObs = e =>
                         {
-                            var ch = e.Event.Changes;
-                            c.L($"a delta={ReferenceRun.D(e.Event.Delta)} added={ReferenceRun.Items(ch.Added)} deleted={ReferenceRun.Items(ch.Deleted)}");
+                            var ch = e.Changes;
+                            c.L($"a delta={ReferenceRun.D(e.Delta)} added={ReferenceRun.Items(ch.Added)} deleted={ReferenceRun.Items(ch.Deleted)}");
                             if (throwInHandler)
                             {
                                 throwInHandler = false;
                                 throw new InvalidOperationException("handler");
                             }
                         };
-                        a.EventHandler += aObs;
+                        aSub = a.Observe(aObs);
                         c.L("+aObs");
                     }
                     else
                     {
-                        a.EventHandler -= aObs;
+                        aSub.Dispose();
                         aObs = null;
                         c.L("-aObs");
                     }
@@ -229,12 +232,12 @@ public class RunExtensionFuzzTests
                     if (mDeep == null)
                     {
                         mDeep = c.DeepObserver("m");
-                        m.DeepEventHandler += mDeep;
+                        mSub = m.ObserveDeep(mDeep);
                         c.L("+mDeep");
                     }
                     else
                     {
-                        m.DeepEventHandler -= mDeep;
+                        mSub.Dispose();
                         mDeep = null;
                         c.L("-mDeep");
                     }
@@ -275,7 +278,7 @@ public class RunExtensionFuzzTests
                     // also during a remote transaction's cleanup, while the lists' markers are stale.
                     if (reactor == null)
                     {
-                        reactor = (_, e) =>
+                        reactor = e =>
                         {
                             c.L("reactor local=" + e.Transaction.Local + " armed=" + armed);
                             if (armed == 0)
@@ -303,12 +306,12 @@ public class RunExtensionFuzzTests
                                 }
                             }
                         };
-                        m.EventHandler += reactor;
+                        rSub = m.Observe(reactor);
                         c.L("+reactor");
                     }
                     else
                     {
-                        m.EventHandler -= reactor;
+                        rSub.Dispose();
                         reactor = null;
                         c.L("-reactor");
                     }
@@ -333,12 +336,12 @@ public class RunExtensionFuzzTests
                             caret++;
                             a.Push(Vals(-100));
                         };
-                        doc.Update += onUpdate;
+                        doc.Updated += onUpdate;
                         c.L("+update");
                     }
                     else
                     {
-                        doc.Update -= onUpdate;
+                        doc.Updated -= onUpdate;
                         onUpdate = null;
                         c.L("-update");
                     }

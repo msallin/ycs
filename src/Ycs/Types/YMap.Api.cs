@@ -12,6 +12,11 @@ namespace Ycs;
 
 public partial class YMap
 {
+    /// <summary>
+    /// Observes the events of this map (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
+    /// </summary>
+    public IDisposable Observe(Action<YMapEvent> handler) => AddObserver(handler);
+
     public YMap()
         : this(null)
     {

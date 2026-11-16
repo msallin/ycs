@@ -50,14 +50,14 @@ public class RunExtensionScenarioTests
             var x = doc.GetText("x"); var y = doc.GetText("y");
             c.LogUpdates(doc, "d");
             var fired = false;
-            x.EventHandler += (_, e) =>
+            x.Observe(e =>
             {
-                c.L("x observer " + ReferenceRun.D(e.Event.Delta));
+                c.L("x observer " + ReferenceRun.D(e.Delta));
                 if (fired) return;
                 fired = true;
                 y.Insert(y.Length, "c");
-                y.EventHandler += c.TextObserver("y");
-            };
+                y.Observe(c.TextObserver("y"));
+            });
             doc.Transact(tr => { x.Insert(0, "x"); y.Insert(0, "b"); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -67,13 +67,13 @@ public class RunExtensionScenarioTests
             var x = doc.GetText("x"); var y = doc.GetText("y"); var m = doc.GetMap("m");
             c.LogUpdates(doc, "d");
             var fired = false;
-            x.EventHandler += (_, e) =>
+            x.Observe(e =>
             {
-                c.L("x observer " + ReferenceRun.D(e.Event.Delta));
+                c.L("x observer " + ReferenceRun.D(e.Delta));
                 if (fired) return;
                 fired = true;
-                doc.Transact(tr => { y.Insert(y.Length, "c"); y.Insert(y.Length, "d"); m.DeepEventHandler += c.DeepObserver("m"); m.Set("k", 1); });
-            };
+                doc.Transact(tr => { y.Insert(y.Length, "c"); y.Insert(y.Length, "d"); m.ObserveDeep(c.DeepObserver("m")); m.Set("k", 1); });
+            });
             doc.Transact(tr => { x.Insert(0, "x"); y.Insert(0, "b"); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -83,7 +83,7 @@ public class RunExtensionScenarioTests
             var x = doc.GetText("x"); var y = doc.GetText("y");
             c.LogUpdates(doc, "d");
             var fired = false;
-            x.EventHandler += (_, e) =>
+            x.Observe(_ =>
             {
                 if (fired) return;
                 fired = true;
@@ -92,7 +92,7 @@ public class RunExtensionScenarioTests
                 {
                     foreach (var (type, evs) in tr.ChangedParentTypes) foreach (var ev in evs) c.L("atx event " + ReferenceRun.D(ev.Delta));
                 };
-            };
+            });
             doc.Transact(tr => { x.Insert(0, "x"); y.Insert(0, "b"); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -113,13 +113,13 @@ public class RunExtensionScenarioTests
             var doc = c.NewDoc(1);
             var x = doc.GetText("x"); var y = doc.GetArray("y");
             var fired = false;
-            x.EventHandler += (_, e) =>
+            x.Observe(_ =>
             {
                 if (fired) return;
                 fired = true;
                 y.Push(Vals(2));
-                y.EventHandler += (_, e2) => c.L("y delta=" + ReferenceRun.D(e2.Event.Delta) + " added=" + string.Join(",", e2.Event.Changes.Added.Select(i => i.Id.Clock + "+" + i.Length).OrderBy(v => v)));
-            };
+                y.Observe(e2 => c.L("y delta=" + ReferenceRun.D(e2.Delta) + " added=" + string.Join(",", e2.Changes.Added.Select(i => i.Id.Clock + "+" + i.Length).OrderBy(v => v))));
+            });
             doc.Transact(tr => { x.Insert(0, "x"); y.Push(Vals(1)); });
         });
         Add("s30-xml-fragment-values", c =>
@@ -128,7 +128,7 @@ public class RunExtensionScenarioTests
             c.LogUpdates(doc, "d");
             var a = new YArray(); m.Set("a", a);
             doc.Transact(tr => { a.Push(Vals(1)); a.Push(Vals(2)); m.Set("a", new YArray()); a.Push(Vals(3)); });
-            doc.Transact(tr => { var b = (YArray)m.Get("a"); b.Push(Vals(1)); b.Push(Vals(2)); m.EventHandler += (_, e) => c.L("m " + string.Join(",", e.Event.Keys.Keys)); b.Push(Vals(3)); m.Delete("a"); });
+            doc.Transact(tr => { var b = (YArray)m.Get("a"); b.Push(Vals(1)); b.Push(Vals(2)); m.Observe(e => c.L("m " + string.Join(",", e.Keys.Keys))); b.Push(Vals(3)); m.Delete("a"); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
         Add("s03-observe-mid-txn", c =>
@@ -140,7 +140,7 @@ public class RunExtensionScenarioTests
             doc.Transact(tr =>
             {
                 t.Insert(2, "c"); t.Insert(3, "d"); t.Insert(4, "e");
-                t.EventHandler += c.TextObserver("t");
+                t.Observe(c.TextObserver("t"));
                 t.Insert(5, "f"); t.Delete(3, 1);
             });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
@@ -157,7 +157,7 @@ public class RunExtensionScenarioTests
             {
                 t.Insert(2, "c"); t.Insert(3, "d");
                 a.Push(Vals(3)); a.Push(Vals(4)); a.Insert(4, Vals(5));
-                m.DeepEventHandler += c.DeepObserver("m");
+                m.ObserveDeep(c.DeepObserver("m"));
                 t.Insert(4, "e"); a.Push(Vals(6));
             });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
@@ -170,7 +170,7 @@ public class RunExtensionScenarioTests
             t.Insert(0, "ab");
             try { doc.Transact(tr => { t.Insert(2, "c"); t.Insert(3, "d"); throw new InvalidOperationException("boom"); }); } catch (InvalidOperationException) { c.L("caught"); }
             c.L(ReferenceRun.Dump(doc));
-            t.EventHandler += c.TextObserver("t");
+            t.Observe(c.TextObserver("t"));
             doc.Transact(tr => { t.Insert(4, "e"); t.Insert(5, "f"); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -225,16 +225,17 @@ public class RunExtensionScenarioTests
             var doc = c.NewDoc(1); var t = doc.GetText("t"); var u = doc.GetText("u");
             c.LogUpdates(doc, "d");
             t.Insert(0, "ab");
-            EventHandler<YEventArgs> thrower = (_, e) => throw new InvalidOperationException("handler");
+            Action<YTextEvent> thrower = _ => throw new InvalidOperationException("handler");
+            IDisposable thrown = null;
             try
             {
-                doc.Transact(tr => { t.Insert(2, "c"); t.Insert(3, "d"); u.Insert(0, "x"); u.EventHandler += thrower; });
+                doc.Transact(tr => { t.Insert(2, "c"); t.Insert(3, "d"); u.Insert(0, "x"); thrown = u.Observe(thrower); });
             }
             catch (InvalidOperationException) { c.L("caught"); }
             c.L(ReferenceRun.Dump(doc));
-            u.EventHandler -= thrower;
+            thrown.Dispose();
             doc.Transact(tr => { t.Insert(4, "e"); t.Insert(5, "f"); });
-            t.EventHandler += c.TextObserver("t");
+            t.Observe(c.TextObserver("t"));
             doc.Transact(tr => { t.Insert(6, "g"); t.Insert(7, "h"); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -245,7 +246,7 @@ public class RunExtensionScenarioTests
             t.Insert(0, "x");
             doc.Transact(tr => { t.Insert(1, "\uD83D"); t.Insert(2, "\uDE00"); t.Insert(3, "y"); });
             c.L(ReferenceRun.Esc(t.ToString())); c.L(ReferenceRun.Dump(doc));
-            doc.Transact(tr => { t.Insert(4, "a\uD83D"); t.Insert(6, "\uDE00b"); t.EventHandler += c.TextObserver("t"); });
+            doc.Transact(tr => { t.Insert(4, "a\uD83D"); t.Insert(6, "\uDE00b"); t.Observe(c.TextObserver("t")); });
             c.L(ReferenceRun.Esc(t.ToString())); c.L(ReferenceRun.Dump(doc));
             doc.Transact(tr => { t.Insert(8, "😀"); t.Insert(10, "😀"); t.Delete(9, 2); });
             c.L(ReferenceRun.Esc(t.ToString()));
@@ -263,7 +264,7 @@ public class RunExtensionScenarioTests
         {
             var doc = c.NewDoc(1); var t = doc.GetText("t"); var a = doc.GetArray("a");
             var peer = c.NewDoc(2);
-            doc.Update += (_, e) => { c.L("u " + ReferenceRun.Hex(e.Item1)); peer.ApplyUpdateV1(e.Item1); c.State(peer, "peer"); };
+            doc.Updated += (_, e) => { c.L("u " + ReferenceRun.Hex(e.Update.ToArray())); peer.ApplyUpdateV1(e.Update.ToArray()); c.State(peer, "peer"); };
             t.Insert(0, "a"); t.Insert(1, "b"); a.Push(Vals(1)); a.Push(Vals(2)); t.Insert(2, "c");
             doc.Transact(tr => { t.Insert(3, "d"); t.Insert(4, "e"); });
             doc.Transact(tr => { t.Insert(5, "f"); a.Push(Vals(3)); a.Push(Vals(4)); a.Push(Vals(5, "s")); });
@@ -348,7 +349,7 @@ public class RunExtensionScenarioTests
                 a.Push(Vals(new YArray(), 13)); a.Push(Vals(14));
             });
             c.L(ReferenceRun.V(a.ToArray()));
-            doc.Transact(tr => { a.Push(Vals(15)); a.EventHandler += (_, e) => c.L("a delta " + ReferenceRun.D(e.Event.Delta)); a.Push(Vals(16)); ((YArray)a.Get(a.Length - 4)).Push(Vals(1)); ((YArray)a.Get(a.Length - 4)).Push(Vals(2)); });
+            doc.Transact(tr => { a.Push(Vals(15)); a.Observe(e => c.L("a delta " + ReferenceRun.D(e.Delta))); a.Push(Vals(16)); ((YArray)a.Get(a.Length - 4)).Push(Vals(1)); ((YArray)a.Get(a.Length - 4)).Push(Vals(2)); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
         Add("s15-xmltext", c =>
@@ -359,7 +360,7 @@ public class RunExtensionScenarioTests
             f.Insert(0, Vals(el)); el.Insert(0, Vals(xt));
             doc.Transact(tr => { xt.Insert(0, "a"); xt.Insert(1, "b"); xt.Insert(2, "c", new Dictionary<string, object> { ["bold"] = true }); xt.Insert(3, "d", new Dictionary<string, object> { ["bold"] = true }); xt.Insert(4, "e"); xt.Insert(5, "f"); });
             c.L(f.ToString());
-            doc.Transact(tr => { xt.Insert(4, "x", new Dictionary<string, object> { ["bold"] = true }); xt.Insert(5, "y", new Dictionary<string, object> { ["bold"] = true }); f.DeepEventHandler += c.DeepObserver("f"); });
+            doc.Transact(tr => { xt.Insert(4, "x", new Dictionary<string, object> { ["bold"] = true }); xt.Insert(5, "y", new Dictionary<string, object> { ["bold"] = true }); f.ObserveDeep(c.DeepObserver("f")); });
             c.L(f.ToString());
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -427,11 +428,11 @@ public class RunExtensionScenarioTests
         {
             var doc = c.NewDoc(1); var m = doc.GetMap("m");
             c.LogUpdates(doc, "d");
-            m.EventHandler += (_, e) => c.L("m keys " + string.Join(",", e.Event.Keys.Keys));
+            m.Observe(e => c.L("m keys " + string.Join(",", e.Keys.Keys)));
             doc.Transact(tr =>
             {
                 var t = new YText("pre"); m.Set("t", t);
-                t.Insert(3, "a"); t.Insert(4, "b"); t.EventHandler += c.TextObserver("t"); t.Insert(5, "c");
+                t.Insert(3, "a"); t.Insert(4, "b"); t.Observe(c.TextObserver("t")); t.Insert(5, "c");
                 var a = new YArray(new object[] { 1, 2 }); m.Set("a", a); a.Push(Vals(3)); a.Push(Vals(4));
             });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
@@ -452,11 +453,11 @@ public class RunExtensionScenarioTests
             var doc = c.NewDoc(1); var x = doc.GetText("x"); var y = doc.GetText("y");
             c.LogUpdates(doc, "d");
             var n = 0;
-            x.EventHandler += (_, e) =>
+            x.Observe(e =>
             {
                 if (n++ > 1) return;
                 doc.Transact(tr => { y.Insert(y.Length, "c"); y.Insert(y.Length, "d"); x.Insert(0, "q"); y.Insert(y.Length, "e"); });
-            };
+            });
             y.Insert(0, "a");
             doc.Transact(tr => { x.Insert(0, "x"); y.Insert(1, "b"); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));

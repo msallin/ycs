@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 
 namespace Ycs;
 
-public class YArrayEvent : YEvent
+public sealed class YArrayEvent : YEvent
 {
     internal YArrayEvent(YArray arr, Transaction transaction)
         : base(arr, transaction)

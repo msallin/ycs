@@ -102,7 +102,7 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var map = doc.GetMap("m");
         YEvent kept = null;
-        map.EventHandler += (_, e) => kept = e.Event;
+        map.Observe(e => kept = e);
         map.Set("a", 1);
 
         map.Set("b", 2);
@@ -115,8 +115,8 @@ public class TransactionReuseTests
     {
         var doc = new YDoc();
         var map = doc.GetMap("m");
-        var keys = new List<IDictionary<string, ChangeKey>>();
-        map.EventHandler += (_, e) => keys.Add(e.Event.Keys);
+        var keys = new List<IReadOnlyDictionary<string, KeyChange>>();
+        map.Observe(e => keys.Add(e.Keys));
         map.Set("a", 1);
 
         map.Set("b", 2);
@@ -130,10 +130,10 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var map = doc.GetMap("m");
-        text.EventHandler += (_, _) => map.Set("seen", true);
+        text.Observe(_ => map.Set("seen", true));
         var log = new List<string>();
         doc.AfterTransaction += (_, tr) => log.Add($"after:{tr.Origin}");
-        doc.Update += (_, e) => log.Add($"update:{e.origin}");
+        doc.Updated += (_, e) => log.Add($"update:{e.Origin}");
         doc.AfterAllTransactions += (_, trs) => log.Add($"all:{trs.Count}:{trs[0] != trs[1]}");
 
         doc.Transact(_ => text.Insert(0, "a"), origin: "outer");
@@ -149,13 +149,13 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var map = doc.GetMap("m");
-        text.EventHandler += (_, _) =>
+        text.Observe(_ =>
         {
             map.Set("x", 1);
             map.Set("y", 2);
-        };
+        });
         var updates = 0;
-        doc.Update += (_, _) => updates++;
+        doc.Updated += (_, _) => updates++;
 
         text.Insert(0, "a");
 
@@ -195,7 +195,7 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var updates = new List<string>();
-        doc.Update += (_, e) => updates.Add((string)e.origin);
+        doc.Updated += (_, e) => updates.Add((string)e.Origin);
         string changed = null;
         doc.AfterTransaction += (_, tr) => changed = string.Join(",", tr.Changed.Keys.Select(k => k == text ? "text" : "map"));
 
@@ -215,7 +215,7 @@ public class TransactionReuseTests
         // As Yjs' transact: the cleanup runs in a 'finally', and its exception replaces the action's.
         var doc = new YDoc();
         var text = doc.GetText("t");
-        text.EventHandler += (_, _) => throw new ArgumentException("observer");
+        text.Observe(_ => throw new ArgumentException("observer"));
 
         var e = Assert.ThrowsExactly<ArgumentException>(() => doc.Transact(_ =>
         {
@@ -233,8 +233,8 @@ public class TransactionReuseTests
         var text = doc.GetText("t");
         var map = doc.GetMap("m");
         var log = new List<string>();
-        text.EventHandler += (_, _) => throw new InvalidOperationException("observer");
-        map.EventHandler += (_, _) => log.Add("map");
+        text.Observe(_ => throw new InvalidOperationException("observer"));
+        map.Observe(_ => log.Add("map"));
         doc.AfterTransaction += (_, _) => log.Add("after");
 
         Assert.ThrowsExactly<InvalidOperationException>(() => doc.Transact(_ =>
@@ -252,14 +252,14 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var fail = true;
-        text.EventHandler += (_, _) =>
+        text.Observe(_ =>
         {
             if (fail)
             {
                 fail = false;
                 throw new InvalidOperationException("observer");
             }
-        };
+        });
         Assert.ThrowsExactly<InvalidOperationException>(() => text.Insert(0, "a"));
         int changed = -1;
         doc.AfterTransaction += (_, tr) => changed = tr.Changed.Count;
@@ -276,8 +276,8 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var map = doc.GetMap("m");
         var log = new List<string>();
-        map.EventHandler += (_, _) => log.Add("observe");
-        map.DeepEventHandler += (_, _) => log.Add("deep");
+        map.Observe(_ => log.Add("observe"));
+        map.ObserveDeep((_, _) => log.Add("deep"));
         doc.AfterTransaction += (_, _) => log.Add("after");
 
         map.Set("k", 1);
@@ -293,7 +293,7 @@ public class TransactionReuseTests
         var child = new YMap();
         root.Set("child", child);
         string paths = null;
-        root.DeepEventHandler += (_, e) => paths = string.Join(",", e.Events.Select(evt => evt.Path.Count));
+        root.ObserveDeep((deepEvents, _) => paths = string.Join(",", deepEvents.Select(evt => evt.Path.Count)));
 
         doc.Transact(_ =>
         {

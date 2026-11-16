@@ -38,7 +38,7 @@ public class RunHeadIndexTests
         var b = Doc(2, walk);
         var ta = List(a, text);
         var tb = List(b, text);
-        ta.EventHandler += (_, _) => { };
+        ta.ObserveAny(_ => { });
         Insert(ta, 0, "abxcde");
         Delete(ta, 2, 1);
         Sync(a, b);
@@ -102,7 +102,7 @@ public class RunHeadIndexTests
         var log = new System.Text.StringBuilder();
         var doc = Doc(1, walk);
         var a = doc.GetArray("a");
-        a.EventHandler += (_, _) => { };
+        a.Observe(_ => { });
         a.Insert(0, Enumerable.Range(0, 3000).Select(v => (object)(long)v).ToList());
         for (var k = 0; k < 1500; k++)
         {
@@ -304,17 +304,17 @@ public class RunHeadIndexTests
             _tb = List(_b, text);
             if (seed % 2 == 0)
             {
-                _ta.EventHandler += (_, _) => { };
+                _ta.ObserveAny(_ => { });
             }
 
             // The second window: during the cleanup of a remote transaction, before the list's own observer call.
-            _a.GetMap("m").EventHandler += (_, _) =>
+            _a.GetMap("m").Observe(_ =>
             {
                 for (; _armed > 0; _armed--)
                 {
                     LocalEdit();
                 }
-            };
+            });
 
             // A long list in one piece of client 1: the deletes split it into one long chain.
             Insert(_ta, 0, new string('a', 300 + _random.Next(300)));

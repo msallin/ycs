@@ -394,8 +394,8 @@ public partial class Transaction
     /// <item>the observer calls (<see cref="YDoc.BeforeObserverCalls"/>, whose exception skips the others of that
     /// transaction, the observers, the deep observers, <see cref="YDoc.AfterTransaction"/>, the formatting cleanup)
     /// as Yjs' <c>callAll</c>;</item>
-    /// <item>what follows them (<see cref="YDoc.AfterTransactionCleanup"/>, <see cref="YDoc.Update"/>,
-    /// <see cref="YDoc.UpdateV2"/>, <see cref="YDoc.SubdocsChanged"/>, destroying the removed subdocuments), each step
+    /// <item>what follows them (<see cref="YDoc.AfterTransactionCleanup"/>, <see cref="YDoc.Updated"/>,
+    /// <see cref="YDoc.UpdatedV2"/>, <see cref="YDoc.SubdocsChanged"/>, destroying the removed subdocuments), each step
     /// even if one before threw. Yjs lets such an exception escape at once and never finishes the batch, so its
     /// document cleans up no later transaction (yjs#799); Ycs does what the open yjs#803 does.</item>
     /// </list>
@@ -715,7 +715,7 @@ public partial class Transaction
                 doc.Subdocs.Remove(subDoc);
             }
 
-            Step(static t => t._doc.InvokeSubdocsChanged(t.SubdocsLoaded, t.SubdocsAdded, t.SubdocsRemoved), transaction, ref error);
+            Step(static t => t._doc.InvokeSubdocsChanged((IReadOnlySet<YDoc>)t.SubdocsLoaded, (IReadOnlySet<YDoc>)t.SubdocsAdded, (IReadOnlySet<YDoc>)t.SubdocsRemoved), transaction, ref error);
             Step(static t =>
             {
                 foreach (var subDoc in t.SubdocsRemoved)

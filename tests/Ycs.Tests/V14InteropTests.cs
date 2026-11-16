@@ -207,7 +207,7 @@ public class V14InteropTests
     {
         var doc = Read(c, "v1", new YDocOptions { ClientId = clientId });
         var edits = new List<byte[]>();
-        doc.Update += (_, e) => edits.Add(e.data);
+        doc.Updated += (_, e) => edits.Add(e.Update.ToArray());
         foreach (var (name, kind) in Roots(c))
         {
             switch (kind)

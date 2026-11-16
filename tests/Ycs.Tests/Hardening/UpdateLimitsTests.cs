@@ -217,7 +217,7 @@ public class UpdateLimitsTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = client });
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         doc.GetText("t").Insert(0, first);
         doc.GetText("t").Insert(first.Length, second);
         return (updates[0], updates[1]);

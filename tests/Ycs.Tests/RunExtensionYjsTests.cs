@@ -28,7 +28,7 @@ public class RunExtensionYjsTests
     {
         var doc = Doc(1);
         var t = doc.GetText("t");
-        t.EventHandler += (_, _) => { };
+        t.Observe(_ => { });
         var m = doc.GetMap("m");
         doc.Transact(_ =>
         {
@@ -45,7 +45,7 @@ public class RunExtensionYjsTests
         peer.GetMap("m").Set("k", 1);
         pt.Insert(2, "e");
         pt.Delete(0, 1);
-        m.EventHandler += (_, _) => t.Insert(2, "f");
+        m.Observe(_ => t.Insert(2, "f"));
 
         Sync(peer, doc);
 
@@ -192,7 +192,7 @@ public class RunExtensionYjsTests
         var y = doc.GetText("y");
         var deltas = new List<string>();
         var fired = false;
-        x.EventHandler += (_, _) =>
+        x.Observe(_ =>
         {
             if (fired)
             {
@@ -201,8 +201,8 @@ public class RunExtensionYjsTests
 
             fired = true;
             y.Insert(y.Length, "c");
-            y.EventHandler += (_, e) => deltas.Add(Describe(e.Event.Delta));
-        };
+            y.Observe(e => deltas.Add(Describe(e.Delta)));
+        });
 
         doc.Transact(_ =>
         {
@@ -221,7 +221,7 @@ public class RunExtensionYjsTests
         var y = doc.GetText("y");
         var seen = new List<string>();
         var fired = false;
-        x.EventHandler += (_, _) =>
+        x.Observe(_ =>
         {
             if (fired)
             {
@@ -231,7 +231,7 @@ public class RunExtensionYjsTests
             fired = true;
             y.Insert(y.Length, "c");
             doc.AfterTransaction += (_, tr) => seen.Add(tr.ChangedParentTypes.TryGetValue(y, out var events) ? string.Join(";", events.Select(e => Describe(e.Delta))) : "-");
-        };
+        });
 
         doc.Transact(_ =>
         {
@@ -250,7 +250,7 @@ public class RunExtensionYjsTests
         var y = doc.GetArray("y");
         var added = new List<string>();
         var fired = false;
-        x.EventHandler += (_, _) =>
+        x.Observe(_ =>
         {
             if (fired)
             {
@@ -259,8 +259,8 @@ public class RunExtensionYjsTests
 
             fired = true;
             y.Push(new object[] { 2 });
-            y.EventHandler += (_, e) => added.Add(string.Join(",", e.Event.Changes.Added.Select(i => $"{i.Id.Clock}+{i.Length}").Order(StringComparer.Ordinal)));
-        };
+            y.Observe(e => added.Add(string.Join(",", e.Changes.Added.Select(i => $"{i.Id.Clock}+{i.Length}").Order(StringComparer.Ordinal))));
+        });
 
         doc.Transact(_ =>
         {
@@ -277,7 +277,7 @@ public class RunExtensionYjsTests
         var t = doc.GetText("t");
         if (observed)
         {
-            t.EventHandler += (_, _) => { };
+            t.Observe(_ => { });
         }
 
         var peer = Doc(2);
@@ -369,7 +369,7 @@ public class RunExtensionYjsTests
             pa.Delete(0, 5);
         });
         object result = null;
-        m.EventHandler += (_, _) =>
+        m.Observe(_ =>
         {
             try
             {
@@ -380,7 +380,7 @@ public class RunExtensionYjsTests
                 // Yjs throws as well (findIndexSS on a negative clock).
                 result = "throws";
             }
-        };
+        });
 
         Sync(peer, doc);
 
@@ -400,7 +400,7 @@ public class RunExtensionYjsTests
             },
         });
         var updates = new List<string>();
-        doc.Update += (_, e) => updates.Add(Hex(e.Item1));
+        doc.Updated += (_, e) => updates.Add(Hex(e.Update.ToArray()));
 
         body(doc);
 
@@ -414,6 +414,6 @@ public class RunExtensionYjsTests
     private static string Hex(byte[] bytes) => Convert.ToHexStringLower(bytes);
 
     // Each op as its insert, and its ychange type after a colon.
-    private static string Describe(IList<Delta> delta) =>
+    private static string Describe(IEnumerable<Delta> delta) =>
         string.Join("|", delta.Select(d => d.Insert + (d.Attributes != null && d.Attributes.TryGetValue("ychange", out var c) ? ":" + ((YText.YTextChangeAttributes)c).Type : "")));
 }

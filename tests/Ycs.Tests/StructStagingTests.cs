@@ -98,7 +98,7 @@ public class StructStagingTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var updates = new List<byte[]>();
-        doc.UpdateV2 += (_, e) => updates.Add(e.data);
+        doc.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
             doc.GetArray("a").Insert(0, new List<object> { i });

@@ -13,13 +13,31 @@ names; everything is in the namespace `Ycs`.
 | Indexes | `number` (UTF-16 code units for text) | `uint` | `int` (UTF-16 code units, as in Yjs) |
 | Values | any JSON-like value, `Uint8Array`, `bigint`, shared types | tagged `Input` / `Output` classes (`Input.Long(5)`, `output.Long`) | plain CLR values from a closed set: `null`, `bool`, `int`/`long`, `double`, `BigInteger`, `string`, `byte[]`, lists, string-keyed dictionaries, shared types |
 | Update format | v1 (`applyUpdate`) by default, v2 (`applyUpdateV2`) | `ApplyV1`/`ApplyV2`, `StateDiffV1`/`StateDiffV2` | v1 by default (`ApplyUpdate`), `…V1`/`…V2` explicitly |
-| Subscriptions | `observe(f)` / `unobserve(f)`, `doc.on('update', f)` | `IDisposable Observe(Action<T>)` | .NET events, plus `Observe`/`ObserveDeep` returning `IDisposable` |
+| Subscriptions | `observe(f)` / `unobserve(f)`, `doc.on('update', f)` | `IDisposable Observe(Action<T>)` | typed `Observe(Action<TEvent>)` and `ObserveDeep` returning `IDisposable`; .NET events on `YDoc` (`Updated`, `UpdatedV2`, `SubdocsChanged`, the transaction events) |
 | Positions that survive edits | `RelativePosition` | `StickyIndex` | `RelativePosition` / `AbsolutePosition` |
 | Undo | `UndoManager(scope, { trackedOrigins, captureTimeout })` | `UndoManager(doc, branch, options)` | `UndoManager(scope, new UndoManagerOptions { TrackedOrigins, CaptureTimeout })` |
 | Threading | single-threaded | the native document is locked per transaction | the caller's job, as in Yjs ([Thread safety](#thread-safety)) |
 
 YDotNet's explicit transactions and tagged values come from the Rust borrow model and the native
 boundary; they would make Ycs harder to use without making it safer, so Ycs keeps the Yjs shape.
+
+## Events
+
+Each shared type observes its own events: `YArray.Observe(Action<YArrayEvent>)`, `YMap` (`YMapEvent`), `YText` and
+`YXmlText` (`YTextEvent`), `YXmlFragment` and `YXmlElement` (`YXmlEvent`). `YType.ObserveDeep(Action<IReadOnlyList<YEvent>,
+Transaction>)` gets the events of the type and everything nested in it, the outer types' first. Both return an
+`IDisposable`; disposing it removes that registration (one handler registered twice is two registrations). A handler may
+be typed more generally (an `Action<YEvent>` observes any type). Every handler runs even when one threw; the last
+exception escapes.
+
+An event is read-only: `Target`, `CurrentTarget`, `Transaction`, `Path` (an `IReadOnlyList<PathSegment>`: a map key, or the
+index in a list when `Key` is null), `Changes` (`YChanges`: `Added`, `Deleted`, `Delta`, `Keys`), `Delta`, `Keys`
+(`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, still an `object?`), and `Adds(view)`,
+`Deletes(view)`. It is valid during the handler, its transaction's observers and cleanup; compute what you keep there.
+
+On `YDoc`, `Updated` and `UpdatedV2` raise an `UpdateEventArgs(Update, Origin, Transaction)`: `Update` is a new
+`ReadOnlyMemory<byte>` for each event, which a handler may keep. `SubdocsChanged` raises a `SubdocsEventArgs(Loaded,
+Added, Removed)` of read-only sets and `AfterAllTransactions` an `IReadOnlyList<Transaction>`.
 
 ## Items in events and filters
 
@@ -43,7 +61,7 @@ empty, null or -1.
 
 | Where | Gets |
 | --- | --- |
-| `ChangesCollection.Added`, `.Deleted` | `ISet<ItemView>` |
+| `YChanges.Added`, `.Deleted` | `IReadOnlySet<ItemView>` |
 | `YEvent.Adds(view)`, `Deletes(view)` | whether the event added or deleted it, also when both |
 | `YDocOptions.GcFilter` | `Predicate<ItemView>`: true lets a deleted item be collected |
 | `UndoManagerOptions.DeleteFilter` | `Func<ItemView, bool>`: false keeps an undo or redo from deleting the item |
@@ -60,9 +78,9 @@ var doc = new YDoc(new YDocOptions
 });
 var list = doc.GetArray("list");
 
-list.Observe((_, e) =>
+list.Observe(e =>
 {
-    foreach (ItemView item in e.Event.Changes.Added)
+    foreach (ItemView item in e.Changes.Added)
     {
         Console.WriteLine($"added {item.Kind}, {item.Length} at {item.Id.Client}:{item.Id.Clock}");
     }
@@ -252,7 +270,7 @@ shape, one peer typing forward where another typed backwards at the same index, 
 and the default admits 4,096 by 4,096. This is the one limit found while the update is integrated:
 **beyond it, the update is applied in part.** `ApplyUpdate` throws `YUpdateException` with
 `PartlyApplied` set (`TryApplyUpdate` returns false); the structs integrated before stay (a causally
-complete part of the update, as if the peer had sent less), observers and `Update` see them, and the
+complete part of the update, as if the peer had sent less), observers and `Updated` see them, and the
 rest of the structs and the update's deletions are dropped. The document is valid, and converges
 with any peer that has the same part; a peer that sends the rest again is refused again.
 
@@ -273,7 +291,7 @@ transactions is finished. The rules:
 
 - **Every step of the cleanup runs**, also after a handler threw: the observers, the deep observers,
   `AfterTransaction`, the formatting cleanup (Yjs' `callAll`), then the garbage collection and merging
-  of structs, `AfterTransactionCleanup`, `Update`, `UpdateV2`, the subdocument bookkeeping, `SubdocsChanged`,
+  of structs, `AfterTransactionCleanup`, `Updated`, `UpdatedV2`, the subdocument bookkeeping, `SubdocsChanged`,
   destroying the removed subdocuments, the cleanup of the transactions queued behind (those observers
   started), and `AfterAllTransactions`.
 - **Several exceptions: the last one escapes** (in the order above; one of `AfterAllTransactions` last of

@@ -13,6 +13,11 @@ namespace Ycs;
 
 public partial class YText
 {
+    /// <summary>
+    /// Observes the events of this text (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
+    /// </summary>
+    public IDisposable Observe(Action<YTextEvent> handler) => AddObserver(handler);
+
     public YText()
         : this(null)
     {

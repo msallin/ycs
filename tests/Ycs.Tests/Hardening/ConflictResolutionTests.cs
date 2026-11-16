@@ -70,7 +70,7 @@ public class ConflictResolutionTests
         var doc = WithItemsOfClient5(2_000);
         var limits = new UpdateLimits { MaxIntegrationSteps = 1_000_000 };
         var integrated = 0L;
-        doc.Update += (_, _) => integrated = doc.Store.GetState(9);
+        doc.Updated += (_, _) => integrated = doc.Store.GetState(9);
         Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(ItemsWithoutOrigins(9, 2_000), null, limits));
 
         // A peer that received only that part has the same document, and the document still works.

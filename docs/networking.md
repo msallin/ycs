@@ -67,7 +67,7 @@ Receive(client, Receive(server, Step1(client), "client"), "server");
 Receive(server, Receive(client, Step1(server), "server"), "client");
 
 // From then on, each local update goes out as an update message.
-client.Update += (_, e) => { if (e.origin as string != "server") Receive(server, UpdateMessage(e.data), "client"); };
+client.Updated += (_, e) => { if (e.Origin as string != "server") Receive(server, UpdateMessage(e.Update.ToArray()), "client"); };
 client.GetText("content").Insert(0, "Live: ");
 
 Console.WriteLine(server.GetText("content").ToString() == client.GetText("content").ToString()); // True

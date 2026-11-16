@@ -379,7 +379,7 @@ public class CoreParityTests
         }
 
         var order = new List<string>();
-        root.ObserveDeep((_, e) => order.AddRange(e.Events.Select(ev => "k" + kids.IndexOf((YMap)ev.Target))));
+        root.ObserveDeep((deepEvents, _) => order.AddRange(deepEvents.Select(ev => "k" + kids.IndexOf((YMap)ev.Target))));
 
         doc.Transact(_ =>
         {

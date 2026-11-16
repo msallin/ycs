@@ -30,7 +30,7 @@ public class YjsTypeParityTests
         var text = doc.GetText("t");
         text.Insert(0, content);
         var deltas = new List<string>();
-        text.Observe((_, e) => deltas.Add(Json(e.Event.Delta)));
+        text.Observe(e => deltas.Add(Json(e.Delta)));
         return (doc, text, deltas);
     }
 
@@ -75,9 +75,9 @@ public class YjsTypeParityTests
         var o = new YDoc(new YDocOptions { ClientId = 3 });
         o.ApplyUpdate(b.EncodeStateAsUpdate());
         var deltas = new List<string>();
-        o.GetText("t").Observe((_, e) => deltas.Add(Json(e.Event.Delta)));
+        o.GetText("t").Observe(e => deltas.Add(Json(e.Delta)));
         var updates = 0;
-        o.Update += (_, _) => updates++;
+        o.Updated += (_, _) => updates++;
 
         o.ApplyUpdate(a.EncodeStateAsUpdate(beforeFormat));
 
@@ -95,7 +95,7 @@ public class YjsTypeParityTests
         o.ApplyUpdate(a.EncodeStateAsUpdate());
         var sv = a.EncodeStateVector();
         var deltas = new List<string>();
-        o.GetText("t").Observe((_, e) => deltas.Add(Json(e.Event.Delta)));
+        o.GetText("t").Observe(e => deltas.Add(Json(e.Delta)));
         a.Transact(_ =>
         {
             t.InsertEmbed(1, new YMap(new Dictionary<string, object> { ["k"] = 1 }));
@@ -132,8 +132,8 @@ public class YjsTypeParityTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         text.Insert(0, "xyz");
-        ChangesCollection changes = null;
-        text.Observe((_, e) => changes = e.Event.Changes);
+        YChanges changes = null;
+        text.Observe(e => changes = e.Changes);
 
         doc.Transact(_ =>
         {
@@ -275,7 +275,7 @@ public class YjsTypeParityTests
         var doc = new YDoc();
         var map = doc.GetMap("m");
         YEvent kept = null;
-        map.Observe((_, e) => kept = e.Event);
+        map.Observe(e => kept = e);
         string keys = null;
         doc.AfterTransactionCleanup += (_, _) => keys = string.Join(",", kept.Keys.Select(kv => $"{kv.Key} {kv.Value.Action} {kv.Value.OldValue ?? "null"}"));
         map.Set("k", 1);
@@ -303,26 +303,26 @@ public class YjsTypeParityTests
     }
 
     [TestMethod]
-    public void Unobserve_HandlerRegisteredTwice_RemovesBothAsYjs()
+    public void Observe_HandlerRegisteredTwice_EachSubscriptionIsDisposedOnItsOwn()
     {
-        // Yjs 13.6.32: observe(f) twice, insert, unobserve(f), insert, observeDeep likewise: f ran 2 times each.
+        // Yjs 13.6.32 removes both registrations of f at once; a subscription removes its own.
         var doc = new YDoc();
         var text = doc.GetText("t");
         var calls = 0;
         var deepCalls = 0;
-        EventHandler<YEventArgs> handler = (_, _) => calls++;
-        EventHandler<YDeepEventArgs> deepHandler = (_, _) => deepCalls++;
+        Action<YTextEvent> handler = _ => calls++;
+        Action<IReadOnlyList<YEvent>, Transaction> deepHandler = (_, _) => deepCalls++;
+        var first = text.Observe(handler);
         text.Observe(handler);
-        text.Observe(handler);
-        text.ObserveDeep(deepHandler);
+        var firstDeep = text.ObserveDeep(deepHandler);
         text.ObserveDeep(deepHandler);
         text.Insert(0, "a");
 
-        text.Unobserve(handler);
-        text.UnobserveDeep(deepHandler);
+        first.Dispose();
+        firstDeep.Dispose();
         text.Insert(0, "b");
 
-        Assert.AreEqual((2, 2), (calls, deepCalls));
+        Assert.AreEqual((3, 3), (calls, deepCalls));
     }
 
     [TestMethod]

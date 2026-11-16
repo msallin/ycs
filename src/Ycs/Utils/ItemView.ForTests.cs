@@ -11,7 +11,7 @@ public readonly partial struct ItemView
     /// target's lists when it is made (<paramref name="changes"/> null), the added and deleted ones of its changes when
     /// they are collected. A test of a long list stays linear in its edits.
     /// </summary>
-    internal static void CheckEvent(YEvent e, ChangesCollection changes)
+    internal static void CheckEvent(YEvent e, YChanges changes)
     {
         var doc = e.Target.Doc;
         if (changes != null)

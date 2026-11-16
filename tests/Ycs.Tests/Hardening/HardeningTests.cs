@@ -196,7 +196,7 @@ public class HardeningTests
     {
         var doc = new YDoc();
         var updates = 0;
-        doc.Update += (_, _) => updates++;
+        doc.Updated += (_, _) => updates++;
 
         AssertRejected(doc, () => doc.ApplyUpdateV1(Hex("01 01 05 00 01 01 01 74 00 00")), "t");
         doc.ApplyUpdateV1(ValidA);
@@ -210,14 +210,14 @@ public class HardeningTests
         var doc = new YDoc();
         var updates = 0;
         var fail = true;
-        doc.Update += (_, _) => updates++;
-        doc.GetText("").EventHandler += (_, _) =>
+        doc.Updated += (_, _) => updates++;
+        doc.GetText("").Observe(_ =>
         {
             if (fail)
             {
                 throw new InvalidOperationException("observer");
             }
-        };
+        });
 
         Assert.ThrowsExactly<InvalidOperationException>(() => doc.ApplyUpdateV1(ValidA));
         fail = false;
@@ -396,7 +396,7 @@ public class HardeningTests
     {
         var source = new YDoc(new YDocOptions { ClientId = 7 });
         var updates = new List<byte[]>();
-        source.Update += (_, e) => updates.Add(e.data);
+        source.Updated += (_, e) => updates.Add(e.Update.ToArray());
         var text = source.GetText("t");
         for (var i = 0; i < 500; i++)
         {

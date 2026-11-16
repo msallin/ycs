@@ -8,14 +8,6 @@
 
 namespace Ycs;
 
-public class ChangesCollection
-{
-    public ISet<ItemView> Added;
-    public ISet<ItemView> Deleted;
-    public IList<Delta> Delta;
-    public IDictionary<string, ChangeKey> Keys;
-}
-
 public class Delta
 {
     /// <summary>
@@ -29,19 +21,6 @@ public class Delta
     public int? Delete;
     public int? Retain;
     public IDictionary<string, object> Attributes;
-}
-
-public enum ChangeAction
-{
-    Add,
-    Update,
-    Delete
-}
-
-public class ChangeKey
-{
-    public ChangeAction Action;
-    public object OldValue;
 }
 
 /// <summary>
@@ -142,7 +121,7 @@ internal static class ChangedKeys
     }
 
     /// <summary>The keys in <paramref name="changed"/> other than <c>null</c>, as a new set.</summary>
-    public static ISet<string> WithoutChildList(ISet<string> changed)
+    public static HashSet<string> WithoutChildList(ISet<string> changed)
     {
         var keys = new HashSet<string>();
         if (changed != null)
@@ -160,10 +139,10 @@ internal static class ChangedKeys
     }
 }
 
-public partial class YEvent
+public abstract partial class YEvent
 {
-    private ChangesCollection _changes = null;
-    private IDictionary<string, ChangeKey> _keys = null;
+    private YChanges _changes = null;
+    private IReadOnlyDictionary<string, KeyChange> _keys = null;
 
     /// <summary>
     /// Every event, when it is made (the observers are called right after), compares the views of the structs of its
@@ -172,7 +151,7 @@ public partial class YEvent
     /// </summary>
     internal static bool CheckViewsForTests;
 
-    internal YEvent(AbstractType target, Transaction transaction)
+    private protected YEvent(YType target, Transaction transaction)
     {
         Target = target;
         CurrentTarget = target;
@@ -193,13 +172,13 @@ public partial class YEvent
         return !Transaction.BeforeState.TryGetValue(str.Id.Client, out var clock) || str.Id.Clock >= clock;
     }
 
-    private IDictionary<string, ChangeKey> CollectKeys()
+    private IReadOnlyDictionary<string, KeyChange> CollectKeys()
     {
         if (_keys == null)
         {
             var target = Target;
             // Cached only once complete: a read after the transaction ended throws on every try.
-            var keys = new Dictionary<string, ChangeKey>();
+            var keys = new Dictionary<string, KeyChange>();
 
             if (!Transaction.Changed.TryGetValue(Target, out var changed))
             {
@@ -210,7 +189,7 @@ public partial class YEvent
             {
                 if (key != null)
                 {
-                    ChangeAction action;
+                    KeyChangeAction action;
                     object oldValue;
                     var item = target._map[key];
 
@@ -226,7 +205,7 @@ public partial class YEvent
                         {
                             if (!prev.IsNull && Deletes(prev))
                             {
-                                action = ChangeAction.Delete;
+                                action = KeyChangeAction.Delete;
                                 oldValue = LastValue(prev);
                             }
                             else
@@ -239,12 +218,12 @@ public partial class YEvent
                         {
                             if (!prev.IsNull && Deletes(prev))
                             {
-                                action = ChangeAction.Update;
+                                action = KeyChangeAction.Update;
                                 oldValue = LastValue(prev);
                             }
                             else
                             {
-                                action = ChangeAction.Add;
+                                action = KeyChangeAction.Add;
                                 oldValue = null;
                             }
                         }
@@ -253,7 +232,7 @@ public partial class YEvent
                     {
                         if (Deletes(item))
                         {
-                            action = ChangeAction.Delete;
+                            action = KeyChangeAction.Delete;
                             oldValue = LastValue(item);
                         }
                         else
@@ -263,7 +242,7 @@ public partial class YEvent
                         }
                     }
 
-                    keys[key] = new ChangeKey { Action = action, OldValue = oldValue };
+                    keys[key] = new KeyChange(action, oldValue);
                 }
             }
 
@@ -275,7 +254,7 @@ public partial class YEvent
 
     private static object LastValue(ItemRef item) => AbstractType.ValueAt(item.Content, item.Length - 1);
 
-    private ChangesCollection CollectChanges()
+    private YChanges CollectChanges()
     {
         if (_changes == null)
         {
@@ -284,13 +263,7 @@ public partial class YEvent
             var deleted = new HashSet<ItemView>();
             var delta = new List<Delta>();
 
-            var changes = new ChangesCollection
-            {
-                Added = added,
-                Deleted = deleted,
-                Delta = delta,
-                Keys = CollectKeys()
-            };
+            var changes = new YChanges(added, deleted, delta, CollectKeys());
 
             if (!Transaction.Changed.TryGetValue(Target, out var changed))
             {
@@ -372,9 +345,6 @@ public partial class YEvent
         return _changes;
     }
 
-    /// <summary>
-    /// Compute the path from this type to the specified target.
-    /// </summary>
     /// <summary>The number of elements of <see cref="Path"/>, without walking the siblings to compute them.</summary>
     internal int PathLength
     {
@@ -390,16 +360,17 @@ public partial class YEvent
         }
     }
 
-    private IReadOnlyCollection<object> GetPathTo(AbstractType parent, AbstractType child)
+    private PathSegment[] GetPathTo(YType parent, YType child)
     {
-        var path = new Stack<object>();
+        var path = new PathSegment[PathLength];
+        var at = path.Length;
 
         while (!child.IsRoot && child != parent)
         {
             if (child.ItemParentSub != null)
             {
                 // Parent is map-ish.
-                path.Push(child.ItemParentSub);
+                path[--at] = new PathSegment(child.ItemParentSub, 0);
             }
             else
             {
@@ -418,7 +389,7 @@ public partial class YEvent
                     c = cItem.IsNull ? default : cItem.Right;
                 }
 
-                path.Push(i);
+                path[--at] = new PathSegment(null, i);
             }
 
             child = child.ParentType;

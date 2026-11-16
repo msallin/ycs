@@ -25,11 +25,11 @@ internal sealed class SocketClient : IAsyncDisposable
     private SocketClient(long clientId)
     {
         Doc = new YDoc(new YDocOptions { ClientId = clientId });
-        Doc.Update += (_, e) =>
+        Doc.Updated += (_, e) =>
         {
-            if (!ReferenceEquals(e.origin, this))
+            if (!ReferenceEquals(e.Origin, this))
             {
-                outbox.Writer.TryWrite((Messages.Update(e.data), WebSocketMessageType.Binary));
+                outbox.Writer.TryWrite((Messages.Update(e.Update.ToArray()), WebSocketMessageType.Binary));
             }
         };
     }

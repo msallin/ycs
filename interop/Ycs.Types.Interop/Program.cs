@@ -21,7 +21,7 @@ static object DeltaToJson(Delta d) => new
     attributes = d.Attributes
 };
 
-static string ActionToJson(ChangeAction a) => a.ToString().ToLowerInvariant();
+static string ActionToJson(KeyChangeAction a) => a.ToString().ToLowerInvariant();
 
 var doc = new YDoc();
 var map = doc.GetMap("map");
@@ -29,18 +29,16 @@ var arr = doc.GetArray("array");
 var text = doc.GetText("text");
 
 var mapEvents = new List<object>();
-map.Observe((s, e) =>
+map.Observe(e =>
 {
-    var evt = (YMapEvent)e.Event;
-    var keys = evt.Keys.ToDictionary(kvp => kvp.Key, kvp => ActionToJson(kvp.Value.Action));
-    mapEvents.Add(new { path = evt.Path.ToList(), keys });
+    var keys = e.Keys.ToDictionary(kvp => kvp.Key, kvp => ActionToJson(kvp.Value.Action));
+    mapEvents.Add(new { path = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(), keys });
 });
 
 var arrEvents = new List<object>();
-arr.Observe((s, e) =>
+arr.Observe(e =>
 {
-    var evt = (YArrayEvent)e.Event;
-    arrEvents.Add(new { path = evt.Path.ToList(), delta = evt.Delta.Select(DeltaToJson).ToList() });
+    arrEvents.Add(new { path = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(), delta = e.Delta.Select(DeltaToJson).ToList() });
 });
 
 // Note: this deliberately does NOT compare per-event YTextEvent.Delta values. That computation has
@@ -51,7 +49,7 @@ arr.Observe((s, e) =>
 // per-implicit-transact model) is still a meaningful, bug-free signal; the actual delta *content* is
 // separately proven correct below via ToDelta()/toDelta(), a different code path the bug doesn't reach.
 var textEventCount = 0;
-text.Observe((s, e) => textEventCount++);
+text.Observe(_ => textEventCount++);
 
 // --- Map ---
 map.Set("str", "hello");

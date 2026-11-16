@@ -48,10 +48,10 @@ public class EventTraceTests
             {
                 var id = nextId++;
                 seen.Add(type);
-                type.Observe((_, e) => log.Add(new List<object> { "obs", id, Describe(e.Event) }));
+                type.ObserveAny(e => log.Add(new List<object> { "obs", id, Describe(e) }));
                 if (id % 3 == 0)
                 {
-                    type.ObserveDeep((_, e) => log.Add(new List<object> { "deep", id, e.Events.Select(Describe).ToList() }));
+                    type.ObserveDeep((deepEvents, _) => log.Add(new List<object> { "deep", id, deepEvents.Select(Describe).ToList() }));
                 }
             }
         }
@@ -199,7 +199,7 @@ public class EventTraceTests
 
     private static object Describe(YEvent e) => new Dictionary<string, object>
     {
-        ["path"] = e.Path.ToList(),
+        ["path"] = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(),
         ["keys"] = e.Keys.Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue }).ToList(),
         ["delta"] = e.Changes.Delta,
         ["added"] = e.Changes.Added.Count,

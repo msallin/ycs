@@ -14,14 +14,14 @@ namespace Ycs;
 /// <summary>
 /// Event that describes changes on a YMap.
 /// </summary>
-public class YMapEvent : YEvent
+public sealed class YMapEvent : YEvent
 {
-    public readonly ISet<string> KeysChanged;
+    public IReadOnlySet<string> KeysChanged { get; }
 
     internal YMapEvent(YMap map, Transaction transaction, ISet<string> subs)
         : base(map, transaction)
     {
-        KeysChanged = subs;
+        KeysChanged = (IReadOnlySet<string>)subs;
     }
 }
 

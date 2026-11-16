@@ -328,7 +328,7 @@ public class SessionTests
     private static List<byte[]> RecordEdits(YDoc doc, int count, int seed)
     {
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         var random = new Random(seed);
         var text = doc.GetText("text");
         for (var i = 0; i < count; i++)

@@ -60,9 +60,9 @@ internal static class Seeds
                 var b = new YDoc(new YDocOptions { Gc = gc, ClientId = 20 });
                 var recorded = new List<(byte[] V1, byte[] V2)>();
                 byte[]? v1 = null;
-                a.Update += (_, e) => v1 = e.data;
-                a.UpdateV2 += (_, e) => recorded.Add((v1!, e.data));
-                b.Update += (_, e) => a.ApplyUpdateV1(e.data, "b");
+                a.Updated += (_, e) => v1 = e.Update.ToArray();
+                a.UpdatedV2 += (_, e) => recorded.Add((v1!, e.Update.ToArray()));
+                b.Updated += (_, e) => a.ApplyUpdateV1(e.Update.ToArray(), "b");
                 edits(a, b);
 
                 // One seed per incremental update, and one for the whole document as a single update.

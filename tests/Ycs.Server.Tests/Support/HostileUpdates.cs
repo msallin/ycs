@@ -7,15 +7,15 @@ internal static class HostileUpdates
     public static byte[] Edit(YDoc doc, Action<YDoc> edit)
     {
         byte[]? update = null;
-        void Capture(object? sender, (byte[] Data, object Origin, Transaction Transaction) e) => update = e.Data;
-        doc.Update += Capture;
+        void Capture(object? sender, UpdateEventArgs e) => update = e.Update.ToArray();
+        doc.Updated += Capture;
         try
         {
             doc.Transact(_ => edit(doc));
         }
         finally
         {
-            doc.Update -= Capture;
+            doc.Updated -= Capture;
         }
 
         return update ?? throw new InvalidOperationException("The edit changed nothing.");

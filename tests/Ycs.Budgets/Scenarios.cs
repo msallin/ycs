@@ -29,7 +29,7 @@ internal static class Scenarios
             var remote = new YDoc(new YDocOptions { ClientId = 2 });
             remote.ApplyUpdateV1(doc.EncodeStateAsUpdateV1());
             var updates = new List<byte[]>();
-            remote.Update += (_, e) => updates.Add(e.data);
+            remote.Updated += (_, e) => updates.Add(e.Update.ToArray());
             var remoteText = remote.GetText("text");
             for (var i = 0; i < 500 + Warmup; i++)
             {
@@ -128,7 +128,7 @@ internal static class Scenarios
             // An editor binding: every keystroke's observer reads the delta.
             var (_, text) = LargeText();
             var ops = 0;
-            text.EventHandler += (_, e) => ops += e.Event.Delta.Count;
+            text.Observe(e => ops += e.Delta.Count);
             var caret = TextLength / 2;
             return _ => text.Insert(caret++, "x");
         }),

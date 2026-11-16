@@ -103,7 +103,7 @@ internal static class Perf
                 }
             });
             var events = 0;
-            array.DeepEventHandler += (_, e) => events += e.Events.Count;
+            array.ObserveDeep((deepEvents, _) => events += deepEvents.Count);
             return () => doc.Transact(_ =>
             {
                 foreach (var map in maps)
@@ -159,7 +159,7 @@ internal static class Perf
     {
         var source = new YDoc(new YDocOptions { ClientId = 7 });
         var updates = new List<byte[]>();
-        source.Update += (_, e) => updates.Add(e.data);
+        source.Updated += (_, e) => updates.Add(e.Update.ToArray());
         var text = source.GetText("t");
         for (var i = 0; i < count; i++)
         {

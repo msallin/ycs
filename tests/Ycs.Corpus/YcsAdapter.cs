@@ -42,16 +42,16 @@ internal sealed class CorpusDoc
     /// <summary>Raised with the v1 update of every transaction made on this doc (not of applied remote updates).</summary>
     public event Action<byte[]> LocalUpdateV1
     {
-        add => _doc.Update += Forward(value);
+        add => _doc.Updated += Forward(value);
         remove => throw new NotSupportedException();
     }
 
-    private static EventHandler<(byte[] data, object origin, Transaction transaction)> Forward(Action<byte[]> handler) =>
+    private static EventHandler<UpdateEventArgs> Forward(Action<byte[]> handler) =>
         (_, e) =>
         {
-            if (!ReferenceEquals(e.origin, Remote))
+            if (!ReferenceEquals(e.Origin, Remote))
             {
-                handler(e.data);
+                handler(e.Update.ToArray());
             }
         };
 

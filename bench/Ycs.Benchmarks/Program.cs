@@ -84,7 +84,7 @@ internal static class Program
         {
             var doc = new YDoc(new YDocOptions { ClientId = 123456789 });
             var collected = new List<byte[]>(txnStarts.Count);
-            doc.Update += (s, e) => collected.Add(e.data);
+            doc.Updated += (s, e) => collected.Add(e.Update.ToArray());
             var text = doc.GetText("text");
             for (int t = 0; t + 1 < txnStarts.Count; t++)
             {
