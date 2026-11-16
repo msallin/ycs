@@ -68,7 +68,7 @@ public class DecodedStructTests
         doc.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
-            doc.GetArray("a").Insert(0, new List<object> { i });
+            doc.GetArray("a").Insert(0, i);
         }
 
         var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);
@@ -250,21 +250,21 @@ public class DecodedStructTests
             doc.GetText("t").Insert(0, "hello é😀 world");
             doc.GetText("t").Format(1, 3, new Dictionary<string, YValue> { ["bold"] = true });
             doc.GetText("t").InsertEmbed(2, YValue.FromObject(new Dictionary<string, object> { ["img"] = "x" }));
-            doc.GetArray("a").Push(new List<object> { 1, "two", 3.5, null, true, new byte[] { 1, 2, 3 }, new List<object> { 1 } });
-            doc.GetArray("a").Push(new List<object> { new YDoc(new YDocOptions { Guid = "sub-1" }) });
+            doc.GetArray("a").Add(1, "two", 3.5, YValue.Null, true, new byte[] { 1, 2, 3 }, 1);
+            doc.GetArray("a").Add(new YDoc(new YDocOptions { Guid = "sub-1" }));
             var map = doc.GetMap("m");
-            map.Set("k", "v");
-            map.Set("nested", new YMap());
-            map.Set("arr", new YArray());
-            map.Set("txt", new YText("abc"));
-            map.Set("k", "w");
-            ((YMap)map.Get("nested")).Set("inner", "gone");
-            map.Delete("nested");
+            map["k"] = "v";
+            map["nested"] = new YMap();
+            map["arr"] = new YArray();
+            map["txt"] = new YText("abc");
+            map["k"] = "w";
+            ((YMap)map["nested"].ToObject())["inner"] = "gone";
+            map.Remove("nested");
             var xml = doc.GetXmlFragment("x");
             var element = new YXmlElement("div");
-            xml.Insert(0, new List<object> { element, new YXmlText("t"), new YXmlHook("hk"), new YXmlFragment() });
+            xml.Insert(0, element, new YXmlText("t"), new YXmlHook("hk"), new YXmlFragment());
             doc.GetText("t").Remove(4, 5);
-            doc.GetArray("a").Delete(0, 2);
+            doc.GetArray("a").RemoveRange(0, 2);
             var peer = new YDoc(new YDocOptions { ClientId = 8, GarbageCollection = gc });
             peer.ApplyUpdate(doc.EncodeStateAsUpdate());
             peer.GetText("t").Insert(1, "peer");
@@ -278,7 +278,7 @@ public class DecodedStructTests
         gapped.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
-            gapped.GetArray("a").Insert(0, new List<object> { i });
+            gapped.GetArray("a").Insert(0, i);
         }
 
         result.Add(YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2));

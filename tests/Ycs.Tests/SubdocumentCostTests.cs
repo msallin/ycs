@@ -58,7 +58,7 @@ public class SubdocumentCostTests
 
         doc.ApplyUpdate(Subdocuments(1));
 
-        Assert.AreSame(limits, ((YDoc)doc.GetArray("a").Get(0)).Limits);
+        Assert.AreSame(limits, ((YDoc)doc.GetArray("a")[0].ToObject()).Limits);
     }
 
     [TestMethod]
@@ -68,9 +68,9 @@ public class SubdocumentCostTests
         var doc = new YDoc(new YDocOptions { Limits = limits });
         doc.ApplyUpdate(Subdocuments(1));
 
-        ((YDoc)doc.GetArray("a").Get(0)).Destroy();
+        ((YDoc)doc.GetArray("a")[0].ToObject()).Destroy();
 
-        Assert.AreSame(limits, ((YDoc)doc.GetArray("a").Get(0)).Limits);
+        Assert.AreSame(limits, ((YDoc)doc.GetArray("a")[0].ToObject()).Limits);
     }
 }
 
@@ -128,7 +128,7 @@ public class SubdocumentOptionTests
 
         doc.ApplyUpdate(SubdocumentWith(OneOption(key, Undefined)));
 
-        var sub = (YDoc)doc.GetMap("m").Get("d");
+        var sub = (YDoc)doc.GetMap("m")["d"].ToObject();
         Assert.AreEqual((false, false, YValue.Null, null), (sub.AutoLoad, sub.ShouldLoad, sub.Meta, sub.CollectionId));
     }
 
@@ -146,6 +146,6 @@ public class SubdocumentOptionTests
 
         doc.ApplyUpdate(SubdocumentWith(OneOption("collectionid", w => w.WriteAny(1))));
 
-        Assert.IsNull(((YDoc)doc.GetMap("m").Get("d")).CollectionId);
+        Assert.IsNull(((YDoc)doc.GetMap("m")["d"].ToObject()).CollectionId);
     }
 }

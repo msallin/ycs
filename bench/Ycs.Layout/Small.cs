@@ -51,7 +51,7 @@ internal static class Small
         for (var i = 0; i < clients; i++)
         {
             var other = new YDoc(new YDocOptions { ClientId = i + 1 });
-            other.GetMap("map").Set("k" + i, (long)i);
+            other.GetMap("map")["k" + i] = (long)i;
             updates[i] = other.EncodeStateAsUpdate();
         }
 
@@ -88,7 +88,7 @@ internal static class Small
         var map = doc.GetMap("map");
         for (var i = 0; i < n; i++)
         {
-            map.Set("k" + i, (long)i);
+            map["k" + i] = (long)i;
         }
     }
 

@@ -7,13 +7,13 @@ Not a test: the bytes allocated (`GC.GetAllocatedBytesForCurrentThread`) by `App
 dotnet run -c Release --project bench/Ycs.ValueAlloc
 ```
 
-Results (bytes, one run; deterministic apart from a few hundred):
+Results (bytes, one run; deterministic apart from a few hundred), 2026-11-16:
 
-| Operation | Before A3 (95b11eb) | First A3 version (list and dictionary wrappers) | A3, array-backed containers |
-|---|---|---|---|
-| decode | 12,564,344 | 13,844,568 | 11,123,784 |
-| encode | 6,860,704 | 6,863,992 | 6,860,680 |
-| insert | 6,767,224 | 14,607,224 | 5,967,224 |
+| Operation | Allocated |
+|---|---|
+| decode | 11,124,960 |
+| encode | 6,860,680 |
+| insert | 688,440 |
 
-The insert copies every list, object and byte array; it allocates less than before because the walk uses no
-enumerators and a reused stack, and a frozen container takes its keys and values by `CopyTo`.
+The objects are converted to `YValue`s before the insert is measured, so the insert figure is `YArray.Add` of 20,000
+ready `YValue`s.

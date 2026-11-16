@@ -54,7 +54,7 @@ public class HandlerRecoveryTests
                 doc.Transact(_ =>
                 {
                     text.Insert(0, "a");
-                    doc.GetMap("m").Set("sub", new YDoc(new YDocOptions { Guid = "s" }));
+                    doc.GetMap("m")["sub"] = new YDoc(new YDocOptions { Guid = "s" });
                 });
                 break;
             case 4:
@@ -197,7 +197,7 @@ public class HandlerRecoveryTests
         {
             if (!map.ContainsKey("k"))
             {
-                map.Set("k", 1);
+                map["k"] = 1;
             }
         });
         var afterAll = 0;
@@ -232,7 +232,7 @@ public class HandlerRecoveryTests
         var escaped = Assert.ThrowsExactly<InvalidOperationException>(() => doc.Transact(_ =>
         {
             doc.GetText("t").Insert(0, "a");
-            doc.GetMap("m").Set("sub", new YDoc());
+            doc.GetMap("m")["sub"] = new YDoc();
         })).Message;
 
         Assert.AreEqual(
@@ -272,12 +272,12 @@ public class HandlerRecoveryTests
         var doc = new YDoc();
         var map = doc.GetMap("m");
         var sub = new YDoc(new YDocOptions { Guid = "s" });
-        map.Set("sub", sub);
+        map["sub"] = sub;
         var destroyed = false;
         sub.Destroyed += (_, _) => destroyed = true;
         ThrowOnce(doc, "SubdocsChanged");
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => map.Delete("sub"));
+        Assert.ThrowsExactly<InvalidOperationException>(() => map.Remove("sub"));
 
         Assert.AreEqual("destroyed: True, subdocuments: 0, queue empty: True",
             $"destroyed: {destroyed}, subdocuments: {doc.Subdocs.Count}, queue empty: {QueueEmpty(doc)}");

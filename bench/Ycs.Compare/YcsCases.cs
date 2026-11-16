@@ -343,7 +343,7 @@ internal static class YcsCases
         {
             for (var i = 0; i < keys.Length; i++)
             {
-                map.Set(keys[i], (long)i);
+                map[keys[i]] = (long)i;
             }
         }
 
@@ -358,13 +358,13 @@ internal static class YcsCases
         {
             for (var i = 0; i < Inputs.MapN; i++)
             {
-                map.Set("key", (long)i);
+                map["key"] = (long)i;
             }
         });
     }
 
     private static Prepared ArrayResult(YDoc doc, YArray array, Action body) =>
-        new(body, () => Canonical.Array(array.Select(Convert.ToInt64)), () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
+        new(body, () => Canonical.Array(array.Select(v => v.GetInt64())), () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
 
     public static Prepared ArrayPush(Fixtures f, bool oneTxn, int n)
     {
@@ -399,7 +399,7 @@ internal static class YcsCases
     private static YArray FilledArray(YDoc doc)
     {
         var array = doc.GetArray("array");
-        array.Add([.. Enumerable.Range(0, Inputs.ArrayN).Select(i => (object)(long)i)]);
+        array.Add(Enumerable.Range(0, Inputs.ArrayN).Select(i => (YValue)(long)i).ToArray());
         return array;
     }
 
@@ -412,7 +412,7 @@ internal static class YcsCases
         {
             foreach (var p in positions)
             {
-                array.Delete(p, 1);
+                array.RemoveRange(p, 1);
             }
         });
     }
@@ -465,7 +465,7 @@ internal static class YcsCases
         {
             for (var i = 0; i < Inputs.MapN; i++)
             {
-                map.Set(Inputs.Keys[i], (long)i);
+                map[Inputs.Keys[i]] = (long)i;
             }
         });
         long sum = 0;
@@ -636,7 +636,7 @@ internal static class YcsCases
         {
             "text" => doc.GetText("text").ToString(),
             "map" => Canonical.Map(doc.GetMap("map").Select(kv => (kv.Key, Convert.ToInt64(kv.Value)))),
-            "array" => Canonical.Array(doc.GetArray("array").Select(Convert.ToInt64)),
+            "array" => Canonical.Array(doc.GetArray("array").Select(v => v.GetInt64())),
             _ => throw new ArgumentException(root),
         };
     }

@@ -66,8 +66,8 @@ public sealed class PermanentUserData
 
     private void InitUser(YMap user, string userDescription)
     {
-        var ds = (YArray)user.Get("ds");
-        var ids = (YArray)user.Get("ids");
+        var ds = ArrayOf(user, "ds")!;
+        var ids = ArrayOf(user, "ids")!;
 
         ds.Observe(e =>
         {
@@ -84,7 +84,7 @@ public sealed class PermanentUserData
             }
         });
 
-        Dss[userDescription] = new DeleteSet(ds.OfType<byte[]>().Select(TryDecodeDeleteSet).Where(d => d != null).ToList());
+        Dss[userDescription] = new DeleteSet(ds.Select(v => v.TryGetBytes(out var bytes) ? TryDecodeDeleteSet(bytes.ToArray()) : null).OfType<DeleteSet>().ToList());
 
         ids.Observe(e =>
         {
@@ -99,11 +99,11 @@ public sealed class PermanentUserData
 
         foreach (var id in ids)
         {
-            AddClientId(id, userDescription);
+            AddClientId(id.Stored(), userDescription);
         }
     }
 
-    private void AddClientId(object clientIdValue, string userDescription)
+    private void AddClientId(object? clientIdValue, string userDescription)
     {
         // Written by other peers: anything but a client id is ignored.
         if (JsValue.IsInteger(clientIdValue, out var id) && id >= 0 && id <= JsValue.MaxSafeInteger)
@@ -114,11 +114,11 @@ public sealed class PermanentUserData
 
     /// <summary>The user map of <paramref name="userDescription"/>, or null when there is none of the expected shape.</summary>
     private static YMap? UserOf(YMap users, string userDescription) =>
-        users.ContainsKey(userDescription) && users.Get(userDescription) is YMap user && ArrayOf(user, "ids") != null && ArrayOf(user, "ds") != null
+        users.TryGetValue(userDescription, out var value) && value.TryGetSharedType(out YMap? user) && ArrayOf(user, "ids") != null && ArrayOf(user, "ds") != null
             ? user
             : null;
 
-    private static YArray? ArrayOf(YMap user, string key) => user.ContainsKey(key) ? user.Get(key) as YArray : null;
+    private static YArray? ArrayOf(YMap user, string key) => user.TryGetValue(key, out var value) && value.TryGetSharedType(out YArray? array) ? array : null;
 
     /// <summary>
     /// Yjs parity: <c>setUserMapping(doc, clientid, userDescription, { filter })</c>: records that
@@ -137,12 +137,12 @@ public sealed class PermanentUserData
         if (userMap == null)
         {
             userMap = new YMap();
-            userMap.Set("ids", new YArray());
-            userMap.Set("ds", new YArray());
-            users.Set(userDescription, userMap);
+            userMap["ids"] = new YArray();
+            userMap["ds"] = new YArray();
+            users[userDescription] = userMap;
         }
 
-        ArrayOf(userMap, "ids")!.Add(new object[] { clientId });
+        ArrayOf(userMap, "ids")!.Add(clientId);
 
         // When another peer replaces this user's entry, the client ids and deletions known so far are
         // copied into the new one.
@@ -159,13 +159,13 @@ public sealed class PermanentUserData
             {
                 if (description == userDescription)
                 {
-                    ArrayOf(userMap, "ids")?.Add(new object[] { id });
+                    ArrayOf(userMap, "ids")?.Add(id);
                 }
             }
 
             if (Dss.TryGetValue(userDescription, out var known))
             {
-                ArrayOf(userMap, "ds")?.Add(new object[] { EncodeDeleteSet(known) });
+                ArrayOf(userMap, "ds")?.Add(EncodeDeleteSet(known));
             }
         }));
 
@@ -176,7 +176,7 @@ public sealed class PermanentUserData
             if (tr.Local && ds.Clients.Count > 0 && filter(tr))
             {
                 var encoded = EncodeDeleteSet(ds);
-                _deferred.Add(() => ArrayOf(userMap, "ds")?.Add(new object[] { encoded }));
+                _deferred.Add(() => ArrayOf(userMap, "ds")?.Add(encoded));
             }
         };
     }

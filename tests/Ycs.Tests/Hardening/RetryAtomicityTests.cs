@@ -184,7 +184,7 @@ public class RetryAtomicityTests
         three.ApplyUpdate(trigger);
         three.ApplyUpdate(deep);
         var vector = three.EncodeStateVector();
-        ((YArray)three.GetArray("a").Get(1)).Insert(0, ["z"]);
+        ((YArray)three.GetArray("a")[1].ToObject()).Insert(0, ["z"]);
         return three.EncodeStateAsUpdate(vector);
     }
 

@@ -123,14 +123,14 @@ public class SnapshotParityTests
     public void SnapshotContainsUpdate_FalseWhenUpdateDeletesSomethingTheSnapshotDidNotSee()
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-        doc.GetArray("array").Insert(0, new object[] { "a", "b", "c" });
+        doc.GetArray("array").Insert(0, "a", "b", "c");
 
         // Same ids the snapshot below will cover, no deletes yet: must be contained.
         var insertOnlyUpdate = doc.EncodeStateAsUpdate();
 
         var snap = doc.CreateSnapshot();
 
-        doc.GetArray("array").Delete(0);
+        doc.GetArray("array").RemoveAt(0);
         var updateWithDelete = doc.EncodeStateAsUpdate();
 
         Assert.IsTrue(snap.ContainsUpdate(insertOnlyUpdate));
@@ -157,15 +157,15 @@ public class SnapshotParityTests
     public void CreateDocFromSnapshot_CanTargetAnExistingDoc()
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-        doc.GetArray("array").Insert(0, new[] { "hello" });
+        doc.GetArray("array").Insert(0, "hello");
         var snap = doc.CreateSnapshot();
-        doc.GetArray("array").Insert(1, new[] { "world" });
+        doc.GetArray("array").Insert(1, "world");
 
         var target = new YDoc();
         var result = doc.CreateDocFromSnapshot(snap, target);
 
         Assert.AreSame(target, result);
-        CollectionAssert.AreEqual(new[] { "hello" }, (System.Collections.ICollection)target.GetArray("array").ToArray());
+        CollectionAssert.AreEqual(new[] { "hello" }, target.GetArray("array").ToArray().Select(v => v.ToObject()).ToList());
     }
 
     [TestMethod]
@@ -183,24 +183,24 @@ public class SnapshotParityTests
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var map = doc.GetMap("map");
-        map.Set("a", 1);
-        map.Set("b", 2);
+        map["a"] = 1;
+        map["b"] = 2;
 
         var snap = doc.CreateSnapshot();
 
-        map.Set("a", 100);
-        map.Delete("b");
-        map.Set("c", 3);
+        map["a"] = 100;
+        map.Remove("b");
+        map["c"] = 3;
 
-        Assert.AreEqual(1L, Convert.ToInt64(map.GetSnapshot("a", snap)));
-        Assert.AreEqual(2L, Convert.ToInt64(map.GetSnapshot("b", snap)));
-        Assert.IsNull(map.GetSnapshot("c", snap));
+        Assert.AreEqual(1L, Convert.ToInt64((map.TryGetValue("a", snap, out var __sv4) ? __sv4.ToObject() : null)));
+        Assert.AreEqual(2L, Convert.ToInt64((map.TryGetValue("b", snap, out var __sv3) ? __sv3.ToObject() : null)));
+        Assert.IsNull((map.TryGetValue("c", snap, out var __sv2) ? __sv2.ToObject() : null));
 
         // Live (unsnapshotted) reads see the current state.
-        Assert.AreEqual(100L, Convert.ToInt64(map.Get("a")));
-        Assert.AreEqual(3L, Convert.ToInt64(map.Get("c")));
+        Assert.AreEqual(100L, Convert.ToInt64(map["a"].ToObject()));
+        Assert.AreEqual(3L, Convert.ToInt64(map["c"].ToObject()));
 
-        var all = map.GetAllSnapshot(snap);
+        var all = map.ToDictionary(snap).ToDictionary(kv => kv.Key, kv => kv.Value.ToObject());
         Assert.AreEqual(2, all.Count);
         Assert.AreEqual(1L, Convert.ToInt64(all["a"]));
         Assert.AreEqual(2L, Convert.ToInt64(all["b"]));
@@ -212,17 +212,17 @@ public class SnapshotParityTests
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var array = doc.GetArray("array");
-        array.Insert(0, new object[] { "x", "y", "z" });
+        array.Insert(0, "x", "y", "z");
 
         var snap = doc.CreateSnapshot();
 
         // 'w' is merged into the item of 'y', 'z' by the cleanup; as Yjs' typeListToArraySnapshot,
         // the read does not split, so the merged item is visible whole (Yjs: x, y, z, w).
-        array.Insert(3, new object[] { "w" });
-        array.Delete(0);
+        array.Insert(3, "w");
+        array.RemoveAt(0);
 
-        CollectionAssert.AreEqual(new object[] { "x", "y", "z", "w" }, ((IList<object>)array.ToArraySnapshot(snap)).ToArray());
-        CollectionAssert.AreEqual(new object[] { "y", "z", "w" }, array.ToArray().ToArray());
+        CollectionAssert.AreEqual(new object[] { "x", "y", "z", "w" }, ((IList<object>)array.ToArray(snap).Select(v => v.ToObject()).ToList()).ToArray());
+        CollectionAssert.AreEqual(new object[] { "y", "z", "w" }, array.ToArray().Select(v => v.ToObject()).ToArray());
     }
 
     [TestMethod]
@@ -239,9 +239,9 @@ public class SnapshotParityTests
         var transactions = 0;
         doc.AfterTransaction += (_, _) => transactions++;
 
-        array.ToArraySnapshot(snap);
-        map.GetAllSnapshot(snap);
-        map.GetSnapshot("k", snap);
+        array.ToArray(snap);
+        map.ToDictionary(snap);
+        map.TryGetValue("k", snap, out _);
 
         Assert.AreEqual(("c\ud800a", 0, Convert.ToBase64String(before)), (text.ToString(), transactions, Convert.ToBase64String(doc.EncodeStateAsUpdate())));
     }

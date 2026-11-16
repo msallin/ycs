@@ -79,8 +79,8 @@ public class UpdateOperationsTests
             var doc1 = new YDoc(new YDocOptions { GarbageCollection = false });
             var doc2 = new YDoc(new YDocOptions { GarbageCollection = false });
 
-            doc1.GetArray("array").Insert(0, new List<object> { 1 });
-            doc2.GetArray("array").Insert(0, new List<object> { 2 });
+            doc1.GetArray("array").Insert(0, 1);
+            doc2.GetArray("array").Insert(0, 2);
 
             var update1 = enc.EncodeStateAsUpdate(doc1);
             var update2 = enc.EncodeStateAsUpdate(doc2);
@@ -91,9 +91,9 @@ public class UpdateOperationsTests
             enc.ApplyUpdate(doc3, merged);
 
             var result = doc3.GetArray("array").ToArray();
-            Assert.AreEqual(2, result.Count);
-            CollectionAssert.Contains((System.Collections.ICollection)result, 1);
-            CollectionAssert.Contains((System.Collections.ICollection)result, 2);
+            Assert.AreEqual(2, result.Length);
+            CollectionAssert.Contains(result, (YValue)1);
+            CollectionAssert.Contains(result, (YValue)2);
         }
     }
 
@@ -103,7 +103,7 @@ public class UpdateOperationsTests
         foreach (var enc in Encoders)
         {
             var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-            doc.GetArray("array").Insert(0, new List<object> { "x" });
+            doc.GetArray("array").Insert(0, "x");
             var update = enc.EncodeStateAsUpdate(doc);
 
             var merged = enc.MergeUpdates(new[] { update });
@@ -123,10 +123,10 @@ public class UpdateOperationsTests
         {
             var (doc, updates) = CaptureUpdates(enc, array =>
             {
-                array.Insert(0, new List<object> { 1 });
-                array.Insert(0, new List<object> { 2 });
-                array.Insert(0, new List<object> { 3 });
-                array.Insert(0, new List<object> { 4 });
+                array.Insert(0, 1);
+                array.Insert(0, 2);
+                array.Insert(0, 3);
+                array.Insert(0, 4);
             });
 
             CheckUpdateCases(enc, doc, updates);
@@ -140,10 +140,10 @@ public class UpdateOperationsTests
         {
             var (doc, updates) = CaptureUpdates(enc, array =>
             {
-                array.Insert(0, new List<object> { 1, 2 });
-                array.Delete(1, 1);
-                array.Insert(0, new List<object> { 3, 4 });
-                array.Delete(1, 2);
+                array.Insert(0, 1, 2);
+                array.RemoveRange(1, 1);
+                array.Insert(0, 3, 4);
+                array.RemoveRange(1, 2);
             });
 
             CheckUpdateCases(enc, doc, updates);
@@ -231,7 +231,7 @@ public class UpdateOperationsTests
         foreach (var enc in Encoders)
         {
             var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-            doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3 });
+            doc.GetArray("array").Insert(0, 1, 2, 3);
             var update = enc.EncodeStateAsUpdate(doc);
 
             var diffed = enc.DiffUpdate(update, EncodeEmptyStateVector());
@@ -239,7 +239,7 @@ public class UpdateOperationsTests
             var applied = new YDoc(new YDocOptions { GarbageCollection = false });
             enc.ApplyUpdate(applied, diffed);
 
-            CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, (System.Collections.ICollection)applied.GetArray("array").ToArray());
+            CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, applied.GetArray("array").ToArray().Select(v => v.ToObject()).ToList());
         }
     }
 
@@ -249,7 +249,7 @@ public class UpdateOperationsTests
         foreach (var enc in Encoders)
         {
             var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-            doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3 });
+            doc.GetArray("array").Insert(0, 1, 2, 3);
             var update = enc.EncodeStateAsUpdate(doc);
             var fullSv = enc.EncodeStateVector(doc);
 
@@ -267,10 +267,10 @@ public class UpdateOperationsTests
         {
             var (_, updates) = CaptureUpdates(enc, array =>
             {
-                array.Insert(0, new List<object> { 1 });
-                array.Insert(0, new List<object> { 2 });
-                array.Insert(0, new List<object> { 3 });
-                array.Insert(0, new List<object> { 4 });
+                array.Insert(0, 1);
+                array.Insert(0, 2);
+                array.Insert(0, 3);
+                array.Insert(0, 4);
             });
 
             var mergedAll = enc.MergeUpdates(updates);
@@ -299,8 +299,8 @@ public class UpdateOperationsTests
         foreach (var enc in Encoders)
         {
             var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-            doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3 });
-            doc.GetMap("map").Set("a", "b");
+            doc.GetArray("array").Insert(0, 1, 2, 3);
+            doc.GetMap("map")["a"] = "b";
 
             var update = enc.EncodeStateAsUpdate(doc);
             AssertStateVectorsEqual(enc.EncodeStateVector(doc), enc.EncodeStateVectorFromUpdate(update));
@@ -313,7 +313,7 @@ public class UpdateOperationsTests
         foreach (var enc in Encoders)
         {
             var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-            doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3, 4, 5 });
+            doc.GetArray("array").Insert(0, 1, 2, 3, 4, 5);
             var update = enc.EncodeStateAsUpdate(doc);
 
             var meta = enc.ParseUpdateMeta(update);
@@ -335,8 +335,8 @@ public class UpdateOperationsTests
     public void ConvertUpdateFormat_V1ToV2ToApply_MatchesOriginal()
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-        doc.GetArray("array").Insert(0, new List<object> { 1, "two", true });
-        doc.GetMap("map").Set("key", "value");
+        doc.GetArray("array").Insert(0, 1, "two", true);
+        doc.GetMap("map")["key"] = "value";
 
         var v1 = doc.EncodeStateAsUpdate();
         var convertedToV2 = YUpdate.Convert(v1, UpdateFormat.V1, UpdateFormat.V2);
@@ -344,15 +344,15 @@ public class UpdateOperationsTests
         var applied = new YDoc();
         applied.ApplyUpdate(convertedToV2, format: UpdateFormat.V2);
 
-        CollectionAssert.AreEqual((System.Collections.ICollection)doc.GetArray("array").ToArray(), (System.Collections.ICollection)applied.GetArray("array").ToArray());
-        Assert.AreEqual("value", applied.GetMap("map").Get("key"));
+        CollectionAssert.AreEqual(doc.GetArray("array").ToArray().Select(v => v.ToObject()).ToList(), applied.GetArray("array").ToArray().Select(v => v.ToObject()).ToList());
+        Assert.AreEqual("value", applied.GetMap("map")["key"].ToObject());
     }
 
     [TestMethod]
     public void ConvertUpdateFormat_V2ToV1ToApply_MatchesOriginal()
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-        doc.GetArray("array").Insert(0, new List<object> { 1, "two", true });
+        doc.GetArray("array").Insert(0, 1, "two", true);
 
         var v2 = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
         var convertedToV1 = YUpdate.Convert(v2, UpdateFormat.V2, UpdateFormat.V1);
@@ -360,14 +360,14 @@ public class UpdateOperationsTests
         var applied = new YDoc();
         applied.ApplyUpdate(convertedToV1);
 
-        CollectionAssert.AreEqual((System.Collections.ICollection)doc.GetArray("array").ToArray(), (System.Collections.ICollection)applied.GetArray("array").ToArray());
+        CollectionAssert.AreEqual(doc.GetArray("array").ToArray().Select(v => v.ToObject()).ToList(), applied.GetArray("array").ToArray().Select(v => v.ToObject()).ToList());
     }
 
     [TestMethod]
     public void ConvertUpdateFormat_RoundTrip_IsByteIdentical()
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
-        doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3 });
+        doc.GetArray("array").Insert(0, 1, 2, 3);
 
         var v1 = doc.EncodeStateAsUpdate();
         var v2 = YUpdate.Convert(v1, UpdateFormat.V1, UpdateFormat.V2);
@@ -387,8 +387,8 @@ public class UpdateOperationsTests
         {
             var doc = new YDoc(new YDocOptions { GarbageCollection = false });
             var array = doc.GetArray("array");
-            array.Insert(0, new List<object> { 1, 2, 3 });
-            array.Delete(1, 1);
+            array.Insert(0, 1, 2, 3);
+            array.RemoveRange(1, 1);
 
             var update = enc.EncodeStateAsUpdate(doc);
             var decoded = enc.DecodeUpdate(update);
@@ -412,10 +412,10 @@ public class UpdateOperationsTests
         {
             var (_, updates) = CaptureUpdates(enc, array =>
             {
-                array.Insert(0, new List<object> { 1 });
-                array.Insert(0, new List<object> { 2 });
-                array.Insert(0, new List<object> { 3 });
-                array.Insert(0, new List<object> { 4 });
+                array.Insert(0, 1);
+                array.Insert(0, 2);
+                array.Insert(0, 3);
+                array.Insert(0, 4);
             });
 
             var gapped = enc.MergeUpdates(new[] { updates[0], updates[2] });
@@ -434,8 +434,8 @@ public class UpdateOperationsTests
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var array = doc.GetArray("array");
-        array.Insert(0, new List<object> { 1, 2, 3 });
-        array.Delete(1, 1);
+        array.Insert(0, 1, 2, 3);
+        array.RemoveRange(1, 1);
 
         var v1 = doc.EncodeStateAsUpdate();
         var v2 = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);

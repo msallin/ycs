@@ -26,7 +26,7 @@ public class ChangedTypesTests
             {
                 var map = new YMap();
                 maps.Add(map);
-                array.Add(new object[] { map });
+                array.Add(map);
             }
         });
 
@@ -35,10 +35,10 @@ public class ChangedTypesTests
         {
             foreach (var map in maps)
             {
-                map.Set("k", 1);
+                map["k"] = 1;
             }
 
-            array.Delete(0, array.Length);
+            array.RemoveRange(0, array.Length);
         });
 
         Assert.IsLessThan(2_000, stopwatch.ElapsedMilliseconds);
@@ -50,16 +50,16 @@ public class ChangedTypesTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         var (first, gone, last) = (new YMap(), new YMap(), new YMap());
-        array.Add(new object[] { first, gone, last });
+        array.Add(first, gone, last);
         var changed = new List<YType>();
         doc.AfterTransaction += (_, tr) => changed = tr.Changed.Keys.ToList();
 
         doc.Transact(_ =>
         {
-            first.Set("k", 1);
-            gone.Set("k", 1);
-            array.Delete(1, 1);
-            last.Set("k", 1);
+            first["k"] = 1;
+            gone["k"] = 1;
+            array.RemoveRange(1, 1);
+            last["k"] = 1;
         });
 
         CollectionAssert.AreEqual(new YType[] { first, array, last }, changed);
@@ -74,7 +74,7 @@ public class ChangedTypesTests
         var map = doc.GetMap("m");
         var array = doc.GetArray("a");
         var inner = new YMap();
-        array.Insert(0, new object[] { inner });
+        array.Insert(0, inner);
         var names = new Dictionary<YType, string> { [text] = "t", [map] = "m", [array] = "a", [inner] = "inner" };
         string order = null;
         map.Observe(_ => doc.AfterTransaction += (_, tr) => order ??= string.Join(",", tr.ChangedParentTypes.Keys.Select(k => names[k])));
@@ -82,8 +82,8 @@ public class ChangedTypesTests
         doc.Transact(_ =>
         {
             text.Insert(0, "x");
-            inner.Set("k", 1);
-            map.Set("k", 1);
+            inner["k"] = 1;
+            map["k"] = 1;
         });
 
         Assert.AreEqual("t,inner,a,m", order);

@@ -74,21 +74,21 @@ public class CoreParityTests
 
         doc.Transact(_ =>
         {
-            a.Insert(0, new object[] { "a", new YMap(new Dictionary<string, object> { ["k2"] = "a" }), "b" });
-            ((YMap)a.Get(1)).Set("k2", new YMap(new Dictionary<string, object> { ["k3"] = new Dictionary<string, object> { ["x"] = 1 } }));
-            ((YMap)a.Get(1)).Set("k2", new List<object> { 1, 2 });
-            m.Delete("k2");
+            a.Insert(0, "a", new YMap(YValue.FromObject(new Dictionary<string, object> { ["k2"] = "a" }).EnumerateObject()), "b");
+            ((YMap)a[1].ToObject())["k2"] = new YMap(YValue.FromObject(new Dictionary<string, object> { ["k3"] = new Dictionary<string, object> { ["x"] = 1 } }).EnumerateObject());
+            ((YMap)a[1].ToObject())["k2"] = YValue.FromObject(new List<object> { 1, 2 });
+            m.Remove("k2");
         });
         doc.Transact(_ =>
         {
-            m.Set("k1", "b");
-            ((YMap)a.Get(1)).Delete("k2");
+            m["k1"] = "b";
+            ((YMap)a[1].ToObject()).Remove("k2");
         });
         doc.Transact(_ =>
         {
-            a.Delete(1, 2);
-            a.Insert(0, new object[] { new Dictionary<string, object> { ["x"] = 1 }, 1 });
-            a.Delete(0, 2);
+            a.RemoveRange(1, 2);
+            a.Insert(0, YValue.FromObject(new Dictionary<string, object> { ["x"] = 1 }), 1);
+            a.RemoveRange(0, 2);
         });
 
         Assert.AreEqual("AQcBAAgBAWEBdwFhgQEAAQABgQEBAQADKAEBbQJrMQF3AWJBAQACAQECAQYIAg==", S(doc.EncodeStateAsUpdate()));
@@ -100,13 +100,13 @@ public class CoreParityTests
         var doc = new YDoc(new YDocOptions { ClientId = 2 });
         var r = doc.GetMap("r");
         var n = new YMap();
-        r.Set("n", n);
-        n.Set("k", 1);
-        n.Set("k", 2);
-        n.Set("k", 3);
-        n.Set("k", 4);
+        r["n"] = n;
+        n["k"] = 1;
+        n["k"] = 2;
+        n["k"] = 3;
+        n["k"] = 4;
 
-        r.Delete("n");
+        r.Remove("n");
 
         Assert.AreEqual("AQICACEBAXIBbgEABAECAQAF", S(doc.EncodeStateAsUpdate()));
     }
@@ -249,8 +249,8 @@ public class CoreParityTests
 
         doc.GetText("t").Insert(0, "max");
         doc.GetText("t").Remove(0, 1);
-        doc.GetMap("m").Set("a", 1);
-        doc.GetMap("m").Set("a", 2);
+        doc.GetMap("m")["a"] = 1;
+        doc.GetMap("m")["a"] = 2;
 
         Assert.AreEqual((MaxClientV1, MaxClientV2), (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))));
     }
@@ -374,7 +374,7 @@ public class CoreParityTests
         for (var i = 0; i < 40; i++)
         {
             var kid = new YMap();
-            root.Set("k" + i, kid);
+            root["k" + i] = kid;
             kids.Add(kid);
         }
 
@@ -385,7 +385,7 @@ public class CoreParityTests
         {
             for (var i = 39; i >= 0; i--)
             {
-                kids[i].Set("v", i);
+                kids[i]["v"] = i;
             }
         });
 

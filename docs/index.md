@@ -15,11 +15,11 @@ byte[] update = doc.EncodeStateAsUpdate();   // what a Yjs peer applies with Y.a
 
 | Page | What is in it |
 | --- | --- |
-| [Getting started](getting-started.md) | install, documents and shared types, syncing two documents, events, undo, saving |
+| [Getting started](getting-started.md) | install, shared types, events, encoding and applying updates, syncing two documents, undo |
 | [Networking](networking.md) | the y-protocols sync in C#, the sample sync server, the .NET client, Blazor, the demo page |
 | [Compatibility](compatibility.md) | tested Yjs versions, wire formats, what is not supported, performance, Ycs or YDotNet |
 | [Untrusted input and threads](untrusted-input.md) | what a hostile update can cost, the limits, errors, thread safety |
-| [API reference](api.md) | the API compared with Yjs and YDotNet, and every contract in detail |
+| [API reference](api.md) | every public type and contract in detail |
 
 ## For contributors
 

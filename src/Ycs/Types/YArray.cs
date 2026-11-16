@@ -43,7 +43,7 @@ public sealed partial class YArray : YArrayBase
         // through to `base.Length` for the whole duration of the flush, exactly as intended.
         var prelimContent = _prelimContent;
         _prelimContent = null;
-        Insert(0, prelimContent);
+        InsertRaw(0, prelimContent);
     }
 
     internal override YType InternalCopy()
@@ -57,16 +57,9 @@ public sealed partial class YArray : YArrayBase
         RuntimeHelpers.EnsureSufficientExecutionStack();
         var arr = new YArray();
 
-        foreach (var item in EnumerateList())
+        foreach (var item in EnumerateValues())
         {
-            if (item is YType at)
-            {
-                arr.Add(new[] { at.InternalClone() });
-            }
-            else
-            {
-                arr.Add(new[] { item });
-            }
+            arr.AddRaw(new[] { item is YType at ? at.InternalClone() : item });
         }
 
         return arr;
@@ -98,7 +91,7 @@ public sealed partial class YArray : YArrayBase
     internal override object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested)
     {
         var result = new List<object>();
-        foreach (var c in Map((c, i, arr) => c))
+        foreach (var c in EnumerateValues())
         {
             if (c is YType at)
             {
@@ -114,24 +107,6 @@ public sealed partial class YArray : YArrayBase
         return result;
     }
 
-    private IEnumerable<object> EnumerateList()
-    {
-        var n = _start;
-
-        while (!n.IsNull)
-        {
-            var id = n.Id;
-            var departures = Doc.Store.Departures;
-            if (n.Countable && !n.Deleted)
-            {
-                var c = n.Content.GetContent();
-                foreach (var item in c)
-                {
-                    yield return item;
-                }
-            }
-
-            n = Doc.Store.NextAfter(n, id, departures);
-        }
-    }
+    /// <summary>The values in order, as stored; those of an array not in a document yet too.</summary>
+    private IEnumerable<object> EnumerateValues() => _prelimContent ?? EnumerateRaw();
 }

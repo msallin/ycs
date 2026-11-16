@@ -25,9 +25,22 @@ doc.Updated += (_, e) => kept = e.Update;
 
 text.Insert(0, "AOT ");
 text.Format(0, 3, new Dictionary<string, YValue> { ["italic"] = true, ["size"] = 1.5 });
-doc.GetMap("map").Set("added", new Dictionary<string, object> { ["n"] = 42, ["list"] = new object?[] { "x", 2.5, null } });
+doc.GetMap("map")["added"] = YValue.FromObject(new Dictionary<string, object> { ["n"] = 42, ["list"] = new object?[] { "x", 2.5, null } });
 
-doc.GetMap("map").Set("observed", 1);
+doc.GetMap("map")["observed"] = 1;
+
+// The collection shapes: arrays, maps and XML nodes over YValue, with numbers read back as JavaScript numbers.
+var list = doc.GetArray("list");
+list.Add(1, "two", YValue.Null, 2.5, 3_000_000_000, new YMap { ["k"] = true });
+list.Insert(1, new YArray(10, 20));
+list.RemoveAt(0);
+Check(list.Count == 6 && list[0].TryGetSharedType<YArray>(out var inner) && inner[1].GetInt32() == 20 && list[1..3].Length == 2, "array shapes");
+var xml = doc.GetXmlFragment("xml");
+var para = new YXmlElement("p");
+xml.Add(para, new YXmlText("tail"));
+para.SetAttribute("class", "intro");
+para.Add(new YXmlElement("b"));
+Check(xml.Count == 2 && xml.QuerySelector("b") != null && xml.CreateTreeWalker().Count() == 3 && para.GetAttribute("class") == "intro", "xml shapes");
 Check(observed > 0 && deepObserved == 2 && !kept.IsEmpty, $"events: observed {observed}, deep {deepObserved}, update {kept.Length} bytes");
 
 // Undo with a time provider and a subdocument's meta (options records, the capture timeout, the stack event payload).
@@ -36,7 +49,7 @@ var undone = 0;
 undo.StackItemPopped += (_, e) => undone += e.ChangedParentTypes.Count;
 text.Insert(0, "!");
 Check(undo.CanUndo && undo.Undo() != null && undone == 1 && text.ToString() == "AOT plain bold tail", $"undo: {text}");
-doc.GetMap("map").Set("sub", new YDoc(new YDocOptions { Meta = YValue.FromObject(new Dictionary<string, object> { ["k"] = 1 }) }));
+doc.GetMap("map")["sub"] = new YDoc(new YDocOptions { Meta = YValue.FromObject(new Dictionary<string, object> { ["k"] = 1 }) });
 
 foreach (var v2 in new[] { false, true })
 {
@@ -54,8 +67,12 @@ foreach (var v2 in new[] { false, true })
     var copyText = copy.GetText("text");
     Check(copyText.ToString() == "AOT plain bold tail", $"v{(v2 ? 2 : 1)}: unexpected text '{copyText}'");
     Check(copyText.ToDelta()[0].Attributes?["italic"] == YValue.True, $"v{(v2 ? 2 : 1)}: formatting lost");
-    var added = (IDictionary<string, object>)copy.GetMap("map").Get("added");
-    Check(added["n"] is 42, $"v{(v2 ? 2 : 1)}: map value lost");
+    var added = copy.GetMap("map")["added"];
+    Check(added["n"].GetInt32() == 42 && added["list"].Length == 3, $"v{(v2 ? 2 : 1)}: map value lost");
+    var copyList = copy.GetArray("list");
+    Check(copyList.Count == 6 && copyList[4].GetInt64() == 3_000_000_000 && copyList[5].TryGetSharedType<YMap>(out var nested) && nested["k"] == true, $"v{(v2 ? 2 : 1)}: array lost");
+    var copyXml = copy.GetXmlFragment("xml");
+    Check(copyXml.Count == 2 && copyXml[0] is YXmlElement { NodeName: "p" } copyPara && copyPara.GetAttributes()["class"] == "intro" && copyXml.ToString() == xml.ToString(), $"v{(v2 ? 2 : 1)}: xml lost");
     Console.WriteLine($"v{(v2 ? 2 : 1)}: {update.Length} bytes, text '{copyText}'");
 
     var position = RelativePosition.FromIndex(copyText, 4, -1);

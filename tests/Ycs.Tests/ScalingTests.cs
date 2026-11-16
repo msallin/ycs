@@ -72,12 +72,12 @@ public class ScalingTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         var maps = Enumerable.Range(0, 16_000).Select(_ => new YMap()).ToList();
-        array.Insert(0, maps.Cast<object>().ToList());
+        array.Insert(0, maps.Cast<object>().ToList().Select(YValue.FromObject).ToArray());
         var events = 0;
         array.ObserveDeep((deepEvents, _) => events += deepEvents.Count);
 
         var stopwatch = Stopwatch.StartNew();
-        doc.Transact(_ => maps.ForEach(map => map.Set("k", 1)));
+        doc.Transact(_ => maps.ForEach(map => map["k"] = 1));
 
         Assert.IsLessThan(500, stopwatch.ElapsedMilliseconds);
     }
@@ -101,7 +101,7 @@ public class ScalingTests
         var stopwatch = Stopwatch.StartNew();
         for (var i = 0; i < array.Length; i++)
         {
-            _ = array.Get(i);
+            _ = array[i].ToObject();
         }
 
         Assert.IsLessThan(500, stopwatch.ElapsedMilliseconds);
@@ -115,6 +115,6 @@ public class ScalingTests
         var doc = new YDoc();
         doc.ApplyUpdate(update);
 
-        Assert.AreEqual((null, 1), (doc.GetArray("a").Get(0), doc.GetArray("a").Get(1)));
+        Assert.AreEqual((null, 1), (doc.GetArray("a")[0].ToObject(), doc.GetArray("a")[1].ToObject()));
     }
 }

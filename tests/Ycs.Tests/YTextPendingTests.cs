@@ -15,7 +15,7 @@ public class YTextPendingTests
         var prelim = new YText("ab");
         Edit(prelim, skipFirstInsert: true);
 
-        new YDoc(new YDocOptions { ClientId = 1 }).GetMap("map").Set("text", prelim);
+        new YDoc(new YDocOptions { ClientId = 1 }).GetMap("map")["text"] = prelim;
 
         Assert.AreEqual(direct.ToString(), prelim.ToString());
         Assert.AreEqual(Describe(direct.ToDelta()), Describe(prelim.ToDelta()));
@@ -31,7 +31,7 @@ public class YTextPendingTests
         var prelim = new YText();
         prelim.ApplyDelta(new List<Delta> { new Delta.Insert("x\n") }, sanitize: false);
 
-        new YDoc(new YDocOptions { ClientId = 1 }).GetMap("map").Set("text", prelim);
+        new YDoc(new YDocOptions { ClientId = 1 }).GetMap("map")["text"] = prelim;
 
         Assert.AreEqual("x\n", prelim.ToString());
     }

@@ -32,15 +32,15 @@ public class EventParityTests
         var arr = doc.GetArray("array");
 
         // These three plain values are packed into ONE Item of Length == 3.
-        arr.Insert(0, new object[] { 1, 2, 3 });
+        arr.Insert(0, 1, 2, 3);
 
         var nestedMap = new YMap();
-        arr.Insert(3, new object[] { nestedMap });
+        arr.Insert(3, nestedMap);
 
         IReadOnlyList<PathSegment> capturedPath = null;
         arr.ObserveDeep((deepEvents, _) => { capturedPath = deepEvents[0].Path; });
 
-        nestedMap.Set("x", 1);
+        nestedMap["x"] = 1;
 
         Assert.IsNotNull(capturedPath);
         CollectionAssert.AreEqual(new[] { new PathSegment(null, 3) }, capturedPath.ToList());
@@ -54,12 +54,12 @@ public class EventParityTests
         var doc = new YDoc();
         var map = doc.GetMap("map");
         var nested = new YMap();
-        map.Set(string.Empty, nested);
+        map[string.Empty] = nested;
 
         IReadOnlyList<PathSegment> capturedPath = null;
         map.ObserveDeep((deepEvents, _) => { capturedPath = deepEvents[0].Path; });
 
-        nested.Set("x", 1);
+        nested["x"] = 1;
 
         Assert.IsNotNull(capturedPath);
         CollectionAssert.AreEqual(new[] { new PathSegment(string.Empty, 0) }, capturedPath.ToList());
@@ -85,11 +85,11 @@ public class EventParityTests
 
         doc.Transact(_ =>
         {
-            map.Set("a", 1);
-            map.Delete("a"); // Added + deleted in the same transaction => nothing to report for "a".
-            map.Set("b", 1);
-            map.Set("c", 1);
-            map.Set("d", 1);
+            map["a"] = 1;
+            map.Remove("a"); // Added + deleted in the same transaction => nothing to report for "a".
+            map["b"] = 1;
+            map["c"] = 1;
+            map["d"] = 1;
         });
 
         Assert.IsNotNull(evt);
@@ -118,7 +118,7 @@ public class EventParityTests
             _ = evt.Changes;
         });
 
-        map.Set("a", 1);
+        map["a"] = 1;
 
         Assert.IsNotNull(evt);
         Assert.AreSame(evt.Changes.Keys, evt.Keys, "YEvent.Keys must be the very same cached map exposed via Changes.Keys.");
@@ -138,7 +138,7 @@ public class EventParityTests
             _ = evt.Changes;
         });
 
-        arr.Insert(0, new object[] { 1, 2, 3 });
+        arr.Insert(0, 1, 2, 3);
 
         Assert.IsNotNull(evt);
         Assert.AreSame(evt.Changes.Delta, evt.Delta, "YEvent.Delta must default to Changes.Delta for non-YText events.");
@@ -190,7 +190,7 @@ public class EventParityTests
             result = (e.Adds(addedItem), e.Deletes(addedItem));
         });
 
-        arr.Insert(0, new object[] { "x" });
+        arr.Insert(0, "x");
 
         Assert.AreEqual((true, false), result);
     }

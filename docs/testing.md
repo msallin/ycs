@@ -239,11 +239,11 @@ XML children and map keys):
 | --- | --- | --- |
 | `insert`, `delete`, `format`, `embed`, `delta` | `at`, `text`, `len`, `attrs`, `value`, `delta` (`[{insert, retain, delete, attrs}]`), `sanitize` | `YText`/`YXmlText` `Insert`, `Delete`, `Format`, `InsertEmbed`, `ApplyDelta` |
 | `setAttr`, `rmAttr` | `key`, `value` | `YText`/`YXmlElement` `SetAttribute`, `RemoveAttribute` |
-| `ains`, `push`, `unshift`, `delete`, `xafter` | `at`, `values`, `ref` | `YArray`/`YXmlFragment` `Insert`, `Push`, `Unshift`, `Delete`, `InsertAfter` |
-| `set`, `mdel`, `clear` | `key`, `value` | `YMap` `Set`, `Delete`, `Clear` |
+| `ains`, `push`, `unshift`, `delete`, `xafter` | `at`, `values`, `ref` | `YArray`/`YXmlFragment` `Insert`, `Add`, `RemoveRange`, `InsertAfter` |
+| `set`, `mdel`, `clear` | `key`, `value` | `YMap` indexer, `Remove`, `Clear` |
 | `transact` | `origin`, `ops` (local steps without `c`, and `deliver`s to this client: an update applied inside the transaction) | `YDoc.Transact` |
 | `um`, `undo`, `redo`, `stop`, `umclear` | `id`, `scope` (paths or `"$doc"`), `timeout` (`"0"` or `"inf"`), `origins` | `UndoManager` |
-| `snap`, `readSnap`, `docFromSnap` | `id`, `prev` | `CreateSnapshot`, `ToDelta(snapshot, prev)`, `ToArraySnapshot`, `GetAllSnapshot`, `CreateDocFromSnapshot`, `EncodeSnapshot(V2)` |
+| `snap`, `readSnap`, `docFromSnap` | `id`, `prev` | `CreateSnapshot`, `ToDelta(snapshot, prev)`, `ToArray(snapshot)`, `ToDictionary(snapshot)`, `CreateDocFromSnapshot`, `EncodeSnapshot(V2)` |
 | `rpos`, `rres` | `id`, `at`, `assoc` (`rres` on any client) | `RelativePosition.FromIndex`, `Encode`, `WriteJson`, `Decode`, `TryResolve` |
 | `observe` | | `Observe`/`ObserveDeep` on a nested type |
 | `react` | `id`, `ops`, `txn` | `Observe` on any type: the first time it changes, the handler makes `ops` (in one `Transact` with `txn`, else each in its own), also during another transaction's cleanup; the results are an event (`react`) |
@@ -290,7 +290,7 @@ Coverage (which observations an operation kind is compared on; ● always, ○ w
 
 Not compared: wall-clock behaviour (capture timeouts other than 0 and infinite); random ids (a
 subdocument's guid is given); Yjs' warnings on the console; `PermanentUserData`, `YXmlHook` and
-`YXmlTreeWalker` (not in the language yet).
+`CreateTreeWalker` (not in the language yet).
 
 ### Running
 

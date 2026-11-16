@@ -99,7 +99,7 @@ internal static class Perf
                 {
                     var map = new YMap();
                     maps.Add(map);
-                    array.Add(new object[] { map });
+                    array.Add(map);
                 }
             });
             var events = 0;
@@ -108,7 +108,7 @@ internal static class Perf
             {
                 foreach (var map in maps)
                 {
-                    map.Set("k", 1);
+                    map["k"] = 1;
                 }
             });
         });
@@ -121,9 +121,9 @@ internal static class Perf
             var array = doc.GetArray("a");
             return () =>
             {
-                for (var i = 0; i < array.Length; i++)
+                for (var i = 0; i < array.Count; i++)
                 {
-                    _ = array.Get(i);
+                    _ = array[i].ToObject();
                 }
             };
         });

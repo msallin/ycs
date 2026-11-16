@@ -103,10 +103,10 @@ public class RunHeadIndexTests
         var doc = Doc(1, walk);
         var a = doc.GetArray("a");
         a.Observe(_ => { });
-        a.Insert(0, Enumerable.Range(0, 3000).Select(v => (object)(long)v).ToList());
+        a.Insert(0, Enumerable.Range(0, 3000).Select(v => (object)(long)v).ToList().Select(YValue.FromObject).ToArray());
         for (var k = 0; k < 1500; k++)
         {
-            a.Delete(k, 1);
+            a.RemoveRange(k, 1);
         }
 
         var structs = doc.Store.Clients[1];
@@ -126,12 +126,12 @@ public class RunHeadIndexTests
                     var bounds = LeafStarts(structs);
                     var b = bounds.Count == 0 ? 3 : bounds[pick >= 0 ? Math.Min(pick, bounds.Count - 1) : Math.Max(0, bounds.Count + pick)];
                     var first = shape switch { -1 => b - 1 - (2 * c + 1), 0 => b - (2 * c + 1), 1 => b + 1 - (2 * c + 1), 2 => b, _ => b - c };
-                    a.Delete(Math.Clamp(first / 2, 0, a.Length - c), c);
+                    a.RemoveRange(Math.Clamp(first / 2, 0, a.Length - c), c);
                     log.Append(b).Append('/').Append(shape).Append('/').Append(c).Append(": ").Append(structs.Count).Append(' ').Append(Recounted(structs)).Append(' ');
                     for (var k = 0; k < 4; k++)
                     {
-                        log.Append(a.Get(random.Next(a.Length))).Append(',');
-                        a.Insert(random.Next(a.Length + 1), new object[] { (long)-k });
+                        log.Append(a[random.Next(a.Length)].ToObject()).Append(',');
+                        a.Insert(random.Next(a.Length + 1), (long)-k);
                     }
 
                     log.Append(Lookups(doc)).Append(' ').Append(a.DescribeSearchMarkers()).Append(' ').Append(Recounted(structs)).Append('\n');
@@ -349,7 +349,7 @@ public class RunHeadIndexTests
                     break;
                 case 2:
                     _armed = 1 + _random.Next(3);
-                    _b.GetMap("m").Set("k", _random.Next());
+                    _b.GetMap("m")["k"] = _random.Next();
                     Sync(_b, _a);
                     _armed = 0;
                     break;
@@ -397,7 +397,7 @@ public class RunHeadIndexTests
             {
                 case 0 when length > 0:
                     // Reads walk from the marker too.
-                    _ = _text ? ((YText)_ta).ToDelta().Count : ((YArray)_ta).Get(_random.Next(length));
+                    _ = _text ? ((YText)_ta).ToDelta().Count : ((YArray)_ta)[_random.Next(length)].ToObject();
                     break;
                 case 1:
                     Insert(_ta, _random.Next(length + 1), _random.Next(3) == 0 ? "xy" : "x");
@@ -435,7 +435,7 @@ public class RunHeadIndexTests
         }
         else
         {
-            ((YArray)type).Insert(index, chars.Select(c => (object)c.ToString()).ToList());
+            ((YArray)type).Insert(index, chars.Select(c => (object)c.ToString()).ToList().Select(YValue.FromObject).ToArray());
         }
     }
 
@@ -447,7 +447,7 @@ public class RunHeadIndexTests
         }
         else
         {
-            ((YArray)type).Delete(index, length);
+            ((YArray)type).RemoveRange(index, length);
         }
     }
 

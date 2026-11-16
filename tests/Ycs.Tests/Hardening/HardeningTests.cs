@@ -102,7 +102,7 @@ public class HardeningTests
         }
 
         var map = new YDoc().GetMap("m");
-        Assert.ThrowsExactly<ArgumentException>(() => map.Set("k", value));
+        Assert.ThrowsExactly<ArgumentException>(() => map["k"] = YValue.FromObject(value));
     }
 
     [TestMethod]
@@ -111,7 +111,7 @@ public class HardeningTests
         var list = new List<object>();
         list.Add(list);
         var map = new YDoc().GetMap("m");
-        Assert.ThrowsExactly<ArgumentException>(() => map.Set("k", list));
+        Assert.ThrowsExactly<ArgumentException>(() => map["k"] = YValue.FromObject(list));
     }
 
     // 3. Deleting (and garbage-collecting) deeply nested types recursed once per level.
@@ -173,12 +173,12 @@ public class HardeningTests
         for (var i = 0; i < UpdateLimits.Default.MaxDepth; i++)
         {
             var inner = new YArray();
-            array.Insert(0, new object[] { inner });
+            array.Insert(0, inner);
             array = inner;
         }
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => array.Insert(0, new object[] { new YArray() }));
-        Assert.ThrowsExactly<InvalidOperationException>(() => array.Insert(0, new object[] { new YMap() }));
+        Assert.ThrowsExactly<InvalidOperationException>(() => array.Insert(0, new YArray()));
+        Assert.ThrowsExactly<InvalidOperationException>(() => array.Insert(0, new YMap()));
     }
 
     // 4. Structs of length 0 broke every later encoding, or the transaction state.
@@ -485,7 +485,7 @@ public class HardeningTests
     {
         var doc = new YDoc();
         doc.ApplyUpdate(Subdocument("76 02 02 67 63 79 04 6D 65 74 61 76 01 01 61 7D 01"));
-        var subdoc = (YDoc)doc.GetMap("m").Get("k");
+        var subdoc = (YDoc)doc.GetMap("m")["k"].ToObject();
 
         Assert.IsFalse(subdoc.GarbageCollection);
         Assert.AreEqual(1, subdoc.Meta["a"]);
@@ -497,8 +497,8 @@ public class HardeningTests
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var map = doc.GetMap("m");
         var subdoc = new YDoc();
-        map.Set("k", subdoc);
-        map.Delete("k");
+        map["k"] = subdoc;
+        map.Remove("k");
 
         var copy = new YDoc(new YDocOptions { GarbageCollection = false });
         copy.ApplyUpdate(doc.EncodeStateAsUpdate());

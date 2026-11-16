@@ -46,11 +46,11 @@ public class PermanentUserDataTests
         // entry, its "ids"/"ds" sub-arrays, and the initial clientId push) before this array insert,
         // so 'a'/'b'/'c' do not start at clock 0 - ask the store for the clock they actually start at.
         var clockBeforeInsert = doc.Store.GetState(doc.ClientId);
-        array.Insert(0, new object[] { "a", "b", "c" });
+        array.Insert(0, "a", "b", "c");
         var idOfA = new ItemId(doc.ClientId, clockBeforeInsert);
         var idOfB = new ItemId(doc.ClientId, clockBeforeInsert + 1);
 
-        array.Delete(0); // delete 'a' only
+        array.RemoveAt(0); // delete 'a' only
 
         Assert.AreEqual("user1", pud.GetUserByDeletedId(idOfA));
         Assert.IsNull(pud.GetUserByDeletedId(idOfB));
@@ -81,10 +81,10 @@ public class PermanentUserDataTests
 
         var array = doc.GetArray("array");
         var clockBeforeInsert = doc.Store.GetState(doc.ClientId);
-        array.Insert(0, new object[] { "a" });
+        array.Insert(0, "a");
         var idOfA = new ItemId(doc.ClientId, clockBeforeInsert);
 
-        array.Delete(0);
+        array.RemoveAt(0);
 
         Assert.IsNull(pud.GetUserByDeletedId(idOfA));
     }
@@ -103,9 +103,9 @@ public class PermanentUserDataTests
         pud2.SetUserMapping(doc2.ClientId, "user2");
 
         var clockBeforeInsert = doc1.Store.GetState(doc1.ClientId);
-        doc1.GetArray("array").Insert(0, new object[] { "a", "b" });
+        doc1.GetArray("array").Insert(0, "a", "b");
         var idOfA = new ItemId(doc1.ClientId, clockBeforeInsert);
-        doc1.GetArray("array").Delete(0); // 'a' deleted by user1
+        doc1.GetArray("array").RemoveAt(0); // 'a' deleted by user1
 
         // Sync both ways: each doc's PermanentUserData should learn about the other user, and doc2
         // should learn that 'a' was deleted by user1 even though it never performed the delete.

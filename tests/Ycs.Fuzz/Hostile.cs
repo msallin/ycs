@@ -19,11 +19,11 @@ internal static class Hostile
         yield return V2("gc-bomb-pending-at-limit", GcRun(limit, clock: 1));
         foreach (var n in new[] { limit, 4 * limit })
         {
-            yield return V2($"deleted-items-{n}", Prepended(n, a => a.Insert(0, new object[] { 1 }), deleteAll: true));
-            yield return V2($"texts-{n}", Prepended(n, a => a.Insert(0, new object[] { new YText() })));
+            yield return V2($"deleted-items-{n}", Prepended(n, a => a.Insert(0, 1), deleteAll: true));
+            yield return V2($"texts-{n}", Prepended(n, a => a.Insert(0, new YText())));
         }
 
-        yield return V2("subdocuments-10000", Prepended(10_000, a => a.Insert(0, new object[] { new YDoc() })));
+        yield return V2("subdocuments-10000", Prepended(10_000, a => a.Insert(0, new YDoc())));
 
         // 2,000 items without origins of client 9 after 2,000 of client 5: 4 million conflict steps.
         yield return new Seed("conflict-2000", true, false, ItemsWithoutOrigins(5, 2_000), ItemsWithoutOrigins(9, 2_000), ["t"]);
@@ -44,7 +44,7 @@ internal static class Hostile
 
             if (deleteAll)
             {
-                array.Delete(0, array.Length);
+                array.RemoveRange(0, array.Length);
             }
         });
         return doc.EncodeStateAsUpdate(format: UpdateFormat.V2);

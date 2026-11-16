@@ -124,7 +124,7 @@ public class StaleMarkerScriptTests
                         doc.ApplyUpdate(peer.EncodeStateAsUpdate(doc.EncodeStateVector()));
                         break;
                     case "pm":
-                        peer.GetMap("m").Set("k", 1);
+                        peer.GetMap("m")["k"] = 1;
                         break;
                     case "sync":
                         peer.ApplyUpdate(doc.EncodeStateAsUpdate(peer.EncodeStateVector()));
@@ -179,13 +179,13 @@ public class StaleMarkerScriptTests
                     yt.Insert(at, op[3].GetString());
                     break;
                 case ("ins", YArray ya):
-                    ya.Insert(at, new object[] { op[3].GetInt32() });
+                    ya.Insert(at, op[3].GetInt32());
                     break;
                 case (_, YText yt):
                     yt.Remove(at, op[3].GetInt32());
                     break;
                 case (_, YArray ya):
-                    ya.Delete(at, op[3].GetInt32());
+                    ya.RemoveRange(at, op[3].GetInt32());
                     break;
             }
         }

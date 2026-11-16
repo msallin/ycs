@@ -17,7 +17,7 @@ public class EventApiTests
         doc.GetMap("m").Observe(e => mapEvent = e);
         doc.GetXmlFragment("x").Observe(e => xmlEvent = e);
 
-        doc.GetMap("m").Set("a", 1);
+        doc.GetMap("m")["a"] = 1;
         doc.GetXmlFragment("x").Insert(0, new[] { new YXmlElement("p") });
 
         Assert.AreEqual((true, true), (mapEvent?.KeysChanged.Contains("a"), xmlEvent?.ChildListChanged));
@@ -32,7 +32,7 @@ public class EventApiTests
         doc.GetArray("a").Observe(handler);
         doc.GetText("t").Observe(handler);
 
-        doc.GetArray("a").Add(new object[] { 1 });
+        doc.GetArray("a").Add(1);
         doc.GetText("t").Insert(0, "x");
 
         CollectionAssert.AreEqual(new[] { "YArrayEvent", "YTextEvent" }, seen);
@@ -46,7 +46,7 @@ public class EventApiTests
         var subscription = doc.GetMap("m").Observe(_ => calls++);
 
         subscription.Dispose();
-        doc.GetMap("m").Set("a", 1);
+        doc.GetMap("m")["a"] = 1;
 
         Assert.AreEqual(0, calls);
     }
@@ -58,12 +58,12 @@ public class EventApiTests
         var root = doc.GetMap("m");
         var list = new YArray();
         var inner = new YMap();
-        root.Set("list", list);
-        list.Add(new object[] { 1, 2, inner });
+        root["list"] = list;
+        list.Add(1, 2, inner);
         IReadOnlyList<PathSegment> path = null;
         root.ObserveDeep((events, _) => path = events[0].Path);
 
-        inner.Set("k", 1);
+        inner["k"] = 1;
 
         CollectionAssert.AreEqual(
             new[] { new PathSegment("list", 0), new PathSegment(null, 2) },
@@ -96,12 +96,12 @@ public class EventApiTests
     {
         var doc = new YDoc();
         var map = doc.GetMap("m");
-        map.Set("a", 1);
+        map["a"] = 1;
         var changes = new List<IReadOnlyDictionary<string, KeyChange>>();
         map.Observe(e => changes.Add(e.Keys));
 
-        map.Set("a", 2);
-        map.Delete("a");
+        map["a"] = 2;
+        map.Remove("a");
 
         Assert.AreEqual(
             (new KeyChange(KeyChangeAction.Update, 1), new KeyChange(KeyChangeAction.Delete, 2)),

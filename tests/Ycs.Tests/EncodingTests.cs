@@ -136,7 +136,7 @@ public class EncodingTests
 
         // ...and a document rejects them when they are inserted, not when it is encoded.
         var doc = new YDoc();
-        Assert.ThrowsExactly<NotSupportedException>(() => doc.GetMap("map").Set("k", Guid.Empty));
+        Assert.ThrowsExactly<ArgumentException>(() => doc.GetMap("map")["k"] = YValue.FromObject(Guid.Empty));
         Assert.AreEqual(0, doc.GetMap("map").Count);
     }
 

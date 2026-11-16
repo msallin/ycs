@@ -20,11 +20,11 @@ internal static class SyncGoldenDocs
         yield return ("text", text);
 
         var mixed = new YDoc(new YDocOptions { ClientId = 3 });
-        mixed.GetMap("m").Set("a", 1.5);
-        mixed.GetMap("m").Set("b", "two");
-        mixed.GetMap("m").Delete("a");
-        mixed.GetArray("a").Push(new object[] { "x", 2, true });
-        mixed.GetArray("a").Delete(1);
+        mixed.GetMap("m")["a"] = 1.5;
+        mixed.GetMap("m")["b"] = "two";
+        mixed.GetMap("m").Remove("a");
+        mixed.GetArray("a").Add("x", 2, true);
+        mixed.GetArray("a").RemoveAt(1);
         yield return ("mixed", mixed);
 
         var merged = new YDoc(new YDocOptions { ClientId = 4 });

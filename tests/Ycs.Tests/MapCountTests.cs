@@ -31,9 +31,9 @@ public class MapCountTests
     {
         var source = new YDoc();
         var map = source.GetMap("m");
-        map.Set("a", 1);
-        map.Set("b", 2);
-        map.Delete("a");
+        map["a"] = 1;
+        map["b"] = 2;
+        map.Remove("a");
         var doc = new YDoc();
         doc.ApplyUpdate(source.EncodeStateAsUpdate());
 
@@ -47,8 +47,8 @@ public class MapCountTests
     {
         var doc1 = new YDoc(new YDocOptions { ClientId = 1 });
         var doc2 = new YDoc(new YDocOptions { ClientId = 2 });
-        doc1.GetMap("m").Set("k", 1);
-        doc2.GetMap("m").Set("k", 2);
+        doc1.GetMap("m")["k"] = 1;
+        doc2.GetMap("m")["k"] = 2;
 
         doc1.ApplyUpdate(doc2.EncodeStateAsUpdate());
         doc2.ApplyUpdate(doc1.EncodeStateAsUpdate());
@@ -62,10 +62,10 @@ public class MapCountTests
         var doc = new YDoc();
         var root = doc.GetMap("m");
         var nested = new YMap();
-        root.Set("n", nested);
-        nested.Set("x", 1);
+        root["n"] = nested;
+        nested["x"] = 1;
 
-        root.Delete("n");
+        root.Remove("n");
 
         Assert.AreEqual("0|0", $"{root.Count}|{nested.Count}");
     }
@@ -103,13 +103,13 @@ public class MapCountTests
                 case 0:
                 case 1:
                 case 2:
-                    PickMap(doc, random).Set(Keys[random.Next(Keys.Length)], random.Next(100));
+                    PickMap(doc, random)[Keys[random.Next(Keys.Length)]] = random.Next(100);
                     break;
                 case 3:
-                    PickMap(doc, random).Set(Keys[random.Next(Keys.Length)], new YMap(new Dictionary<string, object> { ["x"] = 1, ["y"] = 2 }));
+                    PickMap(doc, random)[Keys[random.Next(Keys.Length)]] = new YMap(YValue.FromObject(new Dictionary<string, object> { ["x"] = 1, ["y"] = 2 }).EnumerateObject());
                     break;
                 case 4:
-                    PickMap(doc, random).Delete(Keys[random.Next(Keys.Length)]);
+                    PickMap(doc, random).Remove(Keys[random.Next(Keys.Length)]);
                     break;
                 case 5:
                     if (random.Next(4) == 0)
@@ -133,9 +133,9 @@ public class MapCountTests
                     doc.Transact(_ =>
                     {
                         var map = PickMap(doc, random);
-                        map.Set("a", 1);
-                        map.Delete("a");
-                        map.Set("b", "x");
+                        map["a"] = 1;
+                        map.Remove("a");
+                        map["b"] = "x";
                     });
                     break;
                 case 8:
@@ -179,7 +179,7 @@ public class MapCountTests
         var root = doc.GetMap("m");
         foreach (var key in Keys)
         {
-            if (random.Next(3) == 0 && root.ContainsKey(key) && root.Get(key) is YMap nested)
+            if (random.Next(3) == 0 && root.ContainsKey(key) && root[key].ToObject() is YMap nested)
             {
                 return nested;
             }

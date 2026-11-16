@@ -34,7 +34,7 @@ internal static class Sizes
         {
             var doc = new YDoc(new YDocOptions { ClientId = 1 });
             var array = doc.GetArray("a");
-            var value = new object[] { 1L };
+            YValue value = 1L;
             return (doc, i => array.Insert(0, value));
         });
 
@@ -48,8 +48,8 @@ internal static class Sizes
         {
             var doc = new YDoc(new YDocOptions { ClientId = 1 });
             var map = doc.GetMap("m");
-            object value = 1L;
-            return (doc, i => map.Set(keys[i], value));
+            YValue value = 1L;
+            return (doc, i => map[keys[i]] = value);
         });
 
         Measure("array element and a deleted one (collected)", N, () =>
@@ -58,12 +58,12 @@ internal static class Sizes
             // would make this quadratic. Each deleted element sits between two live ones, so none merges.
             var doc = new YDoc(new YDocOptions { ClientId = 1 });
             var array = doc.GetArray("a");
-            var value = new object[] { 1L };
+            YValue value = 1L;
             return (doc, i =>
             {
                 array.Insert(0, value);
                 array.Insert(0, value);
-                array.Delete(0, 1);
+                array.RemoveRange(0, 1);
             }
             );
         });

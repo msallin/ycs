@@ -185,7 +185,7 @@ internal static class Hostile
                 array.Insert(0, [1L]);
             }
 
-            array.Delete(0, array.Length);
+            array.RemoveRange(0, array.Count);
         });
         return doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
     }

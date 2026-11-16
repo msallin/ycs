@@ -109,7 +109,7 @@ public class FormattingCleanupTests
             for (var i = 0; i < 40_000; i++)
             {
                 var text = new YText();
-                map.Set("t" + i, text);
+                map["t" + i] = text;
                 text.Insert(0, "ab", Bold());
                 texts.Add(text);
             }

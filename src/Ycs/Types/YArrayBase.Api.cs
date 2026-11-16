@@ -15,16 +15,6 @@ public abstract partial class YArrayBase
         _searchMarkers = useSearchMarkers ? new ArraySearchMarkerCollection() : null;
     }
 
-    public IEnumerator<object> GetEnumerator()
-    {
-        return EnumerateContent().GetEnumerator();
-    }
-
-    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()
-    {
-        return EnumerateContent().GetEnumerator();
-    }
-
     private protected void InsertGenerics(Transaction transaction, int index, ICollection<object> content)
     {
         if (index > Length)
@@ -166,41 +156,26 @@ public abstract partial class YArrayBase
         }
     }
 
-    /// <summary>
-    /// Yjs' <c>typeListSlice</c>: never throws. A negative index counts from the end; an empty range
-    /// gives an empty list; a start that is still negative then yields null for each index before 0,
-    /// as JavaScript reads them.
-    /// </summary>
-    private protected IReadOnlyList<object> InternalSlice(int start, int end)
+    /// <summary>The countable content from <paramref name="start"/> to <paramref name="end"/> (exclusive), as stored; the caller has checked the range.</summary>
+    private protected List<object> InternalSlice(int start, int end)
     {
-        if (start < 0)
-        {
-            start += Length;
-        }
-
-        if (end < 0)
-        {
-            end += Length;
-        }
-
-        int length = end - start;
-        var cs = new List<object>();
+        var length = end - start;
+        var cs = new List<object>(length);
         var n = _start;
 
         while (!n.IsNull && length > 0)
         {
             if (n.Countable && !n.Deleted)
             {
-                var c = n.Content.GetContent();
-                if (c.Count <= start)
+                if (n.Length <= start)
                 {
-                    start -= c.Count;
+                    start -= n.Length;
                 }
                 else
                 {
-                    for (int i = start; i < c.Count && length > 0; i++)
+                    for (var i = start; i < n.Length && length > 0; i++)
                     {
-                        cs.Add(i < 0 ? null : c[i]);
+                        cs.Add(ValueAt(n.Content, i));
                         length--;
                     }
 
@@ -211,12 +186,77 @@ public abstract partial class YArrayBase
             n = n.Right.AsItem;
         }
 
-        return cs.AsReadOnly();
+        return cs;
     }
 
-    private protected void ForEach(Action<object, int, YArrayBase> fun)
+    /// <summary>The value at <paramref name="index"/> of the document's list, as stored; false when no countable content is there.</summary>
+    private protected bool TryGetRawAt(int index, out object value)
     {
-        int index = 0;
+        var marker = FindMarker(index);
+        var n = _start;
+
+        if (marker != null)
+        {
+            n = marker.P;
+            index -= marker.Index;
+        }
+
+        value = null;
+        if (index < 0)
+        {
+            // Yjs' typeListGet reads the first visible item's content at the negative offset, which is undefined: for a
+            // negative index, and for a marker beyond the index (an observer of another type reads while a remote
+            // transaction's cleanup has not yet emptied this list's stale markers).
+            return false;
+        }
+
+        var steps = 0;
+        for (; !n.IsNull; n = n.Right.AsItem)
+        {
+            if (++steps == Doc.LiteralWalkStepsForTests)
+            {
+                steps = 0;
+                n = SeekRight(n, ref index);
+            }
+
+            if (!n.Deleted && n.Countable)
+            {
+                if (index < n.Length)
+                {
+                    value = ValueAt(n.Content, index);
+                    return true;
+                }
+
+                index -= n.Length;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The countable content visible in <paramref name="snapshot"/> (Yjs' <c>typeListToArraySnapshot</c>), as stored.</summary>
+    private protected List<object> ContentAtSnapshot(Snapshot snapshot)
+    {
+        // Visibility is decided per item, by its first clock: Yjs' items.
+        Doc?.MaterializeRunExtensions();
+        var result = new List<object>();
+        for (var n = _start; !n.IsNull; n = n.Right.AsItem)
+        {
+            if (n.Countable && n.IsVisible(snapshot))
+            {
+                for (var i = 0; i < n.Length; i++)
+                {
+                    result.Add(ValueAt(n.Content, i));
+                }
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>The countable content of the document's list, as stored, in order; it survives the structs merging or leaving while the caller holds it.</summary>
+    private protected IEnumerable<object> EnumerateRaw()
+    {
         var n = _start;
 
         while (!n.IsNull)
@@ -225,64 +265,14 @@ public abstract partial class YArrayBase
             var departures = Doc.Store.Departures;
             if (n.Countable && !n.Deleted)
             {
-                var c = n.Content.GetContent();
-                foreach (var cItem in c)
+                var length = n.Length;
+                var content = n.Content;
+                for (var i = 0; i < length; i++)
                 {
-                    fun(cItem, index++, this);
+                    yield return ValueAt(content, i);
                 }
             }
 
-            n = Doc.Store.NextAfter(n, id, departures);
-        }
-    }
-
-    private protected void ForEachSnapshot(Action<object, int, YArrayBase> fun, Snapshot snapshot)
-    {
-        // Visibility is decided per item, by its first clock: Yjs' items.
-        Doc?.MaterializeRunExtensions();
-        int index = 0;
-        var n = _start;
-
-        while (!n.IsNull)
-        {
-            if (n.Countable && n.IsVisible(snapshot))
-            {
-                var c = n.Content.GetContent();
-                foreach (var value in c)
-                {
-                    fun(value, index++, this);
-                }
-            }
-
-            n = n.Right.AsItem;
-        }
-    }
-
-    private protected IEnumerable<object> EnumerateContent()
-    {
-        var n = _start;
-        while (!n.IsNull)
-        {
-            while (!n.IsNull && n.Deleted)
-            {
-                n = n.Right.AsItem;
-            }
-
-            // Check if we reached the end, no need to check currentContent, because it does not exist.
-            if (n.IsNull)
-            {
-                yield break;
-            }
-
-            var id = n.Id;
-            var departures = Doc.Store.Departures;
-            var currentContent = n.Content.GetContent();
-            foreach (var c in currentContent)
-            {
-                yield return c;
-            }
-
-            // We used content of n, now iterate to next.
             n = Doc.Store.NextAfter(n, id, departures);
         }
     }

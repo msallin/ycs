@@ -20,12 +20,12 @@ internal static class Limits
         Console.WriteLine($"{"shape",-58} {"v1 B",9} {"v2 B",9} {"ms",7} {"alloc MiB",10} {"kept MiB",9} {"B/struct",9}");
 
         Integrated("characters (prepended, one item each)", a => a.Doc.GetText("t").Insert(0, "x"));
-        Integrated("deleted items", a => a.Insert(0, new object[] { 1 }), deleteAll: true);
-        Integrated("YText", a => a.Insert(0, new object[] { new YText() }));
-        Integrated("YArray", a => a.Insert(0, new object[] { new YArray() }));
-        Integrated("YMap", a => a.Insert(0, new object[] { new YMap() }));
-        Integrated("YXmlElement", a => a.Insert(0, new object[] { new YXmlElement("p") }));
-        Integrated("subdocuments", a => a.Insert(0, new object[] { new YDoc() }));
+        Integrated("deleted items", a => a.Insert(0, 1), deleteAll: true);
+        Integrated("YText", a => a.Insert(0, new YText()));
+        Integrated("YArray", a => a.Insert(0, new YArray()));
+        Integrated("YMap", a => a.Insert(0, new YMap()));
+        Integrated("YXmlElement", a => a.Insert(0, new YXmlElement("p")));
+        Integrated("subdocuments", a => a.Insert(0, new YDoc()));
 
         // Pending: N shared types that wait for the first struct of their client.
         var (first, waiting) = WaitingTypes(10);
@@ -58,7 +58,7 @@ internal static class Limits
 
             if (deleteAll)
             {
-                array.Delete(0, array.Length);
+                array.RemoveRange(0, array.Count);
             }
         });
 
@@ -78,7 +78,7 @@ internal static class Limits
         {
             for (var i = 1; i < N; i++)
             {
-                array.Insert(0, new object[] { new YText() });
+                array.Insert(0, new YText());
             }
         });
 

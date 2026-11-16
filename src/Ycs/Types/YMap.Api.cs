@@ -4,13 +4,16 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Collections;
 
 namespace Ycs;
 
-public partial class YMap
+/// <summary>
+/// A shared map from string keys to <see cref="YValue"/>s. Setting a key inserts a copy of the value; a collection
+/// initializer (<c>new YMap { ["a"] = 1 }</c>) builds a map that is not in a document yet.
+/// </summary>
+#pragma warning disable CA1710 // Named after Yjs' type, as YArray and YText.
+public partial class YMap : IReadOnlyDictionary<string, YValue>
 {
     /// <summary>
     /// Observes the events of this map (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
@@ -18,48 +21,102 @@ public partial class YMap
     public IDisposable Observe(Action<YMapEvent> handler) => AddObserver(handler);
 
     public YMap()
-        : this(null)
-    {
-        // Do nothing.
-    }
-
-    public YMap(IDictionary<string, object> entries)
     {
         _prelimContent = new Dictionary<string, object>();
-        foreach (var entry in entries ?? Enumerable.Empty<KeyValuePair<string, object>>())
+    }
+
+    public YMap(IEnumerable<KeyValuePair<string, YValue>> entries)
+        : this()
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+        foreach (var entry in entries)
         {
-            _prelimContent[entry.Key] = ValueFreezer.Detach(entry.Value);
+            _prelimContent[entry.Key] = entry.Value.Stored();
         }
     }
 
     public int Count => _prelimContent?.Count ?? _mapCount;
 
-    /// <summary>
-    /// Returns the size of the YMap (count of key/value pairs). Mirrors Yjs' <c>size</c> getter;
-    /// identical to <see cref="Count"/>, provided under both names for parity.
-    /// </summary>
-    public int Size => Count;
-
-    /// <summary>The value of <paramref name="key"/>, or null when the map has none (Yjs: <c>undefined</c>); <see cref="TryGet"/> tells the two apart.</summary>
-    public object Get(string key) => TryTypeMapGet(key, out var value) ? value : null;
-
-    /// <summary>Whether the map has <paramref name="key"/>, and its value (which may be null).</summary>
-    public bool TryGet(string key, out object value) => TryTypeMapGet(key, out value);
-
-    public void Set(string key, object value)
+    /// <summary>The value of <paramref name="key"/>; Yjs' <c>set(key, value)</c> sets it.</summary>
+    /// <exception cref="KeyNotFoundException">Getting: the map has no <paramref name="key"/>.</exception>
+    public YValue this[string key]
     {
-        if (Doc != null)
+        get => TryGetValue(key, out var value) ? value : throw new KeyNotFoundException($"The map has no key '{key}'.");
+        set
         {
-            Doc.Transact((self: this, key, value), static (s, tr) => s.self.TypeMapSet(tr, s.key, s.value));
-        }
-        else
-        {
-            _prelimContent[key] = ValueFreezer.Detach(value);
+            ArgumentNullException.ThrowIfNull(key);
+            SetRaw(key, value.Stored());
         }
     }
 
-    public void Delete(string key)
+    /// <summary>Whether the map has <paramref name="key"/>, and its value (which may be null).</summary>
+    public bool TryGetValue(string key, out YValue value)
     {
+        ArgumentNullException.ThrowIfNull(key);
+        if (_prelimContent != null)
+        {
+            var found = _prelimContent.TryGetValue(key, out var stored);
+            value = YValue.FromStored(stored);
+            return found;
+        }
+
+        if (TryTypeMapGet(key, out var raw))
+        {
+            value = YValue.FromStored(raw);
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    /// <summary>
+    /// The value of <paramref name="key"/> as of <paramref name="snapshot"/> (Yjs' <c>typeMapGetSnapshot</c>); false when
+    /// the key was not visible then. It only reads: an item merged across the snapshot's boundary is seen whole, as in Yjs.
+    /// </summary>
+    public bool TryGetValue(string key, Snapshot snapshot, out YValue value)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (TryMapGetSnapshot(key, snapshot, out var raw))
+        {
+            value = YValue.FromStored(raw);
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    /// <summary>Every key and value as of <paramref name="snapshot"/> (Yjs' <c>typeMapGetAllSnapshot</c>).</summary>
+    public IReadOnlyDictionary<string, YValue> ToDictionary(Snapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        return MapAtSnapshot(snapshot);
+    }
+
+    public bool ContainsKey(string key)
+    {
+        ArgumentNullException.ThrowIfNull(key);
+        return _prelimContent != null ? _prelimContent.ContainsKey(key) : _map.TryGetValue(key, out var val) && !val.Deleted;
+    }
+
+    /// <summary>Adds <paramref name="key"/> for a collection initializer.</summary>
+    /// <exception cref="ArgumentException">The map has <paramref name="key"/> already.</exception>
+    public void Add(string key, YValue value)
+    {
+        if (ContainsKey(key))
+        {
+            throw new ArgumentException($"The map has the key '{key}' already.", nameof(key));
+        }
+
+        this[key] = value;
+    }
+
+    /// <summary>Removes <paramref name="key"/>; false when the map had none. In a document it is a transaction either way, as Yjs' <c>delete</c>.</summary>
+    public bool Remove(string key)
+    {
+        var existed = ContainsKey(key);
         if (Doc != null)
         {
             Doc.Transact((self: this, key), static (s, tr) => s.self.TypeMapDelete(tr, s.key));
@@ -68,40 +125,8 @@ public partial class YMap
         {
             _prelimContent.Remove(key);
         }
-    }
 
-    public bool ContainsKey(string key)
-    {
-        return _map.TryGetValue(key, out var val) && !val.Deleted;
-    }
-
-    /// <summary>
-    /// Returns a boolean indicating whether the specified key exists or not. Mirrors Yjs' <c>has(key)</c>;
-    /// identical to <see cref="ContainsKey"/>, provided under both names for parity.
-    /// </summary>
-    public bool Has(string key) => ContainsKey(key);
-
-    public IEnumerable<string> Keys() => TypeMapEnumerate().Select(kvp => kvp.Key);
-
-    public IEnumerable<object> Values() => TypeMapEnumerate().Select(kvp => ValueAt(kvp.Value.Content, kvp.Value.Length - 1));
-
-    /// <summary>
-    /// Returns an enumerable of (key, value) pairs. Mirrors Yjs' <c>entries()</c>; C# idiom: since
-    /// <see cref="YMap"/> already implements <c>IEnumerable&lt;KeyValuePair&lt;string,object&gt;&gt;</c>
-    /// (and is therefore directly usable in a <c>foreach</c>, matching Yjs' <c>[Symbol.iterator]</c>
-    /// which delegates to <c>entries()</c>), this is simply that same sequence under the Yjs-familiar name.
-    /// </summary>
-    public IEnumerable<KeyValuePair<string, object>> Entries() => this;
-
-    /// <summary>
-    /// Executes a provided function once on every key-value pair. Mirrors Yjs' <c>forEach(f)</c>.
-    /// </summary>
-    public void ForEach(System.Action<object, string, YMap> f)
-    {
-        foreach (var kvp in TypeMapEnumerateValues())
-        {
-            f(kvp.Value, kvp.Key, this);
-        }
+        return existed;
     }
 
     /// <summary>
@@ -113,7 +138,7 @@ public partial class YMap
         {
             Doc.Transact(tr =>
             {
-                foreach (var key in Keys().ToList())
+                foreach (var key in TypeMapEnumerate().Select(kvp => kvp.Key).ToList())
                 {
                     TypeMapDelete(tr, key);
                 }
@@ -125,14 +150,53 @@ public partial class YMap
         }
     }
 
+    public IEnumerable<string> Keys => EnumerateEntries().Select(static kvp => kvp.Key);
+
+    public IEnumerable<YValue> Values => EnumerateEntries().Select(static kvp => YValue.FromStored(kvp.Value));
+
     /// <summary>
     /// Transforms this Shared Type to a JSON-compatible <see cref="IDictionary{TKey,TValue}"/>. Mirrors Yjs' <c>toJSON()</c>.
     /// </summary>
     public override object ToJson() => JsonTree(this);
 
-    public YMap Clone() => InternalClone() as YMap;
+    public YMap Clone() => (YMap)InternalClone();
 
-    public IEnumerator<KeyValuePair<string, object>> GetEnumerator() => TypeMapEnumerateValues().GetEnumerator();
+    public IEnumerator<KeyValuePair<string, YValue>> GetEnumerator()
+    {
+        if (_prelimContent != null)
+        {
+            foreach (var kvp in _prelimContent)
+            {
+                yield return new KeyValuePair<string, YValue>(kvp.Key, YValue.FromStored(kvp.Value));
+            }
+
+            yield break;
+        }
+
+        foreach (var kvp in _map)
+        {
+            if (!kvp.Value.Deleted)
+            {
+                yield return new KeyValuePair<string, YValue>(kvp.Key, YValue.FromStored(ValueAt(kvp.Value.Content, kvp.Value.Length - 1)));
+            }
+        }
+    }
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    /// <summary>Sets <paramref name="key"/> to a value as stored, which a document may keep without a copy.</summary>
+    internal void SetRaw(string key, object? stored)
+    {
+        if (Doc != null)
+        {
+            Doc.Transact((self: this, key, stored), static (s, tr) => s.self.TypeMapSet(tr, s.key, s.stored));
+        }
+        else
+        {
+            _prelimContent[key] = stored;
+        }
+    }
+
+    private protected IEnumerable<KeyValuePair<string, object>> EnumerateEntries() => _prelimContent ?? TypeMapEnumerateValues();
 }
+#pragma warning restore CA1710

@@ -91,7 +91,7 @@ public class TransactionReuseTests
             $"{tr.Origin}|{string.Join(",", tr.Changed.Keys.Select(k => k == map ? "map" : "other"))}|{tr.Meta.Count}|" +
             $"{tr.DeleteSet.Clients.Count}|{tr.BeforeState[doc.ClientId]}|{tr.AfterState[doc.ClientId]}";
 
-        map.Set("x", 1);
+        map["x"] = 1;
 
         Assert.AreEqual("|map|0|0|3|4", seen);
     }
@@ -103,9 +103,9 @@ public class TransactionReuseTests
         var map = doc.GetMap("m");
         YEvent kept = null;
         map.Observe(e => kept = e);
-        map.Set("a", 1);
+        map["a"] = 1;
 
-        map.Set("b", 2);
+        map["b"] = 2;
 
         Assert.ThrowsExactly<InvalidOperationException>(() => _ = kept.Changes);
     }
@@ -117,9 +117,9 @@ public class TransactionReuseTests
         var map = doc.GetMap("m");
         var keys = new List<IReadOnlyDictionary<string, KeyChange>>();
         map.Observe(e => keys.Add(e.Keys));
-        map.Set("a", 1);
+        map["a"] = 1;
 
-        map.Set("b", 2);
+        map["b"] = 2;
 
         Assert.AreEqual("a;b", string.Join(";", keys.Select(k => string.Join(",", k.Keys))));
     }
@@ -130,7 +130,7 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var map = doc.GetMap("m");
-        text.Observe(_ => map.Set("seen", true));
+        text.Observe(_ => map["seen"] = true);
         var log = new List<string>();
         doc.AfterTransaction += (_, tr) => log.Add($"after:{tr.Origin}");
         doc.Updated += (_, e) => log.Add($"update:{e.Origin}");
@@ -151,8 +151,8 @@ public class TransactionReuseTests
         var map = doc.GetMap("m");
         text.Observe(_ =>
         {
-            map.Set("x", 1);
-            map.Set("y", 2);
+            map["x"] = 1;
+            map["y"] = 2;
         });
         var updates = 0;
         doc.Updated += (_, _) => updates++;
@@ -204,7 +204,7 @@ public class TransactionReuseTests
             text.Insert(0, "a");
             throw new InvalidOperationException("action");
         }), origin: "failed"));
-        doc.GetMap("m").Set("k", 1);
+        doc.GetMap("m")["k"] = 1;
 
         Assert.AreEqual("failed,|map|a", string.Join(",", updates) + "|" + changed + "|" + text);
     }
@@ -240,7 +240,7 @@ public class TransactionReuseTests
         Assert.ThrowsExactly<InvalidOperationException>(() => doc.Transact(_ =>
         {
             text.Insert(0, "a");
-            map.Set("k", 1);
+            map["k"] = 1;
         }));
 
         Assert.AreEqual("map,after", string.Join(",", log));
@@ -280,7 +280,7 @@ public class TransactionReuseTests
         map.ObserveDeep((_, _) => log.Add("deep"));
         doc.AfterTransaction += (_, _) => log.Add("after");
 
-        map.Set("k", 1);
+        map["k"] = 1;
 
         Assert.AreEqual("observe,deep,after", string.Join(",", log));
     }
@@ -291,14 +291,14 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var root = doc.GetMap("m");
         var child = new YMap();
-        root.Set("child", child);
+        root["child"] = child;
         string paths = null;
         root.ObserveDeep((deepEvents, _) => paths = string.Join(",", deepEvents.Select(evt => evt.Path.Count)));
 
         doc.Transact(_ =>
         {
-            child.Set("x", 1);
-            root.Set("y", 2);
+            child["x"] = 1;
+            root["y"] = 2;
         });
 
         Assert.AreEqual("0,1", paths);

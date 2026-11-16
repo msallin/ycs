@@ -19,28 +19,28 @@ doc.ApplyUpdate(Convert.FromBase64String(input["updateV1"].GetValue<string>()));
 // Ycs writes into the same document, the way a .NET server would.
 doc.Transact(_ =>
 {
-    doc.GetMap("map").Set("from-ycs", "written in C#");
+    doc.GetMap("map")["from-ycs"] = "written in C#";
     doc.GetText("text").Insert(doc.GetText("text").Length, "!");
 });
 
 static object Plain(object value) => value switch
 {
-    YMap m => m.Keys().ToDictionary(k => k, k => Plain(m.Get(k))),
-    YArray a => a.ToArray().Select(Plain).ToList(),
+    YMap m => m.Keys.ToDictionary(k => k, k => Plain(m[k].ToObject())),
+    YArray a => a.ToArray().Select(v => Plain(v.ToObject())).ToList(),
     YText t => t.ToString(),
     // Yjs' toJSON renders a Uint8Array as an object keyed by index; match that shape.
     byte[] b => b.Select((x, i) => (i, x)).ToDictionary(p => p.i.ToString(), p => (object)(int)p.x),
     _ => value
 };
 
-var map = doc.GetMap("map").Keys().ToDictionary(k => k, k => Plain(doc.GetMap("map").Get(k)));
+var map = doc.GetMap("map").Keys.ToDictionary(k => k, k => Plain(doc.GetMap("map")[k].ToObject()));
 
 Console.WriteLine(JsonSerializer.Serialize(new
 {
     readBack = new
     {
         map,
-        array = doc.GetArray("array").ToArray().Select(Plain).ToList(),
+        array = doc.GetArray("array").ToArray().Select(v => Plain(v.ToObject())).ToList(),
         text = doc.GetText("text").ToString()
     },
     updateV1 = Convert.ToBase64String(doc.EncodeStateAsUpdate()),

@@ -22,6 +22,10 @@ public class YjsTypeParityTests
 {
     private static string Json(object value) => CanonicalJson.Write(value);
 
+    private static string Json(IEnumerable<YValue> values) => CanonicalJson.Write(values.Select(v => v.ToObject()).ToList());
+
+    private static string Json(IReadOnlyDictionary<string, YValue> values) => CanonicalJson.Write(values.ToDictionary(kv => kv.Key, kv => kv.Value.ToObject()));
+
     private static string Json(List<string> written) => $"[{string.Join(',', written)}]";
 
     private static (YDoc Doc, YText Text, List<string> Deltas) ObservedText(string content)
@@ -98,7 +102,7 @@ public class YjsTypeParityTests
         o.GetText("t").Observe(e => deltas.Add(Json(e.Delta)));
         a.Transact(_ =>
         {
-            t.InsertEmbed(1, YValue.FromObject(new YMap(new Dictionary<string, object> { ["k"] = 1 })));
+            t.InsertEmbed(1, new YMap { ["k"] = 1 });
             t.Insert(3, "c");
         });
 
@@ -107,7 +111,7 @@ public class YjsTypeParityTests
         var delta = o.GetText("t").ToDelta();
         Assert.AreEqual(
             """[{"insert":"a"},{"insert":"<YMap>"},{"insert":"bc"}] [[{"retain":1},{"insert":"<YMap>"},{"retain":1},{"insert":"c"}]] 4 1""",
-            $"{Json(delta)} {Json(deltas)} {o.GetText("t").Length} {((YMap)delta[1].Inserted().ToObject()).Get("k")}");
+            $"{Json(delta)} {Json(deltas)} {o.GetText("t").Length} {((YMap)delta[1].Inserted().ToObject())["k"].ToObject()}");
     }
 
     [TestMethod]
@@ -119,7 +123,7 @@ public class YjsTypeParityTests
         var map = new YMap();
 
         text.InsertEmbed(1, map, new Dictionary<string, YValue> { ["bold"] = true });
-        map.Set("x", 2);
+        map["x"] = 2;
 
         Assert.AreEqual(
             """[{"insert":"a"},{"attributes":{"bold":true},"insert":"<YMap>"},{"insert":"b"}] AQYBAAQBAXQBYYQBAAFixgEAAQEEYm9sZAR0cnVlxwECAQEBxgEDAQEEYm9sZARudWxsKAABAwF4AX0CAA==""",
@@ -191,10 +195,10 @@ public class YjsTypeParityTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
-        array.Insert(0, new object[] { 1, 2 });
-        array.Delete(1, 1);
+        array.Insert(0, 1, 2);
+        array.RemoveRange(1, 1);
 
-        array.Push(new object[] { 3 });
+        array.Add(3);
 
         // Yjs: origin (1,1), no right origin.
         Assert.AreEqual("AQMBAAgBAWEBfQGBAQABiAEBAX0DAQEBAQE=", System.Convert.ToBase64String(doc.EncodeStateAsUpdate()));
@@ -205,47 +209,52 @@ public class YjsTypeParityTests
     {
         var doc = new YDoc();
         var array = doc.GetArray("a");
-        array.Insert(0, new object[] { 1, 2 });
+        array.Insert(0, 1, 2);
 
-        Assert.ThrowsExactly<System.ArgumentOutOfRangeException>(() => array.Insert(5, new object[] { 9 }));
+        Assert.ThrowsExactly<System.ArgumentOutOfRangeException>(() => array.Insert(5, 9));
 
         Assert.AreEqual("[1,2]", Json(array.ToArray()));
     }
 
     [TestMethod]
-    public void ArrayNotInADocument_InsertAndDeleteOutOfRange_SpliceAsJavaScript()
+    public void ArrayNotInADocument_InsertAndRemoveOutOfRange_Throw()
     {
         var doc = new YDoc();
         var array = new YArray();
-        array.Insert(3, new object[] { 1 });
-        array.Insert(-1, new object[] { 0 });
-        array.Delete(5, 3);
+        Assert.ThrowsExactly<System.ArgumentOutOfRangeException>(() => array.Insert(3, 1));
+        Assert.ThrowsExactly<System.ArgumentOutOfRangeException>(() => array.Insert(-1, 0));
+        array.Add(1, 2);
+        Assert.ThrowsExactly<System.ArgumentOutOfRangeException>(() => array.RemoveRange(1, 5));
 
-        doc.GetMap("m").Set("a", array);
+        doc.GetMap("m")["a"] = array;
 
-        Assert.AreEqual("[0,1]", Json(array.ToArray()));
+        Assert.AreEqual("[1,2]", Json(array.ToArray()));
     }
 
     [TestMethod]
-    public void ArraySlice_EmptyNegativeAndLongRanges_ReturnWhatYjsReturns()
+    public void ArraySlice_RangeOutsideTheArray_ThrowsAndTheRestIsTheValues()
     {
         var doc = new YDoc();
         var array = doc.GetArray("a");
-        array.Insert(0, new object[] { 1, 2, 3 });
+        array.Insert(0, 1, 2, 3);
 
-        Assert.AreEqual("[] [null,null,1,2,3] [2,3]", $"{Json(array.Slice(2, 1))} {Json(array.Slice(-5))} {Json(array.Slice(1, 10))}");
+        Assert.AreEqual("[3]", Json(array.Slice(2, 1)));
+        Assert.AreEqual("[]", Json(array.Slice(3, 0)));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => array.Slice(-5, 1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => array.Slice(1, 10));
     }
 
     [TestMethod]
-    public void MapGet_MissingKey_ReturnsNullAndTryGetTellsItApart()
+    public void MapIndexer_MissingKey_ThrowsAndTryGetValueTellsItApart()
     {
         var doc = new YDoc();
         var map = doc.GetMap("m");
-        map.Set("n", null);
+        map["n"] = YValue.Null;
 
-        var result = $"{map.Get("missing") ?? "null"} {map.TryGet("missing", out _)} {map.TryGet("n", out var n)} {n ?? "null"}";
+        var result = $"{map.TryGetValue("missing", out _)} {map.TryGetValue("n", out var n)} {n.IsNull}";
 
-        Assert.AreEqual("null False True null", result);
+        Assert.AreEqual("False True True", result);
+        Assert.ThrowsExactly<KeyNotFoundException>(() => map["missing"]);
     }
 
     [TestMethod]
@@ -264,7 +273,7 @@ public class YjsTypeParityTests
         text.Remove(0, 1);
         text.Insert(0, "a");
 
-        doc.GetMap("m").Set("t", text);
+        doc.GetMap("m")["t"] = text;
 
         Assert.AreEqual(string.Empty, text.ToString());
     }
@@ -278,9 +287,9 @@ public class YjsTypeParityTests
         map.Observe(e => kept = e);
         string keys = null;
         doc.AfterTransactionCleanup += (_, _) => keys = string.Join(",", kept.Keys.Select(kv => $"{kv.Key} {kv.Value.Action} {kv.Value.OldValue ?? "null"}"));
-        map.Set("k", 1);
+        map["k"] = 1;
 
-        map.Set("k", 2);
+        map["k"] = 2;
 
         Assert.AreEqual("k Update null", keys);
     }
@@ -292,12 +301,12 @@ public class YjsTypeParityTests
         // typeMapGetSnapshot(ymap, 'k', s) and typeMapGetAllSnapshot(ymap, s) give undefined and { k: undefined }.
         var doc = new YDoc();
         var map = doc.GetMap("m");
-        map.Set("k", 1);
+        map["k"] = 1;
         var snapshot = doc.CreateSnapshot();
-        map.Delete("k");
+        map.Remove("k");
 
-        var value = map.GetSnapshot("k", snapshot);
-        var all = map.GetAllSnapshot(snapshot);
+        var value = (map.TryGetValue("k", snapshot, out var __sv5) ? __sv5.ToObject() : null);
+        var all = map.ToDictionary(snapshot).ToDictionary(kv => kv.Key, kv => kv.Value.ToObject());
 
         Assert.AreEqual("null k=null", $"{value ?? "null"} {string.Join(",", all.Select(kv => $"{kv.Key}={kv.Value ?? "null"}"))}");
     }
@@ -352,11 +361,11 @@ public class YjsTypeParityTests
     {
         var array = new YDoc().GetArray("a");
         var bytes = new byte[] { 1, 2 };
-        array.Insert(0, new object[] { bytes });
+        array.Insert(0, bytes);
 
         bytes[0] = 9;
 
-        Assert.AreEqual("[1,2]", Json(((byte[])array.Get(0)).Select(b => (object)(int)b)));
+        Assert.AreEqual("[1,2]", Json(((byte[])array[0].ToObject()).Select(b => (object)(int)b)));
     }
 
     [TestMethod]
@@ -365,10 +374,10 @@ public class YjsTypeParityTests
         // 50 values in one item: both lookups end at that item, index 0. Yjs reuses the marker when
         // the distance is below length / 80 = 0.625 (a float division), so it keeps one marker.
         var array = new YDoc().GetArray("a");
-        array.Insert(0, Enumerable.Range(0, 50).Cast<object>().ToList());
+        array.Insert(0, Enumerable.Range(0, 50).Cast<object>().ToList().Select(YValue.FromObject).ToArray());
 
-        array.Get(10);
-        array.Get(20);
+        array[10].ToObject();
+        array[20].ToObject();
 
         var markers = (YArrayBase.ArraySearchMarkerCollection)typeof(YArrayBase)
             .GetField("_searchMarkers", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)
@@ -382,7 +391,7 @@ public class YjsTypeParityTests
         var doc = new YDoc();
         var fragment = doc.GetXmlFragment("x");
         var element = new YXmlElement("P");
-        fragment.Insert(0, new object[] { element });
+        fragment.Insert(0, element);
         var values = new Dictionary<string, object>
         {
             ["a"] = true,
@@ -399,11 +408,11 @@ public class YjsTypeParityTests
         };
         foreach (var (key, value) in values)
         {
-            element.SetAttribute(key, value);
+            element.SetAttribute(key, YValue.FromObject(value));
         }
 
         var text = new YXmlText();
-        fragment.Insert(1, new object[] { text, new YXmlHook("h") });
+        fragment.Insert(1, text, new YXmlHook("h"));
         text.Insert(0, "ab", new Dictionary<string, YValue> { ["color"] = "red", ["bold"] = true, ["link"] = YValue.FromObject(new Dictionary<string, object> { ["href"] = "u", ["a"] = 1 }), ["l"] = YValue.FromObject(new List<object> { 1, 2 }) });
         text.InsertEmbed(2, YValue.FromObject(new Dictionary<string, object> { ["img"] = 1 }));
 
@@ -426,8 +435,8 @@ public class YjsTypeParityTests
     {
         var doc = new YDoc();
         var element = new YXmlElement("p");
-        doc.GetXmlFragment("x").Insert(0, new object[] { element });
-        element.SetAttribute("n", null);
+        doc.GetXmlFragment("x").Insert(0, element);
+        element.SetAttribute("n", YValue.Null);
         element.SetAttribute("s", "v");
 
         Assert.AreEqual("""{"n":null,"s":"v"}""", Json(element.GetAttributes(doc.CreateSnapshot())));

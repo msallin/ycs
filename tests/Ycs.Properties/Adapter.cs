@@ -33,6 +33,19 @@ namespace Ycs.Properties
 {
     using Ycs.Corpus;
 
+    /// <summary>The length of a text, the count of an array, a fragment or a map.</summary>
+    internal static class TypeLength
+    {
+        internal static int Of(YType t) => t switch
+        {
+            YText text => text.Length,
+            YArray array => array.Count,
+            YXmlFragment fragment => fragment.Count,
+            YMap map => map.Count,
+            _ => 0,
+        };
+    }
+
     /// <summary>A shared type a script step can target: its path, kind, length (or size) and map keys.</summary>
     internal sealed record Target(List<object> Path, string Kind, int Length, IReadOnlyList<string> Keys);
 
@@ -703,7 +716,7 @@ namespace Ycs.Properties
                             return "skip";
                         }
 
-                        var rp = RelativePosition.FromIndex(t, Clamp(s.Int("at"), t.Length), (int)s.Int("assoc"));
+                        var rp = RelativePosition.FromIndex(t, Clamp(s.Int("at"), TypeLength.Of(t)), (int)s.Int("assoc"));
                         var bytes = rp.Encode();
                         _run.RelativePositions[ScriptRun.IdText(s.Get("id"))] = bytes;
                         return Obj(("b", ScriptRun.B64(bytes)), ("j", Replica.View(Replica.JsonOf(rp))));
@@ -745,19 +758,19 @@ namespace Ycs.Properties
                             return "skip";
                         }
 
-                        var at = Clamp(s.Int("at"), target.Length);
-                        var len = Clamp(s.Int("len"), target.Length - at);
+                        var at = Clamp(s.Int("at"), TypeLength.Of(target));
+                        var len = Clamp(s.Int("len"), TypeLength.Of(target) - at);
                         if (text != null)
                         {
                             text.Remove(at, len);
                         }
                         else if (target is YArray a)
                         {
-                            a.Delete(at, len);
+                            a.RemoveRange(at, len);
                         }
                         else
                         {
-                            ((YXmlFragment)target).Delete(at, len);
+                            ((YXmlFragment)target).RemoveRange(at, len);
                         }
 
                         return Missing.Value;
@@ -792,7 +805,7 @@ namespace Ycs.Properties
                         return "skip";
                     }
 
-                    SeqInsert(target, Clamp(s.Int("at"), target.Length), Values(s));
+                    SeqInsert(target, Clamp(s.Int("at"), TypeLength.Of(target)), Values(s));
                     return Missing.Value;
                 case "push":
                     if (!isSeq)
@@ -802,11 +815,11 @@ namespace Ycs.Properties
 
                     if (target is YArray pa)
                     {
-                        pa.Push(Values(s));
+                        pa.Add(Values(s).Select(YValue.FromObject).ToArray());
                     }
                     else
                     {
-                        ((YXmlFragment)target).Push(Values(s));
+                        InsertRaw((YXmlFragment)target, ((YXmlFragment)target).Count, Values(s));
                     }
 
                     return Missing.Value;
@@ -818,11 +831,11 @@ namespace Ycs.Properties
 
                     if (target is YArray ua)
                     {
-                        ua.Unshift(Values(s));
+                        ua.Insert(0, Values(s).Select(YValue.FromObject).ToArray());
                     }
                     else
                     {
-                        ((YXmlFragment)target).Unshift(Values(s));
+                        InsertRaw((YXmlFragment)target, 0, Values(s));
                     }
 
                     return Missing.Value;
@@ -833,15 +846,15 @@ namespace Ycs.Properties
                             return "skip";
                         }
 
-                        var child = s.Get("ref") == null || f.Length == 0 ? null : f.Get(Clamp(s.Int("ref"), f.Length - 1));
-                        if (child is not (null or YType))
+                        var child = s.Get("ref") == null || f.Count == 0 ? null : f[Clamp(s.Int("ref"), f.Count - 1)];
+                        if (s.Get("ref") != null && f.Count != 0 && child == null)
                         {
                             // Yjs takes a reference that is not a type as the item itself and throws on it ('n'.right)
                             // before it changes anything; InsertAfter's parameter cannot hold one.
                             throw new InvalidOperationException("The reference is not a type: Yjs' insertAfter throws.");
                         }
 
-                        f.InsertAfter((YType)child, Values(s));
+                        f.InsertAfter(child, Values(s).Cast<YType>().ToArray());
                         return Missing.Value;
                     }
                 case "set":
@@ -850,7 +863,7 @@ namespace Ycs.Properties
                         return "skip";
                     }
 
-                    ((YMap)target).Set(s.Str("key"), Val(s.Get("value")));
+                    ((YMap)target)[s.Str("key")] = YValue.FromObject(Val(s.Get("value")));
                     return Missing.Value;
                 case "mdel":
                     if (k != "map")
@@ -858,7 +871,7 @@ namespace Ycs.Properties
                         return "skip";
                     }
 
-                    ((YMap)target).Delete(s.Str("key"));
+                    ((YMap)target).Remove(s.Str("key"));
                     return Missing.Value;
                 case "clear":
                     if (k != "map")
@@ -871,7 +884,7 @@ namespace Ycs.Properties
                 case "setAttr":
                     if (target is YXmlElement se)
                     {
-                        se.SetAttribute(s.Str("key"), Val(s.Get("value")));
+                        se.SetAttribute(s.Str("key"), YValue.FromObject(Val(s.Get("value"))));
                     }
                     else if (text != null)
                     {
@@ -992,12 +1005,12 @@ namespace Ycs.Properties
 
                         if (isSeq)
                         {
-                            return ((YArrayBase)target).ToArraySnapshot(snap).Select(Replica.View).ToList();
+                            return Replica.Items(target, snap).Select(Replica.View).ToList();
                         }
 
                         if (k == "map")
                         {
-                            return Replica.View(target.GetAllSnapshot(snap));
+                            return Replica.View(((YMap)target).ToDictionary(snap).ToDictionary(kv => kv.Key, kv => kv.Value.ToObject()));
                         }
 
                         return "skip";
@@ -1044,15 +1057,19 @@ namespace Ycs.Properties
 
         private static List<object> Values(Dictionary<string, object> s) => s.List("values").Select(Val).ToList();
 
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "InsertRaw")]
+        private static extern void InsertRaw(YXmlFragment fragment, int index, ICollection<object> content);
+
+        // An XML fragment takes any value from a foreign client, which the typed Insert refuses: the script drives the raw insert.
         private static void SeqInsert(YType t, int at, List<object> values)
         {
             if (t is YArray a)
             {
-                a.Insert(at, values);
+                a.Insert(at, values.Select(YValue.FromObject).ToArray());
             }
             else
             {
-                ((YXmlFragment)t).Insert(at, values);
+                InsertRaw((YXmlFragment)t, at, values);
             }
         }
 
@@ -1155,7 +1172,7 @@ namespace Ycs.Properties
             {
                 case "text": return PrelimText(s.Has("s") ? new YText(s.Str("s")) : new YText(), s);
                 case "xmlt": return PrelimText(s.Has("s") ? new YXmlText(s.Str("s")) : new YXmlText(), s);
-                case "array": return new YArray((s.List("v") ?? []).Select(Val).ToList());
+                case "array": return new YArray((s.List("v") ?? []).Select(Val).Select(YValue.FromObject).ToArray());
                 case "map":
                     {
                         var entries = new Dictionary<string, object>();
@@ -1164,14 +1181,14 @@ namespace Ycs.Properties
                             entries[(string)kv[0]] = Val(kv[1]);
                         }
 
-                        return new YMap(entries);
+                        return new YMap(entries.Select(kv => KeyValuePair.Create(kv.Key, YValue.FromObject(kv.Value))));
                     }
                 case "xmlf":
                     {
                         var f = new YXmlFragment();
                         if (s.List("v") is { } children)
                         {
-                            f.Insert(0, children.Select(Val).ToList());
+                            f.Insert(0, children.Select(Val).ToList().Cast<YType>().ToArray());
                         }
 
                         return f;
@@ -1181,12 +1198,12 @@ namespace Ycs.Properties
                         var e = new YXmlElement(s.Str("n"));
                         foreach (List<object> kv in s.List("a") ?? [])
                         {
-                            e.SetAttribute((string)kv[0], Val(kv[1]));
+                            e.SetAttribute((string)kv[0], YValue.FromObject(Val(kv[1])));
                         }
 
                         if (s.List("v") is { } children)
                         {
-                            e.Insert(0, children.Select(Val).ToList());
+                            e.Insert(0, children.Select(Val).ToList().Cast<YType>().ToArray());
                         }
 
                         return e;
@@ -1361,7 +1378,7 @@ namespace Ycs.Properties
             _ => null,
         };
 
-        internal static int LengthOf(YType t) => t is YMap m ? m.Count : t.Length;
+        internal static int LengthOf(YType t) => t is YMap m ? m.Count : TypeLength.Of(t);
 
         private const long MaxSafeInteger = (1L << 53) - 1;
 
@@ -1512,12 +1529,28 @@ namespace Ycs.Properties
             return (object)o;
         }).ToList();
 
-        private static Dictionary<string, object> MapView(IEnumerable<KeyValuePair<string, object>> entries)
+        /// <summary>The values of an array or an XML fragment, as stored, live or as of a snapshot.</summary>
+        internal static List<object> Items(YType t, Snapshot snap) => (t, snap) switch
+        {
+            (YArray a, null) => a.Select(v => v.ToObject()).ToList(),
+            (YArray a, _) => a.ToArray(snap).Select(v => v.ToObject()).ToList(),
+            (_, null) => RawValues((YXmlFragment)t).ToList(),
+            _ => Snapshotted((YArrayBase)t, snap),
+        };
+
+        // The children of a fragment as stored: a foreign client may have written a value that is not a type, which the typed reads give as null.
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "EnumerateValues")]
+        private static extern IEnumerable<object> RawValues(YXmlFragment fragment);
+
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "ContentAtSnapshot")]
+        private static extern List<object> Snapshotted(YArrayBase list, Snapshot snapshot);
+
+        private static Dictionary<string, object> MapView(IEnumerable<KeyValuePair<string, YValue>> entries)
         {
             var o = new Dictionary<string, object>();
             foreach (var (k, x) in entries)
             {
-                o[k] = View(x);
+                o[k] = View(x.ToObject());
             }
 
             return o;
@@ -1527,10 +1560,10 @@ namespace Ycs.Properties
         {
             "text" => Obj(("$t", "text"), ("d", DeltaView(((YText)t).ToDelta())), ("a", AttrsView(((YText)t).GetAttributes()))),
             "xmlt" => Obj(("$t", "xmlt"), ("d", DeltaView(((YText)t).ToDelta())), ("a", AttrsView(((YText)t).GetAttributes()))),
-            "array" => Obj(("$t", "array"), ("v", ((YArray)t).ToArray().Select(View).ToList())),
+            "array" => Obj(("$t", "array"), ("v", ((YArray)t).Select(v => View(v.ToObject())).ToList())),
             "map" => Obj(("$t", "map"), ("v", MapView((YMap)t))),
-            "xmlf" => Obj(("$t", "xmlf"), ("v", ((YXmlFragment)t).ToArray().Select(View).ToList())),
-            "xmle" => Obj(("$t", "xmle"), ("n", ((YXmlElement)t).NodeName), ("a", AttrsView(((YXmlElement)t).GetAttributes())), ("v", ((YXmlFragment)t).ToArray().Select(View).ToList())),
+            "xmlf" => Obj(("$t", "xmlf"), ("v", Items(t, null).Select(View).ToList())),
+            "xmle" => Obj(("$t", "xmle"), ("n", ((YXmlElement)t).NodeName), ("a", AttrsView(((YXmlElement)t).GetAttributes().Select(kv => KeyValuePair.Create(kv.Key, kv.Value.ToObject())))), ("v", Items(t, null).Select(View).ToList())),
             "hook" => Obj(("$t", "hook"), ("n", ((YXmlHook)t).HookName), ("v", MapView((YMap)t))),
             _ => Obj(("$t", "?")),
         };
@@ -1573,7 +1606,7 @@ namespace Ycs.Properties
                 case "hook":
                     foreach (var (key, v) in (YMap)parent)
                     {
-                        if (ReferenceEquals(v, t))
+                        if (v.TryGetSharedType(out YType nested) && ReferenceEquals(nested, t))
                         {
                             return key;
                         }
@@ -1598,7 +1631,7 @@ namespace Ycs.Properties
                     }
                 default:
                     {
-                        var items = parent is YArray a ? a.ToArray() : ((YXmlFragment)parent).ToArray();
+                        var items = Items(parent, null);
                         for (var i = 0; i < items.Count; i++)
                         {
                             if (ReferenceEquals(items[i], t))
@@ -1627,12 +1660,12 @@ namespace Ycs.Properties
                 if (path[i] is JsonNumber or long)
                 {
                     var p = path[i] is JsonNumber n ? n.Long : (long)path[i];
-                    if (k is not ("array" or "xmlf" or "xmle") || p < 0 || p >= t.Length)
+                    if (k is not ("array" or "xmlf" or "xmle") || p < 0 || p >= TypeLength.Of(t))
                     {
                         return null;
                     }
 
-                    next = t is YArray a ? a.Get((int)p) : ((YXmlFragment)t).Get((int)p);
+                    next = t is YArray a ? a[(int)p].ToObject() : ((YXmlFragment)t)[(int)p];
                 }
                 else
                 {
@@ -1642,7 +1675,7 @@ namespace Ycs.Properties
                     }
 
                     var map = (YMap)t;
-                    next = map.ContainsKey((string)path[i]) ? map.Get((string)path[i]) : null;
+                    next = map.ContainsKey((string)path[i]) ? map[(string)path[i]].ToObject() : null;
                 }
 
                 t = next as YType;
@@ -1670,7 +1703,7 @@ namespace Ycs.Properties
         private static void Visit(YType t, List<object> path, List<Target> into, int depth)
         {
             var k = KindOf(t);
-            var keys = t is YMap m ? m.Keys().ToList() : (IReadOnlyList<string>)[];
+            var keys = t is YMap m ? m.Keys.ToList() : (IReadOnlyList<string>)[];
             into.Add(new Target(path, k, LengthOf(t), keys));
             if (depth > 6)
             {
@@ -1681,7 +1714,7 @@ namespace Ycs.Properties
             {
                 foreach (var (key, v) in map)
                 {
-                    if (v is YType child)
+                    if (v.TryGetSharedType(out YType child))
                     {
                         Visit(child, [.. path, key], into, depth + 1);
                     }
@@ -1689,7 +1722,7 @@ namespace Ycs.Properties
             }
             else if (k is "array" or "xmlf" or "xmle")
             {
-                var items = t is YArray a ? a.ToArray() : ((YXmlFragment)t).ToArray();
+                var items = Items(t, null);
                 for (var i = 0; i < items.Count; i++)
                 {
                     if (items[i] is YType child)
@@ -1940,7 +1973,7 @@ namespace Ycs.Properties
                 var where = Canonical(target.Path);
                 if (t is YMap map)
                 {
-                    var keys = map.Keys().ToList();
+                    var keys = map.Keys.ToList();
                     if (map.Count != keys.Count)
                     {
                         differences.Add($"{where}: Count {map.Count}, {keys.Count} keys");
@@ -1951,9 +1984,9 @@ namespace Ycs.Properties
 
                 var (length, text) = CountedOf(t);
 
-                if (t.Length != length)
+                if (TypeLength.Of(t) != length)
                 {
-                    differences.Add($"{where}: Length {t.Length}, items count {length}");
+                    differences.Add($"{where}: Length {TypeLength.Of(t)}, items count {length}");
                 }
 
                 if (t is YText yt and not YXmlText && yt.ToString() != text)

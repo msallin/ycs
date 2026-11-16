@@ -12,6 +12,11 @@ namespace Ycs;
 
 internal sealed partial class StructStore
 {
+    /// <summary>One live slot for every struct of <see cref="Clients"/> (shadows the objects; <see cref="AbstractStruct.AttachSlot"/>).</summary>
+    internal readonly Slab Slab = new();
+
+    internal readonly ClientTable ClientTable = new();
+
     // TODO: [alekseyk] To private?
     public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
 
@@ -138,6 +143,7 @@ internal sealed partial class StructStore
         }
 
         structs.Add(str);
+        str.AttachSlot(this);
         Version++;
     }
 
@@ -303,6 +309,7 @@ internal sealed partial class StructStore
 
         int index = FindIndexSS(structs, oldStruct.Id.Clock);
         structs.Replace(index, newStruct);
+        newStruct.TakeSlotFrom(oldStruct);
         oldStruct.MarkDetached();
         Departures++;
     }

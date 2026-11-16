@@ -14,9 +14,9 @@ public class RelativePositionYjsTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("arr");
-        array.Insert(0, new object[] { "x", "y" });
+        array.Insert(0, "x", "y");
         var nested = new YText();
-        array.Insert(2, new object[] { nested });
+        array.Insert(2, nested);
         nested.Insert(0, "abc");
         return (doc, array, nested);
     }
@@ -39,7 +39,7 @@ public class RelativePositionYjsTests
     {
         var (_, array, _) = NestedText();
         var empty = new YText();
-        array.Insert(3, new object[] { empty });
+        array.Insert(3, empty);
 
         Assert.AreEqual("02010600", Convert.ToHexStringLower(RelativePosition.FromIndex(empty, 0).Encode()));
     }

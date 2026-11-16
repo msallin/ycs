@@ -10,7 +10,7 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-public abstract partial class YArrayBase : YType, IEnumerable<object>
+public abstract partial class YArrayBase : YType
 {
     internal sealed class ArraySearchMarker
     {

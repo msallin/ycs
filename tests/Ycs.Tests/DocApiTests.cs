@@ -32,7 +32,7 @@ public class DocApiTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 7 });
         doc.GetText("text").Insert(0, "hello");
-        doc.GetMap("map").Set("k", 1.5);
+        doc.GetMap("map")["k"] = 1.5;
 
         var v1 = new ArrayBufferWriter<byte>();
         doc.EncodeStateAsUpdate(v1);

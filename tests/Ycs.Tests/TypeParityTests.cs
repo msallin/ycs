@@ -26,20 +26,20 @@ public class TypeParityTests
         var doc = new YDoc();
         var map = doc.GetMap("map");
 
-        map.Set("a", 1);
-        map.Set("b", 2);
+        map["a"] = 1;
+        map["b"] = 2;
 
-        Assert.IsTrue(map.Has("a"));
         Assert.IsTrue(map.ContainsKey("a"));
-        Assert.IsFalse(map.Has("missing"));
-        Assert.AreEqual(2, map.Size);
-        Assert.AreEqual(map.Count, map.Size);
+        Assert.IsTrue(map.ContainsKey("a"));
+        Assert.IsFalse(map.ContainsKey("missing"));
+        Assert.AreEqual(2, map.Count);
+        Assert.AreEqual(map.Count, map.Count);
 
         map.Clear();
 
-        Assert.AreEqual(0, map.Size);
-        Assert.IsFalse(map.Has("a"));
-        Assert.IsFalse(map.Has("b"));
+        Assert.AreEqual(0, map.Count);
+        Assert.IsFalse(map.ContainsKey("a"));
+        Assert.IsFalse(map.ContainsKey("b"));
     }
 
     [TestMethod]
@@ -47,7 +47,7 @@ public class TypeParityTests
     {
         // Clear() on a not-yet-integrated (prelim) map must not throw and must empty it.
         var map = new YMap();
-        map.Set("a", 1);
+        map["a"] = 1;
         Assert.AreEqual(1, map.Count);
 
         map.Clear();
@@ -59,19 +59,18 @@ public class TypeParityTests
     {
         var doc = new YDoc();
         var map = doc.GetMap("map");
-        map.Set("a", 1);
-        map.Set("b", 2);
-        map.Set("c", 3);
+        map["a"] = 1;
+        map["b"] = 2;
+        map["c"] = 3;
 
         var seenViaForEach = new Dictionary<string, object>();
-        map.ForEach((value, key, m) =>
+        foreach (var (key, value) in map)
         {
-            Assert.AreSame(map, m);
-            seenViaForEach[key] = value;
-        });
+            seenViaForEach[key] = value.ToObject();
+        }
         CollectionAssert.AreEquivalent(new[] { "a", "b", "c" }, seenViaForEach.Keys.ToList());
 
-        var seenViaEntries = map.Entries().ToDictionary(kvp => kvp.Key, kvp => kvp.Value);
+        var seenViaEntries = map.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToObject());
         CollectionAssert.AreEquivalent(seenViaForEach, seenViaEntries);
     }
 
@@ -80,16 +79,16 @@ public class TypeParityTests
     {
         var doc = new YDoc();
         var map = doc.GetMap("map");
-        map.Set("str", "hello");
-        map.Set("int", 42);
+        map["str"] = "hello";
+        map["int"] = 42;
 
         var nested = new YMap();
-        map.Set("nested", nested);
-        nested.Set("deep", "value");
+        map["nested"] = nested;
+        nested["deep"] = "value";
 
         var innerArray = new YArray();
-        nested.Set("list", innerArray);
-        innerArray.Push(new object[] { 1, 2, 3 });
+        nested["list"] = innerArray;
+        innerArray.Add(1, 2, 3);
 
         var json = map.ToJson() as IDictionary<string, object>;
         Assert.IsNotNull(json);
@@ -114,11 +113,11 @@ public class TypeParityTests
         // the original. This proves the fix.
         var doc = new YDoc();
         var map = doc.GetMap("map");
-        map.Set("a", 1);
+        map["a"] = 1;
 
         var nested = new YMap();
-        map.Set("nested", nested);
-        nested.Set("x", 1);
+        map["nested"] = nested;
+        nested["x"] = 1;
 
         var clone = map.Clone();
 
@@ -126,17 +125,17 @@ public class TypeParityTests
         // somewhere in the Ydoc"), a freshly cloned type is prelim/unattached: its values live in
         // _prelimContent, not the Item-backed _map that Get() reads from. Attach it (into an
         // unrelated container, same or different doc -- doesn't matter) before reading it back.
-        doc.GetArray("holder").Insert(0, new object[] { clone });
+        doc.GetArray("holder").Insert(0, clone);
 
-        Assert.AreEqual(1, clone.Get("a"));
-        var clonedNested = clone.Get("nested") as YMap;
+        Assert.AreEqual(1, clone["a"].ToObject());
+        var clonedNested = clone["nested"].ToObject() as YMap;
         Assert.IsNotNull(clonedNested);
         Assert.AreNotSame(nested, clonedNested);
-        Assert.AreEqual(1, clonedNested.Get("x"));
+        Assert.AreEqual(1, clonedNested["x"].ToObject());
 
         // Mutating the (now-attached) clone must not affect the original.
-        doc.Transact(_ => clone.Set("a", 2));
-        Assert.AreEqual(1, map.Get("a"));
+        doc.Transact(_ => clone["a"] = 2);
+        Assert.AreEqual(1, map["a"].ToObject());
     }
 
     [TestMethod]
@@ -144,29 +143,27 @@ public class TypeParityTests
     {
         var doc = new YDoc();
         var arr = doc.GetArray("array");
-        arr.Push(new object[] { 1, 2, 3 });
+        arr.Add(1, 2, 3);
 
-        Assert.AreEqual(1, arr[0]);
-        Assert.AreEqual(2, arr[1]);
-        Assert.AreEqual(3, arr[2]);
-        Assert.AreEqual(arr.Get(1), arr[1]);
+        Assert.AreEqual<YValue>(1, arr[0]);
+        Assert.AreEqual<YValue>(2, arr[1]);
+        Assert.AreEqual<YValue>(3, arr[2]);
 
-        var doubled = arr.Map((v, i, a) => (int)v * 2);
+        var doubled = arr.Select(v => v.GetInt32() * 2).ToList();
         CollectionAssert.AreEqual(new[] { 2, 4, 6 }, doubled);
 
         var seen = new List<object>();
-        arr.ForEach((v, i, a) =>
+        foreach (var v in arr)
         {
-            Assert.AreSame(arr, a);
-            seen.Add(v);
-        });
+            seen.Add(v.ToObject());
+        }
         CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, seen);
     }
 
     [TestMethod]
-    public void TestYArrayFromConstructsPrelimArray()
+    public void TestYArrayConstructorMakesPrelimArray()
     {
-        var arr = YArray.From(new object[] { "a", "b", "c" });
+        var arr = new YArray("a", "b", "c");
 
         // Length reads _prelimContent directly and is available immediately, but (per Yjs'
         // contract) the *content* of a prelim/unattached type is only readable once it has been
@@ -174,11 +171,11 @@ public class TypeParityTests
         Assert.AreEqual(3, arr.Length);
 
         var doc = new YDoc();
-        doc.GetArray("array").Insert(0, new object[] { arr });
+        doc.GetArray("array").Insert(0, arr);
 
-        var attached = doc.GetArray("array").Get(0) as YArray;
+        var attached = doc.GetArray("array")[0].ToObject() as YArray;
         Assert.AreEqual(3, attached.Length);
-        CollectionAssert.AreEqual(new object[] { "a", "b", "c" }, attached.ToArray().ToList());
+        CollectionAssert.AreEqual(new object[] { "a", "b", "c" }, attached.Select(v => v.ToObject()).ToList());
     }
 
     [TestMethod]
@@ -186,11 +183,11 @@ public class TypeParityTests
     {
         var doc = new YDoc();
         var arr = doc.GetArray("array");
-        arr.Push(new object[] { "a", 1 });
+        arr.Add("a", 1);
 
         var nestedMap = new YMap();
-        nestedMap.Set("k", "v");
-        arr.Push(new object[] { nestedMap });
+        nestedMap["k"] = "v";
+        arr.Add(nestedMap);
 
         var json = arr.ToJson() as IList<object>;
         Assert.IsNotNull(json);
@@ -222,15 +219,15 @@ public class TypeParityTests
 
         int callCount = 0;
         var subscription = map.Observe(_ => callCount++);
-        map.Set("a", 1);
+        map["a"] = 1;
         Assert.AreEqual(1, callCount);
 
         subscription.Dispose();
-        map.Set("b", 2);
+        map["b"] = 2;
         Assert.AreEqual(1, callCount, "Disposing the subscription must remove the handler.");
 
         subscription.Dispose();
-        map.Set("c", 3);
+        map["c"] = 3;
         Assert.AreEqual(1, callCount, "Disposing twice changes nothing.");
     }
 
@@ -240,15 +237,15 @@ public class TypeParityTests
         var doc = new YDoc();
         var map = doc.GetMap("map");
         var nested = new YMap();
-        map.Set("nested", nested);
+        map["nested"] = nested;
 
         int callCount = 0;
         var subscription = map.ObserveDeep((_, _) => callCount++);
-        nested.Set("x", 1);
+        nested["x"] = 1;
         Assert.AreEqual(1, callCount);
 
         subscription.Dispose();
-        nested.Set("y", 2);
+        nested["y"] = 2;
         Assert.AreEqual(1, callCount, "Disposing the subscription must remove the deep handler.");
     }
 }

@@ -20,7 +20,7 @@ Editor documents written by `y-prosemirror`, `y-quill`, Tiptap and BlockNote dec
 
 | | Yjs | Ycs |
 | --- | --- | --- |
-| v1 (the default; what y-protocols and every provider speaks) | `Y.encodeStateAsUpdate` / `Y.applyUpdate` | `EncodeStateAsUpdate` / `ApplyUpdate` (or `…V1`) |
+| v1 (the default; what y-protocols and every provider speaks) | `Y.encodeStateAsUpdate` / `Y.applyUpdate` | `EncodeStateAsUpdate` / `ApplyUpdate` |
 | v2 (denser) | `Y.encodeStateAsUpdateV2` / `Y.applyUpdateV2` | `EncodeStateAsUpdate(format: UpdateFormat.V2)` / `ApplyUpdate(format: UpdateFormat.V2)` |
 | state vector | `Y.encodeStateVector` | `EncodeStateVector` |
 | update events | `doc.on('update')`, `doc.on('updateV2')` | `YDoc.Updated`, `YDoc.UpdatedV2` |
@@ -32,9 +32,9 @@ Editor documents written by `y-prosemirror`, `y-quill`, Tiptap and BlockNote dec
 | Area | Ycs |
 | --- | --- |
 | Shared types | `YText` (formatting, embeds, embedded shared types), `YMap`, `YArray`, `YXmlFragment`, `YXmlElement`, `YXmlText`, `YXmlHook`, nested types, subdocuments |
-| XML traversal | `YXmlFragment.QuerySelector`, `QuerySelectorAll`, `YXmlTreeWalker` |
-| Updates without a document (`UpdateOperations`) | `MergeUpdates`, `DiffUpdate`, `EncodeStateVectorFromUpdate`, `ParseUpdateMeta`, `DecodeUpdate`, `ConvertUpdateFormatV1ToV2` / `V2ToV1`, `DescribeUpdate`, each with a `…V2` sibling |
-| Versions and positions | `Snapshot` (`EncodeSnapshot`, `DecodeSnapshot`, `EqualSnapshots`, `SnapshotContainsUpdate`, `YDoc.CreateDocFromSnapshot`), `RelativePosition` and `AbsolutePosition` (binary and JSON forms), `PermanentUserData`; all byte-compatible |
+| XML traversal | `YXmlFragment.QuerySelector`, `QuerySelectorAll`, `CreateTreeWalker` |
+| Updates without a document (`YUpdate`) | `Merge`, `Diff`, `EncodeStateVector`, `ParseMeta`, `Decode`, `Convert`, `Describe`, each with a `format` argument |
+| Versions and positions | `Snapshot` (`Encode`, `Decode`, `Equals`, `ContainsUpdate`, `YDoc.CreateDocFromSnapshot`), `RelativePosition` and `AbsolutePosition` (binary and JSON forms), `PermanentUserData`; all byte-compatible |
 | Undo | `UndoManager` with Yjs 13.6's behaviour |
 
 Snapshots are only meaningful on a document created with `GarbageCollection = false` (`new YDoc(new YDocOptions { GarbageCollection = false })`),
@@ -59,7 +59,7 @@ as in Yjs.
   `beforeTransaction` leaves the document broken for good. Ycs finishes the cleanup and then rethrows, so the document
   stays usable ([API reference](api.md#exceptions-of-handlers)).
 - **The API is .NET-shaped where it helps:** events, `IDisposable` subscriptions, spans and `IBufferWriter<byte>`
-  for encoding. [The API reference](api.md) compares every difference.
+  for encoding. [The API reference](api.md) describes the shape.
 
 ## Performance
 

@@ -501,11 +501,11 @@ public class CodecReuseTests
         text.Format(0, 5, new Dictionary<string, YValue> { ["bold"] = true });
         text.Remove(2, 2);
         var map = doc.GetMap("map");
-        map.Set("number", clientId);
-        map.Set("list", new List<object> { "a", 1, true });
+        map["number"] = clientId;
+        map["list"] = YValue.FromObject(new List<object> { "a", 1, true });
         var nested = new YArray();
-        map.Set("nested", nested);
-        nested.Insert(0, new object[] { "x", "y" });
+        map["nested"] = nested;
+        nested.Insert(0, "x", "y");
         return doc;
     }
 
@@ -525,7 +525,7 @@ public class CodecReuseTests
 
         var peer = new YDoc(new YDocOptions { ClientId = 4 });
         peer.ApplyUpdate(doc.EncodeStateAsUpdate());
-        peer.GetMap("map").Set("k", "v");
+        peer.GetMap("map")["k"] = "v";
         peer.GetText("text").Remove(1, 3);
         doc.ApplyUpdate(peer.EncodeStateAsUpdate());
         return doc;

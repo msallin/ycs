@@ -56,10 +56,10 @@ public class ClientStructsTests
                         text.Remove(at, Math.Min(1 + random.Next(3), text.Length - at));
                         break;
                     case 2:
-                        array.Insert(random.Next(array.Length + 1), new object[] { (long)step, (long)round });
+                        array.Insert(random.Next(array.Length + 1), (long)step, (long)round);
                         break;
                     case 3 when array.Length > 0:
-                        array.Delete(random.Next(array.Length), 1);
+                        array.RemoveRange(random.Next(array.Length), 1);
                         break;
                     case 4:
                         remote.ApplyUpdate(doc.EncodeStateAsUpdate(remote.EncodeStateVector(), format: UpdateFormat.V2), format: UpdateFormat.V2);
@@ -98,10 +98,10 @@ public class ClientStructsTests
         {
             var doc = new YDoc(new YDocOptions { ClientId = 1 });
             var array = doc.GetArray("a");
-            array.Insert(0, new object[] { 0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L });
+            array.Insert(0, 0L, 1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L);
             for (var k = 0; k < 6; k++)
             {
-                array.Delete(k, 1);
+                array.RemoveRange(k, 1);
             }
 
             var structs = doc.Store.Clients[1];
@@ -110,7 +110,7 @@ public class ClientStructsTests
             {
                 while (array.Length > 0)
                 {
-                    array.Delete(0, 1);
+                    array.RemoveRange(0, 1);
                 }
             });
 

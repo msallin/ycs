@@ -28,7 +28,7 @@ public class SubdocumentParityTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var events = Events(doc);
 
-        doc.GetArray("a").Push([new YDoc(new YDocOptions { Guid = "doc-1", AutoLoad = false })]);
+        doc.GetArray("a").Add(new YDoc(new YDocOptions { Guid = "doc-1", AutoLoad = false }));
 
         CollectionAssert.AreEqual(new[] { "doc-1||doc-1" }, events);
     }
@@ -38,7 +38,7 @@ public class SubdocumentParityTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
 
-        doc.GetMap("m").Set("s", new YDoc(new YDocOptions { Guid = "g1" }));
+        doc.GetMap("m")["s"] = new YDoc(new YDocOptions { Guid = "g1" });
 
         Assert.AreEqual(
             ("AQEBACkBAW0BcwJnMXYAAA==", "AAABAQAAASkIBG1zZzFBAAIBAQAAAQEAdgAA"),
@@ -50,13 +50,13 @@ public class SubdocumentParityTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
 
-        doc.GetMap("m").Set("s", new YDoc(new YDocOptions
+        doc.GetMap("m")["s"] = new YDoc(new YDocOptions
         {
             Guid = "g2",
             GarbageCollection = false,
             AutoLoad = true,
             Meta = YValue.FromObject(new Dictionary<string, object> { ["a"] = 1 }),
-        }));
+        });
 
         Assert.AreEqual("AQEBACkBAW0BcwJnMnYDAmdjeQhhdXRvTG9hZHgEbWV0YXYBAWF9AQA=", S(doc.EncodeStateAsUpdate()));
     }
@@ -90,7 +90,7 @@ public class SubdocumentParityTests
         var doc = new YDoc();
 
         doc.ApplyUpdate(B("AQEBACkBAW0BcwlpdGVtLWd1aWR2AwJnY3gEZ3VpZHcJb3B0cy1ndWlkCGF1dG9Mb2FkeQA="));
-        var subdoc = (YDoc)doc.GetMap("m").Get("s");
+        var subdoc = (YDoc)doc.GetMap("m")["s"].ToObject();
 
         Assert.AreEqual(
             ("opts-guid", false, "AQEBACkBAW0BcwlvcHRzLWd1aWR2AAA="),
@@ -115,7 +115,7 @@ public class SubdocumentParityTests
         var events = Events(doc);
         var subdoc = new YDoc(new YDocOptions { Guid = "x" });
 
-        doc.GetMap("m").Set("s", subdoc);
+        doc.GetMap("m")["s"] = subdoc;
 
         Assert.AreEqual(("x||x", 77L), (string.Join(";", events), (long)subdoc.ClientId));
     }
@@ -130,8 +130,8 @@ public class SubdocumentParityTests
     public void Destroy_ParentWithTwoSubdocuments_DestroysBoth()
     {
         var doc = new YDoc();
-        doc.GetMap("m").Set("a", new YDoc(new YDocOptions { Guid = "a" }));
-        doc.GetMap("m").Set("b", new YDoc(new YDocOptions { Guid = "b" }));
+        doc.GetMap("m")["a"] = new YDoc(new YDocOptions { Guid = "a" });
+        doc.GetMap("m")["b"] = new YDoc(new YDocOptions { Guid = "b" });
         var events = Events(doc);
 
         doc.Destroy();
@@ -146,11 +146,11 @@ public class SubdocumentParityTests
     {
         var doc = new YDoc();
         var subdoc = new YDoc(new YDocOptions { Guid = "al", AutoLoad = true });
-        doc.GetMap("m").Set("s", subdoc);
+        doc.GetMap("m")["s"] = subdoc;
         var events = Events(doc);
 
         subdoc.Destroy();
-        var replacement = (YDoc)doc.GetMap("m").Get("s");
+        var replacement = (YDoc)doc.GetMap("m")["s"].ToObject();
         var shouldLoad = replacement.ShouldLoad;
         replacement.Load();
 
@@ -165,10 +165,10 @@ public class SubdocumentParityTests
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var map = doc.GetMap("m");
         var subdoc = new YDoc(new YDocOptions { Guid = "del" });
-        map.Set("s", subdoc);
+        map["s"] = subdoc;
         var item = subdoc._item;
 
-        map.Delete("s");
+        map.Remove("s");
         var content = (ContentDoc)item.Content;
 
         Assert.AreEqual(("del", false), (content.Doc?.Guid, ReferenceEquals(content.Doc, subdoc)));
@@ -179,11 +179,11 @@ public class SubdocumentParityTests
     {
         var doc = new YDoc();
         var subdoc = new YDoc();
-        doc.GetMap("m").Set("a", subdoc);
+        doc.GetMap("m")["a"] = subdoc;
 
-        doc.GetMap("m").Set("b", subdoc);
+        doc.GetMap("m")["b"] = subdoc;
 
-        Assert.AreSame(subdoc, doc.GetMap("m").Get("b"));
+        Assert.AreSame(subdoc, doc.GetMap("m")["b"].ToObject());
     }
 
     [TestMethod]
@@ -191,15 +191,15 @@ public class SubdocumentParityTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 5 });
         var a = new YDoc(new YDocOptions { Guid = "A" });
-        doc.GetMap("m").Set("a", a);
+        doc.GetMap("m")["a"] = a;
         var b = new YDoc(new YDocOptions { Guid = "B" });
-        a.GetMap("m").Set("b", b);
+        a.GetMap("m")["b"] = b;
         var events = new List<string>();
         doc.SubdocsChanged += (_, e) => events.Add("d:" + Describe(e));
         a.SubdocsChanged += (_, e) => events.Add("a:" + Describe(e));
 
         doc.Destroy();
-        var replacement = (YDoc)doc.GetMap("m").Get("a");
+        var replacement = (YDoc)doc.GetMap("m")["a"].ToObject();
 
         Assert.AreEqual(
             ("a:B|B|;d:A|A|;a:B|B|", 5L, "A", false, false, "B", "AQEFACkBAW0BYQFBdgAA"),
@@ -253,7 +253,7 @@ public class SubdocumentParityTests
             events.Clear();
             var result = action();
             var returned = name is "undo" or "redo" ? (result != null ? "true" : "false") : string.Empty;
-            lines.Add($"{name} {returned} {string.Join(" ", events)} items [{Docs(array.ToArray())}] guids [{string.Join(",", doc.GetSubdocGuids().Order(StringComparer.Ordinal))}] {S(doc.EncodeStateAsUpdate())}");
+            lines.Add($"{name} {returned} {string.Join(" ", events)} items [{Docs(array.Select(v => v.ToObject()))}] guids [{string.Join(",", doc.GetSubdocGuids().Order(StringComparer.Ordinal))}] {S(doc.EncodeStateAsUpdate())}");
         }
 
         Step("insert", () =>
@@ -265,7 +265,7 @@ public class SubdocumentParityTests
         Step("redo", undoManager.Redo);
         Step("delete", () =>
         {
-            array.Delete(0, 1);
+            array.RemoveRange(0, 1);
             return null;
         });
         Step("undo", undoManager.Undo);

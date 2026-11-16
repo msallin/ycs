@@ -125,7 +125,7 @@ public class RunExtensionFuzzTests
 
         if (rng.Chance(0.5))
         {
-            a.Push(Enumerable.Range(0, 10 + rng.Int(200)).Cast<object>().ToArray());
+            a.Add(Enumerable.Range(0, 10 + rng.Int(200)).Cast<object>().ToArray().Select(YValue.FromObject).ToArray());
         }
 
         var throwInHandler = false;
@@ -150,16 +150,16 @@ public class RunExtensionFuzzTests
                 else if (r == 3 && pa.Length > 0)
                 {
                     var at = rng.Int(pa.Length);
-                    pa.Delete(at, Math.Min(1 + rng.Int(2), pa.Length - at));
+                    pa.RemoveRange(at, Math.Min(1 + rng.Int(2), pa.Length - at));
                 }
                 else if (r == 4)
                 {
                     // Reaches the reactor on m during the remote transaction's cleanup.
-                    pm.Set("p", rng.Int(10));
+                    pm["p"] = rng.Int(10);
                 }
                 else
                 {
-                    pa.Insert(rng.Int(pa.Length + 1), Vals(-1 - rng.Int(9)));
+                    pa.Insert(rng.Int(pa.Length + 1), Vals(-1 - rng.Int(9)).Select(YValue.FromObject).ToArray());
                 }
             }
         }
@@ -182,7 +182,7 @@ public class RunExtensionFuzzTests
                     c.L($"ychange {type} {id.Client}:{id.Clock}");
                     return new YChange(type, rng.Chance(0.5) ? id.Client : null);
                 };
-            c.L("snap delta " + ReferenceRun.D(t.ToDelta(s, prev, cy)) + " array " + ReferenceRun.V(a.ToArraySnapshot(s)));
+            c.L("snap delta " + ReferenceRun.D(t.ToDelta(s, prev, cy)) + " array " + ReferenceRun.V(a.ToArray(s).Select(v => v.ToObject()).ToList()));
         }
 
         void ToggleObserver(int which)
@@ -334,7 +334,7 @@ public class RunExtensionFuzzTests
                             caret = Math.Min(caret, t.Length);
                             t.Insert(caret, "u");
                             caret++;
-                            a.Push(Vals(-100));
+                            a.Add(Vals(-100).Select(YValue.FromObject).ToArray());
                         };
                         doc.Updated += onUpdate;
                         c.L("+update");
@@ -398,24 +398,24 @@ public class RunExtensionFuzzTests
             }
             else if (r < 62)
             {
-                a.Push(Vals(rng.Int(1000)));
+                a.Add(Vals(rng.Int(1000)).Select(YValue.FromObject).ToArray());
             }
             else if (r < 68)
             {
                 slot = Math.Min(slot, a.Length);
-                a.Insert(slot, Vals(rng.Int(1000), "s"));
+                a.Insert(slot, Vals(rng.Int(1000), "s").Select(YValue.FromObject).ToArray());
                 slot += 2;
             }
             else if (r < 71)
             {
                 slot = rng.Int(a.Length + 1);
-                a.Insert(slot, Vals(rng.Int(10)));
+                a.Insert(slot, Vals(rng.Int(10)).Select(YValue.FromObject).ToArray());
                 slot++;
             }
             else if (r < 76 && a.Length > 0)
             {
                 var at = rng.Int(a.Length);
-                a.Delete(at, Math.Min(1 + rng.Int(3), a.Length - at));
+                a.RemoveRange(at, Math.Min(1 + rng.Int(3), a.Length - at));
                 slot = Math.Min(slot, a.Length);
             }
             else if (r < 78)
@@ -425,14 +425,14 @@ public class RunExtensionFuzzTests
                     armed = 1 + rng.Int(4);
                 }
 
-                m.Set(rng.Chance(0.5) ? "k" : "j", rng.Int(10));
+                m[rng.Chance(0.5) ? "k" : "j"] = rng.Int(10);
             }
             else if (r < 80)
             {
                 if (nt == null || rng.Chance(0.1))
                 {
                     nt = new YText(rng.Chance(0.5) ? "pre" : "");
-                    m.Set("nt", nt);
+                    m["nt"] = nt;
                 }
                 else
                 {
@@ -445,12 +445,12 @@ public class RunExtensionFuzzTests
                 if (na == null || rng.Chance(0.1))
                 {
                     na = new YArray();
-                    a.Insert(rng.Int(a.Length + 1), Vals(na));
+                    a.Insert(rng.Int(a.Length + 1), Vals(na).Select(YValue.FromObject).ToArray());
                 }
                 else
                 {
-                    na.Push(Vals(1));
-                    na.Push(Vals(2, 3));
+                    na.Add(Vals(1).Select(YValue.FromObject).ToArray());
+                    na.Add(Vals(2, 3).Select(YValue.FromObject).ToArray());
                 }
             }
             else if (r < 83 && t.Length > 0)
@@ -468,7 +468,7 @@ public class RunExtensionFuzzTests
             }
             else if (r < 85)
             {
-                a.Push(Vals(new byte[] { 1, 2 }));
+                a.Add(Vals(new byte[] { 1, 2 }).Select(YValue.FromObject).ToArray());
             }
             else if (r < 87)
             {
@@ -611,9 +611,9 @@ public class RunExtensionFuzzTests
             c.FixClientId(doc);
             c.L($"#{s} t={ReferenceRun.Esc(t.ToString())} a={ReferenceRun.V(a.ToArray())} n={(nt == null ? "-" : nt.ToString())}");
             c.State(doc, "st");
-            if (a.Length != a.ToArray().Count || pa.Length != pa.ToArray().Count)
+            if (a.Length != a.ToArray().Length || pa.Length != pa.ToArray().Length)
             {
-                c.L($"length mismatch a {a.Length} vs {a.ToArray().Count}; pa {pa.Length} vs {pa.ToArray().Count}");
+                c.L($"length mismatch a {a.Length} vs {a.ToArray().Length}; pa {pa.Length} vs {pa.ToArray().Length}");
             }
 
             c.L(ReferenceRun.Dump(doc, t, a));

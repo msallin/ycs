@@ -217,8 +217,8 @@ internal static class UndoReplay
         var m = doc.GetMap("m");
         var a = doc.GetArray("a");
         var x = doc.GetXmlFragment("x");
-        object MapGet(string key) => m.ContainsKey(key) ? m.Get(key) : null;
-        object XmlAt(int i) => i < x.Length ? x.Get(i) : null;
+        object MapGet(string key) => m.ContainsKey(key) ? m[key].ToObject() : null;
+        object XmlAt(int i) => i < x.Length ? x[i] : null;
 
         switch (op[0].GetString())
         {
@@ -228,32 +228,32 @@ internal static class UndoReplay
             case "tdel": t.Remove(op[1].GetInt32(), op[2].GetInt32()); break;
             case "tfmt": t.Format(op[1].GetInt32(), op[2].GetInt32(), new Dictionary<string, YValue> { ["b"] = YValue.FromObject(Value(op[3])) }); break;
             case "temb": t.InsertEmbed(op[1].GetInt32(), YValue.Object(new KeyValuePair<string, YValue>("e", op[2].GetInt32()))); break;
-            case "mset": m.Set(op[1].GetString(), Value(op[2])); break;
-            case "mdel": m.Delete(op[1].GetString()); break;
-            case "mnest": { var n = new YMap(); m.Set(op[1].GetString(), n); n.Set("k", Value(op[2])); break; }
-            case "mtext": { var n = new YText(); m.Set(op[1].GetString(), n); n.Insert(0, op[2].GetString()); break; }
+            case "mset": m[op[1].GetString()] = YValue.FromObject(Value(op[2])); break;
+            case "mdel": m.Remove(op[1].GetString()); break;
+            case "mnest": { var n = new YMap(); m[op[1].GetString()] = n; n["k"] = YValue.FromObject(Value(op[2])); break; }
+            case "mtext": { var n = new YText(); m[op[1].GetString()] = n; n.Insert(0, op[2].GetString()); break; }
             case "mnset":
                 switch (MapGet(op[1].GetString()))
                 {
-                    case YMap nm: nm.Set(op[2].GetString(), Value(op[3])); break;
+                    case YMap nm: nm[op[2].GetString()] = YValue.FromObject(Value(op[3])); break;
                     case YText nt: nt.Insert(0, op[3].GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture)); break;
                 }
 
                 break;
-            case "ains": a.Insert(op[1].GetInt32(), new object[] { Value(op[2]) }); break;
-            case "adel": a.Delete(op[1].GetInt32(), op[2].GetInt32()); break;
-            case "anest": { var n = new YMap(); a.Insert(op[1].GetInt32(), new object[] { n }); n.Set("k", Value(op[2])); break; }
-            case "atext": { var n = new YText(); a.Insert(op[1].GetInt32(), new object[] { n }); n.Insert(0, op[2].GetString()); break; }
+            case "ains": a.Insert(op[1].GetInt32(), YValue.FromObject(Value(op[2]))); break;
+            case "adel": a.RemoveRange(op[1].GetInt32(), op[2].GetInt32()); break;
+            case "anest": { var n = new YMap(); a.Insert(op[1].GetInt32(), n); n["k"] = YValue.FromObject(Value(op[2])); break; }
+            case "atext": { var n = new YText(); a.Insert(op[1].GetInt32(), n); n.Insert(0, op[2].GetString()); break; }
             case "nset":
-                switch (a.Get(op[1].GetInt32()))
+                switch (a[op[1].GetInt32()].ToObject())
                 {
-                    case YMap nm: nm.Set(op[2].GetString(), Value(op[3])); break;
+                    case YMap nm: nm[op[2].GetString()] = YValue.FromObject(Value(op[3])); break;
                     case YText nt: nt.Insert(0, op[3].GetInt32().ToString(System.Globalization.CultureInfo.InvariantCulture)); break;
                 }
 
                 break;
-            case "xel": { var e = new YXmlElement("p"); x.Insert(op[1].GetInt32(), new object[] { e }); e.SetAttribute("k", op[2].GetString()); break; }
-            case "xtext": { var n = new YXmlText(); x.Insert(op[1].GetInt32(), new object[] { n }); n.Insert(0, op[2].GetString()); break; }
+            case "xel": { var e = new YXmlElement("p"); x.Insert(op[1].GetInt32(), e); e.SetAttribute("k", op[2].GetString()); break; }
+            case "xtext": { var n = new YXmlText(); x.Insert(op[1].GetInt32(), n); n.Insert(0, op[2].GetString()); break; }
             case "xattr":
                 if (XmlAt(op[1].GetInt32()) is YXmlElement attrElement)
                 {
@@ -271,7 +271,7 @@ internal static class UndoReplay
             case "xchild":
                 switch (XmlAt(op[1].GetInt32()))
                 {
-                    case YXmlElement e: e.Insert(0, new object[] { new YXmlText(op[2].GetString()) }); break;
+                    case YXmlElement e: e.Insert(0, new YXmlText(op[2].GetString())); break;
                     case YXmlText xt: xt.Insert(0, op[2].GetString()); break;
                 }
 
@@ -283,7 +283,7 @@ internal static class UndoReplay
                 }
 
                 break;
-            case "xdel": x.Delete(op[1].GetInt32(), op[2].GetInt32()); break;
+            case "xdel": x.RemoveRange(op[1].GetInt32(), op[2].GetInt32()); break;
             default: throw new InvalidOperationException("change " + op[0].GetString());
         }
     }

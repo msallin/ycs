@@ -32,7 +32,7 @@ internal static class Ops
         var delete = Workloads.DeleteDoc();
         Console.Error.WriteLine($"array-delete-random built in {sw.Elapsed.TotalSeconds:F0} s");
         var deleteState = delete.EncodeStateAsUpdate();
-        Split(split, "array-delete-random", () => Load(deleteState), (d, s) => d.GetArray("array").SequenceEqual(Builder.Array(s, "array")), check);
+        Split(split, "array-delete-random", () => Load(deleteState), (d, s) => d.GetArray("array").Select(v => (object)v.GetInt64()).SequenceEqual(Builder.Array(s, "array")), check);
         WalkLeft(delete, check);
     }
 

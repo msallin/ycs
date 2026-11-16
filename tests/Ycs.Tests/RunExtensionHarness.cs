@@ -131,7 +131,7 @@ internal sealed class ReferenceRun
         null => "null",
         string s => "\"" + Esc(s) + "\"",
         YText t => "YText(" + Esc(t.ToString()) + ")",
-        YArray a => "YArray(" + string.Join(",", a.ToArray().Select(V)) + ")",
+        YArray a => "YArray(" + string.Join(",", a.ToArray().Select(v => V(v.ToObject()))) + ")",
         YMap => "YMap",
         System.Collections.IEnumerable e => "[" + string.Join(",", e.Cast<object>().Select(V)) + "]",
         _ => Convert.ToString(v, CultureInfo.InvariantCulture),

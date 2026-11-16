@@ -13,6 +13,9 @@ namespace Ycs;
 
 public partial class YText
 {
+    /// <summary>The number of UTF-16 code units of text, and one for each embed.</summary>
+    public new int Length => base.Length;
+
     /// <summary>
     /// Observes the events of this text (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
     /// </summary>
@@ -247,7 +250,7 @@ public partial class YText
 
     /// <summary>
     /// Inserts an embed: a shared type (which becomes part of this text, as in an array), or any
-    /// other value as JSON. It counts one towards <see cref="YType.Length"/>.
+    /// other value as JSON. It counts one towards <see cref="Length"/>.
     /// </summary>
     public void InsertEmbed(int index, YValue embed, IReadOnlyDictionary<string, YValue>? attributes = null)
     {
@@ -392,7 +395,7 @@ public partial class YText
 
     /// <summary>
     /// Copies the text, as <see cref="ToString"/> returns it, into <paramref name="destination"/>
-    /// without allocating. <see cref="YType.Length"/> is always enough room (it also counts
+    /// without allocating. <see cref="Length"/> is always enough room (it also counts
     /// embeds, which the text leaves out).
     /// </summary>
     /// <returns>How many characters were written.</returns>
