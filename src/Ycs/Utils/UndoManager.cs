@@ -285,9 +285,9 @@ public class UndoManager
     {
         stackItem.Deletions.IterateDeletedStructs(tr, i =>
         {
-            if (i.ToStruct() is Item item && InScope(item))
+            if (i.IsItem && InScope(i))
             {
-                ItemRef.Of(item).KeepItemAndParents(false);
+                i.KeepItemAndParents(false);
             }
 
             return true;
@@ -426,9 +426,9 @@ public class UndoManager
         // Deleted structs must not be garbage collected while a stack item can restore them.
         transaction.DeleteSet.IterateDeletedStructs(transaction, i =>
         {
-            if (i.ToStruct() is Item item && InScope(item))
+            if (i.IsItem && InScope(i))
             {
-                ItemRef.Of(item).KeepItemAndParents(true);
+                i.KeepItemAndParents(true);
             }
 
             return true;
@@ -451,7 +451,7 @@ public class UndoManager
         return false;
     }
 
-    private bool InScope(Item item)
+    private bool InScope(ItemRef item)
     {
         foreach (var entry in _scope)
         {
@@ -492,14 +492,15 @@ public class UndoManager
                     var stackItem = stack[^1];
                     stack.RemoveAt(stack.Count - 1);
                     // Enumerated in the order of adding, as Yjs' Set: a HashSet keeps it while nothing is removed, and nothing is.
-                    var itemsToRedo = new HashSet<Item>();
-                    var itemsToDelete = new List<Item>();
+                    var itemsToRedo = new HashSet<ItemRef>();
+                    var itemsToDelete = new List<ItemRef>();
                     var performedChange = false;
 
                     stackItem.Insertions.IterateDeletedStructs(transaction, str =>
                     {
-                        if (str.ToStruct() is Item item)
+                        if (str.IsItem)
                         {
+                            var item = str;
                             if (item.Redone != null)
                             {
                                 var (redone, diff) = store.FollowRedone(str.Id);
@@ -509,10 +510,10 @@ public class UndoManager
                                 }
 
                                 // A garbage-collected copy counts as deleted.
-                                item = redone.ToStruct() as Item;
+                                item = redone.AsItem;
                             }
 
-                            if (item != null && !item.Deleted && InScope(item))
+                            if (!item.IsNull && !item.Deleted && InScope(item))
                             {
                                 itemsToDelete.Add(item);
                             }
@@ -524,9 +525,9 @@ public class UndoManager
                     stackItem.Deletions.IterateDeletedStructs(transaction, str =>
                     {
                         // Structs in the insertions were created and deleted in the same capture interval: never redo them.
-                        if (str.ToStruct() is Item item && InScope(item) && !stackItem.Insertions.IsDeleted(item.Id))
+                        if (str.IsItem && InScope(str) && !stackItem.Insertions.IsDeleted(str.Id))
                         {
-                            itemsToRedo.Add(item);
+                            itemsToRedo.Add(str);
                         }
 
                         return true;
@@ -534,14 +535,14 @@ public class UndoManager
 
                     foreach (var item in itemsToRedo)
                     {
-                        performedChange = RedoItem(transaction, item, itemsToRedo, stackItem.Insertions) != null || performedChange;
+                        performedChange = !RedoItem(transaction, item, itemsToRedo, stackItem.Insertions).IsNull || performedChange;
                     }
 
                     // Children are deleted before their parents, so the filter sees more of them.
                     for (int i = itemsToDelete.Count - 1; i >= 0; i--)
                     {
                         var item = itemsToDelete[i];
-                        if (_deleteFilter(item))
+                        if (_deleteFilter(item.ToItem()))
                         {
                             item.Delete(transaction);
                             performedChange = true;
@@ -608,7 +609,7 @@ public class UndoManager
     /// Integrates a copy of the deleted <paramref name="item"/> at its old place, and its deleted parents
     /// first when they are redone too; null when it cannot be redone. Yjs 13.6's <c>redoItem</c>.
     /// </summary>
-    private AbstractStruct RedoItem(Transaction transaction, Item item, HashSet<Item> redoItems, DeleteSet itemsToDelete)
+    private ItemRef RedoItem(Transaction transaction, ItemRef item, HashSet<ItemRef> redoItems, DeleteSet itemsToDelete)
     {
         // Recurses once per level of deleted parents: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -619,119 +620,119 @@ public class UndoManager
             return store.GetItemCleanStart(transaction, item.Redone.Value);
         }
 
-        var parentItem = ((AbstractType)item.Parent)._item.ToItem();
-        Item left = null;
-        Item right;
+        var parentItem = ((AbstractType)item.Parent)._item;
+        ItemRef left = default;
+        ItemRef right;
 
         // The parent must be redone first.
-        if (parentItem != null && parentItem.Deleted)
+        if (!parentItem.IsNull && parentItem.Deleted)
         {
             // It is redone only if it is redone anyway.
-            if (parentItem.Redone == null && (!redoItems.Contains(parentItem) || RedoItem(transaction, parentItem, redoItems, itemsToDelete) == null))
+            if (parentItem.Redone == null && (!redoItems.Contains(parentItem) || RedoItem(transaction, parentItem, redoItems, itemsToDelete).IsNull))
             {
-                return null;
+                return default;
             }
 
             while (parentItem.Redone != null)
             {
-                parentItem = (Item)store.GetItemCleanStart(transaction, parentItem.Redone.Value);
+                parentItem = store.GetItemCleanStart(transaction, parentItem.Redone.Value);
             }
         }
 
-        var parentType = parentItem == null ? (AbstractType)item.Parent : ((ContentType)parentItem.Content).Type;
+        var parentType = parentItem.IsNull ? (AbstractType)item.Parent : ((ContentType)parentItem.Content).Type;
 
         if (item.ParentSub == null)
         {
             // A list item goes back to its old position: between the nearest neighbours, or their redone copies, in the parent.
-            left = item.Left as Item;
+            left = item.Left.AsItem;
             right = item;
-            while (left != null)
+            while (!left.IsNull)
             {
                 var leftTrace = left;
-                while (leftTrace != null && ((AbstractType)leftTrace.Parent)._item != parentItem)
+                while (!leftTrace.IsNull && ((AbstractType)leftTrace.Parent)._item != parentItem)
                 {
-                    leftTrace = leftTrace.Redone == null ? null : (Item)store.GetItemCleanStart(transaction, leftTrace.Redone.Value);
+                    leftTrace = leftTrace.Redone == null ? default : store.GetItemCleanStart(transaction, leftTrace.Redone.Value);
                 }
 
-                if (leftTrace != null)
+                if (!leftTrace.IsNull)
                 {
                     left = leftTrace;
                     break;
                 }
 
-                left = left.Left as Item;
+                left = left.Left.AsItem;
             }
 
-            while (right != null)
+            while (!right.IsNull)
             {
                 var rightTrace = right;
-                while (rightTrace != null && ((AbstractType)rightTrace.Parent)._item != parentItem)
+                while (!rightTrace.IsNull && ((AbstractType)rightTrace.Parent)._item != parentItem)
                 {
-                    rightTrace = rightTrace.Redone == null ? null : (Item)store.GetItemCleanStart(transaction, rightTrace.Redone.Value);
+                    rightTrace = rightTrace.Redone == null ? default : store.GetItemCleanStart(transaction, rightTrace.Redone.Value);
                 }
 
-                if (rightTrace != null)
+                if (!rightTrace.IsNull)
                 {
                     right = rightTrace;
                     break;
                 }
 
-                right = right.Right as Item;
+                right = right.Right.AsItem;
             }
         }
         else
         {
-            right = null;
-            if (item.Right != null && !IgnoreRemoteMapChanges)
+            right = default;
+            if (!item.Right.IsNull && !IgnoreRemoteMapChanges)
             {
                 // A later value of the key is replaced only when it was redone, or deleted by this undo or a stack
                 // item; any other one is a change this UndoManager did not make, and the item is not redone.
                 left = item;
-                while (left.Right is Item next &&
-                    (next.Redone != null || itemsToDelete.IsDeleted(next.Id) || IsDeletedByStack(_undoStack, next.Id) || IsDeletedByStack(_redoStack, next.Id)))
+                while (left.Right.IsItem &&
+                    (left.Right.Redone != null || itemsToDelete.IsDeleted(left.Right.Id) || IsDeletedByStack(_undoStack, left.Right.Id) || IsDeletedByStack(_redoStack, left.Right.Id)))
                 {
-                    left = next;
+                    left = left.Right;
                     while (left.Redone != null)
                     {
-                        left = (Item)store.GetItemCleanStart(transaction, left.Redone.Value);
+                        left = store.GetItemCleanStart(transaction, left.Redone.Value);
                     }
                 }
 
-                if (left.Right != null)
+                if (!left.Right.IsNull)
                 {
-                    return null;
+                    return default;
                 }
             }
             else
             {
-                left = parentType._map.GetValueOrDefault(item.ParentSub).ToItem();
+                left = parentType._map.GetValueOrDefault(item.ParentSub);
             }
 
             // A left neighbour in another parent would give the copy an origin that misleads remote peers.
-            if (left != null && ((AbstractType)left.Parent)._item != parentItem)
+            if (!left.IsNull && ((AbstractType)left.Parent)._item != parentItem)
             {
-                left = parentType._map.GetValueOrDefault(item.ParentSub).ToItem();
+                left = parentType._map.GetValueOrDefault(item.ParentSub);
             }
         }
 
         var nextId = new ID(ownClientId, store.GetState(ownClientId));
-        var redoneItem = new Item(nextId, left, left?.LastId, right, right?.Id, parentType, item.ParentSub, item.Content.Copy());
+        var redoneItem = ItemRef.New(nextId, left, right, parentType, item.ParentSub, item.Content.Copy());
         item.Redone = nextId;
-        ItemRef.Of(redoneItem).KeepItemAndParents(true);
+        redoneItem.KeepItemAndParents(true);
         redoneItem.Integrate(transaction, 0);
         return redoneItem;
     }
 
-    private static bool IsParentOf(AbstractType parent, Item child)
+    private static bool IsParentOf(AbstractType parent, ItemRef child)
     {
-        while (child != null)
+        while (!child.IsNull)
         {
             if (child.Parent == parent)
             {
                 return true;
             }
 
-            child = ((AbstractType)child.Parent)._item.ToItem();
+            child = ((AbstractType)child.Parent)._item;
         }
 
         return false;
