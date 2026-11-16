@@ -155,19 +155,17 @@ internal sealed class Slab
     [Conditional("DEBUG")]
     public void CheckOwner(int handle, object owner)
     {
-        var current = PageOrNull(handle) is { } page && IndexOf(handle) < page.Used ? page.Owners[IndexOf(handle)] : null;
-        if (!ReferenceEquals(current, owner))
+        var number = handle >> PageBits;
+        var owners = handle >= 0 && number < _ownerPages.Length ? _ownerPages[number] : null;
+        if (owners == null || !ReferenceEquals(owners[IndexOf(handle)], owner))
         {
-            throw new InvalidOperationException(
-                $"The slot {handle} is owned by {(current == null ? "no struct (it is free)" : "another struct")}, not by the struct that reads it: a handle outlived its struct and the slot was freed or reused. Nothing was changed.");
+            ThrowNotOwner(handle, owners?[IndexOf(handle)]);
         }
     }
 
-    private Page? PageOrNull(int handle)
-    {
-        var number = PageOf(handle);
-        return handle >= 0 && number < _pages.Count ? _pages[number] : null;
-    }
+    private static void ThrowNotOwner(int handle, object? current) =>
+        throw new InvalidOperationException(
+            $"The slot {handle} is owned by {(current == null ? "no struct (it is free)" : "another struct")}, not by the struct that reads it: a handle outlived its struct and the slot was freed or reused. Nothing was changed.");
 
     public void SetOwner(int handle, object? owner)
     {

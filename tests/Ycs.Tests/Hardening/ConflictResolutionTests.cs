@@ -94,7 +94,12 @@ public class ConflictResolutionTests
         var stopwatch = Stopwatch.StartNew();
         Assert.IsFalse(doc.TryApplyUpdate(update));
 
+        // The walk is 16.7 million steps; in Debug every step also checks its slot's owner. 100 million would take far longer.
+#if DEBUG
+        Assert.IsLessThan(5_000, stopwatch.ElapsedMilliseconds);
+#else
         Assert.IsLessThan(2_000, stopwatch.ElapsedMilliseconds);
+#endif
     }
 
     [TestMethod]
