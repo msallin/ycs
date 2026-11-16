@@ -191,15 +191,61 @@ internal static class YcsCases
             });
     }
 
+    /// <summary>
+    /// A hub holding the base text merges each client's offline edits, a diff against the base, one transaction each:
+    /// what a server does when many clients come back online.
+    /// </summary>
+    public static Prepared ManyClients(Fixtures f, int clients)
+    {
+        var baseDoc = NewDoc(Inputs.ManyBaseClientId);
+        baseDoc.GetText("text").Insert(0, Inputs.BaseText);
+        var baseUpdate = baseDoc.EncodeStateAsUpdate();
+        var baseVector = baseDoc.EncodeStateVector();
+        baseDoc.Destroy();
+        var edits = Inputs.ManyClientEdits(clients);
+        var diffs = new byte[clients][];
+        for (var c = 0; c < clients; c++)
+        {
+            var client = NewDoc(c + 1);
+            var text = client.GetText("text");
+            client.ApplyUpdate(baseUpdate);
+            foreach (var e in edits[c])
+            {
+                if (e.Delete > 0)
+                {
+                    text.Remove(e.Pos, e.Delete);
+                }
+                else
+                {
+                    text.Insert(e.Pos, e.Insert);
+                }
+            }
+
+            diffs[c] = client.EncodeStateAsUpdate(baseVector);
+            client.Destroy();
+        }
+
+        var hub = NewDoc();
+        var hubText = hub.GetText("text");
+        hub.ApplyUpdate(baseUpdate);
+        return TextResult(hub, hubText, () =>
+        {
+            foreach (var d in diffs)
+            {
+                hub.ApplyUpdate(d);
+            }
+        });
+    }
+
     /// <summary>A stored state is trusted input, so it is applied without limits, as docs/api.md recommends.</summary>
-    public static Prepared ApplyState(Fixtures f, string file, bool v2)
+    public static Prepared ApplyState(Fixtures f, string file, bool v2, int times = 10)
     {
         var update = f.Bytes(file);
         YDoc last = null;
         return new Prepared(
             () =>
             {
-                for (var i = 0; i < 10; i++)
+                for (var i = 0; i < times; i++)
                 {
                     last = new YDoc();
                     if (v2)
@@ -542,6 +588,43 @@ internal static class YcsCases
         }
 
         return (text.ToString(), doc.EncodeStateAsUpdate(), doc.EncodeStateAsUpdate(format: UpdateFormat.V2), updates, half);
+    }
+
+    /// <summary>
+    /// The trace replayed <paramref name="times"/> times into one document, each repetition after the text of the ones
+    /// before, as a v1 state: a large document to load.
+    /// </summary>
+    public static byte[] RecordRepeated(Trace trace, int times)
+    {
+        var doc = NewDoc();
+        var text = doc.GetText("text");
+        for (var r = 0; r < times; r++)
+        {
+            var offset = r * trace.EndContent.Length;
+            for (var t = 0; t < trace.Transactions; t++)
+            {
+                doc.Transact(_ =>
+                {
+                    for (var i = trace.TxnStarts[t]; i < trace.TxnStarts[t + 1]; i++)
+                    {
+                        var e = trace.Edits[i];
+                        if (e.Delete > 0)
+                        {
+                            text.Remove(offset + e.Pos, e.Delete);
+                        }
+
+                        if (e.Insert.Length > 0)
+                        {
+                            text.Insert(offset + e.Pos, e.Insert);
+                        }
+                    }
+                });
+            }
+        }
+
+        var state = doc.EncodeStateAsUpdate();
+        doc.Destroy();
+        return state;
     }
 
     /// <summary>The content of a v1 state as each workload's <see cref="Prepared.Content"/> canonicalizes it.</summary>

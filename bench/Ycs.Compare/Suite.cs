@@ -143,12 +143,15 @@ internal static class Suite
         File.WriteAllBytes(Path.Combine(dir, "trace.yrs.v1"), yrs.V1);
         File.WriteAllBytes(Path.Combine(dir, "trace.yrs.v2"), yrs.V2);
         File.WriteAllBytes(Path.Combine(dir, "trace.half.sv"), ycs.HalfVector);
+        var large = YcsCases.RecordRepeated(trace, Inputs.TraceRepeats);
+        File.WriteAllBytes(Path.Combine(dir, "trace-x100.ycs.v1"), large);
         Inputs.WriteUpdates(Path.Combine(dir, "updates.ycs.v1"), ycs.Updates);
         Inputs.WriteUpdates(Path.Combine(dir, "updates.yrs.v1"), yrs.Updates);
         Console.Error.WriteLine(
             $"trace: {trace.Edits.Length} edits in {trace.Transactions} transactions, {trace.EndContent.Length} characters; " +
             $"state v1 ycs {ycs.V1.Length} / yrs {yrs.V1.Length} bytes, v2 ycs {ycs.V2.Length} / yrs {yrs.V2.Length}; " +
-            $"updates ycs {ycs.Updates.Count} ({ycs.Updates.Sum(u => (long)u.Length)} bytes) / yrs {yrs.Updates.Count} ({yrs.Updates.Sum(u => (long)u.Length)} bytes)");
+            $"updates ycs {ycs.Updates.Count} ({ycs.Updates.Sum(u => (long)u.Length)} bytes) / yrs {yrs.Updates.Count} ({yrs.Updates.Sum(u => (long)u.Length)} bytes); " +
+            $"x{Inputs.TraceRepeats} state v1 ycs {large.Length} bytes");
     }
 
     /// <summary>

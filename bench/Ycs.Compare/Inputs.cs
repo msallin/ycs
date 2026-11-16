@@ -48,6 +48,13 @@ internal static class Inputs
     public const int Clients = 20;
     public const int EditsPerClient = 250;
     public const int BaseLength = 1_000;
+    public const int EditsPerManyClient = 10;
+
+    /// <summary>How often the large-document workload's state repeats the trace.</summary>
+    public const int TraceRepeats = 100;
+
+    /// <summary>The client id of the base text the many-clients workloads start from, above every client's own id.</summary>
+    public const long ManyBaseClientId = 1_000_000;
 
     /// <summary>The client id every single-writer workload uses on both libraries.</summary>
     public const long ClientId = 123456789;
@@ -82,41 +89,7 @@ internal static class Inputs
         return [.. Enumerable.Range(0, ArrayDeleteN).Select(i => rng.Below(ArrayN - i))];
     });
 
-    private static readonly Lazy<Edit[][]> LazyClientEdits = new(() =>
-    {
-        var rng = new Rng(Seed + 5);
-        var all = new Edit[Clients][];
-        for (var c = 0; c < Clients; c++)
-        {
-            var length = BaseLength;
-            var edits = new Edit[EditsPerClient];
-            for (var e = 0; e < edits.Length; e++)
-            {
-                if (rng.Below(5) == 0 && length > 10)
-                {
-                    var del = 1 + rng.Below(5);
-                    edits[e] = new Edit(rng.Below(length - del + 1), del, string.Empty);
-                    length -= del;
-                }
-                else
-                {
-                    var run = 1 + rng.Below(10);
-                    var sb = new StringBuilder(run);
-                    for (var k = 0; k < run; k++)
-                    {
-                        sb.Append(Letters[rng.Below(26)]);
-                    }
-
-                    edits[e] = new Edit(rng.Below(length + 1), 0, sb.ToString());
-                    length += run;
-                }
-            }
-
-            all[c] = edits;
-        }
-
-        return all;
-    });
+    private static readonly Lazy<Edit[][]> LazyClientEdits = new(() => ClientEditsOf(new Rng(Seed + 5), Clients, EditsPerClient));
 
     /// <summary>One single-character string per keystroke of the typing workloads.</summary>
     public static string[] Typing => LazyTyping.Value;
@@ -142,6 +115,9 @@ internal static class Inputs
     /// <summary>The offline edits of each client of the concurrent workload, against its own copy of the base text.</summary>
     public static Edit[][] ClientEdits => LazyClientEdits.Value;
 
+    /// <summary>The offline edits of each of <paramref name="clients"/> clients of a many-clients workload.</summary>
+    public static Edit[][] ManyClientEdits(int clients) => ClientEditsOf(new Rng(Seed + 6), clients, EditsPerManyClient);
+
     /// <summary>The text every client of the concurrent workload starts from.</summary>
     public static string BaseText => string.Concat(Typing.Take(BaseLength));
 
@@ -156,6 +132,14 @@ internal static class Inputs
 
         sb.AppendJoin(',', ArrayInserts).AppendJoin(',', ArrayDeletes);
         foreach (var c in ClientEdits)
+        {
+            foreach (var e in c)
+            {
+                sb.Append(e.Pos).Append(',').Append(e.Delete).Append(e.Insert);
+            }
+        }
+
+        foreach (var c in ManyClientEdits(1_000))
         {
             foreach (var e in c)
             {
@@ -184,6 +168,45 @@ internal static class Inputs
 
         starts.Add(edits.Count);
         return new Trace([.. edits], [.. starts], json.RootElement.GetProperty("endContent").GetString());
+    }
+
+    /// <summary>
+    /// Each client's edits against its own copy of the <see cref="BaseLength"/>-character base text: a fifth delete 1 to
+    /// 5 characters, the rest insert a run of 1 to 10 letters.
+    /// </summary>
+    private static Edit[][] ClientEditsOf(Rng rng, int clients, int editsPerClient)
+    {
+        var all = new Edit[clients][];
+        for (var c = 0; c < clients; c++)
+        {
+            var length = BaseLength;
+            var edits = new Edit[editsPerClient];
+            for (var e = 0; e < edits.Length; e++)
+            {
+                if (rng.Below(5) == 0 && length > 10)
+                {
+                    var del = 1 + rng.Below(5);
+                    edits[e] = new Edit(rng.Below(length - del + 1), del, string.Empty);
+                    length -= del;
+                }
+                else
+                {
+                    var run = 1 + rng.Below(10);
+                    var sb = new StringBuilder(run);
+                    for (var k = 0; k < run; k++)
+                    {
+                        sb.Append(Letters[rng.Below(26)]);
+                    }
+
+                    edits[e] = new Edit(rng.Below(length + 1), 0, sb.ToString());
+                    length += run;
+                }
+            }
+
+            all[c] = edits;
+        }
+
+        return all;
     }
 
     /// <summary>Length-prefixed updates, as the prepare step writes them.</summary>

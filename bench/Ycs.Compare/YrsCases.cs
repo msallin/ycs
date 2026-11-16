@@ -252,7 +252,62 @@ internal static class YrsCases
         }
     }
 
-    public static Prepared ApplyState(Fixtures f, string file, bool v2)
+    public static Prepared ManyClients(Fixtures f, int clients)
+    {
+        byte[] baseUpdate;
+        byte[] baseVector;
+        using (var baseDoc = NewDoc(Inputs.ManyBaseClientId))
+        {
+            var baseText = baseDoc.Text("text");
+            using (var tx = baseDoc.WriteTransaction())
+            {
+                baseText.Insert(tx, 0, Inputs.BaseText);
+            }
+
+            baseUpdate = StateV1(baseDoc);
+            using var rtx = baseDoc.ReadTransaction();
+            baseVector = rtx.StateVectorV1();
+        }
+
+        var edits = Inputs.ManyClientEdits(clients);
+        var diffs = new byte[clients][];
+        for (var c = 0; c < clients; c++)
+        {
+            using var client = NewDoc(c + 1);
+            var text = client.Text("text");
+            using (var tx = client.WriteTransaction())
+            {
+                Check(tx.ApplyV1(baseUpdate));
+            }
+
+            foreach (var e in edits[c])
+            {
+                using var tx = client.WriteTransaction();
+                Apply(text, tx, e);
+            }
+
+            using var rtx = client.ReadTransaction();
+            diffs[c] = rtx.StateDiffV1(baseVector);
+        }
+
+        var hub = NewDoc();
+        var hubText = hub.Text("text");
+        using (var tx = hub.WriteTransaction())
+        {
+            Check(tx.ApplyV1(baseUpdate));
+        }
+
+        return TextResult(hub, hubText, () =>
+        {
+            foreach (var d in diffs)
+            {
+                using var tx = hub.WriteTransaction();
+                Check(tx.ApplyV1(d));
+            }
+        });
+    }
+
+    public static Prepared ApplyState(Fixtures f, string file, bool v2, int times = 10)
     {
         var update = f.Bytes(file);
         Doc last = null;
@@ -262,7 +317,7 @@ internal static class YrsCases
         return new Prepared(
             () =>
             {
-                for (var i = 0; i < 10; i++)
+                for (var i = 0; i < times; i++)
                 {
                     last?.Dispose();
                     last = new Doc();

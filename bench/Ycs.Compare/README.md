@@ -619,6 +619,19 @@ shared with other work (load averages from 2 to 90); each row is from the quiete
   array of slots; until then, the marker walk on the object (the experiment above) is the known way to remove the
   rest.
 
+## Not measured yet
+
+Three workloads were added after the last suite run and have no results yet. They cover two cases of
+[crdt-benchmarks](https://github.com/dmonad/crdt-benchmarks) that the suite lacked. They are not a port of it: its
+published tables are JavaScript on other machines and cannot be compared with these.
+
+* `many-clients-200`, `many-clients-1000` (B3: many clients): a hub holding a 1,000-character text applies the
+  offline edits of 200 or 1,000 clients (10 each, generated like `concurrent-20`'s), one diff per client and
+  transaction, as a server does when they come back online. Their documents and diffs are set up untimed.
+* `apply-state-x100/ycs` (B4x100: a large document): the prepare step replays the trace 100 times into one ycs
+  document, each repetition after the text of the ones before, and writes its v1 state (`trace-x100.ycs.v1`);
+  the workload loads it once into an empty document. It should add about half a minute to the prepare step (100 × `trace-replay`'s 0.26 s; not measured).
+
 ## Not compared
 
 * XML types and formatting attributes, subdocuments, snapshots and relative/sticky positions: both have them, but
