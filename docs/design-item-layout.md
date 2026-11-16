@@ -352,7 +352,8 @@ enumerators hold an id and a hint; a collected type's search markers are cleared
 
 **Step 7, the slab.** `ItemRef` becomes (slab, handle); slots, geometric pages, the client and type tables, `Refs`
 pages on first use, per-page free lists with reuse at the batch end and page release; content stays as objects in
-`Refs`; the clock order holds handles.
+`Refs`; the leaf order (1.3) holds handles; a flat order would make a delete 2.2-2.9× slower than today's code
+(bench/Ycs.Layout README, "Editing").
 
 * *Files*: new `Utils/Slab.cs`, `Utils/TypeTable.cs`; `ItemRef`; `StructStore*.cs`, `ClientStructs*.cs`,
   `Structs/Item.cs`, `GC.cs` (their state moves into slots), `AbstractType.cs` (`_start`, `_item`, `_map` as handles).
@@ -362,8 +363,8 @@ pages on first use, per-page free lists with reuse at the batch end and page rel
   now with real reuse; corpus, differential, soaks. Sabotages: reuse at transaction end instead of batch end (the H4
   property); a `ref Slot` kept across an allocation (the one-slot run); markers not cleared (the H5 test).
 * *Effect*: est. about half of the saving (a character from 186 to about 120 bytes: the `Item` object becomes a 64-byte
-  slot, the content object stays); split 2.5× faster with its lookup (model, measured on flat orders); literal walks
-  8× faster (model: 2.6 against 21 ns a step); no `Item` allocation per edit or split. *Risk*: high: stale handles;
+  slot, the content object stays); integration 1.4-1.7× and deletion 1.6-4.1× faster than today with the leaf order
+  (model: bench/Ycs.Layout README, "Editing"); literal walks 8× faster (model: 2.6 against 21 ns a step); no `Item` allocation per edit or split. *Risk*: high: stale handles;
   the largest diff.
 
 **Step 8, inline content.** `String` and `Any` in the arenas (2.3), `Deleted` and `Type` inline; cold kinds stay in
@@ -387,8 +388,8 @@ pages on first use, per-page free lists with reuse at the batch end and page rel
 * *Effect*: est. a load allocates about what the document holds (the trace: about 1 MiB instead of 3.2); `apply-state`
   1.5-2× is plausible, not measured. *Risk*: medium.
 
-Order: 3 is built; 4a, 4b and 5 pay nothing but are safe and enumerate the holders; 6 only once the slab is
-decided (open question 2), and then right before 7; 7 to 9 are the rewrite (7 alone gives about half the saving).
+Order: 3 is built; 4a, 4b and 5 pay nothing but are safe and enumerate the holders; 6 once the slab is
+decided (it is: open question 2), right before 7; 7 to 9 are the rewrite (7 alone gives about half the saving).
 
 ## 5. Not done, and why
 
@@ -405,10 +406,11 @@ decided (open question 2), and then right before 7; 7 to 9 are the rewrite (7 al
 
 1. **32-bit clocks with an escape table** (12 bytes, 19% of a slot). Recommendation: not in steps 7-9;
    measure afterwards whether the gain is worth an escape that hostile updates can force for a whole client.
-2. **When to commit to the slab** (steps 6 to 9: about 4,000 lines; the model measured memory, not editing).
-   Recommendation: decide after step 5, with one more model measurement first: Yjs' integrate loop and a delete over
-   slots in `bench/Ycs.Layout` against today's objects. Hold step 6 until then: the break alone buys only `Kind` and
-   the removal of `SplitItem`.
+2. **When to commit to the slab** (steps 6 to 9: about 4,000 lines): decided, commit after step 5. The model's
+   editing measurement (bench/Ycs.Layout README, "Editing"; Yjs' integrate loop and the delete-set loop over slots,
+   checked against ycs): with the leaf order of 1.3, integration is 1.4-1.7× and deletion 1.6-4.1× faster than today
+   and allocates less on the workloads with conflicts; with a flat order, deletion is 2.2-2.9× slower than today. So
+   the slab keeps the leaf order. The integration gain is an upper bound: the model keeps no run-head index.
 3. **Enumerators after a merge** (3.2: continue from the struct that holds the id now). Recommendation: accept and pin
    it; the alternative, throwing on a changed store as .NET collections do, breaks code that edits while iterating.
 4. **Leaf capacity**: decided, 128 (measured against 64 and 256 in step 3, bench/Ycs.Compare/README.md).
