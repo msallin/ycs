@@ -39,7 +39,7 @@ internal sealed partial class SyncHub(
         var connection = new Connection(new Session(rooms.GetOrCreate(name)), Context);
         Context.Items[typeof(Connection)] = connection;
         connection.Session.Start();
-        connection.Sending = SendLoopAsync(connection, hub.Clients.Client(Context.ConnectionId));
+        connection.Sending = SendAsync(connection, hub.Clients.Client(Context.ConnectionId), options.CloseTimeout);
         LogOpened(logger, Context.ConnectionId);
         return Task.CompletedTask;
     }
@@ -64,7 +64,21 @@ internal sealed partial class SyncHub(
         var connection = (Connection)Context.Items[typeof(Connection)]!;
         connection.Session.Close();
         await connection.Sending!;
-        LogClosed(logger, Context.ConnectionId, connection.Session.CloseReason, connection.AbortReason);
+        LogClosed(logger, Context.ConnectionId, connection.Session.CloseReason, connection.AbortReason, connection.Session.CloseCause);
+    }
+
+    // A send to a client that stopped reading waits on SignalR's buffer: once the session closed, the send loop has
+    // the close timeout to finish before the connection is aborted.
+    private static async Task SendAsync(Connection connection, ISingleClientProxy client, TimeSpan closeTimeout)
+    {
+        var sending = SendLoopAsync(connection, client);
+        if (await Task.WhenAny(sending, connection.Session.Closed) != sending
+            && await Task.WhenAny(sending, Task.Delay(closeTimeout, CancellationToken.None)) != sending)
+        {
+            connection.Abort(SyncHubCloseReason.SessionClosed);
+        }
+
+        await sending;
     }
 
     // The only sender to its connection, so the client gets the session's messages in their order.
@@ -101,8 +115,9 @@ internal sealed partial class SyncHub(
     [LoggerMessage(Level = LogLevel.Information, Message = "SignalR connection {ConnectionId} opened")]
     private static partial void LogOpened(ILogger logger, string connectionId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "SignalR connection {ConnectionId} closed: {Reason}, aborted {Abort}")]
-    private static partial void LogClosed(ILogger logger, string connectionId, SessionCloseReason reason, SyncHubCloseReason abort);
+    // The cause: see WebSocketEndpoint's LogClosed.
+    [LoggerMessage(Level = LogLevel.Information, Message = "SignalR connection {ConnectionId} closed: {Reason}, aborted {Abort}, cause {Cause}")]
+    private static partial void LogClosed(ILogger logger, string connectionId, SessionCloseReason reason, SyncHubCloseReason abort, CloseCause cause);
 
     /// <summary>The state of one connection, kept in <see cref="HubCallerContext.Items"/> from connect to disconnect.</summary>
     private sealed class Connection(Session session, HubCallerContext context)

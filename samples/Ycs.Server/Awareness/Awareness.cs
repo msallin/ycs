@@ -27,7 +27,8 @@ internal sealed class Awareness(TimeProvider time)
 
     private readonly record struct Meta(ulong Clock, long LastUpdated);
 
-    private readonly record struct Entry(ulong ClientId, ulong Clock, string? State);
+    /// <summary>One client of an awareness message: its state as JSON text, null for a removal.</summary>
+    internal readonly record struct Entry(ulong ClientId, ulong Clock, string? State);
 
     public IReadOnlyCollection<ulong> ClientIds => _states.Keys;
 
@@ -44,9 +45,11 @@ internal sealed class Awareness(TimeProvider time)
     /// Applies an awareness message with y-protocols' clock rules. A malformed message throws
     /// <see cref="YUpdateException"/> and changes nothing.
     /// </summary>
-    public AwarenessChange ApplyUpdate(ReadOnlySpan<byte> update)
+    public AwarenessChange ApplyUpdate(ReadOnlySpan<byte> update) => Apply(Decode(update));
+
+    /// <summary>Applies decoded entries with y-protocols' clock rules; <see cref="Decode"/> needs no instance.</summary>
+    public AwarenessChange Apply(IReadOnlyList<Entry> entries)
     {
-        var entries = Decode(update);
         var now = Now();
         List<ulong> added = [], updated = [], changed = [], removed = [];
 
@@ -81,7 +84,7 @@ internal sealed class Awareness(TimeProvider time)
             }
             else if (state is not null)
             {
-                if (!hadState || !JsonDeepEquals(state, prev!))
+                if (!hadState || (state != prev && !JsonDeepEquals(state, prev!)))
                 {
                     changed.Add(clientId);
                 }
@@ -137,10 +140,30 @@ internal sealed class Awareness(TimeProvider time)
         return removed.Count == 0 ? AwarenessChange.None : new AwarenessChange([], [], [], removed);
     }
 
-    /// <summary>Removes the states not renewed for <see cref="OutdatedTimeoutMs"/>; the room checks about every 3 s.</summary>
+    /// <summary>
+    /// Removes the states not renewed for <see cref="OutdatedTimeoutMs"/>; the room checks about every 3 s. Unlike
+    /// y-protocols, it also forgets the clock of a client that has had no state for as long: a message older than
+    /// that clock is no longer rejected then, but no client sends one after its own newer ones, and the clocks of
+    /// every client ever seen would otherwise stay for the life of the room. A state removed in this call keeps its
+    /// clock until the next, for the removal the caller broadcasts.
+    /// </summary>
     public AwarenessChange RemoveOutdated()
     {
         var now = Now();
+        List<ulong> forgotten = [];
+        foreach (var (clientId, meta) in _meta)
+        {
+            if (OutdatedTimeoutMs <= now - meta.LastUpdated && !_states.ContainsKey(clientId))
+            {
+                forgotten.Add(clientId);
+            }
+        }
+
+        foreach (var clientId in forgotten)
+        {
+            _meta.Remove(clientId);
+        }
+
         List<ulong> outdated = [];
         foreach (var (clientId, meta) in _meta)
         {
@@ -155,12 +178,20 @@ internal sealed class Awareness(TimeProvider time)
 
     private long Now() => time.GetUtcNow().ToUnixTimeMilliseconds();
 
-    private static List<Entry> Decode(ReadOnlySpan<byte> data)
+    /// <summary>
+    /// Decodes an awareness message; one that is malformed or names more than <paramref name="maxEntries"/> clients
+    /// throws <see cref="YUpdateException"/>, before any of its JSON is parsed.
+    /// </summary>
+    public static List<Entry> Decode(ReadOnlySpan<byte> data, int maxEntries = int.MaxValue)
     {
         try
         {
             var pos = 0;
             var count = ReadVarUint(data, ref pos);
+            if (count > (ulong)maxEntries)
+            {
+                throw new YUpdateException($"The awareness message names more than {maxEntries} clients.");
+            }
 
             // An entry takes at least 4 bytes (id, clock, length, and the shortest JSON text).
             var entries = new List<Entry>((int)Math.Min(count, (ulong)(data.Length / 4)));
