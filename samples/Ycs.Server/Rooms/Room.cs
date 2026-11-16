@@ -33,6 +33,14 @@ internal sealed class Room
     public string Name { get; }
 
     /// <summary>
+    /// The most awareness clients one session may hold a state for, and name in one message. A y-websocket client
+    /// sends one entry, its document's client id, and keeps it for the connection; Yjs gives a document a new id
+    /// only when another client uses its id. y-protocols has no limit; without one a single message of a few bytes
+    /// per id makes the room keep a clock per id and parse a JSON text per id under its lock.
+    /// </summary>
+    public const int MaxAwarenessClientsPerSession = 16;
+
+    /// <summary>
     /// Adds the session and queues sync step 1 for it in one step, so that it misses no update in between.
     /// </summary>
     internal void Join(Session session)
@@ -95,6 +103,7 @@ internal sealed class Room
 
         var update = new byte[length];
         reader.ReadExactly(update);
+        var entries = Awareness.Awareness.Decode(update, MaxAwarenessClientsPerSession);
 
         lock (gate)
         {
@@ -104,7 +113,13 @@ internal sealed class Room
                 return;
             }
 
-            var change = awareness.ApplyUpdate(update);
+            var added = entries.Where(e => e.State is not null && !session.ControlledIds.Contains(e.ClientId)).Select(e => e.ClientId).Distinct().Count();
+            if (session.ControlledIds.Count + added > MaxAwarenessClientsPerSession)
+            {
+                throw new YUpdateException($"The session would set the awareness states of more than {MaxAwarenessClientsPerSession} clients.");
+            }
+
+            var change = awareness.Apply(entries);
 
             // By the state each id is left with, not by the change's lists: a message may set, remove and set one id
             // again, and a state set again after a removal or a timeout, or over another session's, is an update

@@ -72,4 +72,86 @@ public class HostileAwarenessTests
 
         Assert.AreEqual(0, room.AwarenessClientIds.Count);
     }
+
+    [TestMethod]
+    public void Receive_MessageOfMoreClientsThanAllowed_ClosesTheSessionAndSetsNothing()
+    {
+        var room = new Room("r");
+        var session = Join(room);
+
+        session.Receive(HostileMessages.Awareness([.. Enumerable.Range(1, Room.MaxAwarenessClientsPerSession + 1).Select(i => ((ulong)i, 1UL, (string?)"{}"))]));
+
+        Assert.AreEqual((SessionCloseReason.ProtocolError, 0), (session.CloseReason, room.AwarenessClientIds.Count));
+    }
+
+    [TestMethod]
+    public void Receive_MoreClientsThanAllowedOverSeveralMessages_ClosesTheSessionAndRemovesItsStates()
+    {
+        var room = new Room("r");
+        var session = Join(room);
+        for (var i = 1; i <= Room.MaxAwarenessClientsPerSession; i++)
+        {
+            session.Receive(Messages.Awareness((ulong)i, 1, "{}"));
+        }
+
+        session.Receive(Messages.Awareness(1_000, 1, "{}"));
+
+        Assert.AreEqual((SessionCloseReason.ProtocolError, 0), (session.CloseReason, room.AwarenessClientIds.Count));
+    }
+
+    [TestMethod]
+    public void Receive_ClientsSetAndRemovedInTurn_StaysOpen()
+    {
+        var room = new Room("r");
+        var session = Join(room);
+
+        for (var i = 1; i <= 4 * Room.MaxAwarenessClientsPerSession; i++)
+        {
+            session.Receive(Messages.Awareness((ulong)i, 1, "{}"));
+            session.Receive(Messages.Awareness((ulong)i, 2, null));
+        }
+
+        Assert.AreEqual(SessionCloseReason.None, session.CloseReason);
+    }
+
+    [TestMethod]
+    public void RemoveOutdated_ClientWithoutStateForLongerThanTheTimeout_IsForgotten()
+    {
+        var clock = new Server.Awareness.AwarenessClock();
+        var awareness = new Server.Awareness.Awareness(clock);
+        awareness.ApplyUpdate(Messages.AwarenessUpdate(Messages.Awareness(1, 5, "{}")));
+        awareness.RemoveStates([1]);
+        clock.Advance(TimeSpan.FromMilliseconds(Server.Awareness.Awareness.OutdatedTimeoutMs));
+
+        awareness.RemoveOutdated();
+
+        Assert.IsFalse(awareness.TryGetClock(1, out _));
+    }
+
+    [TestMethod]
+    public void RemoveOutdated_ClientWithoutStateWithinTheTimeout_KeepsItsClock()
+    {
+        var clock = new Server.Awareness.AwarenessClock();
+        var awareness = new Server.Awareness.Awareness(clock);
+        awareness.ApplyUpdate(Messages.AwarenessUpdate(Messages.Awareness(1, 5, "{}")));
+        awareness.RemoveStates([1]);
+        clock.Advance(TimeSpan.FromMilliseconds(Server.Awareness.Awareness.OutdatedTimeoutMs - 1));
+
+        awareness.RemoveOutdated();
+
+        Assert.IsTrue(awareness.TryGetClock(1, out _));
+    }
+
+    [TestMethod]
+    public void RemoveOutdated_StateTimedOutInThisSweep_KeepsItsClockForTheBroadcast()
+    {
+        var clock = new Server.Awareness.AwarenessClock();
+        var awareness = new Server.Awareness.Awareness(clock);
+        awareness.ApplyUpdate(Messages.AwarenessUpdate(Messages.Awareness(1, 5, "{}")));
+        clock.Advance(TimeSpan.FromMilliseconds(Server.Awareness.Awareness.OutdatedTimeoutMs));
+
+        var change = awareness.RemoveOutdated();
+
+        Assert.AreEqual((1, true), (change.Removed.Count, awareness.TryGetClock(1, out _)));
+    }
 }
