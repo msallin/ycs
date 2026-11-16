@@ -23,15 +23,15 @@ namespace Ycs;
 /// <item><term><see cref="BigInteger"/></term><description>a JavaScript BigInt (122)</description></item>
 /// <item><term><see cref="string"/></term><description>a string (119)</description></item>
 /// <item><term><c>byte[]</c></term><description>a Uint8Array (116)</description></item>
-/// <item><term><c>List&lt;object&gt;</c></term><description>an array (117)</description></item>
-/// <item><term><c>Dictionary&lt;string, object&gt;</c></term><description>an object (118)</description></item>
+/// <item><term><see cref="FrozenList"/></term><description>an array (117)</description></item>
+/// <item><term><see cref="FrozenMap"/></term><description>an object (118), its keys in the order they were written</description></item>
 /// </list>
 /// </para>
 /// <para>
 /// Writing accepts those, every built-in integer type, <see cref="float"/>,
 /// <see cref="IDictionary{TKey, TValue}"/> and <see cref="IReadOnlyDictionary{TKey, TValue}"/>
 /// with string keys, a non-generic <see cref="IDictionary"/> with string keys, and any
-/// <see cref="IList"/> (arrays, <c>List&lt;T&gt;</c>). Numbers follow JavaScript's rules, so the
+/// <see cref="IList"/> (arrays, <c>List&lt;T&gt;</c>); what a document stores has been copied by <see cref="ValueFreezer.Freeze"/>. Numbers follow JavaScript's rules, so the
 /// bytes match what Yjs writes for the same value: an integer within ±(2^31 - 1) is a var-int,
 /// any other number is a float32 if that is exact and a float64 otherwise. An integer beyond
 /// ±(2^53 - 1) has no exact JavaScript number and is rejected; use <see cref="BigInteger"/>.
@@ -121,6 +121,15 @@ internal static class AnyEncoding
         Frame frame;
         switch (o)
         {
+            // The containers of a document are walked as stored: no copy of a byte array on the way.
+            case FrozenMap frozenMap:
+                frame = new Frame(Kind.Dictionary, frozenMap.RawEnumerator());
+                count = frozenMap.Count;
+                break;
+            case FrozenList frozenList:
+                frame = new Frame(Kind.List, frozenList.RawEnumerator());
+                count = frozenList.Count;
+                break;
             case IDictionary<string, object?> map:
                 frame = new Frame(Kind.Dictionary, map.GetEnumerator());
                 count = map.Count;
@@ -229,12 +238,17 @@ internal static class AnyEncoding
         }
 
         var len = reader.ReadVarUint();
-        var obj = new Dictionary<string, object?>(Limits.Capacity(len, reader.Remaining / 2));
+        var obj = new FrozenMap(Limits.Capacity(len, reader.Remaining / 2));
         for (long i = 0; i < len; i++)
         {
             var key = reader.ReadVarString();
             var memberType = reader.ReadByte();
-            obj[key] = memberType == 127 ? JsValue.Undefined : ReadAny(reader, memberType, 1);
+            var member = memberType == 127 ? JsValue.Undefined : ReadAny(reader, memberType, 1);
+            obj.Set(key, member);
+            if (member is FrozenList or FrozenMap)
+            {
+                obj.Depth = Math.Max(obj.Depth, DepthOf(member) + 1);
+            }
         }
 
         return obj;
@@ -259,26 +273,47 @@ internal static class AnyEncoding
             if (remaining == 0)
             {
                 open.RemoveAt(open.Count - 1);
+                if (open.Count > 0)
+                {
+                    RaiseDepth(open[^1].Container, container);
+                }
+
                 continue;
             }
 
             open[^1] = (container, remaining - 1);
-            var obj = container as Dictionary<string, object?>;
+            var obj = container as FrozenMap;
             var key = obj != null ? reader.ReadVarString() : null;
             var childType = reader.ReadByte();
             CheckDepth(depth + open.Count, maxDepth);
             var child = childType is 117 or 118 ? OpenContainer(reader, childType, open) : ReadScalar(reader, childType);
             if (obj != null)
             {
-                obj[key!] = child;
+                obj.Set(key!, child);
             }
             else
             {
-                ((List<object?>)container).Add(child);
+                ((FrozenList)container).Append(child);
             }
         }
 
         return root;
+    }
+
+    private static int DepthOf(object? container) => container is FrozenList list ? list.Depth : ((FrozenMap)container!).Depth;
+
+    /// <summary>Counts the levels of <paramref name="child"/> into those of <paramref name="parent"/>, when the child is closed.</summary>
+    private static void RaiseDepth(object parent, object child)
+    {
+        if (parent is FrozenList list)
+        {
+            list.Depth = Math.Max(list.Depth, DepthOf(child) + 1);
+        }
+        else
+        {
+            var map = (FrozenMap)parent;
+            map.Depth = Math.Max(map.Depth, DepthOf(child) + 1);
+        }
     }
 
     private static void CheckDepth(int depth, int maxDepth)
@@ -293,8 +328,8 @@ internal static class AnyEncoding
     {
         var len = reader.ReadVarUint();
         object container = type == 117
-            ? new List<object?>(Limits.Capacity(len, reader.Remaining))
-            : new Dictionary<string, object?>(Limits.Capacity(len, reader.Remaining / 2));
+            ? new FrozenList(Limits.Capacity(len, reader.Remaining))
+            : new FrozenMap(Limits.Capacity(len, reader.Remaining / 2));
         open.Add((container, len));
         return container;
     }
@@ -333,53 +368,6 @@ internal static class AnyEncoding
             default:
                 throw new YUpdateException($"Unknown 'any' type: {type}.");
         }
-    }
-
-    /// <summary>
-    /// Throws if <paramref name="value"/>, or anything nested in it, is not one of the types
-    /// <see cref="WriteAny"/> accepts, or is nested deeper than <paramref name="maxDepth"/> levels. Called when a
-    /// value enters a document, so a bad value fails at the call that inserted it rather than at the next encode.
-    /// </summary>
-    public static void Validate(object? value, int maxDepth = UpdateLimits.DefaultMaxDepth)
-    {
-        List<Frame>? frames = null;
-        if (!ValidateValue(value, ref frames))
-        {
-            return;
-        }
-
-        while (frames!.Count > 0)
-        {
-            var frame = frames[^1];
-            if (!frame.Entries.MoveNext())
-            {
-                frames.RemoveAt(frames.Count - 1);
-                continue;
-            }
-
-            if (frames.Count > maxDepth)
-            {
-                throw TooDeep(maxDepth, nameof(value));
-            }
-
-            ValidateValue(Entry(frame, out _), ref frames);
-        }
-    }
-
-    private static bool ValidateValue(object? value, ref List<Frame>? frames)
-    {
-        switch (value)
-        {
-            case null or string or bool or double or float or int or long or short or sbyte or byte or ushort or uint or byte[]:
-                return false;
-            case ulong ul:
-                return ul > JsValue.MaxSafeInteger ? throw OutOfRange(ul) : false;
-            case BigInteger bi:
-                ToInt64(bi);
-                return false;
-        }
-
-        return Open(value, ref frames, out _) ? true : throw Unsupported(value!);
     }
 
     /// <summary>lib0 <c>writeAny</c> for a JavaScript number.</summary>

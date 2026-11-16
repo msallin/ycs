@@ -11,13 +11,16 @@ internal class ContentFormat : IContentEx
     internal const int _ref = 6;
 
     public readonly string Key;
-    public readonly object Value;
+    private readonly object _value;
 
     internal ContentFormat(string key, object value)
     {
         Key = key;
-        Value = value;
+        _value = value;
     }
+
+    /// <summary>The attribute's value; a byte array as a copy.</summary>
+    public object Value => ValueFreezer.OnRead(_value)!;
 
     int IContentEx.Ref => _ref;
 
@@ -26,7 +29,7 @@ internal class ContentFormat : IContentEx
     public bool Countable => false;
     public int Length => 1;
 
-    public IContent Copy() => new ContentFormat(Key, Value);
+    public IContent Copy() => new ContentFormat(Key, _value);
 
     // Yjs: ContentFormat#getContent returns an empty array - formatting carries no user content.
     public IReadOnlyList<object> GetContent() => System.Array.Empty<object>();
@@ -61,7 +64,7 @@ internal class ContentFormat : IContentEx
     void IContentEx.Write(IUpdateEncoder encoder, int offset)
     {
         encoder.WriteKey(Key);
-        encoder.WriteJson(Value);
+        encoder.WriteJson(_value);
     }
 
     internal static ContentFormat Read(IUpdateDecoder decoder)

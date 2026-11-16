@@ -83,6 +83,8 @@ internal static class JsValue
 
     private static string JsJoin(IList list)
     {
+        // A list nested as deep as the limits of an update allow would otherwise end the process.
+        System.Runtime.CompilerServices.RuntimeHelpers.EnsureSufficientExecutionStack();
         var sb = new StringBuilder();
         for (var i = 0; i < list.Count; i++)
         {

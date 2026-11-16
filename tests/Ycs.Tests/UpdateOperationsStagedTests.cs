@@ -24,8 +24,8 @@ public class UpdateOperationsStagedTests
 
         var merged = Merge(v2, carrier, deleted, pair);
 
-        var cut = Decode(v2, merged).Single(s => s.Id.Equals(new ID(1, 2)));
-        Assert.AreEqual(("�", new ID(1, 1)), (cut.Text, cut.LeftOrigin));
+        var cut = Decode(v2, merged).Single(s => s.Id.Equals(new ItemId(1, 2)));
+        Assert.AreEqual(("�", new ItemId(1, 1)), (cut.Text, cut.LeftOrigin));
     }
 
     [TestMethod]
@@ -39,7 +39,7 @@ public class UpdateOperationsStagedTests
 
         var texts = UpdateOperations.DecodeUpdateV2(diff).Structs.Select(s => (s.Id, s.Text, s.LeftOrigin)).ToList();
         CollectionAssert.AreEqual(
-            new[] { (new ID(2, 0), "q\uD83D", (ID?)new ID(9, 0)), (new ID(1, 3), "\uDE00", (ID?)new ID(1, 2)) },
+            new[] { (new ItemId(2, 0), "q\uD83D", (ItemId?)new ItemId(9, 0)), (new ItemId(1, 3), "\uDE00", (ItemId?)new ItemId(1, 2)) },
             texts);
     }
 
@@ -78,20 +78,20 @@ public class UpdateOperationsStagedTests
     }
 
     // The items have an origin and so no parent: a parent's name would be a string between the texts in the v2 string column.
-    private static Action<IUpdateEncoder, ID> Text(string text) =>
-        (encoder, id) => Item.WriteItem(encoder, 0, id, new ID(9, 0), null, null, new ContentString(text), null, default);
+    private static Action<IUpdateEncoder, ItemId> Text(string text) =>
+        (encoder, id) => Item.WriteItem(encoder, 0, id, new ItemId(9, 0), null, null, new ContentString(text), null, default);
 
-    private static Action<IUpdateEncoder, ID> Deleted(int length) =>
-        (encoder, id) => Item.WriteItem(encoder, 0, id, new ID(9, 0), null, null, new ContentDeleted(length), null, default);
+    private static Action<IUpdateEncoder, ItemId> Deleted(int length) =>
+        (encoder, id) => Item.WriteItem(encoder, 0, id, new ItemId(9, 0), null, null, new ContentDeleted(length), null, default);
 
-    private static Action<IUpdateEncoder, ID> Gc(int length) => (encoder, _) =>
+    private static Action<IUpdateEncoder, ItemId> Gc(int length) => (encoder, _) =>
     {
         encoder.WriteInfo(GC.StructGCRefNumber);
         encoder.WriteLength(length);
     };
 
     // One client section per entry, in the order given: (client, clock of its first struct, its structs), then an empty delete set.
-    private static byte[] Update(bool v2, params (long Client, long Clock, Action<IUpdateEncoder, ID>[] Structs)[] sections)
+    private static byte[] Update(bool v2, params (long Client, long Clock, Action<IUpdateEncoder, ItemId>[] Structs)[] sections)
     {
         var encoder = v2 ? (IUpdateEncoder)UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
         try
@@ -104,7 +104,7 @@ public class UpdateOperationsStagedTests
                 encoder.RestWriter.WriteVarUint((uint)clock);
                 foreach (var write in structs)
                 {
-                    write(encoder, new ID(client, clock));
+                    write(encoder, new ItemId(client, clock));
                 }
             }
 

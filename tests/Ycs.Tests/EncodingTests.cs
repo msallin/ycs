@@ -124,7 +124,7 @@ public class EncodingTests
         Assert.AreEqual(2147483648.0, RoundTrip(2147483648L));
         Assert.IsTrue(double.IsNegative((double)RoundTrip(-0.0)));
         Assert.AreEqual(new BigInteger(-7), RoundTrip(new BigInteger(-7)));
-        CollectionAssert.AreEqual(new List<object> { "a", 1, null }, (List<object>)RoundTrip(new object[] { "a", 1, null }));
+        CollectionAssert.AreEqual(new List<object> { "a", 1, null }, (System.Collections.IList)RoundTrip(new object[] { "a", 1, null }));
     }
 
     [TestMethod]
@@ -132,7 +132,7 @@ public class EncodingTests
     {
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new Lib0Writer().WriteAny(9007199254740992L));
         Assert.ThrowsExactly<NotSupportedException>(() => new Lib0Writer().WriteAny(DateTime.UnixEpoch));
-        Assert.ThrowsExactly<NotSupportedException>(() => AnyEncoding.Validate(new List<object> { new object() }));
+        Assert.ThrowsExactly<NotSupportedException>(() => ValueFreezer.Freeze(new List<object> { new object() }));
 
         // ...and a document rejects them when they are inserted, not when it is encoded.
         var doc = new YDoc();

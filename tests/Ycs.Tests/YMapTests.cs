@@ -29,7 +29,8 @@ public class YMapTests : YTestBase
         var obj = new object[] { 1 };
         var m2 = new YMap(new Dictionary<string, object> { { "object", obj }, { "boolean", true } });
         map0.Set("m2", m2);
-        Assert.AreSame(obj, m2.Get("object"));
+        Assert.AreNotSame(obj, m2.Get("object")); // the document holds a copy
+        CollectionAssert.AreEqual(obj, (System.Collections.IList)m2.Get("object"));
         Assert.AreEqual(true, m2.Get("boolean"));
 
         CompareUsers();
@@ -297,7 +298,7 @@ public class YMapTests : YTestBase
         map1.Set("map", _map1);
 
         int calls = 0;
-        ID? dmapId = null;
+        ItemId? dmapId = null;
 
         map1.DeepEventHandler += (s, e) =>
         {
@@ -327,9 +328,9 @@ public class YMapTests : YTestBase
         var dmap3 = _map3.Get("deepmap") as YMap;
 
         Assert.IsTrue(calls > 0);
-        Assert.IsTrue(ID.Equals(dmap1.OwnerIdForTests, dmap2.OwnerIdForTests));
-        Assert.IsTrue(ID.Equals(dmap1.OwnerIdForTests, dmap3.OwnerIdForTests));
-        Assert.IsTrue(ID.Equals(dmap1.OwnerIdForTests, dmapId));
+        Assert.IsTrue(dmap1.OwnerIdForTests == dmap2.OwnerIdForTests);
+        Assert.IsTrue(dmap1.OwnerIdForTests == dmap3.OwnerIdForTests);
+        Assert.IsTrue(dmap1.OwnerIdForTests == dmapId);
 
         CompareUsers();
     }

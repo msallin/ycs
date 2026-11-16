@@ -48,7 +48,7 @@ internal static class Properties
             seed => Generator.Generate(seed, BmpOnly), Idempotence),
         new("commutativity", "applying two updates in either order gives the same state",
             CommutativityScript, Commutativity),
-        new("rejects-cleanly", "a structured (fuzzed) update is applied, or rejected with YUpdateException leaving the document as it was (or, with PartlyApplied, a complete part of it); nothing else is thrown",
+        new("rejects-cleanly", "a structured (fuzzed) update is applied, or rejected with YUpdateException leaving the document as it was; nothing else is thrown; and after the script every client's state applies to a fresh document, in v1 and v2",
             seed => UpdateFuzzer.Generate(seed).Script, RejectsCleanly),
         new("markers-invisible", "search markers change no observation (content, encodings, results, events) against the same script with them off, and after every step every marker points at an item of its list with the right index",
             ListsOrGeneral, MarkersInvisible),
@@ -97,6 +97,21 @@ internal static class Properties
         run.Clients.SelectMany(c => c.Log.Select((u, k) => (c.Index, k, u.V1, u.V2))).ToList();
 
     private static Replica Fresh(ScriptRun run, bool gc = true) => new(null, gc, run.Roots);
+
+    private static Replica FreshWith(ScriptRun run, Replica source, bool v2)
+    {
+        var fresh = Fresh(run, source.Gc);
+        if (v2)
+        {
+            fresh.ApplyV2(source.EncodeV2());
+        }
+        else
+        {
+            fresh.ApplyV1(source.EncodeV1());
+        }
+
+        return fresh;
+    }
 
     private static string Content(Replica r) => Canonical(r.Content());
 
@@ -1229,9 +1244,25 @@ internal static class Properties
             run.Step(step);
         }
 
-        return run.RejectionViolations.Count == 0
-            ? null
-            : new Violation("rejects-cleanly", run.RejectionViolations[0].Split(':')[0], string.Join("; ", run.RejectionViolations));
+        if (run.RejectionViolations.Count != 0)
+        {
+            return new Violation("rejects-cleanly", run.RejectionViolations[0].Split(':')[0], string.Join("; ", run.RejectionViolations));
+        }
+
+        // Whatever was accepted, the state of every client applies to a fresh document, in both formats: a room that
+        // accepted an update no document can load is as good as broken.
+        foreach (var c in run.Clients)
+        {
+            var r = c.Replica;
+            var v = Differs("rejects-cleanly", "state applies v1", Sv(r), Sv(FreshWith(run, r, v2: false)))
+                ?? Differs("rejects-cleanly", "state applies v2", Sv(r), Sv(FreshWith(run, r, v2: true)));
+            if (v != null)
+            {
+                return v;
+            }
+        }
+
+        return null;
     });
 
     private static Violation EventReplay(Dictionary<string, object> script) => Guard("event-replay", () =>

@@ -147,7 +147,7 @@ internal static class StructStaging
                 text = new string(table.Chars(i));
                 break;
             case ItemKind.Any:
-                values = table.Values(i).ToArray();
+                values = Array.ConvertAll(table.Values(i).ToArray(), ValueFreezer.OnRead);
                 break;
             case ItemKind.Json or ItemKind.Binary or ItemKind.Embed:
                 values = ((IContent)table.Cold(i)).GetContent();

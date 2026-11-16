@@ -47,8 +47,8 @@ public class PermanentUserDataTests
         // so 'a'/'b'/'c' do not start at clock 0 - ask the store for the clock they actually start at.
         var clockBeforeInsert = doc.Store.GetState(doc.ClientId);
         array.Insert(0, new object[] { "a", "b", "c" });
-        var idOfA = new ID(doc.ClientId, clockBeforeInsert);
-        var idOfB = new ID(doc.ClientId, clockBeforeInsert + 1);
+        var idOfA = new ItemId(doc.ClientId, clockBeforeInsert);
+        var idOfB = new ItemId(doc.ClientId, clockBeforeInsert + 1);
 
         array.Delete(0); // delete 'a' only
 
@@ -82,7 +82,7 @@ public class PermanentUserDataTests
         var array = doc.GetArray("array");
         var clockBeforeInsert = doc.Store.GetState(doc.ClientId);
         array.Insert(0, new object[] { "a" });
-        var idOfA = new ID(doc.ClientId, clockBeforeInsert);
+        var idOfA = new ItemId(doc.ClientId, clockBeforeInsert);
 
         array.Delete(0);
 
@@ -104,7 +104,7 @@ public class PermanentUserDataTests
 
         var clockBeforeInsert = doc1.Store.GetState(doc1.ClientId);
         doc1.GetArray("array").Insert(0, new object[] { "a", "b" });
-        var idOfA = new ID(doc1.ClientId, clockBeforeInsert);
+        var idOfA = new ItemId(doc1.ClientId, clockBeforeInsert);
         doc1.GetArray("array").Delete(0); // 'a' deleted by user1
 
         // Sync both ways: each doc's PermanentUserData should learn about the other user, and doc2

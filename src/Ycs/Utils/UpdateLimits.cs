@@ -1,3 +1,5 @@
+#nullable enable
+
 namespace Ycs;
 
 /// <summary>
@@ -12,7 +14,7 @@ namespace Ycs;
 /// An application that applies updates it trusts and that may be larger (its own stored state, say)
 /// passes <see cref="Unlimited"/>, or its own instance, for that call.
 /// </summary>
-public sealed class UpdateLimits
+public sealed record UpdateLimits
 {
     private readonly long _maxStructsPerUpdate = 1 << 17;
     private readonly long _maxPendingStructs = 1 << 17;

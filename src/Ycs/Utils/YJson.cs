@@ -18,8 +18,7 @@ namespace Ycs;
 ///
 /// <para>Values are the closed set of <see cref="AnyEncoding"/>; there is no reflection, so this works
 /// under trimming and Native AOT. Parsing uses <see cref="Utf8JsonReader"/> straight on the UTF-8 bytes
-/// and returns <see cref="Dictionary{TKey, TValue}"/> of <see cref="string"/> to <see cref="object"/>,
-/// <see cref="List{T}"/> of <see cref="object"/>, <see cref="string"/>, <see cref="bool"/>,
+/// and returns <see cref="FrozenMap"/> for an object, <see cref="FrozenList"/> for an array, <see cref="string"/>, <see cref="bool"/>,
 /// <see cref="int"/> for an integer literal that fits (<see cref="long"/> up to ±(2^53 - 1)), otherwise
 /// <see cref="double"/>, and
 /// <c>null</c>.</para>
@@ -84,18 +83,21 @@ internal static class YJson
             switch (reader.TokenType)
             {
                 case JsonTokenType.StartObject:
-                    value = new Dictionary<string, object?>();
+                    value = new FrozenMap(0);
                     break;
                 case JsonTokenType.StartArray:
-                    value = new List<object?>();
+                    value = new FrozenList(0);
                     break;
                 case JsonTokenType.EndObject:
                 case JsonTokenType.EndArray:
+                    var closed = open[^1];
                     open.RemoveAt(open.Count - 1);
                     if (open.Count == 0)
                     {
                         return root;
                     }
+
+                    RaiseDepth(open[^1], closed);
 
                     reader.Read();
                     continue;
@@ -138,16 +140,16 @@ internal static class YJson
             {
                 root = value;
             }
-            else if (open[^1] is Dictionary<string, object?> dict)
+            else if (open[^1] is FrozenMap map)
             {
-                dict[key!] = value; // a repeated key: the last one wins, as in JSON.parse
+                map.Set(key!, value); // a repeated key: the last one wins, as in JSON.parse
             }
             else
             {
-                ((List<object?>)open[^1]).Add(value);
+                ((FrozenList)open[^1]).Append(value);
             }
 
-            if (value is Dictionary<string, object?> or List<object?>)
+            if (value is FrozenMap or FrozenList)
             {
                 open.Add(value);
             }
@@ -157,6 +159,20 @@ internal static class YJson
             }
 
             reader.Read();
+        }
+    }
+
+    private static void RaiseDepth(object parent, object child)
+    {
+        var depth = (child is FrozenList l ? l.Depth : ((FrozenMap)child).Depth) + 1;
+        if (parent is FrozenList list)
+        {
+            list.Depth = Math.Max(list.Depth, depth);
+        }
+        else
+        {
+            var map = (FrozenMap)parent;
+            map.Depth = Math.Max(map.Depth, depth);
         }
     }
 
@@ -313,6 +329,14 @@ internal static class YJson
                         .Append(bytes[i].ToString(CultureInfo.InvariantCulture));
                 }
                 sb.Append('}');
+                return;
+            case FrozenMap frozenMap:
+                sb.Append('{');
+                open.Add((frozenMap.RawEnumerator(), true, false));
+                return;
+            case FrozenList frozenList:
+                sb.Append('[');
+                open.Add((frozenList.RawEnumerator(), false, false));
                 return;
             case IDictionary<string, object?> map:
                 sb.Append('{');

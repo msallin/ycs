@@ -562,6 +562,6 @@ public class TraceReplayTests
             return got;
         }
 
-        private static YText.YTextChangeAttributes ComputeYChange(YText.YTextChangeType type, ID id) => new() { Type = type, User = id.Client };
+        private static YText.YTextChangeAttributes ComputeYChange(YText.YTextChangeType type, ItemId id) => new() { Type = type, User = id.Client };
     }
 }

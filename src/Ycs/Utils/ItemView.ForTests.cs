@@ -92,7 +92,7 @@ public readonly partial struct ItemView
         Same("Content count", expected.Count, content.Count);
         for (var i = 0; i < expected.Count; i++)
         {
-            Same("Content", expected[i], content[i]);
+            Same("Content", YValue.FromStored(expected[i]), YValue.FromStored(content[i]));
         }
     }
 }

@@ -110,7 +110,7 @@ internal sealed class Session : IDisposable
             switch (type)
             {
                 case MessageType.Sync:
-                    room.ReceiveSync(this, reader);
+                    room.ReceiveSync(this, message.AsSpan((int)reader.Position));
                     break;
                 case MessageType.Awareness:
                     room.ReceiveAwareness(this, reader);

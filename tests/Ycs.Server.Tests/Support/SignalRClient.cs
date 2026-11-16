@@ -234,12 +234,9 @@ internal sealed class SignalRClient : IAsyncDisposable
             var (kind, reader) = Messages.Split(message);
             if (kind == MessageType.Sync)
             {
-                var reply = new MemoryStream();
-                VarUint.Write(reply, MessageType.Sync);
-                SyncProtocol.ReadSyncMessage(reader, reply, Doc, this);
-                if (reply.Length > 1)
+                if (Messages.HandleSync(reader, Doc, this) is { } answer)
                 {
-                    Send(reply.ToArray());
+                    Send(answer);
                 }
             }
             else if (kind == MessageType.Awareness)

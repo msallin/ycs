@@ -1,3 +1,4 @@
+using System.Buffers;
 using Ycs.Server.Rooms;
 
 namespace Ycs.Server.Tests.Support;
@@ -70,19 +71,17 @@ internal sealed class HostilePeer
             switch (type)
             {
                 case MessageType.Sync when Listening is null:
-                    var reply = new MemoryStream();
-                    VarUint.Write(reply, MessageType.Sync);
-                    SyncProtocol.ReadSyncMessage(reader, reply, Doc, Client);
-                    if (reply.Length > 1)
+                    if (Messages.HandleSync(reader, Doc, Client) is { } answer)
                     {
-                        session.Receive(reply.ToArray());
+                        session.Receive(answer);
                     }
 
                     break;
                 case MessageType.Sync:
-                    if (VarUint.Read(reader) == SyncProtocol.MessageYjsUpdate)
+                    var sync = reader.ToArray().AsSpan((int)reader.Position);
+                    if (VarUint.Peek(sync) == (uint)SyncMessageType.Update)
                     {
-                        SyncProtocol.ReadUpdate(reader, Doc, Client);
+                        SyncProtocol.ReadSyncMessage(sync, new ArrayBufferWriter<byte>(), Doc, Client);
                     }
 
                     break;

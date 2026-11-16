@@ -44,6 +44,7 @@ public class ItemRefSignatureTests
         "LazyStructWriter.WriteStruct",
         "ClientStructRefs.*",
         "PendingStructs.*",
+        "PlanItem.*",
         "StructStore.ApplyUpdate",
         "StructStore.CheckPendingLimits",
         "StructStore.WriteRest",

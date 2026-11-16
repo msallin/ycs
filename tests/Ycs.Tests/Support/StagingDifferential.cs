@@ -113,7 +113,7 @@ internal static class StagingDifferential
             item.LeftOrigin,
             item.RightOrigin,
             item.Parent as string,
-            item.Parent as ID?,
+            item.Parent as ItemId?,
             item.ParentSub,
             values,
             text,
@@ -132,12 +132,8 @@ internal static class StagingDifferential
         Assert.AreEqual(
             (expected.Text, expected.FormatKey, expected.TypeRef, expected.TypeName, expected.DocGuid),
             (actual.Text, actual.FormatKey, actual.TypeRef, actual.TypeName, actual.DocGuid));
-        Assert.IsTrue(DeepEqual(expected.FormatValue, actual.FormatValue), $"the format value of {expected.Id}");
-        Assert.HasCount(expected.Content.Count, actual.Content);
-        for (var i = 0; i < expected.Content.Count; i++)
-        {
-            Assert.IsTrue(DeepEqual(expected.Content[i], actual.Content[i]), $"value {i} of {expected.Id}");
-        }
+        Assert.AreEqual(YValue.FromStored(expected.FormatValue), YValue.FromStored(actual.FormatValue), $"the format value of {expected.Id}");
+        Assert.IsTrue(expected.Content.Select(YValue.FromStored).SequenceEqual(actual.Content.Select(YValue.FromStored)), $"the values of {expected.Id}");
     }
 
     // Two reads of one update give equal values, not the same objects.
