@@ -255,6 +255,14 @@ public partial class YDoc
     /// </summary>
     public event EventHandler<(byte[] data, object origin, Transaction transaction)> UpdateV2;
     public event EventHandler Destroyed;
+
+    /// <summary>
+    /// Raised, inside the transaction of an <c>ApplyUpdate</c> that returns normally, when that update let waiting
+    /// structs of earlier updates integrate and they failed a check (nesting, garbage collection): they are dropped
+    /// (kept, every later retry would fail again), the update itself stands whole. Clients that were handed them as
+    /// waiting structs may integrate them under other limits. No user content is passed.
+    /// </summary>
+    public event EventHandler<PendingDrop> PendingDropped;
     public event EventHandler<(ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed)> SubdocsChanged;
 
     public long ClientId { get; internal set; }
@@ -440,9 +448,10 @@ public partial class YDoc
     /// not local, as in Yjs, also when it is the caller's.
     /// <br/>
     /// A malformed update, or one beyond a limit, throws <see cref="YUpdateException"/> and leaves the
-    /// document as it was, except beyond <see cref="UpdateLimits.MaxIntegrationSteps"/>
-    /// (<see cref="YUpdateException.PartlyApplied"/>). Pending structs of earlier updates that this one
-    /// lets integrate, and that then fail a check, are dropped and the update stands (docs/api.md,
+    /// document as it was, except when it was cut short (<see cref="YUpdateException.PartlyApplied"/>: beyond
+    /// <see cref="UpdateLimits.MaxIntegrationSteps"/>, or its own structs waited for waiting structs that were
+    /// dropped). Waiting structs of earlier updates that this one lets integrate, and that then fail a check, are
+    /// dropped and the update stands whole: <see cref="PendingDropped"/> reports it (docs/api.md,
     /// "Pending structs, retried").
     /// </summary>
     /// <param name="update">The update.</param>
@@ -485,16 +494,16 @@ public partial class YDoc
 
     /// <summary>
     /// Like <see cref="ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/> (v1), but returns false instead of throwing
-    /// <see cref="YUpdateException"/>; the document is then unchanged, except beyond
-    /// <see cref="UpdateLimits.MaxIntegrationSteps"/> (see <see cref="YUpdateException.PartlyApplied"/>).
+    /// <see cref="YUpdateException"/>; the document is then unchanged, except when the update was
+    /// cut short (see <see cref="YUpdateException.PartlyApplied"/>).
     /// </summary>
     public bool TryApplyUpdate(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) =>
         TryApply(update, v2: false, transactionOrigin, limits);
 
     /// <summary>
     /// Like <see cref="ApplyUpdateV2(ReadOnlySpan{byte}, object, UpdateLimits)"/>, but returns false instead of throwing
-    /// <see cref="YUpdateException"/>; the document is then unchanged, except beyond
-    /// <see cref="UpdateLimits.MaxIntegrationSteps"/> (see <see cref="YUpdateException.PartlyApplied"/>).
+    /// <see cref="YUpdateException"/>; the document is then unchanged, except when the update was
+    /// cut short (see <see cref="YUpdateException.PartlyApplied"/>).
     /// </summary>
     public bool TryApplyUpdateV2(ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null) =>
         TryApply(update, v2: true, transactionOrigin, limits);
@@ -682,6 +691,8 @@ public partial class YDoc
     {
         BeforeTransaction?.Invoke(this, transaction);
     }
+
+    internal void InvokeOnPendingDropped(PendingDrop args) => PendingDropped?.Invoke(this, args);
 
     internal void InvokeOnAfterTransaction(Transaction transaction)
     {

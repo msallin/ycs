@@ -47,7 +47,7 @@ public class GarbageCollectionCheckTests
 
         doc.ApplyUpdate(DeleteRange(70000, 3, 1));
 
-        Assert.IsTrue(doc.CreateSnapshot().DeleteSet.IsDeleted(new ID(70000, 3)));
+        Assert.IsTrue(doc.CreateSnapshot().DeleteSet.IsDeleted(new ItemId(70000, 3)));
     }
 
     /// <summary>A v1 update with no structs and one deleted range.</summary>

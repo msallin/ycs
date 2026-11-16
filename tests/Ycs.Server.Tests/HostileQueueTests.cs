@@ -1,3 +1,4 @@
+using System.Buffers;
 using Ycs.Server.Rooms;
 using Ycs.Server.Tests.Support;
 
@@ -100,7 +101,7 @@ public class HostileQueueTests
 
         session.Receive(step1);
 
-        Assert.AreEqual((SessionCloseReason.None, SyncProtocol.MessageYjsSyncStep2), (session.CloseReason, Messages.SyncType(Messages.Drain(session).Single())));
+        Assert.AreEqual((SessionCloseReason.None, (uint)SyncMessageType.SyncStep2), (session.CloseReason, Messages.SyncType(Messages.Drain(session).Single())));
     }
 
     [TestMethod]
@@ -109,7 +110,7 @@ public class HostileQueueTests
         var room = new Room("r");
         var session = Join(room);
 
-        session.Receive(Messages.Sync(s => s.WriteByte(9)));
+        session.Receive(Messages.Sync(s => s.Write(new byte[] { 9 }.AsSpan())));
 
         Assert.AreEqual((SessionCloseReason.ProtocolError, nameof(YUpdateException)), (session.CloseReason, session.CloseCause?.GetType().Name));
     }

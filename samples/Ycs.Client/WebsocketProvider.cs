@@ -326,7 +326,7 @@ internal sealed class WebsocketProvider : IAsyncDisposable
                 switch (Wire.ReadVarUint(reader))
                 {
                     case Wire.Sync:
-                        HandleSync(open, reader);
+                        HandleSync(open, message.AsSpan((int)reader.Position));
                         break;
                     case Wire.Awareness:
                         HandleAwareness(open, reader);
@@ -346,21 +346,21 @@ internal sealed class WebsocketProvider : IAsyncDisposable
     }
 
     // Under the gate.
-    private void HandleSync(Connection open, MemoryStream reader)
+    private void HandleSync(Connection open, ReadOnlySpan<byte> message)
     {
-        using var reply = new MemoryStream();
-        Wire.WriteVarUint(reply, Wire.Sync);
-        var type = SyncProtocol.ReadSyncMessage(reader, reply, Doc, this);
+        var reply = new ArrayBufferWriter<byte>();
+        reply.Write([(byte)Wire.Sync]);
+        var type = SyncProtocol.ReadSyncMessage(message, reply, Doc, this);
 
         // Only a step 1 writes a reply; the outer type alone is one byte.
-        if (reply.Length > 1)
+        if (reply.WrittenCount > 1)
         {
-            open.Send(reply.ToArray());
+            open.Send(reply.WrittenSpan.ToArray());
             return;
         }
 
         Received?.Invoke();
-        if (type == SyncProtocol.MessageYjsSyncStep2 && !Synced)
+        if (type == SyncMessageType.SyncStep2 && !Synced)
         {
             Synced = true;
             StatusChanged?.Invoke();

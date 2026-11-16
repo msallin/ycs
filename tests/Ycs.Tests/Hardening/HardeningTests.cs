@@ -257,8 +257,8 @@ public class HardeningTests
     {
         var doc = new YDoc();
         var message = Hex("02 FF FF FF FF 0F 00 00");
-        Assert.IsLessThan(1L << 20, AllocatedBy(() => SyncProtocol.ReadSyncMessage(new MemoryStream(message), new MemoryStream(), doc, null)));
-        Assert.ThrowsExactly<YUpdateException>(() => SyncProtocol.ReadSyncMessage(new MemoryStream(message), new MemoryStream(), doc, null));
+        Assert.IsLessThan(1L << 20, AllocatedBy(() => SyncProtocol.ReadSyncMessage(message, new System.Buffers.ArrayBufferWriter<byte>(), doc, null)));
+        Assert.ThrowsExactly<YUpdateException>(() => SyncProtocol.ReadSyncMessage(message, new System.Buffers.ArrayBufferWriter<byte>(), doc, null));
     }
 
     [TestMethod]
@@ -266,12 +266,11 @@ public class HardeningTests
     {
         var source = new YDoc();
         source.GetText("t").Insert(0, new string('x', 200_000));
-        var stream = new MemoryStream();
-        SyncProtocol.WriteUpdate(stream, source.EncodeStateAsUpdate());
-        stream.Position = 0;
+        var message = new System.Buffers.ArrayBufferWriter<byte>();
+        SyncProtocol.WriteUpdate(message, source.EncodeStateAsUpdate());
 
         var doc = new YDoc();
-        SyncProtocol.ReadSyncMessage(stream, new MemoryStream(), doc, null);
+        SyncProtocol.ReadSyncMessage(message.WrittenSpan, new System.Buffers.ArrayBufferWriter<byte>(), doc, null);
 
         Assert.AreEqual(200_000, doc.GetText("t").Length);
     }

@@ -190,12 +190,9 @@ internal sealed class SocketClient : IAsyncDisposable
             var (type, reader) = Messages.Split(message);
             if (type == MessageType.Sync)
             {
-                var reply = new MemoryStream();
-                VarUint.Write(reply, MessageType.Sync);
-                SyncProtocol.ReadSyncMessage(reader, reply, Doc, this);
-                if (reply.Length > 1)
+                if (Messages.HandleSync(reader, Doc, this) is { } answer)
                 {
-                    outbox.Writer.TryWrite((reply.ToArray(), WebSocketMessageType.Binary));
+                    outbox.Writer.TryWrite((answer, WebSocketMessageType.Binary));
                 }
             }
             else if (type == MessageType.Awareness)

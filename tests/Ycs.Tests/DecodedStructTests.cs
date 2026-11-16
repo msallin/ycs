@@ -150,7 +150,7 @@ public class DecodedStructTests
         Assert.AreEqual(item.LeftOrigin, d.LeftOrigin);
         Assert.AreEqual(item.RightOrigin, d.RightOrigin);
         Assert.AreEqual(item.Parent as string, d.ParentName);
-        Assert.AreEqual(item.Parent is ID id ? id : (ID?)null, d.ParentId);
+        Assert.AreEqual(item.Parent is ItemId id ? id : (ItemId?)null, d.ParentId);
         Assert.AreEqual(item.ParentSub, d.ParentSub);
 
         var holdsValues = d.Kind is ItemKind.Any or ItemKind.Json or ItemKind.Binary or ItemKind.Embed;

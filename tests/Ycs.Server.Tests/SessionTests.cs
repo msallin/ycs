@@ -1,3 +1,4 @@
+using System.Buffers;
 using Ycs.Server.Rooms;
 using Ycs.Server.Tests.Support;
 
@@ -61,7 +62,7 @@ public class SessionTests
         clients[0].Insert(0, "x");
 
         var received = clients.Select(c => Messages.Drain(c.Session!).Select(Messages.SyncType).ToArray()).ToArray();
-        var expected = new[] { Array.Empty<uint>(), [SyncProtocol.MessageYjsUpdate], [SyncProtocol.MessageYjsUpdate], [SyncProtocol.MessageYjsUpdate] };
+        var expected = new[] { Array.Empty<uint>(), [(uint)SyncMessageType.Update], [(uint)SyncMessageType.Update], [(uint)SyncMessageType.Update] };
         Assert.AreEqual(Format(expected), Format(received));
     }
 
@@ -148,7 +149,7 @@ public class SessionTests
             {
                 var reader = new MemoryStream(message);
                 VarUint.Read(reader);
-                SyncProtocol.ReadSyncMessage(reader, new MemoryStream(), clients[i].Doc, "server");
+                Messages.HandleSync(reader, clients[i].Doc, "server");
             }
         }
 
@@ -318,12 +319,8 @@ public class SessionTests
             "truncated frame" => Messages.Update(update)[..^2],
             "truncated update" => Messages.Update(update[..^2]),
             "garbage update" => Messages.Update([0x05, 0xFF, 0xFF, 0xFF, 0x01, 0x80]),
-            "truncated step 1" => [(byte)MessageType.Sync, (byte)SyncProtocol.MessageYjsSyncStep1, 5, 1],
-            "garbage state vector" => Messages.Sync(s =>
-            {
-                s.WriteByte((byte)SyncProtocol.MessageYjsSyncStep1);
-                s.Write([3, 0xFF, 0xFF, 0xFF]);
-            }),
+            "truncated step 1" => [(byte)MessageType.Sync, (byte)SyncMessageType.SyncStep1, 5, 1],
+            "garbage state vector" => Messages.Sync(s => s.Write(new byte[] { (byte)SyncMessageType.SyncStep1, 3, 0xFF, 0xFF, 0xFF }.AsSpan())),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
     }

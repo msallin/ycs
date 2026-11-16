@@ -55,7 +55,7 @@ internal sealed partial class StructStore
                 itemsBeforeOrigin?.Add(o);
                 conflictingItems?.Add(o);
 
-                if (ID.Equals(item.LeftOrigin, oIsItem ? o.LeftOrigin : null))
+                if (item.LeftOrigin == (oIsItem ? o.LeftOrigin : null))
                 {
                     // Case 1
                     if (o.Id.Client < item.Id.Client)
@@ -64,7 +64,7 @@ internal sealed partial class StructStore
                         leftMoved = true;
                         conflictingItems?.Clear();
                     }
-                    else if (ID.Equals(item.RightOrigin, oIsItem ? o.RightOrigin : null))
+                    else if (item.RightOrigin == (oIsItem ? o.RightOrigin : null))
                     {
                         // This and 'o' are conflicting and point to the same integration points. The id
                         // decides which item comes first: this is to the left of 'o'.

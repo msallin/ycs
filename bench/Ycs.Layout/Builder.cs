@@ -68,13 +68,13 @@ internal static class Builder
 
             slot.Left = Handle(item.Left);
             slot.Right = Handle(item.Right);
-            if (item.LeftOrigin is ID lo)
+            if (item.LeftOrigin is ItemId lo)
             {
                 slot.OriginClient = store.ClientIndex[lo.Client];
                 slot.OriginClock = Clock(lo.Clock);
             }
 
-            if (item.RightOrigin is ID ro)
+            if (item.RightOrigin is ItemId ro)
             {
                 slot.ROriginClient = store.ClientIndex[ro.Client];
                 slot.ROriginClock = Clock(ro.Clock);
@@ -82,7 +82,7 @@ internal static class Builder
 
             slot.Parent = TypeIndex(item.Parent as AbstractType);
             var info = (item.Keep ? Flags.Keep : 0) | (item.Countable ? Flags.Countable : 0) | (item.Deleted ? Flags.Deleted : 0) | (item.Marker ? Flags.Marker : 0);
-            if (item.Redone is ID redone)
+            if (item.Redone is ItemId redone)
             {
                 info |= Flags.HasRedone;
                 store.Redone[h] = redone;

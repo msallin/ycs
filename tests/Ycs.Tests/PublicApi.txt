@@ -41,11 +41,11 @@ class Ycs.ChangesCollection
     System.Collections.Generic.ISet<ItemView> Deleted
 sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
     DecodedStruct <Clone>$()
-    DecodedStruct(ID Id, int Length, ItemKind Kind, ID? LeftOrigin, ID? RightOrigin, string? ParentName, ID? ParentId, string? ParentSub, System.Collections.Generic.IReadOnlyList<object?> Content, string? Text, string? FormatKey, object? FormatValue, int TypeRef, string? TypeName, string? DocGuid)
-    ID Id { get; init; }
-    ID? LeftOrigin { get; init; }
-    ID? ParentId { get; init; }
-    ID? RightOrigin { get; init; }
+    DecodedStruct(ItemId Id, int Length, ItemKind Kind, ItemId? LeftOrigin, ItemId? RightOrigin, string? ParentName, ItemId? ParentId, string? ParentSub, System.Collections.Generic.IReadOnlyList<object?> Content, string? Text, string? FormatKey, object? FormatValue, int TypeRef, string? TypeName, string? DocGuid)
+    ItemId Id { get; init; }
+    ItemId? LeftOrigin { get; init; }
+    ItemId? ParentId { get; init; }
+    ItemId? RightOrigin { get; init; }
     ItemKind Kind { get; init; }
     System.Collections.Generic.IReadOnlyList<object?> Content { get; init; }
     bool Equals(DecodedStruct? other)
@@ -63,7 +63,7 @@ sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
     string? ParentSub { get; init; }
     string? Text { get; init; }
     string? TypeName { get; init; }
-    void Deconstruct(out ID Id, out int Length, out ItemKind Kind, out ID? LeftOrigin, out ID? RightOrigin, out string? ParentName, out ID? ParentId, out string? ParentSub, out System.Collections.Generic.IReadOnlyList<object?> Content, out string? Text, out string? FormatKey, out object? FormatValue, out int TypeRef, out string? TypeName, out string? DocGuid)
+    void Deconstruct(out ItemId Id, out int Length, out ItemKind Kind, out ItemId? LeftOrigin, out ItemId? RightOrigin, out string? ParentName, out ItemId? ParentId, out string? ParentSub, out System.Collections.Generic.IReadOnlyList<object?> Content, out string? Text, out string? FormatKey, out object? FormatValue, out int TypeRef, out string? TypeName, out string? DocGuid)
 sealed class Ycs.DecodedUpdate
     System.Collections.Generic.IReadOnlyDictionary<long, System.Collections.Generic.IReadOnlyList<DeletedRange>> DeleteSet { get; }
     System.Collections.Generic.IReadOnlyList<DecodedStruct> Structs { get; }
@@ -78,12 +78,17 @@ class Ycs.Delta
     int? Retain
     object Insert
     static readonly object NullEmbed
-struct Ycs.ID : System.IEquatable<ID>
-    ID(long client, long clock)
-    bool Equals(ID other)
-    long Client
-    long Clock
-    static bool Equals(ID? a, ID? b)
+readonly struct Ycs.ItemId : System.IEquatable<ItemId>
+    ItemId(long Client, long Clock)
+    bool Equals(ItemId other)
+    long Client { get; init; }
+    long Clock { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(ItemId left, ItemId right)
+    static bool op_Inequality(ItemId left, ItemId right)
+    void Deconstruct(out long Client, out long Clock)
 enum Ycs.ItemKind : int
     Any = 8
     Binary = 3
@@ -98,11 +103,11 @@ enum Ycs.ItemKind : int
     Type = 7
 readonly struct Ycs.ItemView : System.IEquatable<ItemView>
     AbstractType Parent { get; }
-    ID Id { get; }
-    ID LastId { get; }
-    ID? LeftOrigin { get; }
-    ID? Redone { get; }
-    ID? RightOrigin { get; }
+    ItemId Id { get; }
+    ItemId LastId { get; }
+    ItemId? LeftOrigin { get; }
+    ItemId? Redone { get; }
+    ItemId? RightOrigin { get; }
     ItemKind Kind { get; }
     ItemView? Left { get; }
     ItemView? Right { get; }
@@ -120,22 +125,35 @@ readonly struct Ycs.ItemView : System.IEquatable<ItemView>
     static bool op_Equality(ItemView left, ItemView right)
     static bool op_Inequality(ItemView left, ItemView right)
     string ParentSub { get; }
+readonly struct Ycs.PendingDrop : System.IEquatable<PendingDrop>
+    PendingDrop(long Structs, System.Collections.Generic.IReadOnlyList<long> Clients)
+    System.Collections.Generic.IReadOnlyList<long> Clients { get; init; }
+    bool Equals(PendingDrop other)
+    long Structs { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(PendingDrop left, PendingDrop right)
+    static bool op_Inequality(PendingDrop left, PendingDrop right)
+    void Deconstruct(out long Structs, out System.Collections.Generic.IReadOnlyList<long> Clients)
 sealed class Ycs.PermanentUserData
     PermanentUserData(YDoc doc, YMap storeType = null)
     YDoc Doc { get; }
     YMap YUsers { get; }
     string GetUserByClientId(long clientId)
-    string GetUserByDeletedId(ID id)
+    string GetUserByDeletedId(ItemId id)
     void SetUserMapping(YDoc doc, long clientId, string userDescription, System.Func<Transaction, bool> filter = null)
 class Ycs.RelativePosition : System.IEquatable<RelativePosition>
-    RelativePosition(AbstractType type, ID? item, int assoc = 0)
+    RelativePosition(AbstractType type, ItemId? item, int assoc = 0)
     System.Collections.Generic.IDictionary<string, object> RelativePositionToJSON()
-    bool Equals(RelativePosition other)
+    bool Equals(RelativePosition? other)
     byte[] ToArray()
     int Assoc
-    readonly ID? Item
-    readonly ID? TypeId
-    readonly string TName
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    readonly ItemId? Item
+    readonly ItemId? TypeId
+    readonly string? TName
     static RelativePosition CreateRelativePositionFromJSON(System.Collections.Generic.IDictionary<string, object> json)
     static RelativePosition CreateRelativePositionFromTypeIndex(AbstractType type, int index, int assoc = 0)
     static RelativePosition DecodeRelativePosition(byte[] encoded)
@@ -144,29 +162,30 @@ class Ycs.RelativePosition : System.IEquatable<RelativePosition>
     static bool CompareRelativePositions(RelativePosition a, RelativePosition b)
     static byte[] EncodeRelativePosition(RelativePosition rpos)
 sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
-    YDoc RestoreDocument(YDoc originDoc, YDocOptions opts = null)
-    bool Equals(Snapshot other)
-    bool SnapshotContainsUpdate(byte[] update, UpdateLimits limits = null)
-    bool SnapshotContainsUpdateV2(byte[] update, UpdateLimits limits = null)
+    YDoc RestoreDocument(YDoc originDoc, YDocOptions? opts = null)
+    bool Equals(Snapshot? other)
+    bool SnapshotContainsUpdate(byte[] update, UpdateLimits? limits = null)
+    bool SnapshotContainsUpdateV2(byte[] update, UpdateLimits? limits = null)
     byte[] EncodeSnapshot()
     byte[] EncodeSnapshotV2()
+    override bool Equals(object? obj)
+    override int GetHashCode()
     static Snapshot DecodeSnapshot(byte[] buf)
     static Snapshot DecodeSnapshotV2(byte[] buf)
-    static bool EqualSnapshots(Snapshot snap1, Snapshot snap2)
+    static bool EqualSnapshots(Snapshot? snap1, Snapshot? snap2)
     static readonly Snapshot Empty
-class Ycs.StackItem
+sealed class Ycs.StackItem
     System.Collections.Generic.IDictionary<string, object> Meta { get; }
+enum Ycs.SyncMessageType : uint
+    SyncStep1 = 0
+    SyncStep2 = 1
+    Update = 2
 static class Ycs.SyncProtocol
-    const uint MessageYjsSyncStep1 = 0
-    const uint MessageYjsSyncStep2 = 1
-    const uint MessageYjsUpdate = 2
-    static uint ReadSyncMessage(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception>? errorHandler = null)
-    static void ReadSyncStep1(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, bool v2 = false)
-    static void ReadSyncStep2(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception>? errorHandler = null)
-    static void ReadUpdate(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception>? errorHandler = null)
-    static void WriteSyncStep1(System.IO.Stream stream, YDoc doc, bool v2 = false)
-    static void WriteSyncStep2(System.IO.Stream stream, YDoc doc, byte[] encodedStateVector, bool v2 = false)
-    static void WriteUpdate(System.IO.Stream stream, byte[] update)
+    static SyncMessageType ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
+    static SyncMessageType ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
+    static void WriteSyncStep1(System.Buffers.IBufferWriter<byte> destination, YDoc doc)
+    static void WriteSyncStep2(System.Buffers.IBufferWriter<byte> destination, YDoc doc, System.ReadOnlySpan<byte> encodedStateVector, bool v2 = false)
+    static void WriteUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update)
 class Ycs.Transaction
     System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.IList<YEvent>> ChangedParentTypes { get; }
     System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.ISet<string>> Changed { get; }
@@ -226,15 +245,22 @@ sealed class Ycs.UndoManagerOptions
     YDoc Doc { get; set; }
     bool IgnoreRemoteMapChanges { get; set; }
     int CaptureTimeout { get; set; }
-sealed class Ycs.UpdateLimits
+sealed class Ycs.UpdateLimits : System.IEquatable<UpdateLimits>
+    UpdateLimits <Clone>$()
     UpdateLimits()
+    bool Equals(UpdateLimits? other)
     int MaxDepth { get; init; }
     long MaxIntegrationSteps { get; init; }
     long MaxPendingBytes { get; init; }
     long MaxPendingStructs { get; init; }
     long MaxStructsPerUpdate { get; init; }
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
     static UpdateLimits Default { get; }
     static UpdateLimits Unlimited { get; }
+    static bool op_Equality(UpdateLimits? left, UpdateLimits? right)
+    static bool op_Inequality(UpdateLimits? left, UpdateLimits? right)
 sealed class Ycs.UpdateMeta
     System.Collections.Generic.IReadOnlyDictionary<long, long> From { get; }
     System.Collections.Generic.IReadOnlyDictionary<long, long> To { get; }
@@ -317,6 +343,7 @@ class Ycs.YDoc
     byte[] EncodeStateVectorV2()
     event System.EventHandler BeforeAllTransactions
     event System.EventHandler Destroyed
+    event System.EventHandler<PendingDrop> PendingDropped
     event System.EventHandler<System.Collections.Generic.IList<Transaction>> AfterAllTransactions
     event System.EventHandler<System.ValueTuple<System.Collections.Generic.ISet<YDoc>, System.Collections.Generic.ISet<YDoc>, System.Collections.Generic.ISet<YDoc>>> SubdocsChanged
     event System.EventHandler<System.ValueTuple<byte[], object, Transaction>> Update
@@ -390,7 +417,7 @@ class Ycs.YMapEvent : YEvent
     readonly System.Collections.Generic.ISet<string> KeysChanged
 class Ycs.YText : YArrayBase
     System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> GetAttributes()
-    System.Collections.Generic.IList<Delta> ToDelta(Snapshot snapshot = null, Snapshot prevSnapshot = null, System.Func<YText.YTextChangeType, ID, YText.YTextChangeAttributes> computeYChange = null)
+    System.Collections.Generic.IList<Delta> ToDelta(Snapshot snapshot = null, Snapshot prevSnapshot = null, System.Func<YText.YTextChangeType, ItemId, YText.YTextChangeAttributes> computeYChange = null)
     YText Clone()
     YText()
     YText(string str)

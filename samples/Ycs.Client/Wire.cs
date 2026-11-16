@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Text;
 
 namespace Ycs.Client;
@@ -11,9 +12,21 @@ internal static class Wire
     public const uint Sync = 0;
     public const uint Awareness = 1;
 
-    public static byte[] SyncStep1(YDoc doc) => Message(Sync, s => SyncProtocol.WriteSyncStep1(s, doc));
+    public static byte[] SyncStep1(YDoc doc)
+    {
+        var message = new ArrayBufferWriter<byte>();
+        message.Write([(byte)Sync]);
+        SyncProtocol.WriteSyncStep1(message, doc);
+        return message.WrittenSpan.ToArray();
+    }
 
-    public static byte[] Update(byte[] update) => Message(Sync, s => SyncProtocol.WriteUpdate(s, update));
+    public static byte[] Update(byte[] update)
+    {
+        var message = new ArrayBufferWriter<byte>(update.Length + 16);
+        message.Write([(byte)Sync]);
+        SyncProtocol.WriteUpdate(message, update);
+        return message.WrittenSpan.ToArray();
+    }
 
     /// <summary>
     /// An awareness message of one client, as y-protocols' <c>encodeAwarenessUpdate</c> writes it inside the

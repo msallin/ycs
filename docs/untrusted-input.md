@@ -21,12 +21,19 @@ catch (YUpdateException ex) when (!ex.PartlyApplied)
 }
 ```
 
+An update that lets waiting structs of earlier updates integrate retries them, and drops those that fail a check
+(nesting, garbage collection). That is not the sender's fault: the update stands whole and `ApplyUpdate` returns
+normally. The document raises `YDoc.PendingDropped` (the number of structs and the clients they were of), so that a
+server can log it and resync the peers it handed the waiting structs to. Only when structs of the update itself waited
+for the dropped ones is the update cut short (`PartlyApplied`).
+
 `TryApplyUpdate` and `TryApplyUpdateV2` return false instead of throwing.
 
 `ApplyUpdate` decodes and checks the whole update before it changes the document, so a rejected update leaves it
-unchanged: same content, same state vector, no events. One exception: an update whose conflict resolution exceeds its
-budget (below) is applied in part, and `YUpdateException.PartlyApplied` is set. The part applied is causally complete
-and the document stays valid.
+unchanged: same content, same state vector, no observer or `Update` event (`AfterTransaction` fires for the empty
+transaction). One exception: an update whose conflict resolution exceeds its budget (below), or whose own structs
+waited for waiting structs that were dropped, is applied in part, and `YUpdateException.PartlyApplied` is set. The part
+applied is causally complete and the document stays valid.
 
 ## What one update may cost
 

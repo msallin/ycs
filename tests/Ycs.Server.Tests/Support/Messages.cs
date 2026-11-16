@@ -1,3 +1,4 @@
+using System.Buffers;
 using Ycs.Server.Rooms;
 
 namespace Ycs.Server.Tests.Support;
@@ -8,6 +9,18 @@ internal static class Messages
     public static byte[] Step1(YDoc doc) => Sync(s => SyncProtocol.WriteSyncStep1(s, doc));
 
     public static byte[] Update(byte[] update) => Sync(s => SyncProtocol.WriteUpdate(s, update));
+
+    /// <summary>
+    /// Handles the sync message that follows the outer type in <paramref name="reader"/>; returns what the peer
+    /// answers (an outer type and a step 2) or null for a message that has no answer.
+    /// </summary>
+    public static byte[]? HandleSync(MemoryStream reader, YDoc doc, object origin)
+    {
+        var reply = new ArrayBufferWriter<byte>();
+        reply.Write([(byte)MessageType.Sync]);
+        SyncProtocol.ReadSyncMessage(reader.ToArray().AsSpan((int)reader.Position), reply, doc, origin);
+        return reply.WrittenCount > 1 ? reply.WrittenSpan.ToArray() : null;
+    }
 
     /// <summary>An awareness message of one client, as y-protocols encodes it; a null state removes it.</summary>
     public static byte[] Awareness(ulong clientId, ulong clock, string? json)
@@ -88,12 +101,12 @@ internal static class Messages
         }
     }
 
-    public static byte[] Sync(Action<Stream> write)
+    public static byte[] Sync(Action<IBufferWriter<byte>> write)
     {
-        var stream = new MemoryStream();
-        VarUint.Write(stream, MessageType.Sync);
-        write(stream);
-        return stream.ToArray();
+        var message = new ArrayBufferWriter<byte>();
+        message.Write([(byte)MessageType.Sync]);
+        write(message);
+        return message.WrittenSpan.ToArray();
     }
 
     /// <summary>The sync sub-type of a queued message, which is always a sync message here.</summary>

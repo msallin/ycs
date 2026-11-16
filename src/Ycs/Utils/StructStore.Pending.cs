@@ -236,32 +236,98 @@ internal sealed partial class StructStore
             Bytes += size;
         }
 
-        /// <summary>By how much <see cref="Bytes"/> would grow if the parts of <paramref name="ds"/> beyond <paramref name="getState"/> were added.</summary>
+        /// <summary>
+        /// By how much <see cref="Bytes"/> would grow if the parts of <paramref name="ds"/> beyond the plan's state
+        /// that what waits does not cover already were added (an honest client sends back the deletions it was sent).
+        /// </summary>
         public long Growth(DeleteSet ds, IntegrationPlan plan)
         {
             long growth = 0;
             foreach (var (client, deletes) in ds.Clients)
             {
                 var state = plan.GetState(client);
+                var covered = _clients.TryGetValue(client, out var entry) ? Covered(entry.Ranges) : null;
                 var added = false;
                 foreach (var delete in deletes)
                 {
                     var clockEnd = delete.Clock + delete.Length;
-                    if (clockEnd > state)
+                    if (clockEnd <= state)
                     {
-                        var clock = Math.Max(delete.Clock, state);
-                        growth += RangeSize(clock, clockEnd - clock);
-                        added = true;
+                        continue;
+                    }
+
+                    var clock = Math.Max(delete.Clock, state);
+                    var index = covered == null ? 0 : FirstEndingAfter(covered, clock);
+                    while (clock < clockEnd)
+                    {
+                        if (covered == null || index == covered.Count || covered[index].Clock >= clockEnd)
+                        {
+                            growth += RangeSize(clock, clockEnd - clock);
+                            added = true;
+                            break;
+                        }
+
+                        var (start, end) = (covered[index].Clock, covered[index].Clock + covered[index].Length);
+                        if (start > clock)
+                        {
+                            growth += RangeSize(clock, start - clock);
+                            added = true;
+                        }
+
+                        clock = end;
+                        index++;
                     }
                 }
 
-                if (added && !_clients.ContainsKey(client))
+                if (added && entry == null)
                 {
                     growth += HeaderSize(client);
                 }
             }
 
             return growth;
+        }
+
+        // The ranges sorted and merged, as a copy: what waits is not kept sorted between compactions.
+        private static List<DeleteSet.DeleteItem> Covered(List<DeleteSet.DeleteItem> ranges)
+        {
+            var sorted = new List<DeleteSet.DeleteItem>(ranges);
+            sorted.Sort((x, y) => x.Clock.CompareTo(y.Clock));
+            var merged = new List<DeleteSet.DeleteItem>(sorted.Count);
+            foreach (var range in sorted)
+            {
+                if (merged.Count > 0 && merged[^1].Clock + merged[^1].Length >= range.Clock)
+                {
+                    var last = merged[^1];
+                    var end = Math.Max(last.Clock + last.Length, range.Clock + range.Length);
+                    merged[^1] = new DeleteSet.DeleteItem(last.Clock, end - last.Clock);
+                }
+                else
+                {
+                    merged.Add(range);
+                }
+            }
+
+            return merged;
+        }
+
+        private static int FirstEndingAfter(List<DeleteSet.DeleteItem> covered, long clock)
+        {
+            int low = 0, high = covered.Count;
+            while (low < high)
+            {
+                var mid = (low + high) >>> 1;
+                if (covered[mid].Clock + covered[mid].Length > clock)
+                {
+                    high = mid;
+                }
+                else
+                {
+                    low = mid + 1;
+                }
+            }
+
+            return low;
         }
 
         /// <summary>Sorts and merges every client's ranges, dropping duplicates.</summary>
