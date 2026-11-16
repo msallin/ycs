@@ -188,28 +188,26 @@ internal sealed class CorpusDoc
     private static List<ItemRun> ItemsOf(AbstractType type)
     {
         var runs = new List<ItemRun>();
-        AbstractStruct previous = null;
-        AbstractStruct s = type._start.ToStruct();
-        while (s != null)
+        var previous = default(ItemRef);
+        for (var s = type._start; !s.IsNull; s = s.Right)
         {
-            if (s is not Item item)
+            if (!s.IsItem)
             {
-                runs.Add(new ItemRun(s.Id.Client, s.Id.Clock, s.Length, null, null, s.Deleted, s.GetType().Name, LinkedBack: true, InParent: false));
+                runs.Add(new ItemRun(s.Id.Client, s.Id.Clock, s.Length, null, null, s.Deleted, StructStore.KindNameForTests(s), LinkedBack: true, InParent: false));
                 break;
             }
 
             runs.Add(new ItemRun(
-                item.Id.Client,
-                item.Id.Clock,
-                item.Length,
-                item.LeftOrigin is ID o ? (o.Client, o.Clock) : null,
-                item.RightOrigin is ID r ? (r.Client, r.Clock) : null,
-                item.Deleted,
+                s.Id.Client,
+                s.Id.Clock,
+                s.Length,
+                s.LeftOrigin is ID o ? (o.Client, o.Clock) : null,
+                s.RightOrigin is ID r ? (r.Client, r.Clock) : null,
+                s.Deleted,
                 ItemRun.ItemKind,
-                LinkedBack: ReferenceEquals(item.Left, previous),
-                InParent: ReferenceEquals(item.Parent, type) && item.ParentSub == null));
-            previous = item;
-            s = item.Right;
+                LinkedBack: s.Left == previous,
+                InParent: ReferenceEquals(s.Parent, type) && s.ParentSub == null));
+            previous = s;
         }
 
         return runs;

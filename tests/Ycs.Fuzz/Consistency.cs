@@ -89,15 +89,10 @@ internal static class Consistency
             }
 
             var ids = new List<(long Client, long Clock, long End)>();
-            AbstractStruct? previous = null;
-            for (AbstractStruct? s = type._start.ToStruct(); s != null; s = (s as Item)?.Right)
+            var previous = default(ItemRef);
+            for (var item = type._start; item.IsItem; item = item.Right)
             {
-                if (s is not Item item)
-                {
-                    break;
-                }
-
-                if (!ReferenceEquals(item.Left, previous))
+                if (item.Left != previous)
                 {
                     return $"the item list of '{path}': item {item.Id.Client}:{item.Id.Clock} is not linked back to the one before it";
                 }
@@ -126,7 +121,7 @@ internal static class Consistency
 
             foreach (var (key, value) in type._map)
             {
-                for (var item = value.ToItem(); item != null; item = item.Left as Item)
+                for (var item = value; item.IsItem; item = item.Left)
                 {
                     if (item.Content is ContentType nested)
                     {
