@@ -468,7 +468,7 @@ public partial class AbstractType
         return !v.IsNull && v.IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
     }
 
-    protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() =>
+    private protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() =>
         _map.Where(kvp => !kvp.Value.Deleted).Select(kvp => new KeyValuePair<string, Item>(kvp.Key, kvp.Value.ToItem()));
 
     /// <summary>

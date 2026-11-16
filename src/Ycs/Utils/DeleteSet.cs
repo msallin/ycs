@@ -247,14 +247,15 @@ internal class DeleteSet
         }
     }
 
-    public void TryGc(StructStore store, Predicate<Item> gcFilter)
+    public void TryGc(StructStore store, YDoc doc)
     {
-        TryGcDeleteSet(store, gcFilter);
+        TryGcDeleteSet(store, doc);
         TryMergeDeleteSet(store);
     }
 
-    public void TryGcDeleteSet(StructStore store, Predicate<Item> gcFilter)
+    public void TryGcDeleteSet(StructStore store, YDoc doc)
     {
+        var gcFilter = doc.GcFilter;
         foreach (var kvp in Clients)
         {
             var client = kvp.Key;
@@ -275,7 +276,7 @@ internal class DeleteSet
                         break;
                     }
 
-                    if (str.IsItem && str.Deleted && !str.Keep && gcFilter(str.ToItem()))
+                    if (str.IsItem && str.Deleted && !str.Keep && gcFilter(ItemView.Of(doc, str.ToStruct())))
                     {
                         str.Gc(store, parentGCd: false);
                     }

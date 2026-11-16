@@ -53,8 +53,8 @@ public class YTextEvent : YEvent
     {
         Keys = Keys,
         Delta = Delta,
-        Added = new HashSet<Item>(),
-        Deleted = new HashSet<Item>(),
+        Added = new HashSet<ItemView>(),
+        Deleted = new HashSet<ItemView>(),
     };
 
     /// <summary>

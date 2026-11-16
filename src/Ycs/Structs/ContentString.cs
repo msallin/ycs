@@ -10,7 +10,7 @@ using System.Text;
 
 namespace Ycs;
 
-public class ContentString : IContentEx
+internal class ContentString : IContentEx
 {
     internal const int _ref = 4;
 

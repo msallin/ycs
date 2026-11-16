@@ -17,9 +17,10 @@ namespace Ycs;
 public class ItemRefSignatureTests
 {
     // The decoded form (an update's structs as read, waiting, merged or planned), the members that carry a public
-    // filter (Predicate<Item>, Func<Item, bool>) to its call, and the hooks of the tests.
+    // filter (Predicate<ItemView>, Func<ItemView, bool>) to its call, and the hooks of the tests.
     private static readonly string[] Decoded =
     [
+        "AbstractType.TypeMapEnumerate",
         "AbstractType.ItemForTests",
         "AbstractType.StartForTests",
         "AbstractType.get_ItemForTests",

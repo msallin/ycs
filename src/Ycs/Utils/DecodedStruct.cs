@@ -22,7 +22,7 @@ namespace Ycs;
 /// <param name="TypeRef">The type reference number of a Type struct, -1 for another kind.</param>
 /// <param name="TypeName">The node name of an XML element or the name of a hook, null for another type.</param>
 /// <param name="DocGuid">The guid of the subdocument of a Doc struct.</param>
-internal sealed record DecodedStruct(
+public sealed record DecodedStruct(
     ID Id,
     int Length,
     ItemKind Kind,

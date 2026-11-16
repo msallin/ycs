@@ -6,7 +6,7 @@
 
 namespace Ycs;
 
-public class ContentFormat : IContentEx
+internal class ContentFormat : IContentEx
 {
     internal const int _ref = 6;
 

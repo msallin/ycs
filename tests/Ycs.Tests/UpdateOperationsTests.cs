@@ -421,7 +421,7 @@ public class UpdateOperationsTests
             var gapped = enc.MergeUpdates(new[] { updates[0], updates[2] });
             var decoded = enc.DecodeUpdate(gapped);
 
-            Assert.IsTrue(decoded.Structs.OfType<Skip>().Any(), "Expected a Skip struct for the missing middle op.");
+            Assert.IsTrue(decoded.Structs.Any(s => s.Kind == ItemKind.Skip), "Expected a Skip struct for the missing middle op.");
         }
     }
 
