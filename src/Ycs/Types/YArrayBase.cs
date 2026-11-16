@@ -14,24 +14,25 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 {
     internal sealed class ArraySearchMarker
     {
-        public ArraySearchMarker(Item p, int index, long timestamp)
+        public ArraySearchMarker(ItemRef p, int index, long timestamp)
         {
             P = p;
             Index = index;
-            P.Marker = true;
+            p.Marker = true;
             Timestamp = timestamp;
         }
 
-        public Item P { get; internal set; }
+        public ItemRef P { get; internal set; }
         public int Index { get; internal set; }
         public long Timestamp { get; internal set; }
 
-        public void Update(Item p, int index, long timestamp)
+        public void Update(ItemRef p, int index, long timestamp)
         {
-            P.Marker = false;
+            var old = P;
+            old.Marker = false;
 
             P = p;
-            P.Marker = true;
+            p.Marker = true;
             Index = index;
             Timestamp = timestamp;
         }
@@ -54,7 +55,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         public long NextTimestamp() => _clock++;
 
-        public ArraySearchMarker MarkPosition(Item p, int index)
+        public ArraySearchMarker MarkPosition(ItemRef p, int index)
         {
             if (_searchMarkers.Count >= MaxSearchMarkers)
             {
@@ -117,18 +118,18 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                     // Ideally we just want to do a simple position comparison, but this will only work if
                     // search markers don't point to deleted items for formats.
                     // Iterate marker to prev undeleted countable position so we know what to do when updating a position.
-                    while (p != null && (p.Deleted || !p.Countable))
+                    while (!p.IsNull && (p.Deleted || !p.Countable))
                     {
                         Debug.Assert(p.Left != p);
-                        p = p.Left as Item;
-                        if (p != null && !p.Deleted && p.Countable)
+                        p = p.Left.IsItem ? p.Left : default;
+                        if (!p.IsNull && !p.Deleted && p.Countable)
                         {
                             // Adjust position. The loop should break now.
                             m.Index -= p.Length;
                         }
                     }
 
-                    if (p == null || p.Marker)
+                    if (p.IsNull || p.Marker)
                     {
                         // Remove search marker if updated position is null or if position is already marked.
                         _searchMarkers.RemoveAt(i);
@@ -173,7 +174,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     // An item of this list (any: a push walks from it to the end), or null. Items leave a list only by merging into
     // their left neighbour (OnMerge moves the hint there) or when the whole type is collected (ForgetPushHint).
-    private Item _pushHint;
+    private ItemRef _pushHint;
 
     // An empty list for the values of the next insert (see InsertGenericsAfterReturningLast), or null.
     private List<object> _spareValues;
@@ -207,7 +208,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// Called when <paramref name="right"/> is merged into <paramref name="left"/>: a marker on
     /// <paramref name="right"/> moves to <paramref name="left"/> (Yjs <c>Item#mergeWith</c>), and so does the push hint.
     /// </summary>
-    internal void OnMerge(Item left, Item right)
+    internal void OnMerge(ItemRef left, ItemRef right)
     {
         if (_pushHint == right)
         {
@@ -236,7 +237,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     }
 
     /// <summary>The type was garbage collected: its list is gone (<see cref="ContentType"/>).</summary>
-    internal void ForgetPushHint() => _pushHint = null;
+    internal void ForgetPushHint() => _pushHint = default;
 
     /// <summary>The markers in their order, as "client:clock@index" (the tests compare them).</summary>
     internal string DescribeSearchMarkers() =>
@@ -254,9 +255,9 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             return null;
         }
 
-        var indexes = new Dictionary<Item, int>(ReferenceEqualityComparer.Instance);
+        var indexes = new Dictionary<ItemRef, int>();
         var index = 0;
-        for (var n = _start; n != null; n = n.Right as Item)
+        for (ItemRef n = _start; !n.IsNull; n = n.Right.IsItem ? n.Right : default)
         {
             indexes[n] = index;
             if (!n.Deleted && n.Countable)
@@ -316,7 +317,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (marker != null)
         {
-            n = marker.P;
+            n = marker.P.ToItem();
             index -= marker.Index;
 
             // We need to iterate one to the left so that the algorithm works.
@@ -376,7 +377,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         // which is the start when only pushes were made: quadratic in pushes. The walk starts from the item the last
         // push made instead, when there is one; any item of the list reaches the same end, and markers are not touched.
         var n = _pushHint;
-        if (n == null)
+        if (n.IsNull)
         {
             n = _start;
             var maxIndex = 0;
@@ -393,12 +394,12 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
         }
 
-        while (n?.Right is Item right)
+        while (!n.IsNull && n.Right.IsItem)
         {
-            n = right;
+            n = n.Right;
         }
 
-        _pushHint = InsertGenericsAfterReturningLast(transaction, n, content);
+        _pushHint = InsertGenericsAfterReturningLast(transaction, n.ToItem(), content);
     }
 
     /// <summary>
@@ -462,11 +463,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         void packJsonContent()
         {
-            if (jsonContent.Count > 0 && left != null && left.CanExtendRun(transaction, this, right, typeof(ContentAny), ownClientId))
+            if (jsonContent.Count > 0 && left != null && ItemRef.Of(left).CanExtendRun(transaction, this, right, typeof(ContentAny), ownClientId))
             {
                 // Appending to this client's run: the run takes the values in place of a new item.
                 ((ContentAny)left.Content).Append(jsonContent);
-                left.ExtendRun(transaction, jsonContent.Count);
+                ItemRef.Of(left).ExtendRun(transaction, jsonContent.Count);
                 jsonContent.Clear();
             }
             else if (jsonContent.Count > 0)
@@ -543,7 +544,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (marker != null)
         {
-            n = marker.P;
+            n = marker.P.ToItem();
             index -= marker.Index;
         }
 
@@ -673,7 +674,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         while (n != null)
         {
-            if (n.Countable && n.IsVisible(snapshot))
+            if (n.Countable && ItemRef.Of(n).IsVisible(snapshot))
             {
                 var c = n.Content.GetContent();
                 foreach (var value in c)
@@ -745,7 +746,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (marker != null)
         {
-            p = marker.P;
+            p = marker.P.ToItem();
             pIndex = marker.Index;
 
             // We used it, we might need to use it again.

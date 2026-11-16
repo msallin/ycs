@@ -38,7 +38,7 @@ public partial class AbstractType
                 v = v.Left as Item;
             }
 
-            if (v != null && v.IsVisible(snapshot))
+            if (v != null && ItemRef.Of(v).IsVisible(snapshot))
             {
                 res[kvp.Key] = ValueAt(v.Content, v.Length - 1);
             }

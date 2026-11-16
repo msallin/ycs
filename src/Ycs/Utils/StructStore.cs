@@ -339,7 +339,7 @@ internal sealed partial class StructStore
     {
         Version++;
         MaySplitMapValues |= item.ParentSub != null && !item.Deleted;
-        return item.ToItem().SplitItem(transaction, diff);
+        return item.SplitItem(transaction, diff);
     }
 
     /// <inheritdoc cref="ClientStructs.FindIndex(long)"/>

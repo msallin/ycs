@@ -665,7 +665,7 @@ public partial class YText : YArrayBase
         {
             while (n != null)
             {
-                if (n.IsVisible(snapshot) || (prevSnapshot != null && n.IsVisible(prevSnapshot)))
+                if (ItemRef.Of(n).IsVisible(snapshot) || (prevSnapshot != null && ItemRef.Of(n).IsVisible(prevSnapshot)))
                 {
                     switch (n.Content)
                     {
@@ -677,7 +677,7 @@ public partial class YText : YArrayBase
 
                             var cur = val as YTextChangeAttributes;
 
-                            if (snapshot != null && !n.IsVisible(snapshot))
+                            if (snapshot != null && !ItemRef.Of(n).IsVisible(snapshot))
                             {
                                 if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Removed)
                                 {
@@ -685,7 +685,7 @@ public partial class YText : YArrayBase
                                     currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YTextChangeType.Removed, n.Id) : new YTextChangeAttributes { Type = YTextChangeType.Removed };
                                 }
                             }
-                            else if (prevSnapshot != null && !n.IsVisible(prevSnapshot))
+                            else if (prevSnapshot != null && !ItemRef.Of(n).IsVisible(prevSnapshot))
                             {
                                 if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Added)
                                 {
@@ -717,7 +717,7 @@ public partial class YText : YArrayBase
                             ops.Add(op);
                             break;
                         case ContentFormat cf:
-                            if (n.IsVisible(snapshot))
+                            if (ItemRef.Of(n).IsVisible(snapshot))
                             {
                                 packStr();
                                 UpdateCurrentAttributes(currentAttributes, cf);
@@ -1116,7 +1116,7 @@ public partial class YText : YArrayBase
 
         if (marker != null)
         {
-            var pos = new ItemTextListPosition(marker.P.Left as Item, marker.P, marker.Index);
+            var pos = new ItemTextListPosition(marker.P.Left.ToStruct() as Item, marker.P.ToItem(), marker.Index);
             pos.FindNextPosition(transaction, index - marker.Index);
             return pos;
         }
@@ -1201,11 +1201,11 @@ public partial class YText : YArrayBase
         }
 
         if (content == null && length > 0 && negatedAttributes == null && currPos.Left is { } left
-            && left.CanExtendRun(transaction, this, currPos.Right, typeof(ContentString), ownClientId))
+            && ItemRef.Of(left).CanExtendRun(transaction, this, currPos.Right, typeof(ContentString), ownClientId))
         {
             // Typing on at the end of this client's run: the run takes the text in place of a new item.
             ((ContentString)left.Content).Append((string)text);
-            left.ExtendRun(transaction, length);
+            ItemRef.Of(left).ExtendRun(transaction, length);
             currPos.Index += length;
             currPos.InsertNegatedAttributes(transaction, this, null);
             return;

@@ -38,7 +38,7 @@ public class ContentBinary : IContentEx
         return false;
     }
 
-    void IContentEx.Integrate(Transaction transaction, Item item)
+    void IContentEx.Integrate(Transaction transaction, ItemRef item)
     {
         // Do nothing.
     }

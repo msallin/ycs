@@ -65,12 +65,12 @@ internal class ContentDoc : IContentEx
         return false;
     }
 
-    void IContentEx.Integrate(Transaction transaction, Item item)
+    void IContentEx.Integrate(Transaction transaction, ItemRef item)
     {
         _doc ??= _read.Create(transaction.Doc.Limits);
 
         // This needs to be reflected in doc.destroy as well.
-        Doc._item = item;
+        Doc._item = item.ToItem();
         transaction.SubdocsAdded.Add(Doc);
 
         if (Doc.ShouldLoad)

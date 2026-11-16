@@ -21,7 +21,7 @@ namespace Ycs;
 /// stays the struct it names), not across a cleanup's merge pass or a type's collection, except the holders that
 /// split and merge keep current (docs/design-item-layout.md, 2.4 and 3.1).
 /// </remarks>
-internal readonly struct ItemRef : IEquatable<ItemRef>
+internal readonly partial struct ItemRef : IEquatable<ItemRef>
 {
     private readonly AbstractStruct _struct;
 
@@ -51,9 +51,17 @@ internal readonly struct ItemRef : IEquatable<ItemRef>
     /// <summary>Whether both are structs of one kind (the merge rules compare the constructors).</summary>
     public bool IsSameKind(ItemRef other) => _struct.GetType() == other._struct.GetType();
 
-    public ID Id => _struct.Id;
+    public ID Id
+    {
+        get => _struct.Id;
+        set => AsItem.SetStart(value);
+    }
 
-    public int Length => _struct.Length;
+    public int Length
+    {
+        get => _struct.Length;
+        set => AsItem.SetLength(value);
+    }
 
     public bool Deleted => _struct.Deleted;
 
@@ -127,18 +135,6 @@ internal readonly struct ItemRef : IEquatable<ItemRef>
         set => AsItem.Countable = value;
     }
 
-    public ID LastId => AsItem.LastId;
-
-    // What every kind of struct does in its own way.
-    public void Delete(Transaction transaction) => _struct.Delete(transaction);
-
-    public void Integrate(Transaction transaction, int offset) => _struct.Integrate(transaction, offset);
-
-    public bool CanMergeWith(ItemRef right) => _struct.CanMergeWith(right._struct);
-
-    public bool MergeWith(ItemRef right) => _struct.MergeWith(right._struct);
-
-    public void Write(IUpdateEncoder encoder, int offset) => _struct.Write(encoder, offset);
 
     public static bool operator ==(ItemRef left, ItemRef right) => ReferenceEquals(left._struct, right._struct);
 

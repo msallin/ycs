@@ -287,7 +287,7 @@ public class UndoManager
         {
             if (i.ToStruct() is Item item && InScope(item))
             {
-                item.KeepItemAndParents(false);
+                ItemRef.Of(item).KeepItemAndParents(false);
             }
 
             return true;
@@ -428,7 +428,7 @@ public class UndoManager
         {
             if (i.ToStruct() is Item item && InScope(item))
             {
-                item.KeepItemAndParents(true);
+                ItemRef.Of(item).KeepItemAndParents(true);
             }
 
             return true;
@@ -717,7 +717,7 @@ public class UndoManager
         var nextId = new ID(ownClientId, store.GetState(ownClientId));
         var redoneItem = new Item(nextId, left, left?.LastId, right, right?.Id, parentType, item.ParentSub, item.Content.Copy());
         item.Redone = nextId;
-        redoneItem.KeepItemAndParents(true);
+        ItemRef.Of(redoneItem).KeepItemAndParents(true);
         redoneItem.Integrate(transaction, 0);
         return redoneItem;
     }

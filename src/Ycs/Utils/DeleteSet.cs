@@ -277,7 +277,7 @@ internal class DeleteSet
 
                     if (str.IsItem && str.Deleted && !str.Keep && gcFilter(str.ToItem()))
                     {
-                        str.ToItem().Gc(store, parentGCd: false);
+                        str.Gc(store, parentGCd: false);
                     }
                 }
             }

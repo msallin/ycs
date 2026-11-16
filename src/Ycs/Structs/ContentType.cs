@@ -34,23 +34,23 @@ public class ContentType : IContentEx
 
     public bool MergeWith(IContent right) => false;
 
-    void IContentEx.Integrate(Transaction transaction, Item item)
+    void IContentEx.Integrate(Transaction transaction, ItemRef item)
     {
-        Type.Integrate(transaction.Doc, item);
+        Type.Integrate(transaction.Doc, item.ToItem());
     }
 
     // Deleting and collecting a type walk the types nested in it, as deep as an update may nest them
     // (UpdateLimits.MaxDepth), so they keep the open types in a list instead of recursing. Both visit the items
     // in the order of Yjs' recursion: depth first, a type's list from its start, then its keys' values; the order
     // decides the order of the changed types, and so of the events.
-    private sealed class Open(AbstractType type, Item owner)
+    private sealed class Open(AbstractType type, ItemRef owner)
     {
         public readonly AbstractType Type = type;
-        public readonly Item Owner = owner;
-        public Item Next = type._start;
+        public readonly ItemRef Owner = owner;
+        public ItemRef Next = type._start;
         public bool InMap;
         public Dictionary<string, Item>.Enumerator Keys;
-        public Item Value;
+        public ItemRef Value;
 
         /// <summary>Starts on the keys' values, once the list is done.</summary>
         public void EnterMap()
@@ -62,15 +62,15 @@ public class ContentType : IContentEx
 
     void IContentEx.Delete(Transaction transaction)
     {
-        var open = new List<Open> { new(Type, null) };
+        var open = new List<Open> { new(Type, default) };
         while (open.Count > 0)
         {
             var frame = open[^1];
-            Item item;
-            if (!frame.InMap && frame.Next != null)
+            ItemRef item;
+            if (!frame.InMap && !frame.Next.IsNull)
             {
                 item = frame.Next;
-                frame.Next = item.Right as Item;
+                frame.Next = item.Right.IsItem ? item.Right : default;
             }
             else
             {
@@ -108,26 +108,26 @@ public class ContentType : IContentEx
         }
     }
 
-    private static bool IsOlderThan(Item item, Transaction transaction) =>
+    private static bool IsOlderThan(ItemRef item, Transaction transaction) =>
         item.Id.Clock < (transaction.BeforeState.TryGetValue(item.Id.Client, out var clock) ? clock : 0);
 
     void IContentEx.Gc(StructStore store)
     {
         // An item is replaced by a GC struct after the types nested in it were collected, as in Yjs' Item.gc.
-        var open = new List<Open> { new(Type, null) };
+        var open = new List<Open> { new(Type, default) };
         while (open.Count > 0)
         {
             var frame = open[^1];
-            Item item;
-            if (!frame.InMap && frame.Next != null)
+            ItemRef item;
+            if (!frame.InMap && !frame.Next.IsNull)
             {
                 item = frame.Next;
-                frame.Next = item.Right as Item;
+                frame.Next = item.Right.IsItem ? item.Right : default;
             }
-            else if (frame.Value != null)
+            else if (!frame.Value.IsNull)
             {
                 item = frame.Value;
-                frame.Value = item.Left as Item;
+                frame.Value = item.Left.IsItem ? item.Left : default;
             }
             else
             {
@@ -147,9 +147,9 @@ public class ContentType : IContentEx
                 frame.Type._map.Clear();
                 frame.Type._mapCount = 0;
                 open.RemoveAt(open.Count - 1);
-                if (frame.Owner != null)
+                if (!frame.Owner.IsNull)
                 {
-                    store.ReplaceStruct(frame.Owner, new GC(frame.Owner.Id, frame.Owner.Length));
+                    store.ReplaceStruct(frame.Owner, ItemRef.Of(new GC(frame.Owner.Id, frame.Owner.Length)));
                 }
 
                 continue;
@@ -167,7 +167,7 @@ public class ContentType : IContentEx
             else
             {
                 item.Content.Gc(store);
-                store.ReplaceStruct(item, new GC(item.Id, item.Length));
+                store.ReplaceStruct(item, ItemRef.Of(new GC(item.Id, item.Length)));
             }
         }
     }

@@ -221,7 +221,7 @@ public class ContentString : IContentEx
         _length = value.Length;
     }
 
-    void IContentEx.Integrate(Transaction transaction, Item item)
+    void IContentEx.Integrate(Transaction transaction, ItemRef item)
     {
         // Do nothing.
     }

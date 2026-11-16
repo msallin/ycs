@@ -354,7 +354,7 @@ public class YXmlFragment : YArrayBase
 
         if (marker != null)
         {
-            n = marker.P;
+            n = marker.P.ToItem();
             index -= marker.Index;
         }
 

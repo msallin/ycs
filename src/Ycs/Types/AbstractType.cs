@@ -379,7 +379,7 @@ public partial class AbstractType
             v = v.Left as Item;
         }
 
-        return v != null && v.IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
+        return v != null && ItemRef.Of(v).IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
     }
 
     protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);

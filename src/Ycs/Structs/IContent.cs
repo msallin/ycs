@@ -23,7 +23,7 @@ internal interface IContentEx : IContent
     /// <summary>Whether <see cref="IContent.MergeWith"/> merges content of the same kind (it then always does).</summary>
     bool Mergeable { get; }
 
-    void Integrate(Transaction transaction, Item item);
+    void Integrate(Transaction transaction, ItemRef item);
     void Delete(Transaction transaction);
     void Gc(StructStore store);
     void Write(IUpdateEncoder encoder, int offset);

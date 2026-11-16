@@ -42,7 +42,7 @@ internal class ContentDeleted : IContentEx
         return true;
     }
 
-    void IContentEx.Integrate(Transaction transaction, Item item)
+    void IContentEx.Integrate(Transaction transaction, ItemRef item)
     {
         transaction.DeleteSet.Add(item.Id.Client, item.Id.Clock, Length);
         // The item is in the store already: StructStore.Refresh records the delete in the run-head index.
