@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!--
+    The sync server of samples/Ycs.Server, compiled from its sources unchanged, plus one endpoint the benchmark reads
+    between phases: /bench/memory (the managed heap after a full GC). Same SDK and settings as the sample.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Ycs.Server</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="../../../samples/Ycs.Server/**/*.cs"
+             Exclude="../../../samples/Ycs.Server/Program.cs;../../../samples/Ycs.Server/bin/**;../../../samples/Ycs.Server/obj/**" />
+    <ProjectReference Include="..\..\..\src\Ycs\Ycs.csproj" />
+  </ItemGroup>
+
+</Project>
