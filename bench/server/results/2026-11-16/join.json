@@ -1,12 +1,12 @@
 {
  "scenario": "join",
- "date": "2026-11-16T15:33:54.962Z",
+ "date": "2026-11-16T18:14:20.312Z",
  "options": {
   "_": [
    "all"
   ],
   "server-cpus": "0-3",
-  "trace": "/home/claude/projects/ycs-server-p6/bench/server/.trace/automerge-paper.json.gz"
+  "trace": "/home/claude/projects/ycs-server/bench/server/.trace/automerge-paper.json.gz"
  },
  "machineBefore": {
   "cpu": "AMD EPYC-Genoa Processor",
@@ -19,9 +19,9 @@
   "driverCpus": "4-7",
   "driverWorkers": 4,
   "loadAverage": [
-   41.82,
-   51.91,
-   41.21
+   6.44,
+   3.39,
+   1.71
   ]
  },
  "servers": {
@@ -30,19 +30,19 @@
    "textChars": 524260,
    "staleDiffBase": 1032686,
    "load": {
-    "ms": 4002.94,
-    "seconds": 4.003396952999989,
-    "cpuSeconds": 0.53,
-    "cores": 0.13238757141053395,
-    "waitSeconds": 4.353150089,
-    "rssPeak": 113704960,
-    "rssEnd": 113704960,
-    "rssDeltaMiB": 350.4609375
+    "ms": 474.78,
+    "seconds": 0.4752876690000121,
+    "cpuSeconds": 0.38,
+    "cores": 0.7995157980839396,
+    "waitSeconds": 0.013039790999999998,
+    "rssPeak": 114061312,
+    "rssEnd": 114061312,
+    "rssDeltaMiB": 365.11328125
    },
    "memoryAfterLoad": {
-    "managedBytes": 19461072,
-    "heapSizeBytes": 25984304,
-    "committedBytes": 31387648,
+    "managedBytes": 19558384,
+    "heapSizeBytes": 26081912,
+    "committedBytes": 31678464,
     "rooms": 1
    },
    "runs": [
@@ -53,14 +53,14 @@
      "step2Bytes": 1117050,
      "syncedMs": {
       "count": 3,
-      "p50Ms": 27.2,
-      "p95Ms": 56.31,
-      "p99Ms": 56.31,
-      "maxMs": 56.31
+      "p50Ms": 7.43,
+      "p95Ms": 7.61,
+      "p99Ms": 7.61,
+      "maxMs": 7.61
      },
-     "serverCpuMsPerJoin": 16.666666666666607,
-     "serverRunQueueWaitS": 0.11146382100000096,
-     "driverBusiestWorkerCore": 0.10651193721941093,
+     "serverCpuMsPerJoin": 23.333333333333353,
+     "serverRunQueueWaitS": 0.005050091999999992,
+     "driverBusiestWorkerCore": 0.17481696278914757,
      "valid": true,
      "problems": []
     },
@@ -71,14 +71,14 @@
      "step2Bytes": 1117050,
      "syncedMs": {
       "count": 30,
-      "p50Ms": 311.52,
-      "p95Ms": 1652.97,
-      "p99Ms": 1656.57,
-      "maxMs": 1656.57
+      "p50Ms": 40.79,
+      "p95Ms": 215.64,
+      "p99Ms": 270.69,
+      "maxMs": 270.69
      },
-     "serverCpuMsPerJoin": 16.666666666666675,
-     "serverRunQueueWaitS": 6.833375452999999,
-     "driverBusiestWorkerCore": 0.07833864620609288,
+     "serverCpuMsPerJoin": 21.666666666666664,
+     "serverRunQueueWaitS": 0.05242329799999999,
+     "driverBusiestWorkerCore": 0.3500046971619715,
      "valid": true,
      "problems": []
     },
@@ -89,14 +89,14 @@
      "step2Bytes": 1117050,
      "syncedMs": {
       "count": 300,
-      "p50Ms": 3183.79,
-      "p95Ms": 4789.22,
-      "p99Ms": 5004.83,
-      "maxMs": 5009.91
+      "p50Ms": 414.11,
+      "p95Ms": 486.35,
+      "p99Ms": 530.12,
+      "maxMs": 532.45
      },
-     "serverCpuMsPerJoin": 8.866666666666667,
-     "serverRunQueueWaitS": 33.348435428,
-     "driverBusiestWorkerCore": 0.036789490802058226,
+     "serverCpuMsPerJoin": 7.233333333333333,
+     "serverRunQueueWaitS": 0.762601071,
+     "driverBusiestWorkerCore": 0.17206613363309126,
      "valid": true,
      "problems": []
     },
@@ -107,14 +107,14 @@
      "step2Bytes": 160422,
      "syncedMs": {
       "count": 3,
-      "p50Ms": 12.66,
-      "p95Ms": 17.77,
-      "p99Ms": 17.77,
-      "maxMs": 17.77
+      "p50Ms": 3.57,
+      "p95Ms": 4.15,
+      "p99Ms": 4.15,
+      "maxMs": 4.15
      },
-     "serverCpuMsPerJoin": 3.3333333333332624,
-     "serverRunQueueWaitS": 0.17027107700000244,
-     "driverBusiestWorkerCore": 0.09670732084163056,
+     "serverCpuMsPerJoin": 6.666666666666821,
+     "serverRunQueueWaitS": 0.0031522910000000293,
+     "driverBusiestWorkerCore": 0.230272112077058,
      "valid": true,
      "problems": []
     },
@@ -125,14 +125,14 @@
      "step2Bytes": 160422,
      "syncedMs": {
       "count": 30,
-      "p50Ms": 150.98,
-      "p95Ms": 1029.68,
-      "p99Ms": 1029.86,
-      "maxMs": 1029.86
+      "p50Ms": 10.74,
+      "p95Ms": 143.75,
+      "p99Ms": 144.67,
+      "maxMs": 144.67
      },
-     "serverCpuMsPerJoin": 1.999999999999987,
-     "serverRunQueueWaitS": 1.5553458469999981,
-     "driverBusiestWorkerCore": 0.09554748514057118,
+     "serverCpuMsPerJoin": 1.6666666666666607,
+     "serverRunQueueWaitS": 0.00863794200000001,
+     "driverBusiestWorkerCore": 0.2483238810791552,
      "valid": true,
      "problems": []
     },
@@ -143,14 +143,14 @@
      "step2Bytes": 160422,
      "syncedMs": {
       "count": 300,
-      "p50Ms": 1093.89,
-      "p95Ms": 1782.51,
-      "p99Ms": 2351.91,
-      "maxMs": 2352.52
+      "p50Ms": 167.45,
+      "p95Ms": 200.04,
+      "p99Ms": 203.46,
+      "maxMs": 203.75
      },
-     "serverCpuMsPerJoin": 1.8666666666666683,
-     "serverRunQueueWaitS": 14.523325368000002,
-     "driverBusiestWorkerCore": 0.04974718627390362,
+     "serverCpuMsPerJoin": 1.4,
+     "serverRunQueueWaitS": 0.27552701199999985,
+     "driverBusiestWorkerCore": 0.1904778221896051,
      "valid": true,
      "problems": []
     }
@@ -161,20 +161,20 @@
    "textChars": 524260,
    "staleDiffBase": 1032686,
    "load": {
-    "ms": 2120.84,
-    "seconds": 2.121084260999982,
-    "cpuSeconds": 0.35000000000000003,
-    "cores": 0.16500994629746255,
-    "waitSeconds": 2.554825687,
-    "rssPeak": 140853248,
-    "rssEnd": 140853248,
-    "rssDeltaMiB": 147.24609375
+    "ms": 255.71,
+    "seconds": 0.25651789000001735,
+    "cpuSeconds": 0.29000000000000004,
+    "cores": 1.1305254382062024,
+    "waitSeconds": 0.196437788,
+    "rssPeak": 141766656,
+    "rssEnd": 141766656,
+    "rssDeltaMiB": 247.046875
    },
    "memoryAfterLoad": {
-    "heapUsedBytes": 24073776,
-    "heapTotalBytes": 99745792,
-    "externalBytes": 10757876,
-    "arrayBuffersBytes": 307655,
+    "heapUsedBytes": 24117032,
+    "heapTotalBytes": 97910784,
+    "externalBytes": 10784585,
+    "arrayBuffersBytes": 4051053,
     "rooms": 1
    },
    "runs": [
@@ -185,14 +185,14 @@
      "step2Bytes": 1117050,
      "syncedMs": {
       "count": 3,
-      "p50Ms": 130.45,
-      "p95Ms": 143.52,
-      "p99Ms": 143.52,
-      "maxMs": 143.52
+      "p50Ms": 14.76,
+      "p95Ms": 15.22,
+      "p99Ms": 15.22,
+      "maxMs": 15.22
      },
-     "serverCpuMsPerJoin": 13.333333333333345,
-     "serverRunQueueWaitS": 0.40908439800000007,
-     "driverBusiestWorkerCore": 0.07754898199772217,
+     "serverCpuMsPerJoin": 23.333333333333318,
+     "serverRunQueueWaitS": 0.06453201800000002,
+     "driverBusiestWorkerCore": 0.19776499862096622,
      "valid": true,
      "problems": []
     },
@@ -203,14 +203,14 @@
      "step2Bytes": 1117050,
      "syncedMs": {
       "count": 30,
-      "p50Ms": 933.36,
-      "p95Ms": 1904.13,
-      "p99Ms": 1922.82,
-      "maxMs": 1922.82
+      "p50Ms": 107.29,
+      "p95Ms": 213.89,
+      "p99Ms": 255.56,
+      "maxMs": 255.56
      },
-     "serverCpuMsPerJoin": 15.666666666666668,
-     "serverRunQueueWaitS": 3.837397180999999,
-     "driverBusiestWorkerCore": 0.07214467790846416,
+     "serverCpuMsPerJoin": 22.666666666666668,
+     "serverRunQueueWaitS": 0.248365391,
+     "driverBusiestWorkerCore": 0.33185729251561563,
      "valid": true,
      "problems": []
     },
@@ -221,14 +221,14 @@
      "step2Bytes": 1117050,
      "syncedMs": {
       "count": 300,
-      "p50Ms": 5676.35,
-      "p95Ms": 10475.16,
-      "p99Ms": 12247.2,
-      "maxMs": 12471
+      "p50Ms": 531.37,
+      "p95Ms": 1021.47,
+      "p99Ms": 1124.64,
+      "maxMs": 1141.4
      },
-     "serverCpuMsPerJoin": 17.666666666666668,
-     "serverRunQueueWaitS": 38.680919450000005,
-     "driverBusiestWorkerCore": 0.014509393024239061,
+     "serverCpuMsPerJoin": 14.8,
+     "serverRunQueueWaitS": 0.686958445,
+     "driverBusiestWorkerCore": 0.08489288209640052,
      "valid": true,
      "problems": []
     },
@@ -239,14 +239,14 @@
      "step2Bytes": 160422,
      "syncedMs": {
       "count": 3,
-      "p50Ms": 14.21,
-      "p95Ms": 23.62,
-      "p99Ms": 23.62,
-      "maxMs": 23.62
+      "p50Ms": 4.45,
+      "p95Ms": 5.57,
+      "p99Ms": 5.57,
+      "maxMs": 5.57
      },
-     "serverCpuMsPerJoin": 3.3333333333332624,
-     "serverRunQueueWaitS": 0.07856872400000015,
-     "driverBusiestWorkerCore": 0.09764801555586848,
+     "serverCpuMsPerJoin": 9.999999999999787,
+     "serverRunQueueWaitS": 0.004049734999999943,
+     "driverBusiestWorkerCore": 0.1749393054510406,
      "valid": true,
      "problems": []
     },
@@ -257,14 +257,14 @@
      "step2Bytes": 160422,
      "syncedMs": {
       "count": 30,
-      "p50Ms": 826.04,
-      "p95Ms": 1622.81,
-      "p99Ms": 1622.85,
-      "maxMs": 1622.85
+      "p50Ms": 92.02,
+      "p95Ms": 152.54,
+      "p99Ms": 155.73,
+      "maxMs": 155.73
      },
-     "serverCpuMsPerJoin": 5.0000000000000115,
-     "serverRunQueueWaitS": 1.343714519999999,
-     "driverBusiestWorkerCore": 0.0711593995994655,
+     "serverCpuMsPerJoin": 4.33333333333336,
+     "serverRunQueueWaitS": 0.028387246000000088,
+     "driverBusiestWorkerCore": 0.23979629005771125,
      "valid": true,
      "problems": []
     },
@@ -275,14 +275,14 @@
      "step2Bytes": 160422,
      "syncedMs": {
       "count": 300,
-      "p50Ms": 1191.18,
-      "p95Ms": 2242.36,
-      "p99Ms": 2555.71,
-      "maxMs": 2610.53
+      "p50Ms": 127.82,
+      "p95Ms": 197.28,
+      "p99Ms": 214.2,
+      "maxMs": 216.63
      },
-     "serverCpuMsPerJoin": 3.0333333333333337,
-     "serverRunQueueWaitS": 6.060526545000002,
-     "driverBusiestWorkerCore": 0.045767690829215356,
+     "serverCpuMsPerJoin": 2.233333333333333,
+     "serverRunQueueWaitS": 0.05565469199999984,
+     "driverBusiestWorkerCore": 0.20695033710993707,
      "valid": true,
      "problems": []
     }
@@ -290,8 +290,8 @@
   }
  },
  "loadAverageAfter": [
-  78.93,
-  62.76,
-  46.92
+  6.75,
+  3.76,
+  1.89
  ]
 }
