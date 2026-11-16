@@ -43,11 +43,6 @@ public partial class AbstractType
     internal ItemRef _start;
     internal Dictionary<string, ItemRef> _map = new Dictionary<string, ItemRef>();
 
-    // The fields as objects, for the property tests (they reach no internal type).
-    internal Item StartForTests => _start.ToItem();
-
-    internal Item ItemForTests => _item.ToItem();
-
     // The facts of the item a collected type was in. Its struct can merge away once the type is collected, and its slot
     // be reused, while user code still holds the type: Collect sets them before the struct is replaced; none changes later.
     private bool _collected;
@@ -121,11 +116,9 @@ public partial class AbstractType
     internal static bool PoisonCollectedHandleForTests;
 
     internal static ItemRef PoisonItem() =>
-        ItemRef.Of(new Item(new ID(424242, 7), null, null, null, null, new YMap(), "POISON", new ContentAny(new object[] { "poison" })));
+        ItemRef.New(new ID(424242, 7), default, default, new YMap(), "POISON", new ContentAny(new object[] { "poison" }));
 
-    internal IEnumerable<KeyValuePair<string, Item>> MapForTests() => _map.Select(kv => new KeyValuePair<string, Item>(kv.Key, kv.Value.ToItem()));
-
-    // How many keys of _map have a value that is not deleted, kept by Item.Integrate and Item.Delete.
+    // How many keys of _map have a value that is not deleted, kept by ItemRef.Integrate and ItemRef.Delete.
     internal int _mapCount;
 
     /// <summary>How deeply this type is nested in other types: 0 for a root type (see <see cref="UpdateLimits.MaxDepth"/>).</summary>
@@ -328,8 +321,7 @@ public partial class AbstractType
         return _rootTypeKey ??= Doc.FindRootTypeKey(this);
     }
 
-    private protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() =>
-        _map.Where(kvp => !kvp.Value.Deleted).Select(kvp => new KeyValuePair<string, Item>(kvp.Key, kvp.Value.ToItem()));
+    private protected IEnumerable<KeyValuePair<string, ItemRef>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
 
     /// <summary>
     /// The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.

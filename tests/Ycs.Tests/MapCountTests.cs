@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// <see cref="YMap.Count"/> is kept by <see cref="Item.Integrate"/> and <see cref="Item.Delete"/>
+/// <see cref="YMap.Count"/> is kept by <see cref="ItemRef.Integrate"/> and <see cref="ItemRef.Delete"/>
 /// (and recounted when a type is integrated); these tests hold it to the count that walks the map.
 /// </summary>
 [TestClass]

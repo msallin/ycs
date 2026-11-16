@@ -130,7 +130,7 @@ client today, 351 (fixed) and 348 (geometric) designed.
 
 `edit` (in `run.sh`; results in [`results/2026-11-16-edit.md`](results/2026-11-16-edit.md), ycs at c263413, load
 average 7.7 over the last minute, 36-44 over 5 and 15). `Integrator.cs` is Yjs' `Item.integrate` and
-`readAndApplyDeleteSet` on handles, as ycs implements them (`Item.ResolveReferences`, `Item.Integrate`,
+`readAndApplyDeleteSet` on handles, as ycs implements them (`ItemRef.Adopt`,
 `StructStore.ResolveConflict` with its lazily filled sets, `StructStore.ApplyDeleteSet`): the same decisions in the
 same order. `Editing.cs` drives both sides.
 
@@ -143,7 +143,7 @@ same order. `Editing.cs` drives both sides.
   `concurrent-20` the conflict loop never takes the branches where a scanned item's origin is not before the new item
   or is among the conflicting items; in `random-sync` it takes every branch.
 * **Integrate**: every struct of the updates, in order, in one transaction (every struct at its client's state,
-  checked: offset 0). *Today*: `Item.ResolveReferences` and `Item.Integrate` per struct, what `IntegrationPlan.Execute`
+  checked: offset 0). *Today*: `ItemRef.Adopt` per struct, what `IntegrationPlan.Execute`
   runs. Included: the origins' lookups and splits, the conflict loop, the links, the parent's start, map entry, length
   and map count, the client's leaf order with its run-head index, the transaction's delete set, changed types and
   merge list. Excluded: decoding (the items and their contents: 200-248 bytes per struct), the plan, the update's

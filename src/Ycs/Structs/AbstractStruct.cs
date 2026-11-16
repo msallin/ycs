@@ -27,7 +27,5 @@ internal abstract partial class AbstractStruct
 
     /// <summary>Whether <see cref="MergeWith"/> would merge <paramref name="right"/>, without changing either.</summary>
     internal abstract bool CanMergeWith(AbstractStruct right);
-    internal abstract void Delete(Transaction transaction);
-    internal abstract void Integrate(Transaction transaction, int offset);
     internal abstract void Write(IUpdateEncoder encoder, int offset);
 }

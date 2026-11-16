@@ -322,7 +322,7 @@ public partial class YEvent
                             }
 
                             lastOp.Delete += item.Length;
-                            deleted.Add(ItemView.Of(Target.Doc, item.ToItem()));
+                            deleted.Add(ItemView.Of(Target.Doc, item));
                         }
                         else
                         {
@@ -340,7 +340,7 @@ public partial class YEvent
                             }
 
                             (lastOp.Insert as List<object>).AddRange(item.Content.GetContent());
-                            added.Add(ItemView.Of(Target.Doc, item.ToItem()));
+                            added.Add(ItemView.Of(Target.Doc, item));
                         }
                         else
                         {

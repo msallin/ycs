@@ -31,9 +31,22 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         _struct = str;
     }
 
-    /// <summary>The reference to <paramref name="str"/> (null gives <c>default</c>): where an object enters the library's code.</summary>
+    /// <summary>
+    /// The reference to <paramref name="str"/> (null gives <c>default</c>). Within the library only this type calls it:
+    /// a decoded struct enters the store through <see cref="Adopt"/>, a decoded one that is only read through
+    /// <see cref="Decoded"/>.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static ItemRef Of(AbstractStruct str) => new(str);
+    internal static ItemRef Of(AbstractStruct str) => new(str);
+
+    /// <summary>
+    /// A decoded struct that is in no store, read in place (the view of <see cref="ItemView.Detached"/>). It is never
+    /// put in a store, a list or a link: a struct enters one only through <see cref="Adopt"/>.
+    /// </summary>
+    public static ItemRef Decoded(AbstractStruct decoded) => new(decoded);
+
+    /// <summary>A new GC struct (not in a store) for the range <paramref name="length"/> from <paramref name="id"/>.</summary>
+    public static ItemRef NewGC(ID id, int length) => new(new GC(id, length));
 
     /// <summary>
     /// A new item (not integrated) between <paramref name="left"/> and <paramref name="right"/>, which are its origins
@@ -42,13 +55,13 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public static ItemRef New(ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, IContent content) =>
         new(new Item(id, left._struct, left.IsNull ? null : left.LastId, right._struct, right.IsNull ? null : right.Id, parent, parentSub, content));
 
-    /// <summary>The object, where the library hands a struct out (a public member, the decoded form): null for <c>default</c>.</summary>
+    /// <summary>The object, for the tests of the library (no method of it calls this outside <see cref="ItemRef"/>).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public AbstractStruct ToStruct() => _struct;
+    internal AbstractStruct ToStruct() => _struct;
 
-    /// <summary>The item, where the library hands one out: null for <c>default</c>; throws on a GC struct.</summary>
+    /// <summary>The item, for the tests of the library (see <see cref="ToStruct"/>): null for <c>default</c>; throws on a GC struct.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public Item ToItem() => (Item)_struct;
+    internal Item ToItem() => (Item)_struct;
 
     public bool IsNull
     {
@@ -69,6 +82,9 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _struct is GC;
     }
+
+    /// <summary>Whether the struct left every list (merged away, or replaced by a GC struct): its id and length are the range it held.</summary>
+    public bool IsDetached => _struct is Item item ? item.Detached : _struct is GC { Detached: true };
 
     /// <summary>Whether both are structs of one kind (the merge rules compare the constructors).</summary>
     public bool IsSameKind(ItemRef other) => _struct.GetType() == other._struct.GetType();

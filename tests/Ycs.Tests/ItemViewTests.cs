@@ -23,7 +23,7 @@ public class ItemViewTests
         var text = doc.GetText("t");
         var views = new List<ItemView>();
         var clock = 0;
-        using var subscription = text.Observe((_, _) => views.Add(ItemView.Of(doc, doc.Store.Find(new ItemId(1, clock)).ToStruct())));
+        using var subscription = text.Observe((_, _) => views.Add(ItemView.Of(doc, doc.Store.Find(new ItemId(1, clock)))));
         foreach (var part in parts)
         {
             text.Insert(text.Length, part);
@@ -42,7 +42,7 @@ public class ItemViewTests
         map.Set("a", "x");
         map.Set("b", "y");
         map.Set("c", "z");
-        return (array, new[] { "a", "b", "c" }.Select(key => ItemView.Of(doc, map._map[key].ToItem())).ToArray());
+        return (array, new[] { "a", "b", "c" }.Select(key => ItemView.Of(doc, map._map[key])).ToArray());
     }
 
     private static string Text(IReadOnlyList<object> content) => string.Concat(content.Select(c => (string)c));
@@ -86,7 +86,7 @@ public class ItemViewTests
         var doc = NewDoc();
         var text = doc.GetText("t");
         text.Insert(0, "abc");
-        var whole = ItemView.Of(doc, text.StartForTests);
+        var whole = ItemView.Of(doc, text._start);
         var right = ItemView.At(doc, new ItemId(1, 2));
 
         text.Insert(1, "X");
@@ -124,7 +124,7 @@ public class ItemViewTests
         var (left, right) = (new GC(new ItemId(1, 0), 3), new GC(new ItemId(1, 3), 2));
         doc.Store.AddStruct(ItemRef.Of(left));
         doc.Store.AddStruct(ItemRef.Of(right));
-        var view = ItemView.Of(doc, right);
+        var view = ItemView.Of(doc, ItemRef.Of(right));
 
         DeleteSet.TryToMergeWithLefts(doc.Store.Clients[1], 1);
 
@@ -203,7 +203,7 @@ public class ItemViewTests
         var doc = NewDoc();
         var text = doc.GetText("t");
         text.Insert(0, "abc");
-        var made = ItemView.Of(doc, text.StartForTests);
+        var made = ItemView.Of(doc, text._start);
         var found = ItemView.At(doc, new ItemId(1, 0));
         var other = ItemView.At(doc, new ItemId(1, 1));
 
@@ -251,8 +251,8 @@ public class ItemViewTests
         var doc = NewDoc();
         var text = doc.GetText("t");
         text.Insert(0, "ab");
-        var left = text.StartForTests;
-        var decoded = new Item(new ItemId(2, 0), left, new ItemId(1, 1), null, null, text, null, new ContentString("c"));
+        var left = text._start;
+        var decoded = new Item(new ItemId(2, 0), left.ToStruct(), new ItemId(1, 1), null, null, text, null, new ContentString("c"));
 
         var view = ItemView.Detached(doc, decoded);
 
@@ -273,7 +273,7 @@ public class ItemViewTests
         var doc = NewDoc();
         var text = doc.GetText("t");
         text.Insert(0, "abc");
-        text.StartForTests.Redone = new ItemId(9, 10);
+        text._start.Redone = new ItemId(9, 10);
         var view = ItemView.At(doc, new ItemId(1, 2));
 
         Assert.AreEqual((9L, 12L), (view.Redone.Value.Client, view.Redone.Value.Clock));
