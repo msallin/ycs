@@ -10,6 +10,10 @@ fuzzer (`tests/Ycs.Properties/UpdateFuzz.cs`, seeds 1 to N):
 * the encodings of documents with structs pending (updates applied in order, reversed, every other one, all but the
   first), as v1 and v2, with and without a state vector.
 
+An exception that is not a `YUpdateException` (the rejection of an input) is a bug: it is written as a line
+`UNEXPECTED <input> <exception type>` (the hash line keeps its `EX:` form), the count is printed at the end and the
+exit code is 1 when there is any.
+
 A refactoring that must not change a byte is checked by running it on the base and on the change and comparing:
 
 ```bash
