@@ -196,7 +196,7 @@ internal sealed class LayoutStore
     }
 
     // Rare: the redone ids (Yjs keeps one per item; most items have none).
-    public readonly Dictionary<int, ID> Redone = [];
+    public readonly Dictionary<int, ItemId> Redone = [];
 
     public int NewSlot()
     {

@@ -306,7 +306,7 @@ public class RunExtensionScenarioTests
             c.LogUpdates(doc, "d");
             t.Insert(0, "ab");
             var s1 = doc.CreateSnapshot();
-            Func<YText.YTextChangeType, ID, YText.YTextChangeAttributes> cy = (type, id) => { c.L($"ychange {type} {id.Client}:{id.Clock}"); return new YText.YTextChangeAttributes { Type = type, User = id.Clock }; };
+            Func<YText.YTextChangeType, ItemId, YText.YTextChangeAttributes> cy = (type, id) => { c.L($"ychange {type} {id.Client}:{id.Clock}"); return new YText.YTextChangeAttributes { Type = type, User = id.Clock }; };
             doc.Transact(tr =>
             {
                 t.Insert(2, "c"); t.Insert(3, "d");

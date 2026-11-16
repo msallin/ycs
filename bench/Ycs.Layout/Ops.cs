@@ -121,7 +121,7 @@ internal static class Ops
                 sw.Start();
                 foreach (var clock in order)
                 {
-                    doc.Store.GetItemCleanStart(tr, new ID(Inputs.ClientId, clock));
+                    doc.Store.GetItemCleanStart(tr, new ItemId(Inputs.ClientId, clock));
                 }
 
                 sw.Stop();

@@ -104,9 +104,9 @@ internal readonly partial struct ItemRef
     /// https://github.com/yjs/yjs/blob/c2f0ca3faef731a93ba28f286ffafe0e1ea1a3aa/src/structs/Item.js#L557
     private bool CanMergeItemWith(ItemRef right) =>
         right.IsItem &&
-        ID.Equals(right.LeftOrigin, LastId) &&
+        right.LeftOrigin == LastId &&
         Right == right &&
-        ID.Equals(right.RightOrigin, RightOrigin) &&
+        right.RightOrigin == RightOrigin &&
         Id.Client == right.Id.Client &&
         Id.Clock + Length == right.Id.Clock &&
         Deleted == right.Deleted &&
@@ -190,7 +190,7 @@ internal readonly partial struct ItemRef
             && Parent == parent
             && ParentSub == null
             && Right == right
-            && ID.Equals(RightOrigin, right.IsNull ? null : right.Id)
+            && RightOrigin == (right.IsNull ? null : right.Id)
             && !Deleted
             && !Keep
             && Redone == null

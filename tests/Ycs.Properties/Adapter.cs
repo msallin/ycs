@@ -1414,7 +1414,7 @@ namespace Ycs.Properties
                     return Obj(("$b", ScriptRun.B64(bytes)));
                 case YDoc d:
                     return Obj(("$t", "doc"), ("g", d.Guid));
-                case ID id:
+                case ItemId id:
                     return Obj(("client", id.Client), ("clock", id.Clock));
                 case YText.YTextChangeAttributes ychange:
                     // Yjs' default computeYChange gives { type: 'added' | 'removed' }.
@@ -1687,13 +1687,13 @@ namespace Ycs.Properties
         private static extern void DumpOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store, StringBuilder sb, bool markers, Func<object, string> parentText, Func<string, IReadOnlyList<object>, string> contentText);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "NestedListsForTests")]
-        private static extern IEnumerable<(ID Item, YArrayBase List)> NestedListsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
+        private static extern IEnumerable<(ItemId Item, YArrayBase List)> NestedListsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "MapIdsForTests")]
-        private static extern IEnumerable<KeyValuePair<string, ID>> MapIdsOf(AbstractType type);
+        private static extern IEnumerable<KeyValuePair<string, ItemId>> MapIdsOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_OwnerIdForTests")]
-        private static extern ID? OwnerIdOf(AbstractType type);
+        private static extern ItemId? OwnerIdOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "InDeletedTypeForTests")]
         private static extern bool InDeletedTypeOf(AbstractType type);
@@ -1702,7 +1702,7 @@ namespace Ycs.Properties
         private static extern (int Length, string Text) CountedOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "ListForTests")]
-        private static extern List<(long Client, long Clock, int Length, ID? LeftOrigin, ID? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListOf(AbstractType type);
+        private static extern List<(long Client, long Clock, int Length, ItemId? LeftOrigin, ItemId? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DescribeSearchMarkers")]
         private static extern string DescribeSearchMarkers(YArrayBase type);
@@ -1745,7 +1745,7 @@ namespace Ycs.Properties
         private static extern ref int LiteralWalkStepsForTests(YDoc doc);
 
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "MarkerLookupsForTests")]
-        private static extern ref List<(ID Item, int Index)> MarkerLookups(YDoc doc);
+        private static extern ref List<(ItemId Item, int Index)> MarkerLookups(YDoc doc);
 
         /// <summary>The marker lookups since the last call, as "client:clock@index" (with the script option "walk"), and forgets them.</summary>
         public string TakeMarkerLookups()
@@ -1761,7 +1761,7 @@ namespace Ycs.Properties
             return text;
         }
 
-        private static string IdOf(ID? id) => id is ID i ? $"{i.Client}:{i.Clock}" : "-";
+        private static string IdOf(ItemId? id) => id is ItemId i ? $"{i.Client}:{i.Clock}" : "-";
 
         private string TypeName(AbstractType t)
         {
@@ -1890,8 +1890,8 @@ namespace Ycs.Properties
                 r.Client,
                 r.Clock,
                 r.Length,
-                r.LeftOrigin is ID o ? (o.Client, o.Clock) : null,
-                r.RightOrigin is ID ro ? (ro.Client, ro.Clock) : null,
+                r.LeftOrigin is ItemId o ? (o.Client, o.Clock) : null,
+                r.RightOrigin is ItemId ro ? (ro.Client, ro.Clock) : null,
                 r.Deleted,
                 r.Kind,
                 r.LinkedBack,

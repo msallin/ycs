@@ -177,9 +177,9 @@ public class StringSpanDifferentialTests
 
         public long ReadDsLength() => inner.ReadDsLength();
 
-        public ID ReadLeftId() => inner.ReadLeftId();
+        public ItemId ReadLeftId() => inner.ReadLeftId();
 
-        public ID ReadRightId() => inner.ReadRightId();
+        public ItemId ReadRightId() => inner.ReadRightId();
 
         public long ReadClient() => inner.ReadClient();
 

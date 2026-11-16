@@ -195,12 +195,12 @@ internal static class Editing
             return s;
         }
 
-        if (item.LeftOrigin is ID lo)
+        if (item.LeftOrigin is ItemId lo)
         {
             (s.HasOrigin, s.OriginClient, s.OriginClock) = (true, lo.Client, lo.Clock);
         }
 
-        if (item.RightOrigin is ID ro)
+        if (item.RightOrigin is ItemId ro)
         {
             (s.HasROrigin, s.ROriginClient, s.ROriginClock) = (true, ro.Client, ro.Clock);
         }
@@ -210,7 +210,7 @@ internal static class Editing
             case string root:
                 s.ParentRoot = root;
                 break;
-            case ID pid:
+            case ItemId pid:
                 (s.HasParentId, s.ParentClient, s.ParentClock) = (true, pid.Client, pid.Clock);
                 break;
         }

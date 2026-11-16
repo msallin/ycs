@@ -4,7 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+#nullable enable
 
 namespace Ycs;
 
@@ -30,7 +30,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
 {
     public readonly ID? Item;
     public readonly ID? TypeId;
-    public readonly string TName;
+    public readonly string? TName;
 
     /// <summary>
     /// A relative position is associated to a specific character.
@@ -59,7 +59,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         }
     }
 
-    private RelativePosition(ID? typeId, string tname, ID? item, int assoc)
+    private RelativePosition(ID? typeId, string? tname, ID? item, int assoc)
     {
         TypeId = typeId;
         TName = tname;
@@ -67,7 +67,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         Assoc = assoc;
     }
 
-    public bool Equals(RelativePosition other)
+    public bool Equals(RelativePosition? other)
     {
         if (ReferenceEquals(this, other))
         {
@@ -76,10 +76,15 @@ public partial class RelativePosition : IEquatable<RelativePosition>
 
         return other != null
             && string.Equals(TName, other.TName)
-            && ID.Equals(Item, other.Item)
-            && ID.Equals(TypeId, other.TypeId)
+            && Item == other.Item
+            && TypeId == other.TypeId
             && Assoc == other.Assoc;
     }
+
+    public override bool Equals(object? obj) => obj is RelativePosition other && Equals(other);
+
+    // Assoc is a mutable field: do not change it while the position is a key of a hash table.
+    public override int GetHashCode() => HashCode.Combine(TName, Item, TypeId, Assoc);
 
     /// <summary>
     /// Create a relative position based on an absolute position.
@@ -178,7 +183,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
     {
         ArgumentNullException.ThrowIfNull(json);
         ID? typeId = json.TryGetValue("type", out var type) && type != null ? JsonToId(type, "type") : null;
-        string tname = json.TryGetValue("tname", out var tn) && tn != null
+        string? tname = json.TryGetValue("tname", out var tn) && tn != null
             ? tn as string ?? throw new YUpdateException("The tname of a relative position is not a string.")
             : null;
         ID? item = json.TryGetValue("item", out var it) && it != null ? JsonToId(it, "item") : null;
@@ -238,7 +243,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             // Case 3: Found position at the end of the list and type is attached to an item.
             // Every constructor sets one of the three.
             writer.WriteVarUint(2);
-            TypeId.Value.Write(writer);
+            TypeId!.Value.Write(writer);
         }
 
         writer.WriteVarInt(Assoc);
@@ -253,7 +258,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
     {
         ID? itemId = null;
         ID? typeId = null;
-        string tName = null;
+        string? tName = null;
 
         switch (reader.ReadVarUint())
         {

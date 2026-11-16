@@ -189,7 +189,7 @@ internal sealed class ReferenceRun
                         sb.Append('m');
                     }
 
-                    sb.Append('<').Append(s.LeftOrigin is ID lo ? lo.Client + ":" + lo.Clock : "-").Append('|').Append(s.RightOrigin is ID ro ? ro.Client + ":" + ro.Clock : "-").Append('>');
+                    sb.Append('<').Append(s.LeftOrigin is ItemId lo ? lo.Client + ":" + lo.Clock : "-").Append('|').Append(s.RightOrigin is ItemId ro ? ro.Client + ":" + ro.Clock : "-").Append('>');
                 }
             }
 
