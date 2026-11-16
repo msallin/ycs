@@ -1,0 +1,2 @@
+array-insert-random      base median     319.4 ms (min 140.9 max 415.0; pass medians 335.5, 170.1, 297.5, 384.7)  alloc    18.16 MiB  held 19.1 MiB  peak RSS 100 MiB  load 0.96
+array-insert-random      new  median     335.6 ms (min 254.2 max 472.9; pass medians 322.0, 340.7, 308.4, 386.0)  alloc    16.93 MiB  held 18.9 MiB  peak RSS 87 MiB  load 0.86

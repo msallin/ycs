@@ -462,6 +462,62 @@ timed runs each (`text-append-1txn-observed-200k` and `-400k` are new: the same 
   positions make it slower (9.3 s for 400,000 characters). A tree of the sums (the design's B+tree order) removes it.
 * A split or a merge also moves the break counts of the later blocks, in the loop that moves their sums.
 
+### The leaf order (2026-11-16, ycs only)
+
+Step 3 of [`docs/design-item-layout.md`](../../docs/design-item-layout.md) (section 1.3): a client's structs, starts and
+run-head flags in leaves of at most 128 positions, each with its visible sum and break and format counts, and from two
+leaves on a directory (first starts, first positions, has-break and has-format bits per leaf, a Fenwick tree of the
+leaf sums). A split shifts one leaf instead of the rest of the list; the walks jump whole leaves through the tree. The
+ycs child of c9f673a (`modernize`) and of the branch (42f0687), interleaved with `ab.py`, load 0.9 to 1.4
+(`results/2026-11-15-leaf-order/`): `fast.txt` 4 processes x 6 timed runs, `heavy.txt` 2 x 3, `against-53a35de.txt`
+4 x 6.
+
+| workload | c9f673a | leaf order | change | alloc (MiB) | held (MiB) |
+| --- | ---: | ---: | --- | ---: | ---: |
+| `apply-updates/ycs` | 314.3 ms | 233.7 ms | -26% | 55.1 / 59.3 | 18.5 / 18.6 |
+| `trace-replay` | 300.9 ms | 214.1 ms | -29% | 43.1 / 43.0 | 2.9 / 3.0 |
+| `apply-updates/ycs`, against 53a35de | 260.1 ms | 233.4 ms | -10% | 54.8 / 59.3 | 18.3 / 18.6 |
+| `trace-replay`, against 53a35de | 253.2 ms | 212.6 ms | -16% | 42.9 / 43.0 | 2.8 / 3.0 |
+| `array-delete-random` | 824.5 ms | 330.0 ms | 2.5x | 33.6 / 32.8 | 19.8 / 20.1 |
+| `text-append-1txn-observed-25k` | 75.0 ms | 33.1 ms | 2.3x | 5.3 / 4.7 | 1.1 / 0.6 |
+| `text-append-1txn-observed` (100k) | 396.5 ms | 143.1 ms | 2.8x | 21.3 / 18.8 | 4.4 / 2.3 |
+| `text-append-1txn-observed-200k` | 1,014.6 ms | 283.0 ms | 3.6x | 42.5 / 37.5 | 8.7 / 4.5 |
+| `text-append-1txn-observed-400k` | 3,341.0 ms | 602.9 ms | 5.5x | 84.9 / 75.0 | 17.4 / 8.9 |
+| `apply-state-v1/ycs` | 54.4 ms | 65.7 ms | +21% | 33.0 / 33.1 | 4.5 / 4.5 |
+| `apply-state-v2/ycs` | 56.0 ms | 61.4 ms | +10% | 35.0 / 35.1 | 4.4 / 4.4 |
+| `concurrent-20` | 66.5 ms | 75.0 ms | +13% | 27.6 / 28.3 | 28.1 / 29.1 |
+| `map-set-distinct` | 47.3 ms | 51.9 ms | +10% (runs 38-69 / 45-75) | 39.0 / 36.6 | 39.3 / 38.9 |
+| `text-random` | 28.6 ms | 31.0 ms | +8% (runs 24-56 / 28-58) | 4.4 / 3.7 | 5.5 / 5.3 |
+| `array-insert-random` | 199.2 ms | 384.8 ms | noise: again 319.4 / 335.6 (`array-insert-random-again.txt`, runs 141-415 / 254-473) | 18.2 / 16.9 | 19.1 / 18.9 |
+| `text-random-100k` | 2,180.9 ms | 2,238.4 ms | +3% (noise) | 21.1 / 18.6 | 27.5 / 27.1 |
+
+* **Won:** the shift. Each split moves at most 127 positions of its leaf and adds 1 to the later leaves' first
+  positions; `apply-updates` and `trace-replay` are now below 53a35de, before steps 1 and 2. Typing into an observed
+  text in one transaction is close to linear (25k to 400k characters: 16 times the characters, 18 times the time; it
+  was 45): a lookup finds the run's head through the bit words and sums the leaves through the tree.
+* **Memory:** held memory is the same within 1 MiB, and halved for the observed typing (no doubling slack of one
+  array of 400,000 positions; the last leaf fills before the next comes). `apply-updates` allocates 4.3 MiB more: a
+  leaf that splits allocates a new one of 128 positions (2.2 KB) and a merge of leaves drops one.
+* **Lost:** `apply-state-v1` (+1.1 ms per load of the trace's 10,971 structs), `apply-state-v2` and `concurrent-20`.
+  Where: a list with a directory pays an indirection per lookup (99,000 lookups by position and 38,000 by clock per
+  load of the trace, counted); with leaves of 2^24 (one leaf, no directory) `apply-state-v1` is 54.1 against 53.1 ms,
+  and with 8,192 (a directory for the last quarter of the structs only) as slow as with 128, so it is the paths with a
+  directory, not the number of leaves. Part of it is garbage collection: with a gen0 budget of 512 MiB
+  (`DOTNET_GCgen0size`, no collection during a run) `apply-state-v1` is 53.0 against 55.0-56.5 ms and `text-random`
+  even; `concurrent-20` stays +9%. A cursor kept on the leaf of the last lookup (42f0687) did not change it measurably.
+  Not resolved; recorded as an open issue.
+* **Capacity** (`capacity-128-vs-64.txt`, `capacity-128-vs-256.txt`; 3 x 6 for the first two rows, 2 x 3 for the
+  others): 128 is best or within noise on the split-heavy workloads and clearly best on `array-delete-random`; 64 is
+  faster on the observed typing, 256 slower.
+
+| workload | 64 | 128 | 256 |
+| --- | ---: | ---: | ---: |
+| `apply-updates/ycs` | 241.3 ms | 235.8 / 234.9 ms | 237.6 ms |
+| `trace-replay` | 219.8 ms | 216.4 / 213.4 ms | 211.3 ms |
+| `array-delete-random` | 371.4 ms | 307.1 / 255.4 ms | 318.6 ms |
+| `text-append-1txn-observed-400k` | 493.9 ms | 597.5 / 552.4 ms | 802.0 ms |
+| `text-random-100k` | 2,563.8 ms | 2,670.1 / 1,406.6 ms (noise) | 1,411.2 ms |
+
 ## Not compared
 
 * XML types and formatting attributes, subdocuments, snapshots and relative/sticky positions: both have them, but

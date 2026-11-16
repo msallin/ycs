@@ -1,12 +1,10 @@
 # Design: items as structs in a slab, linked by handles
 
-Status: steps 1 and 2 built (section 1); the rest is the design for the remaining work (sections 2 to 5), revised
+Status: steps 1 to 3 built (section 1); the rest is the design for the remaining work (sections 2 to 5), revised
 after the design review and the review of steps 1 and 2 (2026-11-15). Parity target unchanged: Yjs 13.6.32, the same
 content, events and update bytes. No unsafe code: arrays of structs and `ref` to their elements only. Numbers come
 from `bench/Ycs.Layout` (the model; README and `results/`), `bench/Ycs.Compare` (README, "After layout steps 1 and 2")
 and the two reviews (findings H, M, L: the design review's; N: the review of steps 1 and 2, also "review" alone).
-The run-head index also keeps a count of breaks per block: the searches for a run's head and end skip the blocks
-without one.
 
 ## Summary
 
@@ -14,8 +12,8 @@ Today an item is a 128-byte object plus a content object (40 bytes for a string,
 its client's list. The design puts each struct in a slot of a slab, links slots by 32-bit handles, keeps characters and
 values in append-only arenas and the rare fields in side tables. The model holds 35-45% of today's memory on the six
 workloads measured, and at most about 400 bytes more than today on the smallest document (section 2.2). Built so far, on today's objects: start clocks beside each client's structs, and the run-head index that makes Yjs'
-marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s). They cost 15-19% on the two split-heavy
-workloads; the next step (the leaf order, step 3) removes that, before anything else. The public API breaks once, in
+marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s), and the leaf order of step 3, which took
+back the 15-19% steps 1 and 2 cost on the two split-heavy workloads and made the walks' lookups logarithmic. The public API breaks once, in
 step 6, after the internal reference layer (steps 4 and 5) has enumerated every holder.
 
 ## 1. What is built
@@ -23,7 +21,7 @@ step 6, after the internal reference layer (steps 4 and 5) has enumerated every 
 ### 1.1 Step 1: start clocks beside the structs
 
 `ClientStructs` (`src/Ycs/Utils/ClientStructs.cs`) replaces the `List<AbstractStruct>` of a client in
-`StructStore.Clients`: an `AbstractStruct[]`, a `long[]` of start clocks and the end clock. `FindIndex` (Yjs'
+`StructStore.Clients`: the structs, their start clocks beside them and the end clock (since step 3 in leaves, 1.3). `FindIndex` (Yjs'
 `findIndexSS`, with its pivot, after a look at the last struct) and the galloping `FindIndex(clock, ref hint)` for
 in-order lookups search the starts only.
 
@@ -83,17 +81,48 @@ in-order lookups search the starts only.
   0.4-1.2 million merges, each shifting about 2,400 later structs. Lazy block sums would gain nothing (21 additions a
   split). The leaf order (step 3) removes the shift.
 
-### 1.3 Known gaps of what is built
+What 1.2 says of blocks of 512 positions holds since step 3 per leaf (1.3): the flags live in the leaves, the sums and
+break counts per leaf, and the scans of block sums became a tree.
 
-* **Quadratic within a run**: `RunHead`, `SeekLeft` and `SeekRight` find the next break by a byte scan over the run, so
-  typing at the end of an observed text in one transaction is still quadratic, 60 times smaller (review: 100,000
-  characters 0.78 s, 400,000 9.1 s). A has-break count per block is being added now (separate task); step 3 keeps it
-  per leaf.
-* Not covered by a test: a break that is a live format (a root text with formats before the document asked for it;
-  N1). The test switches `BlockShiftForNewLists` and `LiteralWalkSteps` lack the `ForTests` name (N4).
-  `ClientStructs.Grow` resizes four arrays one after the other, so an out-of-memory between them breaks the list (N5).
-  The obligation to call `StructStore.Refresh` is stated there, not at `Item.Left` and `Item.MarkDeleted` (N6). Step 3
-  rewrites `Grow` and the switches; the other two are small tasks of their own.
+### 1.3 Step 3: the leaf order
+
+`ClientStructs.Leaves.cs`. A client's structs, starts and flags in leaves of at most 128 positions
+(`ClientStructs.LeafCapacityForTests`), each with its visible sum, break count and live-format count; from two leaves
+on a directory: the leaves, their first starts (the search by clock: the last leaf, the leaf of the last lookup, then a
+binary search), their first positions (the search by position, the same way), a has-break and a has-live-format bit
+per leaf in 64-bit words, and a Fenwick tree of the leaves' sums. Positions stay global ints; no caller changed.
+
+* **Invariant**: the leaves in order hold the structs contiguous by clock; every leaf holds 1 to 128 structs (one leaf
+  without a directory, 0 before the first `Add`); each directory entry's first start and first position, each leaf's
+  sum and counts, the bits and, when not marked stale, the tree equal a recount (`Violations`).
+* **Kept current at**: a split shifts within the left part's leaf (a full leaf first splits in two) and adds 1 to the
+  later leaves' first positions; a merge removes from one leaf or more, drops emptied leaves, and a leaf at or below a
+  quarter then merges with a neighbour when they fit; `Add` opens a new leaf when the last is full; a list of one leaf
+  has no directory (it comes at the 129th struct and goes when merges leave one leaf). A change of the leaves inserts
+  or removes their bits in place and marks the tree stale; the next read rebuilds it (O(leaves), once per change of the
+  leaves, which come every 64 splits or so at the earliest).
+* **The walks**: the run's head is the last break in the position's leaf, else in the last leaf before it whose bit
+  is set; the run's end the same way forward. `RunHead`'s sum, `SeekRight` and `SeekLeft` go position by position in
+  the first and last leaf and jump whole leaves through the tree (the leaf where the sum reaches the target is found by
+  one descent), bounded by the run's last leaf and, for a text, the next leaf with a live format. A lookup is O(128 +
+  log leaves + leaves/64).
+* **Where it differs from the design**: a Fenwick tree of the leaf sums (section 5 rejected one over positions): with
+  leaf sums only, a walk over a run of n structs adds n/128 sums, which leaves typing into an observed text in one
+  transaction quadratic (n/128 is 4 times the n/512 blocks before); the tree makes it O(log). A has-live-format bit
+  per leaf (the walk right of a text must not jump a leaf with one). Leaves of 2, 4 and 8 in the tests, not only 2 and
+  4. The suggested commits (the container first, the index second) were one: the per-leaf index is the container's
+  bookkeeping, and an intermediate state would have kept block sums over leaves only to delete them.
+* **Proof**: the recount after every transaction covers the directory; `Ycs.Tests` (also with `YCS_LEAF_CAPACITY` 2
+  and 4), the corpus with leaves of 2, the properties with leaves of 4 (`walk-index` also with 2); merges of 3 to 81
+  structs ending before, at and after a leaf boundary, starting at one and centred on one (`RunHeadIndexTests`); the
+  placeholder text with leaves of 2; the review's differential fuzz with leaves of 2, 16 and 128 against the walks item
+  by item; the soak against Yjs. Sabotages caught by `Ycs.Tests`, and the measurements: bench/Ycs.Compare/README.md,
+  "The leaf order".
+
+### 1.4 Known gaps of what is built
+
+* The obligation to call `StructStore.Refresh` is stated there, not at `Item.Left` and `Item.MarkDeleted` (N6), a
+  small task of its own.
 
 ## 2. The layout still to build
 
@@ -265,7 +294,7 @@ reviewed alone. Effects: *measured* where a source is named, otherwise estimates
 
 | step | concern | effect | risk |
 | --- | --- | --- | --- |
-| 3 | the leaf order of a client's structs | `apply-updates`, `trace-replay` back below 53a35de (est.) | medium |
+| 3 | the leaf order of a client's structs: built (1.3) | `apply-updates`, `trace-replay` below 53a35de (measured) | medium |
 | 4a | `ItemRef` in the store core | none (est.) | low |
 | 4b | `ItemRef` in the types, undo, events | none (est.) | low |
 | 5 | ids wherever a struct is held across a free point | < 1% (est.) | low-medium |
@@ -274,32 +303,8 @@ reviewed alone. Effects: *measured* where a source is named, otherwise estimates
 | 8 | inline content and the arenas | the rest of the saving; no allocation per edit (est.) | medium-high |
 | 9 | the decoder and the update operations on staging tables | a load allocates about what it holds (est.) | medium |
 
-**Step 3, the leaf order. Do it next.** The regression is on `modernize` now, on the paths that sync documents
-(`apply-updates`, `trace-replay`); the change is local to `ClientStructs` and the slab inherits it. It was step 7.
-
-* *Design*: a client's structs in leaves of at most 128 positions (structs, starts, flags; per leaf its visible sum,
-  break count and live-format count), and a directory: the leaves, their first starts (searched), their first global
-  positions, and a bit per leaf "has a break" in 64-bit words. Positions stay global ints, so the callers do not
-  change. A split shifts within its leaf (at most 127 × 17 bytes) and adds 1 to the later leaves' first positions (4
-  bytes a leaf: about 1/500 of today's traffic); a full leaf splits in two; a leaf below a quarter merges with a neighbour
-  when they fit. One leaf, no directory, up to 128 structs. The blocks of 512 and their scans go; the run search reads
-  the leaf's flags, then the has-break words, then one leaf.
-* *Files*: `ClientStructs.cs`, `ClientStructs.RunHeads.cs` (a `ClientStructs.Leaves.cs` for the directory), the
-  stores' test switch (`LeafCapacityForTests` replaces `BlockShiftForNewLists`) in `tests/*/StoreChecks.cs`,
-  `RunHeadIndexTests`, `bench/Ycs.Compare/README.md`.
-* *Invariant*: the leaves in order hold the structs contiguous by clock; each directory entry's first start and first
-  position, each leaf's sums and counts, and the has-break bits equal a recount.
-* *Proof*: the recount after every transaction extended to the directory, with leaves of 2 and 4 in the property and
-  corpus suites; `walk-index`; the soaks against Yjs; the review's `blocks` probe moved to leaf boundaries (merges of
-  3 to 81 structs around them) and its `placeholder` probe as a test (a break that is a live format, N1). Sabotages
-  that must be caught: a later leaf's first position not moved by a split; a stale first start after a merge removed a
-  leaf's first struct; a break count not lowered by `Refresh`; a jump right that crosses a leaf boundary past the
-  target.
-* *Effect*: est. `apply-updates` and `trace-replay` 20-30% faster than now (the shift per split from about 40 KB to
-  under 2 KB); a lookup by clock one more binary search, +5-15 ns (est.; measure it, M7); held memory ±1% (leaf
-  slack against doubling slack); typing at the end of an observed text in one transaction O(n/8,192) words per lookup
-  plus the leaf sums of the run (est. 400,000 characters well under 1 s). *Risk*: medium: the order every lookup
-  reads, contained in two files behind an unchanged interface.
+**Step 3, the leaf order: built** (1.3). `apply-updates` and `trace-replay` are below 53a35de again; the slab
+inherits the order.
 
 **Step 4, `ItemRef`, in two halves.** Every internal use of `Item`/`AbstractStruct` (435 in `src/Ycs`: `StructStore`
 87, `Item` 41, `YArrayBase` 39, `YText` 30, `UndoManager` 23, the rest under 16) goes through `ItemRef` wrapping
@@ -375,12 +380,13 @@ pages on first use, per-page free lists with reuse at the batch end and page rel
 * *Effect*: est. a load allocates about what the document holds (the trace: about 1 MiB instead of 3.2); `apply-state`
   1.5-2× is plausible, not measured. *Risk*: medium.
 
-Order: 3 now and alone; 4a, 4b and 5 pay nothing but are safe and enumerate the holders; 6 only once the slab is
+Order: 3 is built; 4a, 4b and 5 pay nothing but are safe and enumerate the holders; 6 only once the slab is
 decided (open question 2), and then right before 7; 7 to 9 are the rewrite (7 alone gives about half the saving).
 
 ## 5. Not done, and why
 
-* A Fenwick tree and an `int[]` of lengths: block (then leaf) sums from the starts are as fast and cost nothing per struct.
+* A Fenwick tree over positions and an `int[]` of lengths: leaf sums from the starts are as fast and cost nothing per
+  struct (the tree is over the leaves' sums, 1.3).
 * A full B+tree: two levels hold a client of a million structs in a directory of 8,000-16,000 leaves; revisit if measured.
 * Generation counters: the id check is exact (2.4).
 * A separate small-document representation: geometric pages cost at most about 400 bytes a document (2.2).
@@ -398,7 +404,6 @@ decided (open question 2), and then right before 7; 7 to 9 are the rewrite (7 al
    the removal of `SplitItem`.
 3. **Enumerators after a merge** (3.2: continue from the struct that holds the id now). Recommendation: accept and pin
    it; the alternative, throwing on a changed store as .NET collections do, breaks code that edits while iterating.
-4. **Leaf capacity** (128). Recommendation: keep 128 and measure 64 and 256 on `apply-updates` and `trace-replay` in
-   step 3; the capacity is a constant.
+4. **Leaf capacity**: decided, 128 (measured against 64 and 256 in step 3, bench/Ycs.Compare/README.md).
 5. **Plenum's client** (`SharedText.cs` reads `Structs` as `Item`/`Skip`). Recommendation: change it in the Plenum
    commit that moves the ycs submodule past step 6, with `Plenum.Blazor.Tests` as the check.
