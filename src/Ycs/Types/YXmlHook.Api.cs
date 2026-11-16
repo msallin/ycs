@@ -8,7 +8,7 @@
 
 namespace Ycs;
 
-public partial class YXmlHook
+public sealed partial class YXmlHook
 {
     public YXmlHook(string hookName)
     {

@@ -56,7 +56,7 @@ public partial class UndoManager
 
     public class StackEventArgs : EventArgs
     {
-        public StackEventArgs(StackItem item, OperationType type, IDictionary<AbstractType, IList<YEvent>> changedParentTypes, object origin)
+        internal StackEventArgs(StackItem item, OperationType type, IDictionary<AbstractType, IList<YEvent>> changedParentTypes, object origin)
         {
             StackItem = item;
             Type = type;

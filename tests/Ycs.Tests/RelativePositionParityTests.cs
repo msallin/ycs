@@ -71,7 +71,7 @@ public class RelativePositionParityTests
     public void DecodesYjsRelativePositionAndResolvesToTheOriginalIndex(string base64, string typeName, int expectedIndex, int expectedAssoc)
     {
         var doc = BuildDoc();
-        var type = typeName == "text" ? (AbstractType)doc.GetText("text") : doc.GetArray("array");
+        var type = typeName == "text" ? (YType)doc.GetText("text") : doc.GetArray("array");
 
         var rpos = RelativePosition.DecodeRelativePosition(B(base64));
         Assert.AreEqual(expectedAssoc, rpos.Assoc);

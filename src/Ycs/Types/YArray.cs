@@ -19,9 +19,9 @@ public class YArrayEvent : YEvent
     }
 }
 
-public partial class YArray : YArrayBase
+public sealed partial class YArray : YArrayBase
 {
-    public const byte YArrayRefId = 0;
+    internal const byte YArrayRefId = 0;
 
     private List<object> _prelimContent;
 
@@ -46,12 +46,12 @@ public partial class YArray : YArrayBase
         Insert(0, prelimContent);
     }
 
-    internal override AbstractType InternalCopy()
+    internal override YType InternalCopy()
     {
         return new YArray();
     }
 
-    internal override AbstractType InternalClone()
+    internal override YType InternalClone()
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -59,7 +59,7 @@ public partial class YArray : YArrayBase
 
         foreach (var item in EnumerateList())
         {
-            if (item is AbstractType at)
+            if (item is YType at)
             {
                 arr.Add(new[] { at.InternalClone() });
             }
@@ -95,12 +95,12 @@ public partial class YArray : YArrayBase
     }
 
     /// <summary>The JSON list of this array with each nested type left null and listed in <paramref name="nested"/>.</summary>
-    internal override object ShallowJson(List<(AbstractType Type, object Container, string Key, int Index)> nested)
+    internal override object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested)
     {
         var result = new List<object>();
         foreach (var c in Map((c, i, arr) => c))
         {
-            if (c is AbstractType at)
+            if (c is YType at)
             {
                 nested.Add((at, result, null, result.Count));
                 result.Add(null);

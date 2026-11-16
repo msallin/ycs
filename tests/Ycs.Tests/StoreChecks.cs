@@ -18,7 +18,7 @@ public static class StoreChecks
         StructStore.CheckAfterTransactionsForTests = true;
         YEvent.CheckViewsForTests = true;
         UpdateReader.StageForTests = true;
-        AbstractType.PoisonCollectedHandleForTests = Environment.GetEnvironmentVariable("YCS_POISON") == "1";
+        YType.PoisonCollectedHandleForTests = Environment.GetEnvironmentVariable("YCS_POISON") == "1";
         if (Environment.GetEnvironmentVariable("YCS_LEAF_CAPACITY") is { Length: > 0 } capacity)
         {
             ClientStructs.LeafCapacityForTests = int.Parse(capacity, CultureInfo.InvariantCulture);

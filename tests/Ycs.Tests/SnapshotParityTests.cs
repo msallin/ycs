@@ -17,7 +17,7 @@ namespace Ycs;
 /// snapshot wire format (<see cref="Snapshot.EncodeSnapshot"/>/<see cref="Snapshot.DecodeSnapshot(byte[])"/>),
 /// <see cref="Snapshot.SnapshotContainsUpdate"/>/<see cref="Snapshot.SnapshotContainsUpdateV2"/>,
 /// the <see cref="YDocSnapshotExtensions.CreateDocFromSnapshot"/> extension, and the
-/// snapshot-aware type helpers in Types/AbstractType.Snapshot.cs.
+/// snapshot-aware type helpers in Types/YType.Snapshot.cs.
 /// <br/>
 /// The base64 fixtures below were produced by real Yjs 13.6.32 (yjs13, pinned client id 1) -
 /// see the generating script recorded next to <see cref="SnapshotBytesRoundTripThroughYjsFixtures"/>.

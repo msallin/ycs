@@ -8,21 +8,18 @@
 
 namespace Ycs;
 
-public partial class AbstractType
+public abstract partial class YType
 {
     public event EventHandler<YEventArgs> EventHandler;
     public event EventHandler<YDeepEventArgs> DeepEventHandler;
 
-    public YDoc Doc { get; protected set; }
-    public AbstractType Parent => ParentType;
+    public YDoc Doc { get; private protected set; }
+    public YType Parent => ParentType;
 
     public virtual int Length { get; internal set; }
 
-    /// <summary>
-    /// Transforms this Shared Type into a JSON-compatible representation (mirrors Yjs' <c>toJSON()</c>).
-    /// Must be implemented by each concrete type.
-    /// </summary>
-    public virtual object ToJson() { throw new NotImplementedException(); }
+    /// <summary>Transforms this shared type into a JSON-compatible representation (mirrors Yjs' <c>toJSON()</c>).</summary>
+    public abstract object ToJson();
 
     /// <summary>
     /// Observe all events that are created on this type (Yjs' <c>observe(f)</c>). Disposing the
@@ -75,7 +72,7 @@ public partial class AbstractType
         while (!ReferenceEquals(before, DeepEventHandler));
     }
 
-    protected void TypeMapDelete(Transaction transaction, string key)
+    private protected void TypeMapDelete(Transaction transaction, string key)
     {
         if (_map.TryGetValue(key, out var c))
         {
@@ -83,7 +80,7 @@ public partial class AbstractType
         }
     }
 
-    protected void TypeMapSet(Transaction transaction, string key, object value)
+    private protected void TypeMapSet(Transaction transaction, string key, object value)
     {
         if (!_map.TryGetValue(key, out var left))
         {
@@ -105,7 +102,7 @@ public partial class AbstractType
                 case YDoc d:
                     content = new ContentDoc(d);
                     break;
-                case AbstractType at:
+                case YType at:
                     CheckCanNest();
                     content = new ContentType(at);
                     break;
@@ -122,7 +119,7 @@ public partial class AbstractType
         newItem.Integrate(transaction, 0);
     }
 
-    protected bool TryTypeMapGet(string key, out object value)
+    private protected bool TryTypeMapGet(string key, out object value)
     {
         if (_map.TryGetValue(key, out var val) && !val.Deleted)
         {
@@ -134,7 +131,7 @@ public partial class AbstractType
         return false;
     }
 
-    protected object TypeMapGetSnapshot(string key, Snapshot snapshot)
+    private protected object TypeMapGetSnapshot(string key, Snapshot snapshot)
     {
         if (!_map.TryGetValue(key, out var v))
         {
@@ -149,7 +146,7 @@ public partial class AbstractType
         return !v.IsNull && v.IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
     }
 
-    protected IEnumerable<KeyValuePair<string, object>> TypeMapEnumerateValues()
+    private protected IEnumerable<KeyValuePair<string, object>> TypeMapEnumerateValues()
     {
         foreach (var kvp in _map)
         {

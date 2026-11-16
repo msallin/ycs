@@ -84,7 +84,7 @@ public class StaleMarkerScriptTests
         }
 
         var text = script.GetProperty("kind").GetString() == "text";
-        AbstractType Root(YDoc d) => text ? d.GetText("t") : d.GetArray("t");
+        YType Root(YDoc d) => text ? d.GetText("t") : d.GetArray("t");
         var t = Root(doc);
         var pt = Root(peer);
         if (script.GetProperty("obs").GetBoolean())
@@ -192,7 +192,7 @@ public class StaleMarkerScriptTests
     }
 
     // As the generator renders it: a text's string, an array as JSON of its integers.
-    private static string Content(AbstractType type) => type is YText text
+    private static string Content(YType type) => type is YText text
         ? text.ToString()
         : "[" + string.Join(",", ((YArray)type).ToArray().Select(v => Convert.ToString(v, CultureInfo.InvariantCulture))) + "]";
 }

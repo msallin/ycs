@@ -46,7 +46,7 @@ public class EventGatingTests
 
         var changedParentTypes = InsertCapturingChangedParentTypes(doc, text);
 
-        CollectionAssert.AreEqual(new AbstractType[] { text, map }, new List<AbstractType>(changedParentTypes.Keys));
+        CollectionAssert.AreEqual(new YType[] { text, map }, new List<YType>(changedParentTypes.Keys));
         Assert.AreSame(text, seen[0].Target);
     }
 
@@ -170,10 +170,10 @@ public class EventGatingTests
 
     // The Update handler sees the transaction after its observers, and is no transaction listener
     // (YDoc.HasTransactionListeners); a copy, because the transaction is reused once it has ended.
-    private static Dictionary<AbstractType, IList<YEvent>> InsertCapturingChangedParentTypes(YDoc doc, YText text)
+    private static Dictionary<YType, IList<YEvent>> InsertCapturingChangedParentTypes(YDoc doc, YText text)
     {
-        Dictionary<AbstractType, IList<YEvent>> captured = null;
-        doc.Update += (_, e) => captured = new Dictionary<AbstractType, IList<YEvent>>(e.transaction.ChangedParentTypes);
+        Dictionary<YType, IList<YEvent>> captured = null;
+        doc.Update += (_, e) => captured = new Dictionary<YType, IList<YEvent>>(e.transaction.ChangedParentTypes);
 
         text.Insert(0, "a");
 

@@ -32,7 +32,7 @@ walkthrough below describes the code at 40d7fdb.
 | 20f `ContentString.GetContent()` | fixed in a3b3ea5 |
 | traces pinned on 3, 4, 5, 8 (522) | all pass since the merge 0149a2a; the pins are gone |
 
-Scope: `types/AbstractType.js`, `YArray.js`, `YMap.js`, `YText.js`, `YXml*.js`, `utils/YEvent.js`,
+Scope: `types/YType.js`, `YArray.js`, `YMap.js`, `YText.js`, `YXml*.js`, `utils/YEvent.js`,
 `utils/EventHandler.js` and the observer part of `utils/Transaction.js`, against `src/Ycs/Types/**`,
 `Utils/YEvent.cs`, the observer part of `Utils/Transaction.cs`, and the content classes as the types
 use them. Branch `modernize` at 40d7fdb. Reference: `interop/corpus/node_modules/yjs` 13.6.32.
@@ -75,7 +75,7 @@ Nothing in the repository was changed except this file. All probe code, traces a
 Verdicts: **identical** (same control flow), **equivalent** (different code, no observable
 difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**.
 
-### AbstractType.js
+### YType.js
 
 | JS | C# | Verdict |
 | --- | --- | --- |
@@ -85,8 +85,8 @@ difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**
 | `updateMarkerChanges` | `ArraySearchMarkerCollection.UpdateMarkerChanges` | identical; a marker an insert moves off a deleted or uncountable item lands on Yjs' item: the transaction's runs extended in place are split back first, and the caller takes the item left of its insert again (`LeftOf`) |
 | marker move in `Item#mergeWith` | `YArrayBase.OnMerge` | identical (runs before the length is added, as in JS) |
 | `getTypeChildren` | none | not ported (internal helper) |
-| `callTypeObservers` | `AbstractType.CallTypeObservers` | identical; but only called when observed, finding 16 |
-| `AbstractType` constructor, `_item`, `_map`, `_start`, `_length`, `doc` | fields of `AbstractType` | equivalent (`_mapCount` and `Depth` are port-only) |
+| `callTypeObservers` | `YType.CallTypeObservers` | identical; but only called when observed, finding 16 |
+| `YType` constructor, `_item`, `_map`, `_start`, `_length`, `doc` | fields of `YType` | equivalent (`_mapCount` and `Depth` are port-only) |
 | `parent` | `Parent` | identical |
 | `_integrate` | `Integrate` | equivalent (also sets depth and map count) |
 | `_copy`, `clone`, `_write` | `InternalCopy`, `InternalClone`, `Write` | identical |
@@ -164,7 +164,7 @@ difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**
 | `formatText` | `FormatText` | identical |
 | `cleanupFormattingGap` | `CleanupFormattingGap` | identical (new port, checked line by line; `===` is `StrictEquals`, `??` is `GetAttribute`) |
 | `cleanupContextlessFormattingGap` | `CleanupContextlessFormattingGap` | identical |
-| `cleanupYTextFormatting` | `CleanupFormatting`, `CleanupYTextFormatting` | identical |
+| `cleanupYTextFormatting` | `CleanupFormatting` | identical |
 | `cleanupYTextAfterTransaction` | `CleanupAfterTransaction` | identical (including Yjs passing the end clock as a length) |
 | `deleteText` | `DeleteText` | equivalent; finding 17 (empty text) |
 | `YTextEvent` constructor, `keysChanged`, `childListChanged` | `YTextEvent`, lazily | identical |
@@ -294,7 +294,7 @@ every entry of `ChangedParentTypes`, so an event ends with the last type of the 
   Yjs `currentTarget === target`, `path = []`; port `CurrentTarget == root`.
 - 947 steps of the array/map traces. Confirmed by run.
 - Fix validated: test `DeepEventHandler != null` before touching the events (needs an accessor on
-  `AbstractType`).
+  `YType`).
 
 ### 4. Deep observers: events of equal path length arrive in a different order (wrong order)
 
@@ -367,7 +367,7 @@ check: the walk ends with `n == null` and `InsertGenericsAfter(null)` puts the c
 ### 10. A shared type inside a text is invisible to `ToDelta` and to the event delta, and cannot be inserted (wrong event, wrong read, API gap)
 
 Yjs treats `ContentType` like `ContentEmbed` in `toDelta` and in `YTextEvent#delta`, and
-`insertText` wraps an `AbstractType` in `ContentType`. The port handles `ContentEmbed` only and
+`insertText` wraps an `YType` in `ContentType`. The port handles `ContentEmbed` only and
 wraps everything that is not a string in `ContentEmbed`.
 
 - Scenario S10: Yjs peer does `t.insertEmbed(1, new Y.Map()); t.insert(3,'c')` on `ab`; the port
@@ -377,7 +377,7 @@ wraps everything that is not a string in `ContentEmbed`.
 - `t.InsertEmbed(1, new YMap())` throws `NotSupportedException` (S10local), after the transaction
   started. `Clone` of such a text loses the type.
 - Confirmed by run. Fix: `case ContentType` next to `ContentEmbed` in `ToDelta` and `Delta` (the
-  latter validated), and `text is AbstractType ? new ContentType(...)` with `CheckCanNest` in `InsertText`.
+  latter validated), and `text is YType ? new ContentType(...)` with `CheckCanNest` in `InsertText`.
 
 ### 11. `Keys`/`Changes` read after the transaction's GC throw `NotImplementedException` (exception)
 

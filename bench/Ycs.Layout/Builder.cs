@@ -12,7 +12,7 @@ internal static class Builder
         var store = new LayoutStore(paging);
         var clients = doc.Store.Clients;
         var handles = new Dictionary<AbstractStruct, int>(ReferenceEqualityComparer.Instance);
-        var types = new Dictionary<AbstractType, int>(ReferenceEqualityComparer.Instance);
+        var types = new Dictionary<YType, int>(ReferenceEqualityComparer.Instance);
 
         store.ClientIds = [.. clients.Keys];
         store.Orders = new ClientOrder[store.ClientIds.Length];
@@ -34,7 +34,7 @@ internal static class Builder
             }
         }
 
-        int TypeIndex(AbstractType t)
+        int TypeIndex(YType t)
         {
             if (t == null)
             {
@@ -80,7 +80,7 @@ internal static class Builder
                 slot.ROriginClock = Clock(ro.Clock);
             }
 
-            slot.Parent = TypeIndex(item.Parent as AbstractType);
+            slot.Parent = TypeIndex(item.Parent as YType);
             var info = (item.Keep ? Flags.Keep : 0) | (item.Countable ? Flags.Countable : 0) | (item.Deleted ? Flags.Deleted : 0) | (item.Marker ? Flags.Marker : 0);
             if (item.Redone is ItemId redone)
             {
