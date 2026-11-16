@@ -97,8 +97,8 @@ difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**
 | `typeListSlice` | `YArrayBase.InternalSlice` | DIFFERS, finding 17 (`start > end` throws) |
 | `typeListToArray` | `YArray.ToArray`, `YXmlFragment.ToArray` | equivalent (the fragment's skips only deleted items, not uncountable ones; none occur) |
 | `typeListToArraySnapshot` | `YArrayBase.ToArraySnapshot` | identical |
-| `typeListForEach`, `typeListMap` | `YArrayBase.ForEach`, `YArray.ForEach`/`Map` | identical |
-| `typeListCreateIterator` | `YArrayBase.EnumerateContent` | identical |
+| `typeListForEach`, `typeListMap` | `YArrayBase.ForEach`, `YArray.ForEach`/`Map` | identical, but for an edit in the callback (see `typeListCreateIterator`) |
+| `typeListCreateIterator` | `YArrayBase.EnumerateContent` | identical, but for what the caller's code does between two values: Yjs' orphaned item (merged away by a cleanup) continues with its old right neighbour; Ycs holds the item's id and continues from the struct that holds it now, which is the same unless the list changed right of it since, and ends when the item's type was collected (design-item-layout.md, 3.2). Also `YArray.Map`/`ForEach`, `YXmlFragment.ForEach`, `YText.WriteTo` |
 | `typeListForEachSnapshot` | `YArrayBase.ForEachSnapshot` | identical |
 | `typeListGet` | `YArray.Get`, `YXmlFragment.Get` | identical (`undefined` is `null`) |
 | `typeListInsertGenericsAfter` | `YArrayBase.InsertGenericsAfter` | equivalent; 20e (a `byte[]` is not copied) |
@@ -190,7 +190,7 @@ difference found), **DIFFERS** (numbered finding), **not ported**, **port-only**
 
 | JS | C# | Verdict |
 | --- | --- | --- |
-| `YXmlTreeWalker` (`next`) | `YXmlTreeWalker.MoveNext` | identical |
+| `YXmlTreeWalker` (`next`) | `YXmlTreeWalker.MoveNext` | identical, but a walker standing in a type that was collected since the last call ends, where Yjs' orphaned node walks up through its old parent |
 | `YXmlFragment` constructor, `firstChild`, `_integrate`, `_copy`, `clone`, `length` | same | identical |
 | `createTreeWalker`, `querySelector`, `querySelectorAll` | same | identical |
 | `_callObserver` | `CallObserver` | identical apart from finding 16 |

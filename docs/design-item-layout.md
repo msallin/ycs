@@ -1,6 +1,6 @@
 # Design: items as structs in a slab, linked by handles
 
-Status: steps 1 to 4 built (section 1); the rest is the design for the remaining work (sections 2 to 5), revised
+Status: steps 1 to 5 built (section 1); the rest is the design for the remaining work (sections 2 to 5), revised
 after the design review and the review of steps 1 and 2 (2026-11-15). Parity target unchanged: Yjs 13.6.32, the same
 content, events and update bytes. No unsafe code: arrays of structs and `ref` to their elements only. Numbers come
 from `bench/Ycs.Layout` (the model; README and `results/`), `bench/Ycs.Compare` (README, "After layout steps 1 and 2")
@@ -15,7 +15,7 @@ workloads measured, and at most about 400 bytes more than today on the smallest 
 marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s), and the leaf order of step 3, which took
 back the 15-19% steps 1 and 2 cost on the two split-heavy workloads and made the walks' lookups logarithmic, and the
 internal reference layer `ItemRef` of step 4, which enumerated the public boundaries and the holders across free points
-(1.4). The public API breaks once, in step 6, after step 5 has given those holders ids.
+(1.4). Step 5 gave those holders ids (1.5), and the public API breaks once, in step 6.
 
 ## 1. What is built
 
@@ -180,8 +180,8 @@ Public members that hand out objects without a conversion: `Item.Left`, `Item.Ri
 `DecodedUpdate.Structs` (the decoded form), and the classes `AbstractStruct`, `GC`, `Skip`, `Item`, `IContent`, the
 `Content*`.
 
-**The holders across a free point (step 5's work list).** Marked in the code with "ItemRef lifetime
-(docs/design-item-layout.md, 3.1)":
+**The holders across a free point (step 5's work list, done: 1.5).** Marked in the code with "ItemRef lifetime
+(docs/design-item-layout.md, 3.1)" until step 5:
 
 | holder | what it is held across |
 | --- | --- |
@@ -251,7 +251,44 @@ neighbour they read (`Item` is not sealed, so a cast or a test is a compare wher
 variable it was +3 % (an experiment, not kept: it would hold the object step 7 removes). Step 7's slab reads a slot by
 index and has no test; see bench/Ycs.Compare/README.md, "ItemRef", for the experiments.
 
-### 1.5 Known gaps of what is built
+### 1.5 Step 5: ids across free points
+
+Built on objects, before any slot exists. Nothing that can outlive a cleanup's merge pass or a type's collection holds a
+struct without its id; no public API changed (`PublicApi.txt`).
+
+| holder | holds now |
+| --- | --- |
+| `Transaction._mergeStructs` | `List<ID>`: the id a split or a collection added; the merge pass finds the struct that holds it by the clock |
+| `YArrayBase.EnumerateContent`, `YArray.EnumerateList` (`Map`, `ForEach`), `YArrayBase.ForEach` (`YXmlFragment.ForEach`), `YText.WriteTo` | the item it stands on, its id and `StructStore.Departures` read before the caller's code runs; `StructStore.NextAfter` goes on from the item when the count is unchanged, else from the struct that holds the id now (one lookup by id) |
+| `YXmlTreeWalker` | the current node, its id and the count, the same way |
+| `YArrayBase._searchMarkers` of a collected type | cleared with the push hint when the type is collected (`ForgetList`) |
+
+`Departures` counts the structs that left a list: merged into their left neighbour (`ItemRef.MergeItemWith`) or
+replaced by a GC struct (`StructStore.ReplaceStruct`). It is the hint's validity check until step 7, where the handle's
+slot answers it (a live slot that starts at the id).
+
+* **Open question 3, accepted and pinned**: after a merge an enumerator continues from the struct that holds its id now
+  (`EnumeratorLifetimeTests`). That is where Yjs' orphaned item continues unless the list changed right of it since:
+  an item that arrives right of the merged struct after the merge is visited (Yjs' orphan skips it, `a,c,d,z` against
+  `a,c,d,y,z`). When the id lies in a GC struct the type was collected, and the walk ends: for the list enumerators that
+  is where Yjs ends too (everything left is deleted); a tree walker standing in the collected type ends where Yjs'
+  orphan walks up through its old parent to the next node (`e1,c` against `e1,c,e3`).
+* **Found on the way**: `YXmlFragment.ForEach` called itself (its lambda bound to the public overload): a stack overflow
+  on every call; fixed (`fix:`).
+* **Proof**: `Ycs.Properties` scripts whose handlers on the document (`afterTransactionCleanup`, `update`,
+  `afterTransaction`) and on types make nested transactions (`react` with `on`, `GenOptions.Hooks`: `fixtures/hooks.jsonl`,
+  150 scripts recorded from Yjs, and fresh seeds live, `HookScriptTests`), `EnumeratorLifetimeTests` (the values of Yjs
+  13.6.32 where they agree), `CollectedTypeMarkersTests`. Sabotage, not committed: a hook that rewrites the `Id` of
+  every merged-away and replaced object changes nothing in any suite; with `_mergeStructs` back to objects, 40 of the
+  150 hooks fixtures and the live hook seeds fail (so do 163 others, where an observer's transaction or a later
+  merge of the pass reads an orphan: 203 of 772 recorded scripts, 626 of 2,916 `Ycs.Tests`); the same with the rewrite
+  only while another cleanup is queued, 7 hooks fixtures and 76 other recorded scripts. A hook that also clears an orphan's `Left`
+  and `Right` leaves `EnumeratorLifetimeTests` passing; the markers not cleared fail `CollectedTypeMarkersTests`.
+* **Measured** (`bench/Ycs.Compare`, `ab.py`, 9e182ef against the branch, 6 processes x 6 timed runs, interleaved, load 1.6
+  to 2.7): `apply-updates/ycs` 222.1 / 218.5 ms, `trace-replay` 198.4 / 196.4 ms, `text-append-1txn-observed-25k` 32.3 /
+  31.8 ms; allocations and held memory equal to the byte. Noise, so not in the bench README.
+
+### 1.6 Known gaps of what is built
 
 * The obligation to call `StructStore.Refresh` is stated there, not at `Item.Left` and `Item.MarkDeleted` (N6), a
   small task of its own.
@@ -335,13 +372,13 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   outside the store needs to know is whether the slot still holds *its* struct, and "the slot is live and its id is
   the held id" answers that exactly, because an id names one struct start. So every holder that can outlive a free
   point holds an id (and at most a handle as a hint, validated by that check): delete sets, stack items, snapshots,
-  relative positions, `Transaction._mergeStructs` (it holds ids from step 5: the failure it prevents is H4's, where a
+  relative positions, `Transaction._mergeStructs` (it holds ids since step 5: the failure it prevents is H4's, where a
   nested transaction's merge pass reads a reused slot and merges at a position Yjs does not, so the update bytes
   differ), the public enumerators, and `ItemView` (section 3). Handles without ids are held only by what split and merge
   keep current: type starts, map entries, search markers, the push hint, the clock order. A Debug check after every
   test transaction walks them: none points at a `Free` slot.
 * **Type table**: an entry is never reused; a collected type's `AbstractType` gets index -1, and its search markers
-  are cleared at collection (today only `_start` is: `ContentType.cs`), so a user-held collected `YArray` writes no
+  are cleared at collection (`_start` and the markers are, since step 5: `ContentType.cs`), so a user-held collected `YArray` writes no
   marker flag through a handle that now names another type's item (H5).
 
 ### 2.5 Decoding, and the operations without a document
@@ -429,7 +466,7 @@ reviewed alone. Effects: *measured* where a source is named, otherwise estimates
 | 3 | the leaf order of a client's structs: built (1.3) | `apply-updates`, `trace-replay` below 53a35de (measured) | medium |
 | 4a | `ItemRef` in the store core: built (1.4) | none beyond noise, but observed typing in one transaction +5-7 % (measured) | low |
 | 4b | `ItemRef` in the types, undo, events: built (1.4) | (with 4a) | low |
-| 5 | ids wherever a struct is held across a free point | < 1% (est.) | low-medium |
+| 5 | ids wherever a struct is held across a free point: built (1.5) | none beyond noise (measured) | low-medium |
 | 6 | the public API break | none inside; a view read costs a hint check | medium |
 | 7 | the slab, content still as objects | about half of the memory saving; no `Item` allocation per edit (est.) | high |
 | 8 | inline content and the arenas | the rest of the saving; no allocation per edit (est.) | medium-high |
@@ -454,7 +491,7 @@ today's object, with implicit conversions both ways until the end of 4b.
   transaction, +5-7 % (the type test of each member read, 1.4). *Risk*: low per line, a large diff; review as a diff of
   renames.
 
-**Step 5, ids across free points.** `Transaction._mergeStructs` holds ids (looked up at the merge pass); the public
+**Step 5, ids across free points: built** (1.5). `Transaction._mergeStructs` holds ids (looked up at the merge pass); the public
 enumerators hold an id and a hint; a collected type's search markers are cleared. On objects, before any slot exists.
 
 * *Files*: `Transaction.cs`, `YArrayBase.cs`, `YXmlFragment.cs` (the tree walker), `ContentType.cs`, tests.
@@ -538,8 +575,9 @@ decided (it is: open question 2), right before 7; 7 to 9 are the rewrite (7 alon
    checked against ycs): with the leaf order of 1.3, integration is 1.4-1.7× and deletion 1.6-4.1× faster than today
    and allocates less on the workloads with conflicts; with a flat order, deletion is 2.2-2.9× slower than today. So
    the slab keeps the leaf order. The integration gain is an upper bound: the model keeps no run-head index.
-3. **Enumerators after a merge** (3.2: continue from the struct that holds the id now). Recommendation: accept and pin
-   it; the alternative, throwing on a changed store as .NET collections do, breaks code that edits while iterating.
+3. **Enumerators after a merge** (3.2: continue from the struct that holds the id now): decided, accepted and pinned
+   in step 5 (1.5); the alternative, throwing on a changed store as .NET collections do, breaks code that edits while
+   iterating.
 4. **Leaf capacity**: decided, 128 (measured against 64 and 256 in step 3, bench/Ycs.Compare/README.md).
 5. **Plenum's client** (`SharedText.cs` reads `Structs` as `Item`/`Skip`). Recommendation: change it in the Plenum
    commit that moves the ycs submodule past step 6, with `Plenum.Blazor.Tests` as the check.
