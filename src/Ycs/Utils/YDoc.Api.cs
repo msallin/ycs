@@ -230,19 +230,19 @@ public partial class YDoc
     /// <summary>Transactions are synchronous: an <c>async</c> lambda is a compile error (CS0619), not a transaction that ends at its first <c>await</c>.</summary>
     [Obsolete("Transactions are synchronous.", error: true)]
     [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
-    public void Transact(Func<Transaction, Task> _, object? origin = null, bool local = true) =>
+    public void Transact(Func<Transaction, Task> action, object? origin = null, bool local = true) =>
         throw new NotSupportedException("Transactions are synchronous.");
 
     /// <summary>The guard above for an <c>async</c> lambda that returns a value.</summary>
     [Obsolete("Transactions are synchronous.", error: true)]
     [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
-    public Task<TResult> Transact<TResult>(Func<Transaction, Task<TResult>> _, object? origin = null, bool local = true) =>
+    public Task<TResult> Transact<TResult>(Func<Transaction, Task<TResult>> func, object? origin = null, bool local = true) =>
         throw new NotSupportedException("Transactions are synchronous.");
 
     /// <summary>The <see cref="Transact{TState}(TState, Action{TState, Transaction}, object, bool)"/> form of the guard above.</summary>
     [Obsolete("Transactions are synchronous.", error: true)]
     [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
-    public void Transact<TState>(TState state, Func<TState, Transaction, Task> _, object? origin = null, bool local = true)
+    public void Transact<TState>(TState state, Func<TState, Transaction, Task> action, object? origin = null, bool local = true)
         where TState : allows ref struct =>
         throw new NotSupportedException("Transactions are synchronous.");
 

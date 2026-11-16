@@ -50,7 +50,7 @@ event. A document is a value too: `YValue` converts from a `YDoc`, and inserting
 raises a `SubdocsEventArgs(Loaded, Added, Removed)` of read-only sets.
 
 `PermanentUserData(doc)` maps client ids to users of that document: `SetUserMapping(clientId, user, filter?)`,
-`GetUserByClientId`, `GetUserByDeletedId`; `Users` is the map that stores them and `Doc` the document.
+`GetUserByClientId`, `GetUserByDeletedId`; `Doc` is the document.
 
 ## YValue
 
@@ -68,7 +68,7 @@ implicitly, so `map["theme"] = "dark"` and `array.Add(1, "two")` read as they sh
 To read one: `Kind`, `IsNull`, `GetBoolean`, `GetInt32`, `GetInt64`, `GetDouble`, `GetBigInteger`, `GetString`,
 `GetBytes` (these throw when the kind does not fit) and the `TryGet...` form of each (`TryGetBoolean`, `TryGetInt32`,
 `TryGetInt64`, `TryGetDouble`, `TryGetBigInteger`, `TryGetString`, `TryGetBytes`); explicit conversions to the same
-scalar types; `TryGetSharedType<T>(out T? value)`, `TryGetShared` and `TryGetDocument`; for arrays `Length`, the
+scalar types; `TryGetSharedType<T>(out T? value)` (`YType` for any shared type) and `TryGetDocument`; for arrays `Length`, the
 `int` indexer and `EnumerateArray()`; for objects `MemberCount`, the `string` indexer, `TryGetMember(name, out value)`
 and `EnumerateObject()`; and `ToObject()`, the CLR value back.
 

@@ -1619,7 +1619,7 @@ namespace Ycs.Properties
                         long i = 0;
                         foreach (var d in ((YText)parent).ToDelta())
                         {
-                            if (d is Delta.Insert { Value: var embedded } && embedded.TryGetShared(out var shared) && ReferenceEquals(shared, t))
+                            if (d is Delta.Insert { Value: var embedded } && embedded.TryGetSharedType(out YType? shared) && ReferenceEquals(shared, t))
                             {
                                 return i;
                             }

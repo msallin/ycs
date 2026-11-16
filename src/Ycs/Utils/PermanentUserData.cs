@@ -25,7 +25,7 @@ public sealed class PermanentUserData
     public YDoc Doc { get; }
 
     /// <summary>The map in the document that holds the users: each description maps to its client ids and deletions.</summary>
-    public YMap Users { get; }
+    internal YMap Users { get; }
 
     /// <summary>Client id to user description; Yjs' <c>clients</c>.</summary>
     internal readonly Dictionary<long, string> Clients = new Dictionary<long, string>();
