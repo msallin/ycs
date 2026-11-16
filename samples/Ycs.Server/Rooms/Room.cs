@@ -1,4 +1,5 @@
 using System.Buffers;
+using Microsoft.Extensions.Logging.Abstractions;
 using Ycs.Server.Awareness;
 
 namespace Ycs.Server.Rooms;
@@ -11,11 +12,12 @@ namespace Ycs.Server.Rooms;
 /// <c>TryWrite</c>). A session whose queue is full is closed once the fan-out that found it is done, by the outermost
 /// call under the lock (<see cref="CloseOverflowing"/>), so that closes do not nest; the lock is reentrant for them.
 /// </summary>
-internal sealed class Room
+internal sealed partial class Room
 {
     private readonly Lock gate = new();
     private readonly YDoc doc;
     private readonly Awareness.Awareness awareness;
+    private readonly ILogger logger;
 
     // Under the lock: whether the update being applied may integrate what waited for it, which its origin has not seen.
     private bool updateReachesOrigin;
@@ -28,12 +30,14 @@ internal sealed class Room
     private readonly List<Session> overflowing = [];
     private bool closingOverflowing;
 
-    public Room(string name, TimeProvider? time = null, UpdateLimits? limits = null)
+    public Room(string name, TimeProvider? time = null, UpdateLimits? limits = null, ILogger? logger = null)
     {
         Name = name;
+        this.logger = logger ?? NullLogger.Instance;
         doc = new YDoc(new YDocOptions { Limits = limits ?? DocumentLimits });
         awareness = new Awareness.Awareness(time ?? TimeProvider.System);
         doc.Update += OnUpdate;
+        doc.PendingDropped += OnPendingDropped;
     }
 
     public string Name { get; }
@@ -358,4 +362,10 @@ internal sealed class Room
             }
         }
     }
+
+    // Runs under the lock, inside the transaction of the update that dropped them; the update itself stood whole.
+    private void OnPendingDropped(object? sender, PendingDrop e) => LogPendingDropped(logger, Name, e.Structs, e.Clients.Count);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Room {Room} dropped {Structs} waiting structs of {Clients} clients beyond the document's limits")]
+    private static partial void LogPendingDropped(ILogger logger, string room, long structs, int clients);
 }
