@@ -801,7 +801,8 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 var reached = store.SeekRight(p, ref remaining, stopAtFormats: false);
                 if (reached != p)
                 {
-                    (p, pIndex) = (reached, index - remaining);
+                    p = reached;
+                    pIndex = index - remaining;
                     continue;
                 }
             }
@@ -829,7 +830,8 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 var reached = run.SeekLeft(at, pIndex - index, out var passed);
                 if (reached != at)
                 {
-                    (p, pIndex) = (run[reached], pIndex - checked((int)passed));
+                    p = run[reached];
+                    pIndex -= checked((int)passed);
                     continue;
                 }
             }

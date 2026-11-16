@@ -378,29 +378,30 @@ public partial class YText : YArrayBase
 
         public void Forward()
         {
-            if (Right.IsNull)
+            var right = Right;
+            if (right.IsNull)
             {
                 throw new Exception("Unexpected");
             }
 
-            switch (Right.Content)
+            switch (right.Content)
             {
                 default:
-                    if (!Right.Deleted)
+                    if (!right.Deleted)
                     {
-                        Index += Right.Length;
+                        Index += right.Length;
                     }
                     break;
                 case ContentFormat cf:
-                    if (!Right.Deleted)
+                    if (!right.Deleted)
                     {
                         UpdateCurrentAttributes(ref CurrentAttributes, cf);
                     }
                     break;
             }
 
-            Left = Right;
-            Right = Right.Right.AsItem;
+            Left = right;
+            Right = right.Right.AsItem;
         }
 
         public void FindNextPosition(Transaction transaction, int count)
@@ -425,31 +426,32 @@ public partial class YText : YArrayBase
                     }
                 }
 
-                switch (Right.Content)
+                var right = Right;
+                switch (right.Content)
                 {
                     default:
-                        if (!Right.Deleted)
+                        if (!right.Deleted)
                         {
-                            if (count < Right.Length)
+                            if (count < right.Length)
                             {
                                 // Split right.
-                                transaction.Doc.Store.GetItemCleanStart(transaction, new ID(Right.Id.Client, Right.Id.Clock + count));
+                                transaction.Doc.Store.GetItemCleanStart(transaction, new ID(right.Id.Client, right.Id.Clock + count));
                             }
 
-                            Index += Right.Length;
-                            count -= Right.Length;
+                            Index += right.Length;
+                            count -= right.Length;
                         }
                         break;
                     case ContentFormat cf:
-                        if (!Right.Deleted)
+                        if (!right.Deleted)
                         {
                             UpdateCurrentAttributes(ref CurrentAttributes, cf);
                         }
                         break;
                 }
 
-                Left = Right;
-                Right = Right.Right.AsItem;
+                Left = right;
+                Right = right.Right.AsItem;
                 // We don't forward() because that would halve the performance because we already do the checks above.
             }
         }
