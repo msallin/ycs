@@ -43,13 +43,13 @@ public class StructSlotTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         var outer = new YMap();
-        array.Push(new object[] { outer });
-        outer.Set("k", 1);
+        array.Add(outer);
+        outer["k"] = 1;
         var id = new ItemId(1, 1);
         var handle = doc.Store.Find(id).Handle;
         var live = doc.Store.Slab.LiveCount;
 
-        array.Delete(0, 1);
+        array.RemoveAt(0);
 
         var after = doc.Store.Find(id);
         Assert.AreEqual((true, handle, live), (after.IsGC, after.Handle, doc.Store.Slab.LiveCount));
@@ -61,12 +61,13 @@ public class StructSlotTests
         var first = new YDoc(new YDocOptions { ClientId = 1 });
         var array = first.GetArray("a");
         var map = new YMap();
-        array.Push(new object[] { map });
+        array.Add(map);
         var second = new YDoc(new YDocOptions { ClientId = 2 });
         second.ApplyUpdate(first.EncodeStateAsUpdate());
-        ((YMap)second.GetArray("a").Get(0)).Set("k", 1);
+        _ = second.GetArray("a")[0].TryGetSharedType<YMap>(out var remote);
+        remote!["k"] = 1;
 
-        array.Delete(0, 1);
+        array.RemoveAt(0);
         first.ApplyUpdate(second.EncodeStateAsUpdate(first.EncodeStateVector()));
 
         var stored = first.Store.Find(new ItemId(2, 0));
