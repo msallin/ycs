@@ -21,8 +21,27 @@ internal static class IlScan
     /// <summary>One instruction that carries a metadata token (a call, a box, a constrained prefix, ...).</summary>
     internal readonly record struct TokenOp(OpCode Op, EntityHandle Token);
 
-    /// <summary>The instructions with a token of every method body of the library, with the method's outermost declaring type and name.</summary>
-    internal static (int Methods, List<(string Type, string Method, TypeDefinitionHandle Outer, TypeDefinitionHandle Declaring, TokenOp Op)> Ops, MetadataReader Metadata) Read()
+    /// <summary>
+    /// The instructions with a token of every method body of the library, with the method's outermost declaring type and name.
+    /// The metadata reader is valid until the result is disposed.
+    /// </summary>
+    internal sealed class Result(
+        PEReader pe,
+        int methods,
+        List<(string Type, string Method, TypeDefinitionHandle Outer, TypeDefinitionHandle Declaring, TokenOp Op)> ops,
+        MetadataReader metadata) : IDisposable
+    {
+        public void Deconstruct(out int methodCount, out List<(string Type, string Method, TypeDefinitionHandle Outer, TypeDefinitionHandle Declaring, TokenOp Op)> operations, out MetadataReader reader)
+        {
+            methodCount = methods;
+            operations = ops;
+            reader = metadata;
+        }
+
+        public void Dispose() => pe.Dispose();
+    }
+
+    internal static Result Read()
     {
         var pe = new PEReader(File.OpenRead(typeof(YDoc).Assembly.Location));
         var md = pe.GetMetadataReader();
@@ -62,7 +81,7 @@ internal static class IlScan
             }
         }
 
-        return (methods, ops, md);
+        return new Result(pe, methods, ops, md);
     }
 
     private static void Skip(ref BlobReader il, OpCode op)

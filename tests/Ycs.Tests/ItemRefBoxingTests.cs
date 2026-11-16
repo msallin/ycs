@@ -17,7 +17,8 @@ public class ItemRefBoxingTests
     [TestMethod]
     public void Library_EveryMethodBody_NeverBoxesAnItemRef()
     {
-        var (methods, ops, md) = IlScan.Read();
+        using var scan = IlScan.Read();
+        var (methods, ops, md) = scan;
         var itemRef = md.TypeDefinitions.Single(h => md.GetString(md.GetTypeDefinition(h).Name) == nameof(ItemRef));
         var found = new List<string>();
 
