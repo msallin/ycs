@@ -247,7 +247,7 @@ public abstract partial class YEvent
         Retain,
     }
 
-    private static void PackRun(List<Delta> delta, DeltaRun run, int count, List<YValue> inserted)
+    private static void PackRun(List<Delta> delta, DeltaRun run, int count, StoredItems inserted)
     {
         switch (run)
         {
@@ -284,7 +284,7 @@ public abstract partial class YEvent
                 // The run being collected: none, a deletion or a retain (counted), or an insertion (its items).
                 var run = DeltaRun.None;
                 var count = 0;
-                List<YValue> inserted = null;
+                StoredItems inserted = null;
 
                 for (var item = Target._start; !item.IsNull; item = item.Right.AsItem)
                 {
@@ -309,13 +309,10 @@ public abstract partial class YEvent
                         {
                             PackRun(delta, run, count, inserted);
                             run = DeltaRun.Insert;
-                            inserted = new List<YValue>(1);
+                            inserted = new StoredItems();
                         }
 
-                        foreach (var value in item.Content.GetContent())
-                        {
-                            inserted.Add(YValue.FromStored(value));
-                        }
+                        inserted.AddRange(item.Content.GetContent());
 
                         added.Add(ItemView.Of(Target.Doc, item));
                     }

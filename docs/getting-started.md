@@ -56,10 +56,10 @@ var doc = new YDoc();
 // Text, with formatting.
 var text = doc.GetText("notes");
 text.Insert(0, "Hello world");
-text.Format(0, 5, new Dictionary<string, object> { ["bold"] = true });
+text.Format(0, 5, new Dictionary<string, YValue> { ["bold"] = true });
 foreach (var d in text.ToDelta())
 {
-    Console.WriteLine($"{d.Insert} {(d.Attributes is null ? "" : string.Join(",", d.Attributes.Keys))}");
+    Console.WriteLine($"{((Delta.Insert)d).Value} {(d.Attributes is null ? "" : string.Join(",", d.Attributes.Keys))}");
 }
 // Hello bold
 //  world
@@ -120,22 +120,27 @@ using var subscription = text.Observe(e =>
 {
     foreach (var d in e.Delta)
     {
-        Console.WriteLine($"retain {d.Retain} insert {d.Insert} delete {d.Delete}");
+        Console.WriteLine(d switch
+        {
+            Delta.Insert i => $"insert {i.Value}",
+            Delta.Retain r => $"retain {r.Length}",
+            Delta.Delete x => $"delete {x.Length}",
+            _ => d.ToString(),
+        });
     }
 });
 
-text.Insert(0, "abc");
-// retain  insert abc delete
+text.Insert(0, "abc"); // insert abc
 
 // One transaction: one event, one Updated, one undo step. The origin is passed to every handler.
 doc.Transact(tr =>
 {
-    text.Delete(0, 1);
+    text.Remove(0, 1);
     text.Insert(2, "d");
 }, origin: "my-editor");
-// retain  insert  delete 1
-// retain 2 insert  delete
-// retain  insert d delete
+// delete 1
+// retain 2
+// insert d
 ```
 
 - Every change runs in a transaction; without `Transact`, each call is its own.

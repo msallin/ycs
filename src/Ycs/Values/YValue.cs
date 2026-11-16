@@ -18,6 +18,9 @@ namespace Ycs;
 /// </remarks>
 public readonly struct YValue : IEquatable<YValue>
 {
+    private static readonly object BoxedTrue = true;
+    private static readonly object BoxedFalse = false;
+
     private const double MaxExactInteger = 9007199254740992.0; // 2^53
 
     // Null: nothing. Boolean: _bits 0 or 1. Number: the bits of the double. BigInteger: the value. Other kinds: _object only.
@@ -204,7 +207,7 @@ public readonly struct YValue : IEquatable<YValue>
     internal object? Stored() => _kind switch
     {
         YValueKind.Null => null,
-        YValueKind.Boolean => _bits != 0,
+        YValueKind.Boolean => _bits != 0 ? BoxedTrue : BoxedFalse,
         YValueKind.Number => NumberObject(BitConverter.Int64BitsToDouble(_bits)),
         YValueKind.BigInteger => new BigInteger(_bits),
         _ => _object,

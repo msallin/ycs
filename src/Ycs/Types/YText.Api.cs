@@ -95,14 +95,19 @@ public partial class YText
     public IReadOnlyList<Delta> ToDelta() => ComputeDelta(null, null, null);
 
     /// <summary>
-    /// The text as of <paramref name="snapshot"/>; with <paramref name="previous"/>, also what was removed since it, each run with a
+    /// The text as of <paramref name="snapshot"/> (the current text when null, with <paramref name="previous"/> given); with
+    /// <paramref name="previous"/>, also what was added since it and what was removed, each run with a
     /// <c>ychange</c> attribute (an object of <c>type</c>, <c>added</c> or <c>removed</c>, and <c>user</c> when
     /// <paramref name="computeYChange"/> sets one).
     /// </summary>
     /// <exception cref="InvalidOperationException">The text is not in a document yet.</exception>
-    public IReadOnlyList<Delta> ToDelta(Snapshot snapshot, Snapshot? previous = null, Func<YChangeKind, ItemId, YChange>? computeYChange = null)
+    public IReadOnlyList<Delta> ToDelta(Snapshot? snapshot, Snapshot? previous = null, Func<YChangeKind, ItemId, YChange>? computeYChange = null)
     {
-        ArgumentNullException.ThrowIfNull(snapshot);
+        if (snapshot == null && previous == null)
+        {
+            throw new ArgumentNullException(nameof(snapshot), "Pass a snapshot, a previous snapshot or both; ToDelta() reads the current text.");
+        }
+
         return ComputeDelta(snapshot, previous, computeYChange);
     }
 

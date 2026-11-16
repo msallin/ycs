@@ -35,6 +35,23 @@ index in a list when `Key` is null), `Changes` (`YChanges`: `Added`, `Deleted`, 
 (`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, still an `object?`), and `Adds(view)`,
 `Deletes(view)`. It is valid during the handler, its transaction's observers and cleanup; compute what you keep there.
 
+### Text and deltas
+
+`YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `InsertEmbed(index, YValue,
+attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
+`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `RemoveNonText()`, `CleanupFormatting()`, `ToString()`,
+`CopyTo(Span<char>)` (the characters written; an `ArgumentException` when the span is shorter than the text, and `Length` is
+always enough) and `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is null when unset,
+`GetAttributes`, `SetAttribute`, `RemoveAttribute`) and `Clone`. Formatting attributes and embeds are `YValue`s; in an
+attribute dictionary of `Format` or of a `Retain`, a `YValue.Null` removes the attribute.
+
+A `Delta` is one operation of a delta, one of the sealed cases `Delta.Insert(YValue Value)` (a string, or an embed: a shared
+type or a value; an embed of null is `YValue.Null`), `Delta.InsertItems(IReadOnlyList<YValue> Items)` (what an array's or an
+XML fragment's event inserted), `Delta.Retain(int Length)` and `Delta.Delete(int Length)`, with `Attributes`
+(`IReadOnlyDictionary<string, YValue>?`) on every case. `ToDelta(snapshot, previous)` marks added and removed runs with a
+`ychange` attribute, an object of `type` (`"added"` or `"removed"`) and, when `computeYChange` returns a `YChange(YChangeKind,
+long? User)` with one, `user`. Applying an `InsertItems` to a text throws.
+
 On `YDoc`, `Updated` and `UpdatedV2` raise an `UpdateEventArgs(Update, Origin, Transaction)`: `Update` is a new
 `ReadOnlyMemory<byte>` for each event, which a handler may keep. `SubdocsChanged` raises a `SubdocsEventArgs(Loaded,
 Added, Removed)` of read-only sets and `AfterAllTransactions` an `IReadOnlyList<Transaction>`.

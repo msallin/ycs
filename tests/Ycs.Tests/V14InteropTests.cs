@@ -343,7 +343,7 @@ public class V14InteropTests
         var op = new Dictionary<string, object> { ["insert"] = Value(d.Inserted().ToObject()) };
         if (d.Attributes?.Count > 0)
         {
-            op["attributes"] = Value(d.Attributes);
+            op["attributes"] = Value(d.Attributes.ToDictionary(kv => kv.Key, kv => kv.Value.ToObject()));
         }
 
         return (object)op;

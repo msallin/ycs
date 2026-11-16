@@ -497,7 +497,7 @@ public class YTextTests : YTestBase
 
         text0.SetAttribute("test", 42);
         Assert.AreEqual(42, text0.GetAttribute("test"));
-        CollectionAssert.AreEqual(new[] { new KeyValuePair<string, object>("test", 42) }, text0.GetAttributes().ToArray());
+        CollectionAssert.AreEqual(new[] { new KeyValuePair<string, YValue>("test", 42) }, text0.GetAttributes().ToArray());
     }
 
     [TestMethod]

@@ -63,6 +63,20 @@ foreach (var v2 in new[] { false, true })
     Check(decoded.TryResolve(copy, out var absolute) && absolute.Index == 4, $"v{(v2 ? 2 : 1)}: position resolves elsewhere");
 }
 
+// The text API: embeds, deltas of both kinds, a snapshot with ychange, the span and writer reads.
+var edited = new YDoc();
+var note = edited.GetText("note");
+note.Insert(0, "ab");
+note.InsertEmbed(1, YValue.Object(new KeyValuePair<string, YValue>("image", "x.png")));
+var before = edited.CreateSnapshot();
+note.ApplyDelta([new Delta.Retain(1), new Delta.Insert("Z") { Attributes = new Dictionary<string, YValue> { ["bold"] = true } }, new Delta.Delete(1)]);
+var runs = note.ToDelta();
+Check(runs.Count == 3 && runs[1] is Delta.Insert { Value.Kind: YValueKind.String } && runs[1].Attributes!["bold"] == YValue.True, "text delta lost");
+var changes = note.ToDelta(edited.CreateSnapshot(), before, (kind, id) => new YChange(kind, id.Client));
+Check(changes.Any(d => d.Attributes?["ychange"]["type"] == "added"), "ychange lost");
+Span<char> chars = stackalloc char[note.Length];
+Check(note.CopyTo(chars) == 3 && chars[..3].SequenceEqual("aZb".AsSpan()) && note.ToString() == "aZb", "text read lost");
+
 Console.WriteLine("OK");
 return 0;
 

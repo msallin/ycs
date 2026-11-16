@@ -1036,9 +1036,9 @@ public partial class YText : YArrayBase
     internal static YValue EmbedOf(IContent content) => content is ContentEmbed embed ? YValue.FromStored(embed.Embed) : YValue.FromStored(((ContentType)content).Type);
 
     /// <summary>The attributes as a delta carries them; a change (<see cref="ChangeKey"/>) as the object it is in Yjs.</summary>
-    internal static Dictionary<string, YValue> AttributeValues(Dictionary<string, object> attributes, bool skipNull)
+    internal static IReadOnlyDictionary<string, YValue> AttributeValues(Dictionary<string, object> attributes, bool skipNull)
     {
-        var values = new Dictionary<string, YValue>(attributes.Count);
+        var values = new AttributeSet(attributes.Count);
         foreach (var kvp in attributes)
         {
             if (kvp.Value == null && skipNull)
@@ -1046,7 +1046,7 @@ public partial class YText : YArrayBase
                 continue;
             }
 
-            values[kvp.Key] = kvp.Value is YChange change ? ChangeValue(change) : YValue.FromStored(kvp.Value);
+            values.Add(kvp.Key, kvp.Value is YChange change ? ChangeValue(change) : YValue.FromStored(kvp.Value));
         }
 
         return values;
@@ -1060,18 +1060,34 @@ public partial class YText : YArrayBase
             : YValue.Object(type);
     }
 
-    /// <summary>The attributes of an operation of the caller's as the document stores them (a copy the text may change); null for none.</summary>
-    private static Dictionary<string, object> StoredAttributes(IReadOnlyDictionary<string, YValue> attributes)
+    // The attributes of the operation being made, as the document stores them. The text's insert and format code changes the
+    // dictionary it is given and does not keep it, so one is reused: each operation is finished before the next converts.
+    private Dictionary<string, object> _storedAttributes;
+
+    /// <summary>The attributes of an operation of the caller's as the document stores them, in a dictionary the text may change; null for none.</summary>
+    private Dictionary<string, object> StoredAttributes(IReadOnlyDictionary<string, YValue> attributes)
     {
         if (attributes == null)
         {
             return null;
         }
 
-        var stored = new Dictionary<string, object>(attributes.Count);
-        foreach (var kvp in attributes)
+        var stored = _storedAttributes ??= new Dictionary<string, object>();
+        stored.Clear();
+        if (attributes is Dictionary<string, YValue> dictionary)
         {
-            stored[kvp.Key] = kvp.Value.Stored();
+            // The struct enumerator: the interface's allocates one.
+            foreach (var kvp in dictionary)
+            {
+                stored[kvp.Key] = kvp.Value.Stored();
+            }
+        }
+        else
+        {
+            foreach (var kvp in attributes)
+            {
+                stored[kvp.Key] = kvp.Value.Stored();
+            }
         }
 
         return stored;
