@@ -47,10 +47,8 @@ internal readonly partial struct ItemRef
         }
     }
 
-    /// <summary>
-    /// Computes the last content address of this Item.
-    /// </summary>
-    public ID LastId => Length == 1 ? Id : new ID(Id.Client, Id.Clock + Length - 1);
+    /// <summary>The last content address of this struct.</summary>
+    public ID LastId => _struct.LastId;
 
     // Deleting a GC struct does nothing (it is deleted already).
     public void Delete(Transaction transaction)
@@ -75,14 +73,18 @@ internal readonly partial struct ItemRef
     /// is resolved (to nothing when a neighbour is a GC struct or the parent type is collected: the item then enters as
     /// a GC struct). Then, when <paramref name="integrate"/> is set, the struct is integrated from
     /// <paramref name="offset"/>, which is the part of its range the store holds already (an item that is integrated
-    /// whole in the store is the same object; a GC struct is trimmed in place), and the reference to the store's
-    /// struct is returned (the new GC struct when the parent is gone). Without <paramref name="integrate"/> the struct
-    /// stays outside the store (<c>default</c>).
-    /// A <see cref="Skip"/> struct is never adopted.
+    /// whole in the store is the same object; a GC struct is trimmed in place); an item whose parent is gone enters as
+    /// a new GC struct. Without <paramref name="integrate"/> the struct stays outside the store.
+    /// A <see cref="Skip"/> struct is never adopted: it throws.
     /// </summary>
-    public static ItemRef Adopt(AbstractStruct decoded, Transaction transaction, int offset, bool integrate)
+    public static void Adopt(AbstractStruct decoded, Transaction transaction, int offset, bool integrate)
     {
         var adopted = Of(decoded);
+        if (decoded is not (Item or GC))
+        {
+            throw new InvalidOperationException("Only items and GC structs are adopted; a Skip struct stands for a gap and never enters a store.");
+        }
+
         if (adopted.IsItem)
         {
             adopted.ResolveReferences(transaction, transaction.Doc.Store);
@@ -90,21 +92,18 @@ internal readonly partial struct ItemRef
 
         if (!integrate)
         {
-            return default;
+            return;
         }
 
         if (adopted.IsItem)
         {
-            return adopted.IntegrateItem(transaction, offset);
+            adopted.IntegrateItem(transaction, offset);
         }
         else
         {
-            Debug.Assert(decoded is GC, "Only items and GC structs are adopted.");
             ((GC)decoded).TrimStart(offset);
             transaction.Doc.Store.AddStruct(adopted);
         }
-
-        return adopted;
     }
 
     /// <summary>
@@ -602,8 +601,6 @@ internal readonly partial struct ItemRef
         {
             rightItem.Redone = new ID(Redone.Value.Client, Redone.Value.Clock + diff);
         }
-
-        rightItem.AttachSlot(transaction.Doc.Store);
 
         // Update left (do not set leftItem.RightOrigin as it will lead to problems when syncing).
         Right = rightItem;

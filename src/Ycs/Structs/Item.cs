@@ -212,11 +212,6 @@ internal partial class Item : AbstractStruct
         FreeSlot();
     }
 
-    /// <summary>
-    /// Computes the last content address of this Item.
-    /// </summary>
-    public ID LastId => Length == 1 ? Id : new ID(Id.Client, Id.Clock + Length - 1);
-
     internal void SetStart(ID id) => Id = id;
 
     internal void SetLength(int length) => Length = length;
