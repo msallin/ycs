@@ -1,0 +1,179 @@
+{
+ "scenario": "memory",
+ "date": "2026-11-16T15:36:38.154Z",
+ "options": {
+  "_": [
+   "all"
+  ],
+  "server-cpus": "0-3",
+  "trace": "/home/claude/projects/ycs-server-p6/bench/server/.trace/automerge-paper.json.gz"
+ },
+ "machineBefore": {
+  "cpu": "AMD EPYC-Genoa Processor",
+  "logicalCores": 8,
+  "memoryBytes": 33648422912,
+  "kernel": "7.0.0-43-generic",
+  "node": "v24.22.3",
+  "dotnet": "11.0.100",
+  "serverCpus": "0-3",
+  "driverCpus": "4-7",
+  "driverWorkers": 4,
+  "loadAverage": [
+   78.93,
+   62.76,
+   46.92
+  ]
+ },
+ "servers": {
+  "ycs": {
+   "rooms": 100,
+   "roomTxns": 20000,
+   "roomStateBytes": 23490,
+   "roomTextChars": 14302,
+   "editorsPerRoom": 2,
+   "ratePerEditor": 2,
+   "durationS": 120,
+   "empty": {
+    "rssMiB": 55.15234375,
+    "managedBytes": 729120,
+    "heapSizeBytes": 827616,
+    "committedBytes": 2867200,
+    "rooms": 0
+   },
+   "built": {
+    "rssMiB": 130.3359375,
+    "managedBytes": 30553592,
+    "heapSizeBytes": 30550368,
+    "committedBytes": 64425984,
+    "rooms": 100
+   },
+   "edited": {
+    "rssMiB": 221.10546875,
+    "managedBytes": 31202272,
+    "heapSizeBytes": 31379336,
+    "committedBytes": 131420160,
+    "rooms": 100
+   },
+   "perRoomKiB": {
+    "rssBuilt": 769.88,
+    "heapBuilt": 291.254609375,
+    "rssEdited": 1699.36,
+    "heapEdited": 297.589375
+   },
+   "editing": {
+    "updatesSent": 48000,
+    "offeredUpdatesPerS": 400,
+    "deliveriesExpected": 48000,
+    "deliveries": 48000,
+    "echoes": 0,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 399.9591375081179,
+    "deliveriesPerS": 399.9591375081179,
+    "typingS": 120.00824,
+    "drainS": 0.00402,
+    "latency": {
+     "count": 47999,
+     "p50Ms": 2.07,
+     "p95Ms": 7.63,
+     "p99Ms": 14.01,
+     "maxMs": 96.43
+    },
+    "server": {
+     "cores": 0.056744202633964236,
+     "cpuSeconds": 6.8100000000000005,
+     "cpuUsPerDelivery": 141.87500000000003,
+     "runQueueWaitS": 43.560149947,
+     "rssPeakMiB": 220.68359375,
+     "rssEndMiB": 220.68359375
+    },
+    "driver": {
+     "processCores": 0.06855200460352967,
+     "busiestWorkerCore": 0.01565155926569502,
+     "loopDelayP99Ms": 13.844479,
+     "loopDelayMaxMs": 125.698047
+    }
+   },
+   "valid": true,
+   "problems": []
+  },
+  "node": {
+   "rooms": 100,
+   "roomTxns": 20000,
+   "roomStateBytes": 23490,
+   "roomTextChars": 14302,
+   "editorsPerRoom": 2,
+   "ratePerEditor": 2,
+   "durationS": 120,
+   "empty": {
+    "rssMiB": 83.20703125,
+    "heapUsedBytes": 10205888,
+    "heapTotalBytes": 30801920,
+    "externalBytes": 4367674,
+    "arrayBuffersBytes": 347143,
+    "rooms": 0
+   },
+   "built": {
+    "rssMiB": 132.4140625,
+    "heapUsedBytes": 37597792,
+    "heapTotalBytes": 106037248,
+    "externalBytes": 8867767,
+    "arrayBuffersBytes": 4889545,
+    "rooms": 100
+   },
+   "edited": {
+    "rssMiB": 166.13671875,
+    "heapUsedBytes": 38167016,
+    "heapTotalBytes": 78249984,
+    "externalBytes": 4555030,
+    "arrayBuffersBytes": 576808,
+    "rooms": 100
+   },
+   "perRoomKiB": {
+    "rssBuilt": 503.88,
+    "heapBuilt": 311.445283203125,
+    "rssEdited": 849.2,
+    "heapEdited": 274.8875390625
+   },
+   "editing": {
+    "updatesSent": 48000,
+    "offeredUpdatesPerS": 400,
+    "deliveriesExpected": 48000,
+    "deliveries": 48000,
+    "echoes": 48000,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 399.97106875935975,
+    "deliveriesPerS": 399.97106875935975,
+    "typingS": 120.00473,
+    "drainS": 0.00395,
+    "latency": {
+     "count": 48000,
+     "p50Ms": 2.85,
+     "p95Ms": 14.01,
+     "p99Ms": 174.84,
+     "maxMs": 926.76
+    },
+    "server": {
+     "cores": 0.04824651016909777,
+     "cpuSeconds": 5.79,
+     "cpuUsPerDelivery": 120.625,
+     "runQueueWaitS": 60.805227759999994,
+     "rssPeakMiB": 282.76953125,
+     "rssEndMiB": 166.11328125
+    },
+    "driver": {
+     "processCores": 0.06842020093879876,
+     "busiestWorkerCore": 0.016096019054621716,
+     "loopDelayP99Ms": 14.123007,
+     "loopDelayMaxMs": 97.845247
+    }
+   },
+   "valid": true,
+   "problems": []
+  }
+ },
+ "loadAverageAfter": [
+  85.53,
+  76.02,
+  56.4
+ ]
+}
