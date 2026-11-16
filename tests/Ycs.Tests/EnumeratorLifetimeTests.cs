@@ -23,12 +23,12 @@ public class EnumeratorLifetimeTests
     {
         var a = new YDoc(new YDocOptions { ClientId = 1 });
         var array = a.GetArray("a");
-        array.Push(new object[] { "a", "b", "c", "d" });
+        array.Add("a", "b", "c", "d");
         var b = new YDoc(new YDocOptions { ClientId = 2 });
         b.ApplyUpdate(a.EncodeStateAsUpdate());
-        b.GetArray("a").Push(new object[] { "z" });
+        b.GetArray("a").Add("z");
         a.ApplyUpdate(b.EncodeStateAsUpdate());
-        array.Delete(1);
+        array.RemoveAt(1);
         return (a, array);
     }
 
@@ -37,7 +37,7 @@ public class EnumeratorLifetimeTests
     {
         var b = new YDoc(new YDocOptions { ClientId = 2 });
         b.ApplyUpdate(a.EncodeStateAsUpdate());
-        b.GetArray("a").Insert(3, new object[] { "y" });
+        b.GetArray("a").Insert(3, "y");
         return b.EncodeStateAsUpdate(a.EncodeStateVector());
     }
 
@@ -54,7 +54,7 @@ public class EnumeratorLifetimeTests
             seen.Add(value);
             if (value.Equals("c"))
             {
-                array.Delete(1, 2);
+                array.RemoveRange(1, 2);
             }
         }
 
@@ -74,7 +74,7 @@ public class EnumeratorLifetimeTests
             seen.Add(value);
             if (value.Equals("c"))
             {
-                array.Delete(1, 2);
+                array.RemoveRange(1, 2);
                 doc.ApplyUpdate(inserted);
             }
         }
@@ -87,24 +87,24 @@ public class EnumeratorLifetimeTests
     {
         var (doc, array) = Split();
         var seen = new List<string>();
-        array.ForEach((value, _, _) =>
+        foreach (var value in array)
         {
-            seen.Add((string)value);
-            if (value.Equals("c"))
+            seen.Add(value.GetString());
+            if (value == "c")
             {
-                array.Delete(1, 2);
+                array.RemoveRange(1, 2);
             }
-        });
+        }
         var (_, second) = Split();
-        var mapped = second.Map((value, _, _) =>
+        var mapped = second.Select(value =>
         {
-            if (value.Equals("c"))
+            if (value == "c")
             {
-                second.Delete(1, 2);
+                second.RemoveRange(1, 2);
             }
 
-            return (string)value;
-        });
+            return value.GetString();
+        }).ToList();
 
         Assert.AreEqual("a,c,d,z|a,c,d,z", string.Join(",", seen) + "|" + string.Join(",", mapped));
     }
@@ -116,18 +116,18 @@ public class EnumeratorLifetimeTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var map = doc.GetMap("m");
         var array = new YArray();
-        map.Set("k", array);
-        array.Push(new object[] { "x" });
+        map["k"] = array;
+        array.Add("x");
         var other = new YDoc(new YDocOptions { ClientId = 2 });
         other.ApplyUpdate(doc.EncodeStateAsUpdate());
-        ((YArray)other.GetMap("m").Get("k")).Push(new object[] { "y" });
+        ((YArray)other.GetMap("m")["k"].ToObject()).Add("y");
         doc.ApplyUpdate(other.EncodeStateAsUpdate());
         var seen = new List<object>();
 
         foreach (var value in array)
         {
             seen.Add(value);
-            map.Delete("k");
+            map.Remove("k");
         }
 
         Assert.AreEqual((0, "x"), (array.Length, string.Join(",", seen)));
@@ -139,16 +139,16 @@ public class EnumeratorLifetimeTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var map = doc.GetMap("m");
         var fragment = new YXmlFragment();
-        map.Set("k", fragment);
+        map["k"] = fragment;
         fragment.Insert(0, new[] { new YXmlElement("a") });
         fragment.Insert(1, new[] { new YXmlElement("b") });
         var visited = 0;
 
-        fragment.ForEach((_, _, _) =>
+        foreach (var _ in fragment)
         {
             visited++;
-            map.Delete("k");
-        });
+            map.Remove("k");
+        }
 
         Assert.AreEqual(1, visited);
     }
@@ -187,14 +187,13 @@ public class EnumeratorLifetimeTests
         e1.Insert(0, new[] { new YXmlElement("c") });
         fragment.Insert(0, new[] { e1, new YXmlElement("e3") });
         var seen = new List<string>();
-        var walker = fragment.CreateTreeWalker();
 
-        while (walker.MoveNext())
+        foreach (var node in fragment.CreateTreeWalker())
         {
-            seen.Add(((YXmlElement)walker.Current).NodeName);
-            if (walker.Current is YXmlElement { NodeName: "c" })
+            seen.Add(((YXmlElement)node).NodeName);
+            if (node is YXmlElement { NodeName: "c" })
             {
-                fragment.Delete(0, 1);
+                fragment.RemoveRange(0, 1);
             }
         }
 
@@ -208,11 +207,10 @@ public class EnumeratorLifetimeTests
         var fragment = doc.GetXmlFragment("x");
         fragment.Insert(0, new[] { new YXmlElement("a"), new YXmlElement("b"), new YXmlElement("c") });
         var seen = new List<string>();
-        var walker = fragment.CreateTreeWalker();
 
-        while (walker.MoveNext())
+        foreach (var node in fragment.CreateTreeWalker())
         {
-            seen.Add(((YXmlElement)walker.Current).NodeName);
+            seen.Add(((YXmlElement)node).NodeName);
             var other = doc.GetText("t");
             other.Insert(0, "xy");
             other.Remove(0, 1);

@@ -24,9 +24,9 @@ public sealed partial class YXmlHook : YMap
     internal override YType InternalClone()
     {
         var el = new YXmlHook(HookName);
-        foreach (var kvp in this)
+        foreach (var kvp in EnumerateEntries())
         {
-            el.Set(kvp.Key, kvp.Value);
+            el.SetRaw(kvp.Key, kvp.Value);
         }
 
         return el;

@@ -38,10 +38,10 @@ public class ItemViewTests
     {
         var map = new YMap();
         var array = doc.GetArray("a");
-        array.Push(new object[] { map });
-        map.Set("a", "x");
-        map.Set("b", "y");
-        map.Set("c", "z");
+        array.Add(map);
+        map["a"] = "x";
+        map["b"] = "y";
+        map["c"] = "z";
         return (array, new[] { "a", "b", "c" }.Select(key => ItemView.Of(doc, map._map[key])).ToArray());
     }
 
@@ -101,7 +101,7 @@ public class ItemViewTests
         var (array, views) = MapWithThreeValues(doc);
         var before = views[0].Kind;
 
-        array.Delete(0);
+        array.RemoveAt(0);
 
         Assert.AreEqual((ItemKind.Any, ItemKind.GC, true, 3, 0, false, null), (before, views[0].Kind, views[0].Deleted, views[0].Length, views[0].Content.Count, views[0].Countable, views[0].Parent));
     }
@@ -112,7 +112,7 @@ public class ItemViewTests
         var doc = NewDoc();
         var (array, views) = MapWithThreeValues(doc);
 
-        array.Delete(0);
+        array.RemoveAt(0);
 
         Assert.AreEqual("GC 3, GC 2, GC 1", string.Join(", ", views.Select(v => $"{v.Kind} {v.Length}")));
     }
@@ -138,7 +138,7 @@ public class ItemViewTests
         var (array, _) = MapWithThreeValues(doc);
         var child = (Item)doc.Store.Find(new ItemId(1, 1)).ToStruct();
 
-        array.Delete(0);
+        array.RemoveAt(0);
 
         Assert.AreEqual((true, false), (child.Detached, doc.Store.Find(new ItemId(1, 1)).ToStruct() is Item));
     }

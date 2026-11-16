@@ -30,7 +30,7 @@ internal static class Sizes
         Measure("array element (an integer), one item each", n, check, doc =>
         {
             var array = doc.GetArray("a");
-            var value = new object[] { 1L };
+            YValue value = 1L;
             for (var i = 0; i < n; i++)
             {
                 array.Insert(0, value);
@@ -40,22 +40,22 @@ internal static class Sizes
         Measure("map entry (distinct key, an integer)", n, check, doc =>
         {
             var map = doc.GetMap("m");
-            object value = 1L;
+            YValue value = 1L;
             for (var i = 0; i < n; i++)
             {
-                map.Set(keys[i], value);
+                map[keys[i]] = value;
             }
         });
 
         Measure("array element and a deleted one (collected)", n, check, doc =>
         {
             var array = doc.GetArray("a");
-            var value = new object[] { 1L };
+            YValue value = 1L;
             for (var i = 0; i < n; i++)
             {
                 array.Insert(0, value);
                 array.Insert(0, value);
-                array.Delete(0, 1);
+                array.RemoveRange(0, 1);
             }
         });
 

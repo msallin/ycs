@@ -4,11 +4,16 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+using System.Collections;
 
 namespace Ycs;
 
-public sealed partial class YArray
+/// <summary>
+/// A shared array of <see cref="YValue"/>s. Indices are those of the visible values; a range of them is taken with
+/// <c>array[1..3]</c>. Inserting a <see cref="YValue"/> copies it into the array: the value a caller holds never changes
+/// what the document holds.
+/// </summary>
+public sealed partial class YArray : IReadOnlyList<YValue>
 {
     /// <summary>
     /// Observes the events of this array (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
@@ -16,41 +21,165 @@ public sealed partial class YArray
     public IDisposable Observe(Action<YArrayEvent> handler) => AddObserver(handler);
 
     public YArray()
-        : this(null)
     {
-        // Do nothing.
+        _prelimContent = new List<object>();
     }
 
-    public YArray(IEnumerable<object> prelimContent = null)
+    public YArray(params ReadOnlySpan<YValue> values)
     {
-        _prelimContent = prelimContent != null ? new List<object>(prelimContent.Select(ValueFreezer.Detach)) : new List<object>();
+        _prelimContent = new List<object>(values.Length);
+        foreach (var value in values)
+        {
+            _prelimContent.Add(value.Stored());
+        }
+    }
+
+    public int Count => Length;
+
+    internal override int Length => _prelimContent?.Count ?? base.Length;
+
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not in 0 to <see cref="Count"/> - 1.</exception>
+    public YValue this[int index]
+    {
+        get
+        {
+            CheckIndex(index);
+            return YValue.FromStored(RawAt(index));
+        }
+    }
+
+    /// <summary>The value at <paramref name="index"/>; false, and null, when the array has none.</summary>
+    public bool TryGetValue(int index, out YValue value)
+    {
+        if ((uint)index >= (uint)Count)
+        {
+            value = default;
+            return false;
+        }
+
+        value = YValue.FromStored(RawAt(index));
+        return true;
+    }
+
+    public YArray Clone() => (YArray)InternalClone();
+
+    /// <summary>
+    /// Inserts <paramref name="values"/> at <paramref name="index"/>, which is 0 to <see cref="Count"/>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is beyond <see cref="Count"/>; nothing is inserted.</exception>
+    public void Insert(int index, params ReadOnlySpan<YValue> values)
+    {
+        if ((uint)index > (uint)Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"The index is beyond the count ({Count}). Nothing was inserted.");
+        }
+
+        var content = Stored(values);
+        InsertRaw(index, content);
+        Release(content);
     }
 
     /// <summary>
-    /// Construct a new YArray containing the specified items. Mirrors Yjs' static <c>Y.Array.from(items)</c>.
+    /// Appends <paramref name="values"/> after the last item, deleted ones included, as Yjs' <c>push</c> (which is not
+    /// an insert at <see cref="Count"/>: the bytes and the place among concurrent appends differ).
     /// </summary>
-    public static YArray From(IEnumerable<object> items)
+    public void Add(params ReadOnlySpan<YValue> values)
     {
-        var a = new YArray();
-        a.Push(new List<object>(items ?? Array.Empty<object>()));
-        return a;
+        var content = Stored(values);
+        AddRaw(content);
+        Release(content);
     }
 
-    public override int Length => _prelimContent?.Count ?? base.Length;
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not in 0 to <see cref="Count"/> - 1.</exception>
+    public void RemoveAt(int index)
+    {
+        CheckIndex(index);
+        RemoveRangeCore(index, 1);
+    }
+
+    /// <exception cref="ArgumentOutOfRangeException">The range is not within the array; nothing is removed.</exception>
+    public void RemoveRange(int index, int count)
+    {
+        CheckRange(index, count, nameof(index));
+        RemoveRangeCore(index, count);
+    }
+
+    /// <summary>The <paramref name="length"/> values from <paramref name="start"/>; <c>array[1..3]</c> calls it.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The range is not within the array.</exception>
+    public YValue[] Slice(int start, int length)
+    {
+        CheckRange(start, length, nameof(start));
+        var result = new YValue[length];
+        if (length == 0)
+        {
+            return result;
+        }
+
+        if (_prelimContent != null)
+        {
+            for (var i = 0; i < length; i++)
+            {
+                result[i] = YValue.FromStored(_prelimContent[start + i]);
+            }
+
+            return result;
+        }
+
+        var slice = InternalSlice(start, start + length);
+        for (var i = 0; i < result.Length; i++)
+        {
+            result[i] = YValue.FromStored(slice[i]);
+        }
+
+        return result;
+    }
+
+    public YValue[] ToArray()
+    {
+        var result = new YValue[Count];
+        var i = 0;
+        foreach (var raw in EnumerateValues())
+        {
+            result[i++] = YValue.FromStored(raw);
+        }
+
+        return result;
+    }
 
     /// <summary>
-    /// Returns the i-th element from this YArray. C# idiom: indexer form of <see cref="Get"/>.
-    /// There is intentionally no setter — Yjs arrays have no in-place index assignment; use
-    /// <see cref="Delete(int, int)"/> + <see cref="Insert"/> (or <see cref="Add"/>) instead.
+    /// The values visible in <paramref name="snapshot"/> (Yjs' <c>typeListToArraySnapshot</c>). It only reads: an item that
+    /// was merged across the snapshot's boundary is seen whole, as in Yjs.
     /// </summary>
-    public object this[int index] => Get(index);
+    public YValue[] ToArray(Snapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        var raw = ContentAtSnapshot(snapshot);
+        var result = new YValue[raw.Count];
+        for (var i = 0; i < result.Length; i++)
+        {
+            result[i] = YValue.FromStored(raw[i]);
+        }
 
-    public YArray Clone() => InternalClone() as YArray;
+        return result;
+    }
+
+    public IEnumerator<YValue> GetEnumerator()
+    {
+        foreach (var raw in EnumerateValues())
+        {
+            yield return YValue.FromStored(raw);
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
     /// <summary>
-    /// Inserts new content at an index.
+    /// Transforms this Shared Type to a JSON-compatible list. Mirrors Yjs' <c>toJSON()</c>
+    /// (<c>this.map(c =&gt; c instanceof YType ? c.toJSON() : c)</c>).
     /// </summary>
-    public void Insert(int index, ICollection<object> content)
+    public override object ToJson() => JsonTree(this);
+
+    internal void InsertRaw(int index, ICollection<object?> content)
     {
         if (Doc != null)
         {
@@ -62,11 +191,7 @@ public sealed partial class YArray
         }
     }
 
-    /// <summary>
-    /// Appends content after the last item, deleted ones included, as Yjs' <c>push</c> (which is not
-    /// an insert at <see cref="Length"/>: the bytes and the place among concurrent appends differ).
-    /// </summary>
-    public void Add(ICollection<object> content)
+    internal void AddRaw(ICollection<object?> content)
     {
         if (Doc != null)
         {
@@ -74,116 +199,73 @@ public sealed partial class YArray
         }
         else
         {
-            _prelimContent.AddRange(content.Select(ValueFreezer.Detach));
+            _prelimContent.AddRange(content);
         }
     }
 
-    /// <summary>Yjs' <c>push(content)</c>; the same as <see cref="Add"/>.</summary>
-    public void Push(ICollection<object> content) => Add(content);
+    // The array of a one-value insert, kept for the next one on this thread: an insert only reads it before it returns, no
+    // user code runs in between, and an insert that runs inside another finds the slot empty and allocates.
+    [ThreadStatic]
+    private static object?[]? t_single;
 
-    public void Unshift(ICollection<object> content)
+    private static object?[] Stored(ReadOnlySpan<YValue> values)
     {
-        Insert(0, content);
-    }
-
-    public void Delete(int index, int length = 1)
-    {
-        if (Doc != null)
+        object?[] stored;
+        if (values.Length == 1)
         {
-            Doc.Transact((self: this, index, length), static (s, tr) => s.self.Delete(tr, s.index, s.length));
+            stored = t_single ?? new object?[1];
+            t_single = null;
         }
         else
         {
-            PrelimDelete(_prelimContent, index, length);
+            stored = new object?[values.Length];
         }
+
+        for (var i = 0; i < stored.Length; i++)
+        {
+            stored[i] = values[i].Stored();
+        }
+
+        return stored;
     }
 
-    public IReadOnlyList<object> Slice(int start = 0) => InternalSlice(start, Length);
-
-    public IReadOnlyList<object> Slice(int start, int end) => InternalSlice(start, end);
-
-    public object Get(int index)
+    private static void Release(object?[] stored)
     {
-        var marker = FindMarker(index);
-        var n = _start;
-
-        if (marker != null)
+        if (stored.Length == 1)
         {
-            n = marker.P;
-            index -= marker.Index;
+            stored[0] = null;
+            t_single = stored;
         }
-
-        if (index < 0)
-        {
-            // Yjs' typeListGet reads the first visible item's content at the negative offset, which is undefined: for a
-            // negative index, and for a marker beyond the index (an observer of another type reads while a remote
-            // transaction's cleanup has not yet emptied this list's stale markers).
-            return default;
-        }
-
-        var steps = 0;
-        for (; !n.IsNull; n = n.Right.AsItem)
-        {
-            if (++steps == Doc.LiteralWalkStepsForTests)
-            {
-                steps = 0;
-                n = SeekRight(n, ref index);
-            }
-
-            if (!n.Deleted && n.Countable)
-            {
-                if (index < n.Length)
-                {
-                    return ValueAt(n.Content, index);
-                }
-
-                index -= n.Length;
-            }
-        }
-
-        return default;
     }
 
-    public IList<object> ToArray()
+    private void RemoveRangeCore(int index, int count)
     {
-        var cs = new List<object>();
-        cs.AddRange(EnumerateList());
-        return cs;
-    }
-
-    /// <summary>
-    /// Returns a list with the result of calling a provided function on every element of this
-    /// YArray. Mirrors Yjs' <c>map(f)</c>.
-    /// </summary>
-    public List<TResult> Map<TResult>(Func<object, int, YArray, TResult> f)
-    {
-        var result = new List<TResult>();
-        int index = 0;
-
-        foreach (var item in EnumerateList())
+        if (Doc != null)
         {
-            result.Add(f(item, index++, this));
+            Doc.Transact((self: this, index, count), static (s, tr) => s.self.Delete(tr, s.index, s.count));
         }
-
-        return result;
-    }
-
-    /// <summary>
-    /// Executes a provided function once on every element of this YArray. Mirrors Yjs' <c>forEach(f)</c>.
-    /// </summary>
-    public void ForEach(Action<object, int, YArray> f)
-    {
-        int index = 0;
-
-        foreach (var item in EnumerateList())
+        else
         {
-            f(item, index++, this);
+            PrelimDelete(_prelimContent, index, count);
         }
     }
 
-    /// <summary>
-    /// Transforms this Shared Type to a JSON-compatible list. Mirrors Yjs' <c>toJSON()</c>
-    /// (<c>this.map(c =&gt; c instanceof YType ? c.toJSON() : c)</c>).
-    /// </summary>
-    public override object ToJson() => JsonTree(this);
+    private object? RawAt(int index) =>
+        _prelimContent != null ? _prelimContent[index] : TryGetRawAt(index, out var value) ? value : null;
+
+    private void CheckIndex(int index)
+    {
+        if ((uint)index >= (uint)Count)
+        {
+            throw new ArgumentOutOfRangeException(nameof(index), index, $"The index is not within the array (count {Count}).");
+        }
+    }
+
+    private void CheckRange(int start, int length, string paramName)
+    {
+        if (start < 0 || length < 0 || start > Count || length > Count - start)
+        {
+            throw new ArgumentOutOfRangeException(paramName, start, $"The range of {length} values from {start} is not within the array (count {Count}).");
+        }
+    }
 }

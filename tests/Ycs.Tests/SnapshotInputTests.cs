@@ -1,4 +1,6 @@
+using System.Linq;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -44,12 +46,12 @@ public class SnapshotInputTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var array = doc.GetArray("a");
-        array.Insert(0, new object[] { 1, 2 });
+        array.Insert(0, 1, 2);
         var own = doc.CreateSnapshot();
         var foreign = ForeignSnapshot();
         var snapshot = new Snapshot(new DeleteSet(new List<DeleteSet> { own.DeleteSet, foreign.DeleteSet }), own.StateVector);
 
-        CollectionAssert.AreEqual(new object[] { 1, 2 }, (System.Collections.ICollection)array.ToArraySnapshot(snapshot));
+        CollectionAssert.AreEqual(new object[] { 1, 2 }, (System.Collections.ICollection)array.ToArray(snapshot).Select(v => v.ToObject()).ToList());
     }
 
     [TestMethod]
@@ -57,12 +59,12 @@ public class SnapshotInputTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var map = doc.GetMap("m");
-        map.Set("k", 1);
+        map["k"] = 1;
         var own = doc.CreateSnapshot();
         var ds = new DeleteSet();
         ds.Add(1, 5, 3);
         var snapshot = new Snapshot(new DeleteSet(new List<DeleteSet> { own.DeleteSet, ds }), own.StateVector);
 
-        Assert.AreEqual(1, map.GetAllSnapshot(snapshot)["k"]);
+        Assert.AreEqual(1, map.ToDictionary(snapshot).ToDictionary(kv => kv.Key, kv => kv.Value.ToObject())["k"]);
     }
 }

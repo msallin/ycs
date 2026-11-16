@@ -34,19 +34,19 @@ doc.ApplyUpdate(Convert.FromBase64String(args[0]));
 var frag = doc.GetXmlFragment("xml");
 
 // The JS side deleted the 'scratch' element before encoding, so only 'paragraph' should remain.
-Check(frag.Length == 1, $"expected 1 top-level child (the deleted 'scratch' sibling should be gone), got {frag.Length}");
+Check(frag.Count == 1, $"expected 1 top-level child (the deleted 'scratch' sibling should be gone), got {frag.Count}");
 
-var paragraph = frag.Get(0) as YXmlElement;
+var paragraph = frag[0] as YXmlElement;
 Check(paragraph != null, "top-level child is not a YXmlElement");
 Check(paragraph.NodeName == "paragraph", $"expected <paragraph>, got <{paragraph?.NodeName}>");
 Check(paragraph.Parent == frag, "paragraph.Parent does not point back to the fragment");
 
 var attrs = paragraph.GetAttributes();
-Check(attrs.Count == 2 && Equals(attrs["align"], "center") && Equals(attrs["class"], "intro"),
+Check(attrs.Count == 2 && attrs["align"] == "center" && attrs["class"] == "intro",
     $"paragraph attributes mismatch: {JsonSerializer.Serialize(attrs, jsonOptions)}");
 
 var children = paragraph.ToArray();
-Check(children.Count == 2, $"expected 2 children under <paragraph>, got {children.Count}");
+Check(children.Length == 2, $"expected 2 children under <paragraph>, got {children.Length}");
 
 var boldText = children[0] as YXmlText;
 Check(boldText != null, "first paragraph child is not a YXmlText");
@@ -86,7 +86,7 @@ doc.Transact(_ =>
 
     var tail = new YXmlText();
     tail.Insert(0, "tail", new Dictionary<string, YValue> { { "italic", true } });
-    frag.Push(new object[] { tail });
+    frag.Add(tail);
 });
 
 var toStringAfterEdit = frag.ToString();

@@ -36,21 +36,21 @@ public class YXmlTests
         // The 'scratch' sibling was inserted then deleted; only 'paragraph' should survive.
         Assert.AreEqual(1, frag.Length);
 
-        var paragraph = frag.Get(0) as YXmlElement;
+        var paragraph = frag[0] as YXmlElement;
         Assert.IsNotNull(paragraph);
         Assert.AreEqual("paragraph", paragraph.NodeName);
         Assert.AreSame(frag, paragraph.Parent);
 
         var attrs = paragraph.GetAttributes();
         Assert.AreEqual(2, attrs.Count);
-        Assert.AreEqual("center", attrs["align"]);
-        Assert.AreEqual("intro", attrs["class"]);
-        Assert.AreEqual("center", paragraph.GetAttribute("align"));
+        Assert.AreEqual("center", attrs["align"].ToObject());
+        Assert.AreEqual("intro", attrs["class"].ToObject());
+        Assert.AreEqual("center", paragraph.GetAttribute("align").ToObject());
         Assert.IsTrue(paragraph.HasAttribute("class"));
         Assert.IsFalse(paragraph.HasAttribute("missing"));
 
         var children = paragraph.ToArray();
-        Assert.AreEqual(2, children.Count);
+        Assert.AreEqual(2, children.Length);
 
         var boldText = children[0] as YXmlText;
         Assert.IsNotNull(boldText);
@@ -63,7 +63,7 @@ public class YXmlTests
         var em = children[1] as YXmlElement;
         Assert.IsNotNull(em);
         Assert.AreEqual("em", em.NodeName);
-        Assert.AreEqual("shout", em.GetAttribute("title"));
+        Assert.AreEqual("shout", em.GetAttribute("title").ToObject());
         Assert.AreSame(boldText, em.PrevSibling);
         Assert.AreSame(em, boldText.NextSibling);
         Assert.IsNull(em.NextSibling);
@@ -114,30 +114,30 @@ public class YXmlTests
         var p = new YXmlElement("p");
         p.SetAttribute("id", "1");
         var text = new YXmlText("hi");
-        p.Insert(0, new object[] { text });
-        frag.Insert(0, new object[] { p });
+        p.Insert(0, text);
+        frag.Insert(0, p);
 
         Assert.AreEqual(1, frag.Length);
         Assert.AreEqual("<p id=\"1\">hi</p>", frag.ToString());
 
         var second = new YXmlElement("q");
-        frag.Push(new object[] { second });
+        frag.Add(second);
         Assert.AreEqual(2, frag.Length);
-        Assert.AreSame(second, frag.Get(1));
+        Assert.AreSame(second, frag[1]);
 
         var first = new YXmlElement("first");
-        frag.Unshift(new object[] { first });
+        frag.Insert(0, first);
         Assert.AreEqual(3, frag.Length);
-        Assert.AreSame(first, frag.Get(0));
+        Assert.AreSame(first, frag[0]);
 
-        frag.Delete(1, 1); // removes 'p'
+        frag.RemoveRange(1, 1); // removes 'p'
         Assert.AreEqual(2, frag.Length);
         CollectionAssert.DoesNotContain(frag.ToArray().ToList(), p);
 
         var inserted = new YXmlElement("inserted");
-        frag.InsertAfter(first, new object[] { inserted });
+        frag.InsertAfter(first, inserted);
         Assert.AreEqual(3, frag.Length);
-        Assert.AreSame(inserted, frag.Get(1));
+        Assert.AreSame(inserted, frag[1]);
     }
 
     [TestMethod]
@@ -150,17 +150,17 @@ public class YXmlTests
         el.SetAttribute("temp", "x");
         el.RemoveAttribute("temp");
         var child = new YXmlText("child");
-        el.Insert(0, new object[] { child });
+        el.Insert(0, child);
 
         var doc = new YDoc();
-        doc.GetXmlFragment("xml").Insert(0, new object[] { el });
+        doc.GetXmlFragment("xml").Insert(0, el);
 
-        Assert.AreEqual("prelim", el.GetAttribute("class"));
+        Assert.AreEqual("prelim", el.GetAttribute("class").ToObject());
         Assert.IsFalse(el.HasAttribute("temp"));
 
         Assert.AreEqual(1, el.Length);
-        Assert.AreEqual(1, el.ToArray().Count);
-        Assert.AreEqual("child", el.Get(0).ToString());
+        Assert.AreEqual(1, el.ToArray().Length);
+        Assert.AreEqual("child", el[0].ToString());
         Assert.AreEqual("<div class=\"prelim\">child</div>", el.ToString());
     }
 
@@ -172,22 +172,22 @@ public class YXmlTests
         var el = new YXmlElement("p");
         el.SetAttribute("a", "1");
         var text = new YXmlText("hi");
-        el.Insert(0, new object[] { text });
-        frag.Insert(0, new object[] { el });
+        el.Insert(0, text);
+        frag.Insert(0, el);
 
         // Per Yjs' own contract ("the content is only readable after it has been included
         // somewhere in the Ydoc"), attach the clone before reading it back.
         var clone = el.Clone();
-        frag.Push(new object[] { clone });
+        frag.Add(clone);
 
-        Assert.AreEqual("1", clone.GetAttribute("a"));
+        Assert.AreEqual("1", clone.GetAttribute("a").ToObject());
         Assert.AreEqual(el.ToString(), clone.ToString());
         Assert.AreNotSame(el, clone);
 
         // Mutating the clone must not affect the original.
         clone.SetAttribute("a", "2");
-        Assert.AreEqual("1", el.GetAttribute("a"));
-        Assert.AreEqual("2", clone.GetAttribute("a"));
+        Assert.AreEqual("1", el.GetAttribute("a").ToObject());
+        Assert.AreEqual("2", clone.GetAttribute("a").ToObject());
     }
 
     [TestMethod]
@@ -199,9 +199,9 @@ public class YXmlTests
         var root = new YXmlElement("root");
         var a = new YXmlElement("a");
         var b = new YXmlElement("b");
-        a.Insert(0, new object[] { new YXmlText("in-a") });
-        root.Insert(0, new object[] { a, b });
-        frag.Insert(0, new object[] { root });
+        a.Insert(0, new YXmlText("in-a"));
+        root.Insert(0, a, b);
+        frag.Insert(0, root);
 
         Assert.AreSame(a, frag.QuerySelector("A"));
         Assert.AreSame(b, frag.QuerySelector("b"));
@@ -222,23 +222,23 @@ public class YXmlTests
     {
         var doc1 = new YDoc();
         var hook = new YXmlHook("custom-widget");
-        hook.Set("editable", false);
-        doc1.GetXmlFragment("xml").Insert(0, new object[] { hook });
+        hook["editable"] = false;
+        doc1.GetXmlFragment("xml").Insert(0, hook);
 
         var update = doc1.EncodeStateAsUpdate();
 
         var doc2 = new YDoc();
         doc2.ApplyUpdate(update);
 
-        var readBack = doc2.GetXmlFragment("xml").Get(0) as YXmlHook;
+        var readBack = doc2.GetXmlFragment("xml")[0] as YXmlHook;
         Assert.IsNotNull(readBack);
         Assert.AreEqual("custom-widget", readBack.HookName);
-        Assert.AreEqual(false, readBack.Get("editable"));
+        Assert.AreEqual(false, readBack["editable"].ToObject());
 
         // Also round-trips through v2.
         var doc3 = new YDoc();
         doc3.ApplyUpdate(doc1.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
-        var readBack2 = doc3.GetXmlFragment("xml").Get(0) as YXmlHook;
+        var readBack2 = doc3.GetXmlFragment("xml")[0] as YXmlHook;
         Assert.AreEqual("custom-widget", readBack2.HookName);
     }
 
@@ -253,7 +253,7 @@ public class YXmlTests
         var copy = new YDoc();
         copy.ApplyUpdate(update);
 
-        Assert.AreEqual("b", copy.GetXmlElement("el").GetAttribute("a"));
+        Assert.AreEqual("b", copy.GetXmlElement("el").GetAttribute("a").ToObject());
         Assert.AreEqual("hello", copy.GetXmlText("txt").ToString());
     }
 
@@ -272,7 +272,7 @@ public class YXmlTests
         CollectionAssert.Contains(captured.AttributesChanged.ToList(), "a");
 
         captured = null;
-        el.Insert(0, new object[] { new YXmlText("hi") });
+        el.Insert(0, new YXmlText("hi"));
         Assert.IsNotNull(captured);
         Assert.IsTrue(captured.ChildListChanged);
     }

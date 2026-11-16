@@ -126,13 +126,13 @@ public class UndoManagerParityTests
         var map2 = doc.GetMap("map2");
         var um = new UndoManager(map1);
 
-        map2.Set("x", 1);
+        map2["x"] = 1;
         Assert.AreEqual(0, um.UndoStack.Count, "map2 isn't in scope yet.");
 
         um.AddToScope(map2);
         Assert.IsTrue(um.Scope.Contains(map2));
 
-        map2.Set("y", 2);
+        map2["y"] = 2;
         Assert.AreEqual(1, um.UndoStack.Count);
 
         um.Undo();
@@ -149,9 +149,9 @@ public class UndoManagerParityTests
         var text = doc.GetText("text");
         var um = new UndoManager(doc);
 
-        map.Set("a", 1);
+        map["a"] = 1;
         um.StopCapturing();
-        arr.Insert(0, new object[] { 1, 2 });
+        arr.Insert(0, 1, 2);
         um.StopCapturing();
         text.Insert(0, "hi");
 

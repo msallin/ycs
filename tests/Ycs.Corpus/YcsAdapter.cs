@@ -164,9 +164,15 @@ internal sealed class CorpusDoc
             case YArrayBase seq:
                 into[path] = ItemsOf(seq);
                 var i = 0;
-                foreach (var value in seq)
+                IEnumerable<YType> children = seq switch
                 {
-                    if (value is YType nested)
+                    YArray array => array.Select(v => v.TryGetSharedType(out YType nested) ? nested : null),
+                    YXmlFragment fragment => fragment,
+                    _ => [],
+                };
+                foreach (var nested in children)
+                {
+                    if (nested != null)
                     {
                         Collect(nested, $"{path}[{i}]", into);
                     }
@@ -178,7 +184,7 @@ internal sealed class CorpusDoc
             case YMap map:
                 foreach (var (key, value) in map)
                 {
-                    if (value is YType nested)
+                    if (value.TryGetSharedType(out YType nested))
                     {
                         Collect(nested, $"{path}.{key}", into);
                     }

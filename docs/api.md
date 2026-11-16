@@ -77,6 +77,31 @@ On `YDoc`, `Updated` and `UpdatedV2` raise an `UpdateEventArgs(Update, Origin, T
 `ReadOnlyMemory<byte>` for each event, which a handler may keep. `SubdocsChanged` raises a `SubdocsEventArgs(Loaded,
 Added, Removed)` of read-only sets and `AfterAllTransactions` an `IReadOnlyList<Transaction>`.
 
+## Arrays, maps and XML nodes
+
+`YArray` is an `IReadOnlyList<YValue>`: `Count`, the indexer (an `ArgumentOutOfRangeException` for an index out of range),
+`TryGetValue(index, out value)`, `Add(params ReadOnlySpan<YValue>)` (Yjs' `push`), `Insert(index, params ReadOnlySpan<YValue>)`,
+`RemoveAt(index)`, `RemoveRange(index, count)`, `Slice(start, length)` (so `array[1..3]` works), `ToArray()`,
+`ToArray(snapshot)`, `Clone()` and `ToJson()`; `new YArray(1, "two")` builds one that is not in a document yet, whose
+content can be read, changed and then inserted. A range that is not within the array throws before anything changes.
+
+`YMap` is an `IReadOnlyDictionary<string, YValue>`: `Count`, the indexer (it throws for a missing key when read; setting is Yjs'
+`set`), `TryGetValue(key, out value)` and `TryGetValue(key, snapshot, out value)`, `ContainsKey`, `Remove(key)` (false when the
+key was missing), `Clear()`, `Keys`, `Values`, `ToDictionary(snapshot)`, `Clone()`, `Add(key, value)` for collection
+initializers (`new YMap { ["theme"] = "dark" }`) and a constructor over entries.
+
+`YXmlFragment` (and `YXmlElement`, which derives from it) is an `IReadOnlyList<YType>` of its children: `Count`, the indexer,
+`TryGetValue`, `FirstChild`, `Add`, `Insert`, `InsertAfter(reference, ...)` (all `params ReadOnlySpan<YType>`, which throw
+`ArgumentException` for a child that is not a `YXmlElement`, `YXmlFragment`, `YXmlText` or `YXmlHook`), `RemoveAt`, `RemoveRange`,
+`Slice`, `ToArray()`, `ToArray(snapshot)`, `CreateTreeWalker(filter?)` (a lazy `IEnumerable<YType>` of the descendants in
+document order), `QuerySelector(name)` and `QuerySelectorAll(name)`. A child that is none of those, which only another client
+can have written, reads as null. `YXmlElement` has `NodeName`, `NextSibling`, `PrevSibling` and attributes as `YValue`s:
+`GetAttribute` (null when unset), `SetAttribute`, `RemoveAttribute`, `HasAttribute` and `GetAttributes(snapshot?)`.
+
+A shared type is a value too: `array[0].TryGetSharedType<YMap>(out var map)`. A number inserted as a `YValue` encodes as Yjs
+encodes a JavaScript number (an integer within 31 bits as a varint, otherwise a float32 or a float64); one read back is a
+`YValue` number whatever its wire form.
+
 ## Transactions
 
 `doc.Transact(tr => ..., origin, local)` runs an `Action<Transaction>`; `Transact<TResult>(Func<Transaction, TResult>)`
@@ -206,8 +231,8 @@ the contract. Every API that decodes bytes — `ApplyUpdate`, `TryApplyUpdate`,
 `CreateDocFromSnapshot` (a snapshot that holds more than the document),
 `Snapshot.ContainsUpdate`, `RelativePosition.Decode`, `RelativePosition.FromJson`, `SyncProtocol.Read…` — throws only
 `YUpdateException` for malformed input, with a message that says what was wrong (never the
-input's content). The snapshot reads (`ToArraySnapshot`, `GetSnapshot`, `GetAllSnapshot`,
-`ToDelta(snapshot)`) ignore deletions of clients or clocks the document does not have, as Yjs does.
+input's content). The snapshot reads (`YArray.ToArray(snapshot)`, `YMap.TryGetValue(key, snapshot, out value)`, `YMap.ToDictionary(snapshot)`,
+`YXmlElement.GetAttributes(snapshot)`, `YXmlFragment.ToArray(snapshot)`, `ToDelta(snapshot)`) ignore deletions of clients or clocks the document does not have, as Yjs does.
 
 **Atomicity.** `ApplyUpdate` decodes the whole update (structs and delete set) before it touches
 the document, then plans the integration against the document without changing it (which structs

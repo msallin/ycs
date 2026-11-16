@@ -66,12 +66,12 @@ public class PlanItemKeysTests
         doc.ApplyUpdate(SplitValueSetup());
         var r = doc.GetMap("r");
         var m = new YMap();
-        r.Set("m", m);
+        r["m"] = m;
         var t = new YMap();
-        m.Set("t", t);
-        m.Delete("t");
+        m["t"] = t;
+        m.Remove("t");
         Assert.IsTrue(t.IsCollected, "t is collected");
-        t.Set("k", "x");
+        t["k"] = "x";
         var l = new ItemId(1, doc.Store.GetState(1) - 1);
         return (doc, PeerUpdate(l, m.ItemId));
     }

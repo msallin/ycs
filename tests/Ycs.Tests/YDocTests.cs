@@ -31,7 +31,7 @@ public class YDocTests : YTestBase
         doc2.ClientId = 0;
         Assert.AreEqual(doc1.ClientId, doc2.ClientId);
 
-        doc1.GetArray("a").Insert(0, new object[] { 1, 2 });
+        doc1.GetArray("a").Insert(0, 1, 2);
         doc2.ApplyUpdate(doc1.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
         Assert.AreNotEqual(doc1.ClientId, doc2.ClientId);
     }
@@ -69,35 +69,35 @@ public class YDocTests : YTestBase
             var subdocs = doc.GetMap("mysubdocs");
             var docA = new YDoc(new YDocOptions { Guid = "a" });
             docA.Load();
-            subdocs.Set("a", docA);
+            subdocs["a"] = docA;
             CollectionAssert.AreEqual(new[] { "a" }, events[0]);
             CollectionAssert.AreEqual(new object[] { }, events[1]);
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
             events = null;
 
-            (subdocs.Get("a") as YDoc).Load();
+            (subdocs["a"].ToObject() as YDoc).Load();
             Assert.IsNull(events);
             events = null;
 
-            (subdocs.Get("a") as YDoc).Destroy();
+            (subdocs["a"].ToObject() as YDoc).Destroy();
             CollectionAssert.AreEqual(new[] { "a" }, events[0]);
             CollectionAssert.AreEqual(new[] { "a" }, events[1]);
             CollectionAssert.AreEqual(new object[] { }, events[2]);
             events = null;
 
-            (subdocs.Get("a") as YDoc).Load();
+            (subdocs["a"].ToObject() as YDoc).Load();
             CollectionAssert.AreEqual(new object[] { }, events[0]);
             CollectionAssert.AreEqual(new object[] { }, events[1]);
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
             events = null;
 
-            subdocs.Set("b", new YDoc(new YDocOptions { Guid = "a", ShouldLoad = false }));
+            subdocs["b"] = new YDoc(new YDocOptions { Guid = "a", ShouldLoad = false });
             CollectionAssert.AreEqual(new[] { "a" }, events[0]);
             CollectionAssert.AreEqual(new object[] { }, events[1]);
             CollectionAssert.AreEqual(new object[] { }, events[2]);
             events = null;
 
-            (subdocs.Get("b") as YDoc).Load();
+            (subdocs["b"].ToObject() as YDoc).Load();
             CollectionAssert.AreEqual(new object[] { }, events[0]);
             CollectionAssert.AreEqual(new object[] { }, events[1]);
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
@@ -105,7 +105,7 @@ public class YDocTests : YTestBase
 
             var docC = new YDoc(new YDocOptions { Guid = "c" });
             docC.Load();
-            subdocs.Set("c", docC);
+            subdocs["c"] = docC;
             CollectionAssert.AreEqual(new[] { "c" }, events[0]);
             CollectionAssert.AreEqual(new object[] { }, events[1]);
             CollectionAssert.AreEqual(new[] { "c" }, events[2]);
@@ -136,7 +136,7 @@ public class YDocTests : YTestBase
             CollectionAssert.AreEqual(new object[] { }, events[2]);
             events = null;
 
-            (doc2.GetMap("mysubdocs").Get("a") as YDoc).Load();
+            (doc2.GetMap("mysubdocs")["a"].ToObject() as YDoc).Load();
             CollectionAssert.AreEqual(new object[] { }, events[0]);
             CollectionAssert.AreEqual(new object[] { }, events[1]);
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
@@ -146,7 +146,7 @@ public class YDocTests : YTestBase
             guids.Sort();
             CollectionAssert.AreEqual(new[] { "a", "c" }, guids);
 
-            doc2.GetMap("mysubdocs").Delete("a");
+            doc2.GetMap("mysubdocs").Remove("a");
             CollectionAssert.AreEqual(new object[] { }, events[0]);
             CollectionAssert.AreEqual(new[] { "a" }, events[1]);
             CollectionAssert.AreEqual(new object[] { }, events[2]);

@@ -40,17 +40,17 @@ internal static class Editing
             var map = d.GetMap("map");
             for (var i = 0; i < Inputs.MapN; i++)
             {
-                map.Set("key", (long)i);
+                map["key"] = (long)i;
             }
         });
 
         var arrayRec = Record("array-delete-random", "array", 'a', d =>
         {
             var array = d.GetArray("array");
-            array.Add([.. Enumerable.Range(0, Inputs.ArrayN).Select(i => (object)(long)i)]);
+            array.Add(Enumerable.Range(0, Inputs.ArrayN).Select(i => (YValue)(long)i).ToArray());
             foreach (var p in Inputs.ArrayDeletes)
             {
-                array.Delete(p, 1);
+                array.RemoveRange(p, 1);
             }
         });
 
@@ -500,7 +500,7 @@ internal static class Editing
     {
         't' => doc.GetText(root).ToString(),
         'm' => Canonical.Map(doc.GetMap(root).Select(kv => (kv.Key, Convert.ToInt64(kv.Value)))),
-        _ => Canonical.Array(doc.GetArray(root).Select(Convert.ToInt64)),
+        _ => Canonical.Array(doc.GetArray(root).Select(v => v.GetInt64())),
     };
 
     private static string Content(LayoutStore store, Recording r) => r.RootKind switch

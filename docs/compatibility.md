@@ -32,7 +32,7 @@ Editor documents written by `y-prosemirror`, `y-quill`, Tiptap and BlockNote dec
 | Area | Ycs |
 | --- | --- |
 | Shared types | `YText` (formatting, embeds, embedded shared types), `YMap`, `YArray`, `YXmlFragment`, `YXmlElement`, `YXmlText`, `YXmlHook`, nested types, subdocuments |
-| XML traversal | `YXmlFragment.QuerySelector`, `QuerySelectorAll`, `YXmlTreeWalker` |
+| XML traversal | `YXmlFragment.QuerySelector`, `QuerySelectorAll`, `CreateTreeWalker` |
 | Updates without a document (`UpdateOperations`) | `MergeUpdates`, `DiffUpdate`, `EncodeStateVectorFromUpdate`, `ParseUpdateMeta`, `DecodeUpdate`, `ConvertUpdateFormatV1ToV2` / `V2ToV1`, `DescribeUpdate`, each with a `…V2` sibling |
 | Versions and positions | `Snapshot` (`EncodeSnapshot`, `DecodeSnapshot`, `EqualSnapshots`, `SnapshotContainsUpdate`, `YDoc.CreateDocFromSnapshot`), `RelativePosition` and `AbsolutePosition` (binary and JSON forms), `PermanentUserData`; all byte-compatible |
 | Undo | `UndoManager` with Yjs 13.6's behaviour |

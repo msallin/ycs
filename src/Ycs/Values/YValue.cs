@@ -180,22 +180,30 @@ public readonly struct YValue : IEquatable<YValue>
 
     private static YValue Number(double d) => new(YValueKind.Number, null, BitConverter.DoubleToInt64Bits(d));
 
+    // The boxes of the small integers, shared: a document keeps a stored number as an object, and boxing one per insert would allocate.
+    private static readonly object[] SmallIntegers = Enumerable.Range(-1, 1026).Select(static i => (object)i).ToArray();
+
     private static object NumberObject(double d)
     {
-        object boxed = d;
         if (Math.Floor(d) == d && !double.IsInfinity(d) && !(d == 0 && double.IsNegative(d)))
         {
+            if (d >= -1 && d <= 1024)
+            {
+                return SmallIntegers[(int)d + 1];
+            }
+
             if (d >= int.MinValue && d <= int.MaxValue)
             {
-                boxed = (int)d;
+                return (int)d;
             }
-            else if (Math.Abs(d) <= MaxExactInteger)
+
+            if (Math.Abs(d) <= MaxExactInteger)
             {
-                boxed = (long)d;
+                return (long)d;
             }
         }
 
-        return boxed;
+        return d;
     }
 
     private static object? Contained(YValue item) =>
@@ -337,6 +345,14 @@ public readonly struct YValue : IEquatable<YValue>
     public bool TryGetShared([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AbstractType? value)
     {
         value = _object as AbstractType;
+        return value != null;
+    }
+
+    /// <summary>The shared type, when the value is one of type <typeparamref name="T"/>.</summary>
+    public bool TryGetSharedType<T>([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out T? value)
+        where T : YType
+    {
+        value = _object as T;
         return value != null;
     }
 

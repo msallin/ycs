@@ -69,13 +69,13 @@ public class UndoManagerYjsTests
         var doc = Doc(1);
         var map = doc.GetMap("m");
         var um = new UndoManager(map, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero, TrackedOrigins = new HashSet<object> { "t" } });
-        doc.Transact(_ => map.Set("a", 1), "t");
-        doc.Transact(_ => map.Set("a", 2), "t");
-        map.Set("a", 3);
+        doc.Transact(_ => map["a"] = 1, "t");
+        doc.Transact(_ => map["a"] = 2, "t");
+        map["a"] = 3;
 
         var result = um.Undo();
 
-        Assert.AreEqual((3, true, 0, 0), (map.Get("a"), result == null, um.UndoStack.Count, um.RedoStack.Count));
+        Assert.AreEqual((3, true, 0, 0), (map["a"].ToObject(), result == null, um.UndoStack.Count, um.RedoStack.Count));
     }
 
     [TestMethod]
@@ -83,7 +83,7 @@ public class UndoManagerYjsTests
     {
         var (map, um, result) = UndoAfterRemoteSet(ignoreRemoteMapChanges: false);
 
-        Assert.AreEqual((3, true, 0, 0), (map.Get("a"), result == null, um.UndoStack.Count, um.RedoStack.Count));
+        Assert.AreEqual((3, true, 0, 0), (map["a"].ToObject(), result == null, um.UndoStack.Count, um.RedoStack.Count));
     }
 
     [TestMethod]
@@ -91,7 +91,7 @@ public class UndoManagerYjsTests
     {
         var (map, um, result) = UndoAfterRemoteSet(ignoreRemoteMapChanges: true);
 
-        Assert.AreEqual((1, true, 1, 1), (map.Get("a"), result != null, um.UndoStack.Count, um.RedoStack.Count));
+        Assert.AreEqual((1, true, 1, 1), (map["a"].ToObject(), result != null, um.UndoStack.Count, um.RedoStack.Count));
     }
 
     private static (YMap Map, UndoManager Um, StackItem Result) UndoAfterRemoteSet(bool ignoreRemoteMapChanges)
@@ -100,10 +100,10 @@ public class UndoManagerYjsTests
         var remote = Doc(2);
         var map = doc.GetMap("m");
         var um = new UndoManager(map, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero, IgnoreRemoteMapChanges = ignoreRemoteMapChanges });
-        map.Set("a", 1);
-        map.Set("a", 2);
+        map["a"] = 1;
+        map["a"] = 2;
         Sync(doc, remote);
-        remote.GetMap("m").Set("a", 3);
+        remote.GetMap("m")["a"] = 3;
         Sync(remote, doc);
         return (map, um, um.Undo());
     }
@@ -115,13 +115,13 @@ public class UndoManagerYjsTests
         var array = doc.GetArray("a");
         var um = new UndoManager(array, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
         var nested = new YText();
-        array.Insert(0, new object[] { nested });
+        array.Insert(0, nested);
         nested.Insert(0, "pq");
-        array.Delete(0, 1);
+        array.RemoveRange(0, 1);
 
         um.Undo();
 
-        Assert.AreEqual("pq", (array.Get(0) as YText)?.ToString());
+        Assert.AreEqual("pq", (array[0].ToObject() as YText)?.ToString());
     }
 
     [TestMethod]

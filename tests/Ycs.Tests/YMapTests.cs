@@ -21,17 +21,17 @@ public class YMapTests : YTestBase
         Init(users: 1);
         var map0 = Maps[Users[0]];
 
-        var m1 = new YMap(new Dictionary<string, object> { { "number", 1 }, { "string", "hello" } });
-        map0.Set("m1", m1);
-        Assert.AreEqual(1, m1.Get("number"));
-        Assert.AreEqual("hello", m1.Get("string"));
+        var m1 = new YMap(YValue.FromObject(new Dictionary<string, object> { { "number", 1 }, { "string", "hello" } }).EnumerateObject());
+        map0["m1"] = m1;
+        Assert.AreEqual(1, m1["number"].ToObject());
+        Assert.AreEqual("hello", m1["string"].ToObject());
 
         var obj = new object[] { 1 };
-        var m2 = new YMap(new Dictionary<string, object> { { "object", obj }, { "boolean", true } });
-        map0.Set("m2", m2);
-        Assert.AreNotSame(obj, m2.Get("object")); // the document holds a copy
-        CollectionAssert.AreEqual(obj, (System.Collections.IList)m2.Get("object"));
-        Assert.AreEqual(true, m2.Get("boolean"));
+        var m2 = new YMap(YValue.FromObject(new Dictionary<string, object> { { "object", obj }, { "boolean", true } }).EnumerateObject());
+        map0["m2"] = m2;
+        Assert.AreNotSame(obj, m2["object"].ToObject()); // the document holds a copy
+        CollectionAssert.AreEqual(obj, (System.Collections.IList)m2["object"].ToObject());
+        Assert.AreEqual(true, m2["boolean"].ToObject());
 
         CompareUsers();
     }
@@ -46,50 +46,50 @@ public class YMapTests : YTestBase
 
         Users[2].Disconnect();
 
-        map0.Set("number", 1);
-        map0.Set("string", "hello Y");
-        map0.Set("object", new List<object> { "value" });
-        map0.Set("y-map", new YMap());
-        map0.Set("boolean1", true);
-        map0.Set("boolean0", false);
+        map0["number"] = 1;
+        map0["string"] = "hello Y";
+        map0["object"] = YValue.FromObject(new List<object> { "value" });
+        map0["y-map"] = new YMap();
+        map0["boolean1"] = true;
+        map0["boolean0"] = false;
 
-        var map = map0.Get("y-map") as YMap;
+        var map = map0["y-map"].ToObject() as YMap;
         Assert.IsNotNull(map);
-        map.Set("y-array", new YArray());
-        var array = map.Get("y-array") as YArray;
+        map["y-array"] = new YArray();
+        var array = map["y-array"].ToObject() as YArray;
         Assert.IsNotNull(array);
 
-        array.Insert(0, new object[] { 0 });
-        array.Insert(0, new object[] { -1 });
+        array.Insert(0, 0);
+        array.Insert(0, -1);
 
-        Assert.AreEqual(1, map0.Get("number"));
-        Assert.AreEqual("hello Y", map0.Get("string"));
-        Assert.AreEqual(false, map0.Get("boolean0"));
-        Assert.AreEqual(true, map0.Get("boolean1"));
-        Assert.AreEqual("value", (map0.Get("object") as IList<object>)[0]);
-        Assert.AreEqual(-1, ((map0.Get("y-map") as YMap).Get("y-array") as YArray).Get(0));
-        Assert.AreEqual(6, map0.Keys().Count());
+        Assert.AreEqual(1, map0["number"].ToObject());
+        Assert.AreEqual("hello Y", map0["string"].ToObject());
+        Assert.AreEqual(false, map0["boolean0"].ToObject());
+        Assert.AreEqual(true, map0["boolean1"].ToObject());
+        Assert.AreEqual("value", (map0["object"].ToObject() as IList<object>)[0]);
+        Assert.AreEqual(-1, ((map0["y-map"].ToObject() as YMap)["y-array"].ToObject() as YArray)[0].ToObject());
+        Assert.AreEqual(6, map0.Keys.Count());
 
         Users[2].Connect();
         Connector.FlushAllMessages();
 
-        Assert.AreEqual(1, map1.Get("number"));
-        Assert.AreEqual("hello Y", map1.Get("string"));
-        Assert.AreEqual(false, map1.Get("boolean0"));
-        Assert.AreEqual(true, map1.Get("boolean1"));
+        Assert.AreEqual(1, map1["number"].ToObject());
+        Assert.AreEqual("hello Y", map1["string"].ToObject());
+        Assert.AreEqual(false, map1["boolean0"].ToObject());
+        Assert.AreEqual(true, map1["boolean1"].ToObject());
 
-        Assert.AreEqual("value", (map1.Get("object") as IList<object>)[0]);
-        Assert.AreEqual(-1, ((map1.Get("y-map") as YMap).Get("y-array") as YArray).Get(0));
-        Assert.AreEqual(6, map1.Keys().Count());
+        Assert.AreEqual("value", (map1["object"].ToObject() as IList<object>)[0]);
+        Assert.AreEqual(-1, ((map1["y-map"].ToObject() as YMap)["y-array"].ToObject() as YArray)[0].ToObject());
+        Assert.AreEqual(6, map1.Keys.Count());
 
         // Compare disconnected user.
-        Assert.AreEqual(1, map2.Get("number"));
-        Assert.AreEqual("hello Y", map2.Get("string"));
-        Assert.AreEqual(false, map2.Get("boolean0"));
-        Assert.AreEqual(true, map2.Get("boolean1"));
-        Assert.AreEqual("value", (map2.Get("object") as IList<object>)[0]);
-        Assert.AreEqual(-1, ((map2.Get("y-map") as YMap).Get("y-array") as YArray).Get(0));
-        Assert.AreEqual(6, map2.Keys().Count());
+        Assert.AreEqual(1, map2["number"].ToObject());
+        Assert.AreEqual("hello Y", map2["string"].ToObject());
+        Assert.AreEqual(false, map2["boolean0"].ToObject());
+        Assert.AreEqual(true, map2["boolean1"].ToObject());
+        Assert.AreEqual("value", (map2["object"].ToObject() as IList<object>)[0]);
+        Assert.AreEqual(-1, ((map2["y-map"].ToObject() as YMap)["y-array"].ToObject() as YArray)[0].ToObject());
+        Assert.AreEqual(6, map2.Keys.Count());
 
         CompareUsers();
     }
@@ -100,18 +100,18 @@ public class YMapTests : YTestBase
         Init(users: 2);
         var map0 = Maps[Users[0]];
 
-        map0.Set("stuff", "stuffy");
-        map0.Set("null", null);
-        Assert.AreEqual("stuffy", map0.Get("stuff"));
-        Assert.AreEqual(null, map0.Get("null"));
+        map0["stuff"] = "stuffy";
+        map0["null"] = YValue.Null;
+        Assert.AreEqual("stuffy", map0["stuff"].ToObject());
+        Assert.AreEqual(null, map0["null"].ToObject());
 
         Connector.FlushAllMessages();
 
         foreach (var user in Users)
         {
             var u = user.GetMap("map");
-            Assert.AreEqual("stuffy", u.Get("stuff"));
-            Assert.AreEqual(null, u.Get("null"));
+            Assert.AreEqual("stuffy", u["stuff"].ToObject());
+            Assert.AreEqual(null, u["null"].ToObject());
         }
 
         CompareUsers();
@@ -123,11 +123,11 @@ public class YMapTests : YTestBase
         Init(users: 2);
         var map0 = Maps[Users[0]];
         var map = new YMap();
-        map0.Set("map", map);
+        map0["map"] = map;
 
-        Assert.AreSame(map, map0.Get("map"));
-        map.Set("one", 1);
-        Assert.AreEqual(1, map.Get("one"));
+        Assert.AreSame(map, map0["map"].ToObject());
+        map["one"] = 1;
+        Assert.AreEqual(1, map["one"].ToObject());
 
         CompareUsers();
     }
@@ -139,11 +139,11 @@ public class YMapTests : YTestBase
         var map0 = Maps[Users[0]];
 
         var array = new YArray();
-        map0.Set("array", array);
-        Assert.AreSame(array, map0.Get("array"));
+        map0["array"] = array;
+        Assert.AreSame(array, map0["array"].ToObject());
 
-        array.Insert(0, new object[] { 1, 2, 3 });
-        CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, (ICollection)(map0.Get("array") as YArray).ToArray());
+        array.Insert(0, 1, 2, 3);
+        CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, (map0["array"].ToObject() as YArray).ToArray().Select(v => v.ToObject()).ToList());
 
         CompareUsers();
     }
@@ -154,14 +154,14 @@ public class YMapTests : YTestBase
         Init(users: 2);
         var map0 = Maps[Users[0]];
 
-        map0.Set("stuff", "stuffy");
-        Assert.AreEqual("stuffy", map0.Get("stuff"));
+        map0["stuff"] = "stuffy";
+        Assert.AreEqual("stuffy", map0["stuff"].ToObject());
         Connector.FlushAllMessages();
 
         foreach (var user in Users)
         {
             var u = user.GetMap("map");
-            Assert.AreEqual("stuffy", u.Get("stuff"));
+            Assert.AreEqual("stuffy", u["stuff"].ToObject());
         }
 
         CompareUsers();
@@ -174,14 +174,14 @@ public class YMapTests : YTestBase
         var map0 = Maps[Users[0]];
         var map1 = Maps[Users[1]];
 
-        map0.Set("stuff", "c0");
-        map1.Set("stuff", "c1");
+        map0["stuff"] = "c0";
+        map1["stuff"] = "c1";
         Connector.FlushAllMessages();
 
         foreach (var user in Users)
         {
             var u = user.GetMap("map");
-            Assert.AreEqual("c1", u.Get("stuff"));
+            Assert.AreEqual("c1", u["stuff"].ToObject());
         }
 
         CompareUsers();
@@ -193,15 +193,15 @@ public class YMapTests : YTestBase
         Init(users: 1);
         var map0 = Maps[Users[0]];
 
-        map0.Set("stuff", "c0");
-        map0.Set("otherStuff", "c1");
-        Assert.AreEqual(2, map0.Keys().Count());
+        map0["stuff"] = "c0";
+        map0["otherStuff"] = "c1";
+        Assert.AreEqual(2, map0.Keys.Count());
 
-        map0.Delete("stuff");
-        Assert.AreEqual(1, map0.Keys().Count());
+        map0.Remove("stuff");
+        Assert.AreEqual(1, map0.Keys.Count());
 
-        map0.Delete("otherStuff");
-        Assert.AreEqual(0, map0.Keys().Count());
+        map0.Remove("otherStuff");
+        Assert.AreEqual(0, map0.Keys.Count());
 
         CompareUsers();
     }
@@ -213,9 +213,9 @@ public class YMapTests : YTestBase
         var map0 = Maps[Users[0]];
         var map1 = Maps[Users[1]];
 
-        map0.Set("stuff", "c0");
-        map1.Set("stuff", "c1");
-        map1.Delete("stuff");
+        map0["stuff"] = "c0";
+        map1["stuff"] = "c1";
+        map1.Remove("stuff");
 
         Connector.FlushAllMessages();
 
@@ -236,17 +236,17 @@ public class YMapTests : YTestBase
         var map1 = Maps[Users[1]];
         var map2 = Maps[Users[2]];
 
-        map0.Set("stuff", "c0");
-        map1.Set("stuff", "c1");
-        map1.Set("stuff", "c2");
-        map2.Set("stuff", "c3");
+        map0["stuff"] = "c0";
+        map1["stuff"] = "c1";
+        map1["stuff"] = "c2";
+        map2["stuff"] = "c3";
 
         Connector.FlushAllMessages();
 
         foreach (var user in Users)
         {
             var u = user.GetMap("map");
-            Assert.AreEqual("c3", u.Get("stuff"));
+            Assert.AreEqual("c3", u["stuff"].ToObject());
         }
 
         CompareUsers();
@@ -261,18 +261,18 @@ public class YMapTests : YTestBase
         var map2 = Maps[Users[2]];
         var map3 = Maps[Users[3]];
 
-        map0.Set("stuff", "c0");
-        map1.Set("stuff", "c1");
-        map1.Set("stuff", "c2");
-        map2.Set("stuff", "c3");
+        map0["stuff"] = "c0";
+        map1["stuff"] = "c1";
+        map1["stuff"] = "c2";
+        map2["stuff"] = "c3";
 
         Connector.FlushAllMessages();
 
-        map0.Set("stuff", "deleteMe");
-        map1.Set("stuff", "c1");
-        map2.Set("stuff", "c2");
-        map3.Set("stuff", "c3");
-        map3.Delete("stuff");
+        map0["stuff"] = "deleteMe";
+        map1["stuff"] = "c1";
+        map2["stuff"] = "c2";
+        map3["stuff"] = "c3";
+        map3.Remove("stuff");
 
         Connector.FlushAllMessages();
 
@@ -295,7 +295,7 @@ public class YMapTests : YTestBase
         var map3 = Maps[Users[3]];
 
         var _map1 = new YMap();
-        map1.Set("map", _map1);
+        map1["map"] = _map1;
 
         int calls = 0;
         ItemId? dmapId = null;
@@ -309,23 +309,23 @@ public class YMapTests : YTestBase
                 Assert.IsTrue(evt.Changes.Keys.ContainsKey("deepmap"));
                 Assert.AreEqual(1, evt.Path.Count);
                 Assert.AreEqual("map", evt.Path[0].Key);
-                dmapId = ((evt.Target as YMap).Get("deepmap") as YMap).OwnerIdForTests;
+                dmapId = ((evt.Target as YMap)["deepmap"].ToObject() as YMap).OwnerIdForTests;
             }
         });
 
         Connector.FlushAllMessages();
 
-        var _map3 = map3.Get("map") as YMap;
-        _map3.Set("deepmap", new YMap());
+        var _map3 = map3["map"].ToObject() as YMap;
+        _map3["deepmap"] = new YMap();
         Connector.FlushAllMessages();
 
-        var _map2 = map2.Get("map") as YMap;
-        _map2.Set("deepmap", new YMap());
+        var _map2 = map2["map"].ToObject() as YMap;
+        _map2["deepmap"] = new YMap();
         Connector.FlushAllMessages();
 
-        var dmap1 = _map1.Get("deepmap") as YMap;
-        var dmap2 = _map2.Get("deepmap") as YMap;
-        var dmap3 = _map3.Get("deepmap") as YMap;
+        var dmap1 = _map1["deepmap"].ToObject() as YMap;
+        var dmap2 = _map2["deepmap"].ToObject() as YMap;
+        var dmap3 = _map3["deepmap"].ToObject() as YMap;
 
         Assert.IsTrue(calls > 0);
         Assert.IsTrue(dmap1.OwnerIdForTests == dmap2.OwnerIdForTests);
@@ -354,9 +354,9 @@ public class YMapTests : YTestBase
             calls++;
         });
 
-        map0.Set("map", new YMap());
-        (map0.Get("map") as YMap).Set("array", new YArray());
-        ((map0.Get("map") as YMap).Get("array") as YArray).Insert(0, new object[] { "content" });
+        map0["map"] = new YMap();
+        (map0["map"].ToObject() as YMap)["array"] = new YArray();
+        ((map0["map"].ToObject() as YMap)["array"].ToObject() as YArray).Insert(0, "content");
         Assert.AreEqual(3, calls);
         Assert.AreEqual(3, paths.Count);
         Assert.AreEqual(0, paths[0].Count);
@@ -383,20 +383,20 @@ public class YMapTests : YTestBase
             Assert.IsNotNull(changes);
         });
 
-        map0.Set("stuff", 4);
+        map0["stuff"] = 4;
         Assert.AreSame(map0, evt.Target);
         CollectionAssert.AreEqual(new[] { "stuff" }, evt.KeysChanged.ToList());
         evt = null;
 
         // Update, oldValue is in contents.
-        map0.Set("stuff", new YArray());
+        map0["stuff"] = new YArray();
         Assert.AreSame(map0, evt.Target);
         CollectionAssert.AreEqual(new[] { "stuff" }, evt.KeysChanged.ToList());
         evt = null;
 
         // Update, oldValue is in opContents.
-        map0.Set("stuff", 5);
-        map0.Delete("stuff");
+        map0["stuff"] = 5;
+        map0.Remove("stuff");
         Assert.AreSame(map0, evt.Target);
         CollectionAssert.AreEqual(new[] { "stuff" }, evt.KeysChanged.ToList());
         evt = null;
@@ -418,13 +418,13 @@ public class YMapTests : YTestBase
             changes = e.Changes;
         });
 
-        map0.Set("a", 1);
+        map0["a"] = 1;
         Assert.IsTrue(changes.Keys.TryGetValue("a", out keyChange));
         Assert.AreEqual(KeyChangeAction.Add, keyChange.Action);
         Assert.IsNull(keyChange.OldValue);
         changes = null;
 
-        map0.Set("a", 2);
+        map0["a"] = 2;
         Assert.IsTrue(changes.Keys.TryGetValue("a", out keyChange));
         Assert.AreEqual(KeyChangeAction.Update, keyChange.Action);
         Assert.AreEqual(1, keyChange.OldValue);
@@ -432,8 +432,8 @@ public class YMapTests : YTestBase
 
         Users[0].Transact(tr =>
         {
-            map0.Set("a", 3);
-            map0.Set("a", 4);
+            map0["a"] = 3;
+            map0["a"] = 4;
         });
 
         Assert.IsTrue(changes.Keys.TryGetValue("a", out keyChange));
@@ -443,8 +443,8 @@ public class YMapTests : YTestBase
 
         Users[0].Transact(tr =>
         {
-            map0.Set("b", 1);
-            map0.Set("b", 2);
+            map0["b"] = 1;
+            map0["b"] = 2;
         });
 
         Assert.IsTrue(changes.Keys.TryGetValue("b", out keyChange));
@@ -454,8 +454,8 @@ public class YMapTests : YTestBase
 
         Users[0].Transact(tr =>
         {
-            map0.Set("c", 1);
-            map0.Delete("c");
+            map0["c"] = 1;
+            map0.Remove("c");
         });
 
         Assert.AreEqual(0, changes.Keys.Count);
@@ -463,8 +463,8 @@ public class YMapTests : YTestBase
 
         Users[0].Transact(tr =>
         {
-            map0.Set("d", 1);
-            map0.Set("d", 2);
+            map0["d"] = 1;
+            map0["d"] = 2;
         });
 
         Assert.IsTrue(changes.Keys.TryGetValue("d", out keyChange));
@@ -508,7 +508,7 @@ public class YMapTests : YTestBase
 
         Assert.ThrowsExactly<Exception>(() =>
         {
-            map.Set("y", "2");
+            map["y"] = "2";
         });
 
         Assert.IsTrue(updateCalled);
@@ -522,14 +522,14 @@ public class YMapTests : YTestBase
 
         Assert.ThrowsExactly<Exception>(() =>
         {
-            map.Set("z", "3");
+            map["z"] = "3";
         });
 
         Assert.IsTrue(updateCalled);
         Assert.IsTrue(throwingObserverCalled);
         Assert.IsTrue(throwingDeepObserverCalled);
 
-        Assert.AreEqual("3", map.Get("z"));
+        Assert.AreEqual("3", map["z"].ToObject());
     }
 
     [TestMethod]
@@ -560,7 +560,7 @@ public class YMapTests : YTestBase
             {
                 var key = new[] { "one", "two" }[rand.Next(0, 2)];
                 var value = Guid.NewGuid().ToString();
-                user.GetMap("map").Set(key, value);
+                user.GetMap("map")[key] = value;
             },
 
             // Set type
@@ -568,15 +568,15 @@ public class YMapTests : YTestBase
             {
                 var key = new[] { "one", "two" }[rand.Next(0, 2)];
                 var type = new object[] { new YArray(), new YMap() }[rand.Next(0, 2)];
-                user.GetMap("map").Set(key, type);
+                user.GetMap("map")[key] = YValue.FromObject(type);
 
                 if (type is YArray yarr)
                 {
-                    yarr.Insert(0, new object[] { 1, 2, 3, 4 });
+                    yarr.Insert(0, 1, 2, 3, 4);
                 }
                 else if (type is YMap ymap)
                 {
-                    ymap.Set("deepkey", "deepvalue");
+                    ymap["deepkey"] = "deepvalue";
                 }
                 else
                 {
@@ -588,7 +588,7 @@ public class YMapTests : YTestBase
             (user, rand) =>
             {
                 var key = new[] { "one", "two" }[rand.Next(0, 2)];
-                user.GetMap("map").Delete(key);
+                user.GetMap("map").Remove(key);
             }
         }, users, iterations);
     }

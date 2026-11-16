@@ -132,52 +132,52 @@ internal static class Seeds
     private static void MapEdits(YDoc a, YDoc b)
     {
         var m = a.GetMap("m");
-        m.Set("s", "str");
-        m.Set("i", 42);
-        m.Set("l", 1L << 40);
-        m.Set("d", 0.5);
-        m.Set("b", true);
-        m.Set("n", null!);
-        m.Set("bin", new byte[] { 1, 2, 255 });
-        m.Set("list", new List<object> { 1, "two", new Dictionary<string, object> { ["three"] = 3 } });
-        m.Set("nested", new YMap(new Dictionary<string, object> { ["x"] = 1 }));
-        m.Set("s", "overwritten");
-        m.Delete("i");
+        m["s"] = "str";
+        m["i"] = 42;
+        m["l"] = 1L << 40;
+        m["d"] = 0.5;
+        m["b"] = true;
+        m["n"] = YValue.Null;
+        m["bin"] = new byte[] { 1, 2, 255 };
+        m["list"] = YValue.FromObject(new List<object> { 1, "two", new Dictionary<string, object> { ["three"] = 3 } });
+        m["nested"] = new YMap { ["x"] = 1 };
+        m["s"] = "overwritten";
+        m.Remove("i");
         b.ApplyUpdate(a.EncodeStateAsUpdate());
-        b.GetMap("m").Set("from-b", "b");
+        b.GetMap("m")["from-b"] = "b";
     }
 
     private static void ArrayEdits(YDoc a, YDoc b)
     {
         var arr = a.GetArray("a");
-        arr.Insert(0, new object[] { 1, 2, 3, "four" });
-        arr.Insert(2, new object[] { new YArray(new object[] { "inner" }), new YText("text inside") });
-        arr.Delete(1, 2);
+        arr.Insert(0, 1, 2, 3, "four");
+        arr.Insert(2, new YArray("inner"), new YText("text inside"));
+        arr.RemoveRange(1, 2);
         b.ApplyUpdate(a.EncodeStateAsUpdate());
-        b.GetArray("a").Insert(0, new object[] { true });
-        arr.Add(new object[] { new byte[] { 9 } });
+        b.GetArray("a").Insert(0, true);
+        arr.Add(new byte[] { 9 });
     }
 
     private static void XmlEdits(YDoc a, YDoc b)
     {
         var f = a.GetXmlFragment("x");
         var p = new YXmlElement("p");
-        f.Insert(0, new object[] { p, new YXmlText("tail") });
+        f.Insert(0, p, new YXmlText("tail"));
         p.SetAttribute("class", "c");
-        p.Insert(0, new object[] { new YXmlText("inside"), new YXmlElement("br") });
+        p.Insert(0, new YXmlText("inside"), new YXmlElement("br"));
         b.ApplyUpdate(a.EncodeStateAsUpdate());
-        ((YXmlElement)b.GetXmlFragment("x").Get(0)).RemoveAttribute("class");
-        f.Delete(1);
+        ((YXmlElement)b.GetXmlFragment("x")[0]).RemoveAttribute("class");
+        f.RemoveAt(1);
     }
 
     private static void SubdocEdits(YDoc a, YDoc b)
     {
         var m = a.GetMap("docs");
-        m.Set("sub", new YDoc(new YDocOptions { Guid = "sub-guid" }));
+        m["sub"] = new YDoc(new YDocOptions { Guid = "sub-guid" });
         b.ApplyUpdate(a.EncodeStateAsUpdate());
 
         // Not m.Delete("sub"): with Gc = false the destroyed subdocument's item keeps a ContentDoc
         // whose Doc is null, and encoding the document throws NullReferenceException.
-        b.GetMap("docs").Set("sub2", new YDoc(new YDocOptions { Guid = "sub-guid-2", AutoLoad = true }));
+        b.GetMap("docs")["sub2"] = new YDoc(new YDocOptions { Guid = "sub-guid-2", AutoLoad = true });
     }
 }

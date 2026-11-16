@@ -88,10 +88,10 @@ public class EventLifetimeTests
         var doc = new YDoc();
         var map = doc.GetMap("m");
         var inner = new YArray();
-        map.Set("a", inner);
+        map["a"] = inner;
         IReadOnlyList<YEvent> kept = null;
         map.ObserveDeep((deepEvents, _) => kept = deepEvents);
-        inner.Add(new object[] { 1 });
+        inner.Add(1);
         doc.GetText("other").Insert(0, "x");
 
         Assert.AreEqual("True|True", $"{kept[0].Target == inner}|{ThrowsEnded(() => kept[0].Changes)}");
@@ -123,7 +123,7 @@ public class EventLifetimeTests
         text.Observe(e =>
         {
             textEvent = e;
-            doc.Transact(_ => map.Set("k", 1));
+            doc.Transact(_ => map["k"] = 1);
         });
         map.Observe(e =>
         {

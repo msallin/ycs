@@ -66,23 +66,23 @@ foreach (var d in text.ToDelta())
 
 // A map, holding a nested array.
 var settings = doc.GetMap("settings");
-settings.Set("theme", "dark");
-settings.Set("fontSize", 14);
+settings["theme"] = "dark";
+settings["fontSize"] = 14;
 var tags = new YArray();
-settings.Set("tags", tags);
-tags.Add(["draft", "review"]);
+settings["tags"] = tags;
+tags.Add("draft", "review");
 
-Console.WriteLine(settings.Get("theme"));           // dark
-Console.WriteLine(tags.Length);                     // 2
-Console.WriteLine(string.Join(", ", tags.Slice())); // draft, review
+Console.WriteLine(settings["theme"]);               // dark
+Console.WriteLine(tags.Count);                      // 2
+Console.WriteLine(string.Join(", ", tags[0..2]));   // draft, review
 ```
 
 - `doc.GetText(name)`, `GetMap`, `GetArray` and `Get<T>` return the root type of that name, created on first use.
   Peers that use the same name and type share it.
-- Values are `null`, `bool`, `int`, `long`, `double`, `BigInteger`, `string`, `byte[]`, lists and string-keyed
-  dictionaries of those, and shared types. Anything else is rejected when it is inserted.
+- Values are `YValue`s: `null`, `bool`, a number, `BigInteger`, `string`, `byte[]`, arrays and objects of those, and shared types; the
+  implicit conversions cover the scalars and `YValue.FromObject` the CLR lists and dictionaries. Anything else is rejected when it is converted.
 - Indexes into a text count UTF-16 code units, as in Yjs and in .NET strings.
-- `YMap.Get` returns null for a missing key; `TryGet` tells a missing key from a null value.
+- `YMap` and `YArray` read as a dictionary and a list of `YValue`s: the indexer of a map throws for a missing key and `TryGetValue` tells a missing key from a null value; the indexer of an array throws for an index out of range.
 
 ## Catching up after being offline
 

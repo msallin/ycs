@@ -31,13 +31,13 @@ public class ValueAliasingTests
     {
         var doc = new YDoc();
         var map = Sample(out var inner, out var bytes);
-        doc.GetMap("m").Set("k", map);
+        doc.GetMap("m")["k"] = YValue.FromObject(map);
         var before = doc.EncodeStateAsUpdate();
 
         Mutate(map, inner, bytes);
 
         CollectionAssert.AreEqual(before, doc.EncodeStateAsUpdate());
-        Assert.AreEqual(3, ((IDictionary<string, object?>)doc.GetMap("m").Get("k")).Count);
+        Assert.AreEqual(3, ((IDictionary<string, object?>)doc.GetMap("m")["k"].ToObject()).Count);
     }
 
     [TestMethod]
@@ -46,7 +46,7 @@ public class ValueAliasingTests
         var doc = new YDoc();
         var map = Sample(out var inner, out var bytes);
         var list = new List<object?> { map, inner, bytes };
-        doc.GetArray("a").Add(list.Cast<object>().ToList());
+        doc.GetArray("a").Add(list.Cast<object>().ToList().Select(YValue.FromObject).ToArray());
         var before = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
 
         Mutate(map, inner, bytes);
@@ -59,30 +59,30 @@ public class ValueAliasingTests
     {
         var doc = new YDoc();
         var bytes = new byte[] { 1, 2, 3 };
-        doc.GetMap("m").Set("k", bytes);
+        doc.GetMap("m")["k"] = bytes;
 
         bytes[0] = 9;
 
-        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, (byte[])doc.GetMap("m").Get("k"));
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, (byte[])doc.GetMap("m")["k"].ToObject());
     }
 
     [TestMethod]
     public void Read_CallerMutatesTheBytesItGot_DocumentKeepsItsBytes()
     {
         var doc = new YDoc();
-        doc.GetMap("m").Set("top", new byte[] { 1, 2, 3 });
-        doc.GetMap("m").Set("nested", new List<object?> { new byte[] { 4, 5 } });
-        doc.GetArray("a").Add(new object[] { new byte[] { 6 }, new Dictionary<string, object?> { ["b"] = new byte[] { 7 } } });
+        doc.GetMap("m")["top"] = new byte[] { 1, 2, 3 };
+        doc.GetMap("m")["nested"] = YValue.FromObject(new List<object?> { new byte[] { 4, 5 } });
+        doc.GetArray("a").Add(new byte[] { 6 }, YValue.FromObject(new Dictionary<string, object?> { ["b"] = new byte[] { 7 } }));
         var before = doc.EncodeStateAsUpdate();
 
-        ((byte[])doc.GetMap("m").Get("top"))[0] = 9;
-        ((byte[])((IList<object?>)doc.GetMap("m").Get("nested"))[0]!)[0] = 9;
-        ((byte[])doc.GetArray("a").Get(0))[0] = 9;
-        ((byte[])((IDictionary<string, object?>)doc.GetArray("a").Get(1))["b"]!)[0] = 9;
+        ((byte[])doc.GetMap("m")["top"].ToObject())[0] = 9;
+        ((byte[])((IList<object?>)doc.GetMap("m")["nested"].ToObject())[0]!)[0] = 9;
+        ((byte[])doc.GetArray("a")[0].ToObject())[0] = 9;
+        ((byte[])((IDictionary<string, object?>)doc.GetArray("a")[1].ToObject())["b"]!)[0] = 9;
         ((byte[])doc.GetMap("m").ToJson().As<IDictionary<string, object?>>()["top"]!)[0] = 9;
         foreach (var value in doc.GetArray("a"))
         {
-            (value as byte[])?.AsSpan().Fill(9);
+            (value.ToObject() as byte[])?.AsSpan().Fill(9);
         }
 
         CollectionAssert.AreEqual(before, doc.EncodeStateAsUpdate());
@@ -92,11 +92,11 @@ public class ValueAliasingTests
     public void Read_DecodedFromAnUpdate_CallerMutatesTheBytesItGot_DocumentKeepsItsBytes()
     {
         var source = new YDoc();
-        source.GetMap("m").Set("nested", new List<object?> { new byte[] { 4, 5 } });
+        source.GetMap("m")["nested"] = YValue.FromObject(new List<object?> { new byte[] { 4, 5 } });
         var remote = new YDoc();
         remote.ApplyUpdate(source.EncodeStateAsUpdate());
 
-        ((byte[])((IList<object?>)remote.GetMap("m").Get("nested"))[0]!)[0] = 9;
+        ((byte[])((IList<object?>)remote.GetMap("m")["nested"].ToObject())[0]!)[0] = 9;
 
         CollectionAssert.AreEqual(source.EncodeStateAsUpdate(), remote.EncodeStateAsUpdate());
     }
@@ -105,10 +105,10 @@ public class ValueAliasingTests
     public void Read_ContainersFromADocument_AreReadOnly()
     {
         var doc = new YDoc();
-        doc.GetMap("m").Set("list", new List<object?> { 1, 2 });
-        doc.GetMap("m").Set("obj", new Dictionary<string, object?> { ["k"] = 1 });
-        var list = (IList<object?>)doc.GetMap("m").Get("list");
-        var obj = (IDictionary<string, object?>)doc.GetMap("m").Get("obj");
+        doc.GetMap("m")["list"] = YValue.FromObject(new List<object?> { 1, 2 });
+        doc.GetMap("m")["obj"] = YValue.FromObject(new Dictionary<string, object?> { ["k"] = 1 });
+        var list = (IList<object?>)doc.GetMap("m")["list"].ToObject();
+        var obj = (IDictionary<string, object?>)doc.GetMap("m")["obj"].ToObject();
 
         Assert.IsTrue(list.IsReadOnly && obj.IsReadOnly && ((IList)list).IsFixedSize);
         Assert.ThrowsExactly<NotSupportedException>(() => list.Add(3));
@@ -130,10 +130,10 @@ public class ValueAliasingTests
     public void Read_ContainersFromADocument_ReadLikeCollections()
     {
         var doc = new YDoc();
-        doc.GetMap("m").Set("list", new List<object?> { 1, "b", null });
-        doc.GetMap("m").Set("obj", new Dictionary<string, object?> { ["z"] = 1, ["a"] = 2 });
-        var list = (IList<object?>)doc.GetMap("m").Get("list");
-        var obj = (IReadOnlyDictionary<string, object?>)doc.GetMap("m").Get("obj");
+        doc.GetMap("m")["list"] = YValue.FromObject(new List<object?> { 1, "b", null });
+        doc.GetMap("m")["obj"] = YValue.FromObject(new Dictionary<string, object?> { ["z"] = 1, ["a"] = 2 });
+        var list = (IList<object?>)doc.GetMap("m")["list"].ToObject();
+        var obj = (IReadOnlyDictionary<string, object?>)doc.GetMap("m")["obj"].ToObject();
 
         Assert.AreEqual(
             (3, 1, "b", 1, true, "z,a", "1,2", 2, false),
@@ -146,12 +146,12 @@ public class ValueAliasingTests
     public void MapSet_ObjectKeys_KeepTheirOrderInTheEncoding()
     {
         var ordered = new YDoc();
-        ordered.GetMap("m").Set("k", new Dictionary<string, object?> { ["z"] = 1, ["a"] = 2, ["m"] = 3 });
+        ordered.GetMap("m")["k"] = YValue.FromObject(new Dictionary<string, object?> { ["z"] = 1, ["a"] = 2, ["m"] = 3 });
         var remote = new YDoc();
 
         remote.ApplyUpdate(ordered.EncodeStateAsUpdate());
 
-        Assert.AreEqual("z,a,m", string.Join(',', ((IDictionary<string, object?>)remote.GetMap("m").Get("k")).Keys));
+        Assert.AreEqual("z,a,m", string.Join(',', ((IDictionary<string, object?>)remote.GetMap("m")["k"].ToObject()).Keys));
         CollectionAssert.AreEqual(ordered.EncodeStateAsUpdate(), remote.EncodeStateAsUpdate());
     }
 
@@ -159,11 +159,11 @@ public class ValueAliasingTests
     public void MapSet_ValueReadFromAnotherDocument_InsertsEqually()
     {
         var first = new YDoc();
-        first.GetMap("m").Set("k", new Dictionary<string, object?> { ["l"] = new List<object?> { 1, new byte[] { 5 } } });
+        first.GetMap("m")["k"] = YValue.FromObject(new Dictionary<string, object?> { ["l"] = new List<object?> { 1, new byte[] { 5 } } });
         var second = new YDoc();
         second.ClientId = first.ClientId;
 
-        second.GetMap("m").Set("k", first.GetMap("m").Get("k"));
+        second.GetMap("m")["k"] = YValue.FromObject(first.GetMap("m")["k"].ToObject());
 
         CollectionAssert.AreEqual(first.EncodeStateAsUpdate(), second.EncodeStateAsUpdate());
     }
@@ -173,25 +173,25 @@ public class ValueAliasingTests
     {
         var first = new YDoc();
         object nested = new List<object?> { new List<object?> { new List<object?> { 1 } } };
-        first.GetMap("m").Set("k", nested);
+        first.GetMap("m")["k"] = YValue.FromObject(nested);
         var second = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 2 } });
 
-        Assert.ThrowsExactly<ArgumentException>(() => second.GetMap("m").Set("k", first.GetMap("m").Get("k")));
+        Assert.ThrowsExactly<ArgumentException>(() => second.GetMap("m")["k"] = YValue.FromObject(first.GetMap("m")["k"].ToObject()));
     }
 
     [TestMethod]
     public void Constructors_PrelimValues_CallerMutatesBeforeTheTypeJoinsADocument_DocumentHasTheInsertedValue()
     {
         var list = new List<object?> { 1 };
-        var map = new YMap(new Dictionary<string, object> { ["l"] = list });
-        var array = new YArray([list]);
+        var map = new YMap { ["l"] = YValue.FromObject(list) };
+        var array = new YArray(YValue.FromObject(list));
         list.Add(2);
         var doc = new YDoc();
 
-        doc.GetMap("root").Set("m", map);
-        doc.GetMap("root").Set("a", array);
+        doc.GetMap("root")["m"] = map;
+        doc.GetMap("root")["a"] = array;
 
-        Assert.AreEqual((1, 1), (((IList)doc.GetMap("root").Get("m").As<YMap>().Get("l")).Count, ((IList)doc.GetMap("root").Get("a").As<YArray>().Get(0)).Count));
+        Assert.AreEqual((1, 1), (((IList)doc.GetMap("root")["m"].ToObject().As<YMap>()["l"].ToObject()).Count, ((IList)doc.GetMap("root")["a"].ToObject().As<YArray>()[0].ToObject()).Count));
     }
 
     [TestMethod]
@@ -233,7 +233,7 @@ public class ValueAliasingTests
     {
         var doc = new YDoc();
 
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => doc.GetMap("m").Set("k", 9007199254740992L));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => doc.GetMap("m")["k"] = 9007199254740992L);
         Assert.AreEqual(0, doc.GetMap("m").Count);
     }
 
@@ -244,7 +244,7 @@ public class ValueAliasingTests
         var list = new List<object?>();
         list.Add(list);
 
-        Assert.ThrowsExactly<ArgumentException>(() => doc.GetMap("m").Set("k", list));
+        Assert.ThrowsExactly<ArgumentException>(() => doc.GetMap("m")["k"] = YValue.FromObject(list));
         Assert.AreEqual(0, doc.GetMap("m").Count);
     }
 
@@ -253,11 +253,11 @@ public class ValueAliasingTests
     {
         var doc = new YDoc();
         var strings = new Dictionary<string, string> { ["b"] = "1", ["a"] = "2" };
-        doc.GetMap("m").Set("k", strings);
+        doc.GetMap("m")["k"] = YValue.FromObject(strings);
 
         strings["b"] = "changed";
 
-        Assert.AreEqual("b=1,a=2", string.Join(',', ((IDictionary<string, object?>)doc.GetMap("m").Get("k")).Select(kv => $"{kv.Key}={kv.Value}")));
+        Assert.AreEqual("b=1,a=2", string.Join(',', ((IDictionary<string, object?>)doc.GetMap("m")["k"].ToObject()).Select(kv => $"{kv.Key}={kv.Value}")));
     }
 }
 

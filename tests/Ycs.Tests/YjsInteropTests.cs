@@ -37,25 +37,25 @@ public class YjsInteropTests
         var doc = Apply(base64Update, v2);
 
         var map = doc.GetMap("map");
-        Assert.AreEqual("hello \u2713 \u043c\u0438\u0440", map.Get("str"));
-        Assert.AreEqual(42, Convert.ToInt32(map.Get("int")));
-        Assert.AreEqual(3.5, Convert.ToDouble(map.Get("float")));
-        Assert.AreEqual(true, map.Get("bool"));
-        Assert.IsNull(map.Get("null"));
-        CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 250 }, (byte[])map.Get("bin"));
+        Assert.AreEqual("hello \u2713 \u043c\u0438\u0440", map["str"].ToObject());
+        Assert.AreEqual(42, Convert.ToInt32(map["int"].ToObject()));
+        Assert.AreEqual(3.5, Convert.ToDouble(map["float"].ToObject()));
+        Assert.AreEqual(true, map["bool"].ToObject());
+        Assert.IsNull(map["null"].ToObject());
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 250 }, (byte[])map["bin"].ToObject());
 
-        var json = (IDictionary<string, object>)map.Get("json");
+        var json = (IDictionary<string, object>)map["json"].ToObject();
         Assert.AreEqual(1L, Convert.ToInt64(json["a"]));
         CollectionAssert.AreEqual(new[] { "x", "y" }, ((IList<object>)json["b"]).ToArray());
 
-        Assert.AreEqual("value", ((YMap)map.Get("nested")).Get("deep"));
+        Assert.AreEqual("value", ((YMap)map["nested"].ToObject())["deep"].ToObject());
 
         // 'array' had its second element deleted in a later transaction.
-        var array = doc.GetArray("array").ToArray();
-        Assert.AreEqual(4, array.Count);
+        var array = doc.GetArray("array").ToArray().Select(v => v.ToObject()).ToArray();
+        Assert.AreEqual(4, array.Length);
         Assert.AreEqual("a", array[0]);
         Assert.AreEqual(false, array[1]);
-        CollectionAssert.AreEqual(new[] { "i0", "i1" }, ((YArray)array[3]).ToArray().ToArray());
+        CollectionAssert.AreEqual(new[] { "i0", "i1" }, ((YArray)array[3]).Select(v => v.ToObject()).ToList());
 
         Assert.AreEqual("plain bold tail", doc.GetText("text").ToString());
         var delta = doc.GetText("text").ToDelta();
@@ -84,7 +84,7 @@ public class YjsInteropTests
         }
 
         Assert.AreEqual("plain bold tail", copy.GetText("text").ToString());
-        Assert.AreEqual("value", ((YMap)copy.GetMap("map").Get("nested")).Get("deep"));
+        Assert.AreEqual("value", ((YMap)copy.GetMap("map")["nested"].ToObject())["deep"].ToObject());
 
         // ...and, for v1, is byte-identical to what Yjs itself emitted.
         if (!v2)

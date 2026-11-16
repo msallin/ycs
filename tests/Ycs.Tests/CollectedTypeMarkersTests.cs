@@ -13,11 +13,11 @@ public class CollectedTypeMarkersTests
     private static YArray Filled(YDoc doc, string name)
     {
         var array = doc.GetArray(name);
-        array.Push(Enumerable.Range(0, 400).Select(i => (object)i).ToList());
+        array.Add(Enumerable.Range(0, 400).Select(i => (object)i).ToList().Select(YValue.FromObject).ToArray());
         for (var i = 0; i < 400; i += 37)
         {
-            array.Get(i);
-            array.Insert(i, new object[] { "x" });
+            array[i].ToObject();
+            array.Insert(i, "x");
         }
 
         return array;
@@ -29,12 +29,12 @@ public class CollectedTypeMarkersTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var map = doc.GetMap("m");
         var held = new YArray();
-        map.Set("k", held);
-        held.Push(Enumerable.Range(0, 400).Select(i => (object)i).ToList());
-        held.Get(300);
+        map["k"] = held;
+        held.Add(Enumerable.Range(0, 400).Select(i => (object)i).ToList().Select(YValue.FromObject).ToArray());
+        held[300].ToObject();
         var before = held.DescribeSearchMarkers();
 
-        map.Delete("k");
+        map.Remove("k");
 
         Assert.AreEqual((false, ""), (before == "", held.DescribeSearchMarkers()));
     }
@@ -45,17 +45,17 @@ public class CollectedTypeMarkersTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var map = doc.GetMap("m");
         var held = new YArray();
-        map.Set("k", held);
-        held.Push(Enumerable.Range(0, 400).Select(i => (object)i).ToList());
-        held.Get(300);
+        map["k"] = held;
+        held.Add(Enumerable.Range(0, 400).Select(i => (object)i).ToList().Select(YValue.FromObject).ToArray());
+        held[300].ToObject();
         var other = Filled(doc, "o");
-        map.Delete("k");
+        map.Remove("k");
         var markers = other.DescribeSearchMarkers();
         var content = other.ToJson().ToString();
         var violations = other.SearchMarkerViolations();
 
-        held.Insert(0, new object[] { "q" });
-        held.Insert(0, new object[] { "r" });
+        held.Insert(0, "q");
+        held.Insert(0, "r");
 
         Assert.AreEqual((markers, content, violations), (other.DescribeSearchMarkers(), other.ToJson().ToString(), other.SearchMarkerViolations()));
     }

@@ -28,7 +28,7 @@ public sealed class YMapEvent : YEvent
 /// <summary>
 /// A shared Map implementation.
 /// </summary>
-public partial class YMap : YType, IEnumerable<KeyValuePair<string, object>>
+public partial class YMap : YType
 {
     internal const int YMapRefId = 1;
 
@@ -38,7 +38,7 @@ public partial class YMap : YType, IEnumerable<KeyValuePair<string, object>>
     internal override object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested)
     {
         var result = new Dictionary<string, object>();
-        foreach (var kvp in TypeMapEnumerateValues())
+        foreach (var kvp in EnumerateEntries())
         {
             if (kvp.Value is YType at)
             {
@@ -65,13 +65,13 @@ public partial class YMap : YType, IEnumerable<KeyValuePair<string, object>>
         RuntimeHelpers.EnsureSufficientExecutionStack();
         var map = new YMap();
 
-        foreach (var kvp in TypeMapEnumerateValues())
+        foreach (var kvp in EnumerateEntries())
         {
             // Bug fix vs. the original port: `TypeMapEnumerate()` yields raw `Item`s, not their
             // content values, so cloning used to store the `Item` itself as the value. Use
             // `TypeMapEnumerateValues()` (actual values) and recursively clone nested shared types,
             // matching Yjs' `clone()`: `map.set(key, value instanceof YType ? value.clone() : value)`.
-            map.Set(kvp.Key, kvp.Value is YType at ? at.InternalClone() : kvp.Value);
+            map.SetRaw(kvp.Key, kvp.Value is YType at ? at.InternalClone() : kvp.Value);
         }
 
         return map;
@@ -85,7 +85,7 @@ public partial class YMap : YType, IEnumerable<KeyValuePair<string, object>>
 
         foreach (var kvp in _prelimContent)
         {
-            Set(kvp.Key, kvp.Value);
+            SetRaw(kvp.Key, kvp.Value);
         }
 
         _prelimContent = null;

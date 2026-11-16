@@ -4,8 +4,6 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 namespace Ycs;
 
 public sealed partial class YXmlHook
@@ -17,5 +15,5 @@ public sealed partial class YXmlHook
 
     public string HookName { get; }
 
-    public new YXmlHook Clone() => InternalClone() as YXmlHook;
+    public new YXmlHook Clone() => (YXmlHook)InternalClone();
 }

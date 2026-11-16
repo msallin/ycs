@@ -87,9 +87,9 @@ public class YTestBase
             // Flush all messages.
         }
 
-        var userArrayValues = Users.Select(u => u.GetArray("array").ToArray()).ToList();
+        var userArrayValues = Users.Select(u => u.GetArray("array").Select(v => v.ToObject()).ToList()).ToList();
         var userMapValues = Users.Select(u => u.GetMap("map").ToList())
-            .Select(v => new Dictionary<string, object>(v)).ToList();
+            .Select(v => v.ToDictionary(kv => kv.Key, kv => kv.Value.ToObject())).ToList();
         var userTextValues = Users.Select(u => u.GetText("text").ToDelta()).ToList();
 
         foreach (var u in Users)
@@ -98,25 +98,25 @@ public class YTestBase
         }
 
         // Test array iterator.
-        CollectionAssert.AreEqual(Users[0].GetArray("array").ToArray().ToList(), Users[0].GetArray("array").ToList());
+        CollectionAssert.AreEqual(Users[0].GetArray("array").ToArray(), Users[0].GetArray("array").ToList());
 
         // Test map iterator.
-        Assert.AreEqual(userMapValues[0].Count, Users[0].GetMap("map").Keys().Count());
-        Assert.AreEqual(userMapValues[0].Count, Users[0].GetMap("map").Keys().Count());
-        Assert.AreEqual(userMapValues[0].Count, Users[0].GetMap("map").Values().Count());
+        Assert.AreEqual(userMapValues[0].Count, Users[0].GetMap("map").Keys.Count());
+        Assert.AreEqual(userMapValues[0].Count, Users[0].GetMap("map").Keys.Count());
+        Assert.AreEqual(userMapValues[0].Count, Users[0].GetMap("map").Values.Count());
 
         foreach (var kvp in Users[0].GetMap("map"))
         {
             var otherKvp = userMapValues[0].FirstOrDefault(v => string.Equals(v.Key, kvp.Key));
             Assert.IsTrue(userMapValues[0].Any(v => string.Equals(v.Key, kvp.Key)), $"key '{kvp.Key}' missing");
-            Assert.AreEqual(otherKvp.Value, kvp.Value);
+            Assert.AreEqual(otherKvp.Value, kvp.Value.ToObject());
         }
 
         // Compare all users.
         for (int i = 0; i < Users.Count - 1; i++)
         {
             // Compare arrays.
-            Assert.AreEqual(userArrayValues[i].Count, Users[i].GetArray("array").Length);
+            Assert.AreEqual(userArrayValues[i].Count, Users[i].GetArray("array").Count);
             CompareObjects(userArrayValues[i], userArrayValues[i + 1]);
 
             // Compare texts.
@@ -223,7 +223,7 @@ public class YTestBase
 
         for (int i = 0; i < arr1.Length; i++)
         {
-            CompareObjects(arr1.Get(i), arr2.Get(i));
+            CompareObjects(arr1[i].ToObject(), arr2[i].ToObject());
         }
     }
 
@@ -237,10 +237,10 @@ public class YTestBase
         Assert.IsTrue((map1 == null) == (map2 == null));
         Assert.AreEqual(map1.Count, map2.Count);
 
-        foreach (var key1 in map1.Keys())
+        foreach (var key1 in map1.Keys)
         {
             Assert.IsTrue(map2.ContainsKey(key1));
-            CompareObjects(map1.Get(key1), map2.Get(key1));
+            CompareObjects(map1[key1].ToObject(), map2[key1].ToObject());
         }
     }
 

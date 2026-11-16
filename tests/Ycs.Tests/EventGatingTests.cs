@@ -40,7 +40,7 @@ public class EventGatingTests
         var doc = new YDoc();
         var map = doc.GetMap("map");
         var text = new YText();
-        map.Set("text", text);
+        map["text"] = text;
         IReadOnlyList<YEvent> seen = null;
         map.ObserveDeep((deepEvents, _) => seen = deepEvents);
 
@@ -135,7 +135,7 @@ public class EventGatingTests
         doc.AfterTransaction += (_, tr) => tr._changed[map].Add("added");
         doc.AfterTransactionCleanup += (_, tr) => seen.AddRange(tr._changed[map]);
 
-        map.Set("key", 1);
+        map["key"] = 1;
 
         CollectionAssert.AreEqual(new[] { "key", "added" }, seen);
     }

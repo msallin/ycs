@@ -15,22 +15,22 @@ public class CollectedTypeReadTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var map = doc.GetMap("r");
-        map.Set("k", held);
+        map["k"] = held;
         fill(held);
-        map.Delete("k");
+        map.Remove("k");
         return held;
     }
 
-    private static YArray Array() => Collected(new YArray(), a => a.Push(new object[] { 1, 2, 3 }));
+    private static YArray Array() => Collected(new YArray(), a => a.Add(1, 2, 3));
 
-    private static YMap Map() => Collected(new YMap(), m => { m.Set("a", 1); m.Set("b", 2); });
+    private static YMap Map() => Collected(new YMap(), m => { m["a"] = 1; m["b"] = 2; });
 
     [TestMethod]
-    public void Get_CollectedArray_ReturnsNullLikeYjsUndefined()
+    public void Get_CollectedArray_HasNoValue()
     {
         var held = Array();
 
-        Assert.AreEqual((null, null), (held.Get(0), held.Get(5)));
+        Assert.AreEqual((false, false), (held.TryGetValue(0, out _), held.TryGetValue(5, out _)));
     }
 
     [TestMethod]
@@ -44,7 +44,7 @@ public class CollectedTypeReadTests
     {
         var held = Array();
 
-        Assert.AreEqual((0, 0, 0, 0), (held.ToArray().Count, held.Slice(0).Count, held.Slice(1, 2).Count, held.ToList().Count));
+        Assert.AreEqual((0, 0, 0, 0), (held.ToArray().Length, held.Slice(0, 0).Length, held.Count, held.ToList().Count));
     }
 
     [TestMethod]
@@ -58,19 +58,19 @@ public class CollectedTypeReadTests
     {
         var held = Array();
 
-        held.Push(new object[] { 9 });
-        held.Insert(0, new object[] { 9 });
-        held.Unshift(new object[] { 9 });
+        held.Add(9);
+        held.Insert(0, 9);
+        held.Insert(0, 9);
 
         Assert.AreEqual(0, held.Length);
     }
 
     [TestMethod]
-    public void Delete_FromACollectedArray_ThrowsLikeYjsLengthExceeded()
+    public void RemoveRange_FromACollectedArray_Throws()
     {
         var held = Array();
 
-        Assert.ThrowsExactly<Exception>(() => held.Delete(0, 1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => held.RemoveRange(0, 1));
     }
 
     [TestMethod]
@@ -78,7 +78,7 @@ public class CollectedTypeReadTests
     {
         var held = Map();
 
-        Assert.AreEqual((null, false, 0, 0, 0), (held.Get("a"), held.Has("a"), held.Size, held.Keys().Count(), held.Values().Count()));
+        Assert.AreEqual((false, false, 0, 0, 0), (held.TryGetValue("a", out _), held.ContainsKey("a"), held.Count, held.Keys.Count(), held.Values.Count()));
     }
 
     [TestMethod]
@@ -86,9 +86,9 @@ public class CollectedTypeReadTests
     {
         var held = Map();
 
-        held.Set("c", 3);
+        held["c"] = 3;
 
-        Assert.AreEqual((null, 0), (held.Get("c"), held.Size));
+        Assert.AreEqual((false, 0), (held.TryGetValue("c", out _), held.Count));
     }
 
     [TestMethod]
@@ -114,11 +114,12 @@ public class CollectedTypeReadTests
     {
         var held = Collected(new YXmlElement("p"), e =>
         {
-            e.Insert(0, new object[] { new YXmlText("x") });
+            e.Insert(0, new YXmlText("x"));
             e.SetAttribute("a", "1");
         });
 
-        Assert.AreEqual(("<p></p>", 0, null, null, 0, 0), (held.ToString(), held.Length, held.Get(0), held.GetAttribute("a"),
-            held.GetAttributes().Count, held.ToArray().Count));
+        Assert.AreEqual(("<p></p>", 0, YValue.Null, 0, 0), (held.ToString(), held.Count, held.GetAttribute("a"),
+            held.GetAttributes().Count, held.ToArray().Length));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => held[0]);
     }
 }

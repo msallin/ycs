@@ -14,7 +14,7 @@ public class YValueTests
     private static YValue Decoded(object? inserted, bool v2)
     {
         var a = new YDoc();
-        a.GetMap("m").Set("k", inserted!);
+        a.GetMap("m")["k"] = YValue.FromObject(inserted!);
         var b = new YDoc();
         if (v2)
         {
@@ -25,7 +25,7 @@ public class YValueTests
             b.ApplyUpdate(a.EncodeStateAsUpdate());
         }
 
-        return YValue.FromObject(b.GetMap("m").Get("k"));
+        return YValue.FromObject(b.GetMap("m")["k"].ToObject());
     }
 
     [TestMethod]

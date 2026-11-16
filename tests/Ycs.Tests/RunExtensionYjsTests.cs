@@ -42,7 +42,7 @@ public class RunExtensionYjsTests
         var peer = Doc(2);
         Sync(doc, peer);
         var pt = peer.GetText("t");
-        peer.GetMap("m").Set("k", 1);
+        peer.GetMap("m")["k"] = 1;
         pt.Insert(2, "e");
         pt.Remove(0, 1);
         m.Observe(_ => t.Insert(2, "f"));
@@ -60,18 +60,18 @@ public class RunExtensionYjsTests
         var a = doc.GetArray("t");
         var peer = Doc(2);
         var pa = peer.GetArray("t");
-        a.Insert(0, new object[] { 0 });
-        a.Delete(0, 1);
-        a.Insert(0, new object[] { 1 });
+        a.Insert(0, 0);
+        a.RemoveRange(0, 1);
+        a.Insert(0, 1);
         Sync(doc, peer);
-        pa.Delete(0, 1);
+        pa.RemoveRange(0, 1);
 
         doc.Transact(_ =>
         {
-            a.Insert(1, new object[] { 2 });
-            a.Insert(2, new object[] { 3 });
+            a.Insert(1, 2);
+            a.Insert(2, 3);
             Sync(peer, doc);
-            a.Insert(1, new object[] { 4 });
+            a.Insert(1, 4);
         });
 
         Assert.AreEqual(("4,2,3", "01040300010101740141030001c803010300027d027d03480301017d040103010002"), (string.Join(",", a.ToArray()), Hex(doc.EncodeStateAsUpdate())));
@@ -119,10 +119,10 @@ public class RunExtensionYjsTests
             var a = doc.GetArray("a");
             doc.Transact(_ =>
             {
-                a.Push(new object[] { 1 });
-                a.Push(new object[] { 2 });
-                a.Push(new object[] { 3 });
-                a.Delete(0, 3);
+                a.Add(1);
+                a.Add(2);
+                a.Add(3);
+                a.RemoveRange(0, 3);
             });
         });
 
@@ -134,16 +134,16 @@ public class RunExtensionYjsTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var a = doc.GetArray("a");
-        a.Push(new object[] { 1, 2 });
+        a.Add(1, 2);
         IList<object> read = null;
 
         doc.Transact(_ =>
         {
-            a.Push(new object[] { 3 });
+            a.Add(3);
             var snapshot = doc.CreateSnapshot();
-            a.Push(new object[] { 4 });
-            a.Push(new object[] { 5 });
-            read = a.ToArraySnapshot(snapshot);
+            a.Add(4);
+            a.Add(5);
+            read = a.ToArray(snapshot).Select(v => v.ToObject()).ToList();
         });
 
         Assert.AreEqual("1,2,3", string.Join(",", read));
@@ -258,14 +258,14 @@ public class RunExtensionYjsTests
             }
 
             fired = true;
-            y.Push(new object[] { 2 });
+            y.Add(2);
             y.Observe(e => added.Add(string.Join(",", e.Changes.Added.Select(i => $"{i.Id.Clock}+{i.Length}").Order(StringComparer.Ordinal))));
         });
 
         doc.Transact(_ =>
         {
             x.Insert(0, "x");
-            y.Push(new object[] { 1 });
+            y.Add(1);
         });
 
         Assert.AreEqual("1+1,2+1 | ", string.Join(" | ", added));
@@ -301,7 +301,7 @@ public class RunExtensionYjsTests
     public void Get_StaleMarkerBeyondTheIndex_ReturnsNothingAsYjs()
     {
         // Yjs reads the content at a negative offset (undefined), although index 1 holds a value.
-        var (result, v1) = StaleMarkerBeyondTheIndex(a => a.Get(1) ?? "undefined");
+        var (result, v1) = StaleMarkerBeyondTheIndex(a => a[1].ToObject() ?? "undefined");
 
         Assert.AreEqual(("undefined", "0206020041010001410200014102010141020201410203012801016d016b017d0102010008010161017d01870100010102010005"), (result, v1));
     }
@@ -311,7 +311,7 @@ public class RunExtensionYjsTests
     {
         var (result, v1) = StaleMarkerBeyondTheIndex(a =>
         {
-            a.Insert(1, new object[] { 7 });
+            a.Insert(1, 7);
             return "inserted";
         });
 
@@ -323,7 +323,7 @@ public class RunExtensionYjsTests
     {
         var (result, v1) = StaleMarkerBeyondTheIndex(a =>
         {
-            a.Delete(1, 1);
+            a.RemoveRange(1, 1);
             return "deleted";
         });
 
@@ -331,15 +331,15 @@ public class RunExtensionYjsTests
     }
 
     [TestMethod]
-    public void Get_NegativeIndex_ReturnsNothingAsYjs()
+    public void TryGetValue_NegativeIndex_IsFalse()
     {
         var doc = new YDoc();
         var a = doc.GetArray("a");
         var x = doc.GetXmlFragment("x");
-        a.Push(new object[] { 1, 2 });
-        x.Push(new object[] { new YXmlText("t") });
+        a.Add(1, 2);
+        x.Add(new YXmlText("t"));
 
-        Assert.AreEqual(((object)null, (object)null), (a.Get(-1), x.Get(-1)));
+        Assert.AreEqual((false, false), (a.TryGetValue(-1, out _), x.TryGetValue(-1, out _)));
     }
 
     /// <summary>
@@ -351,22 +351,22 @@ public class RunExtensionYjsTests
         var doc = Doc(1);
         var a = doc.GetArray("a");
         var m = doc.GetMap("m");
-        a.Insert(0, new object[] { 1 });
-        a.Push(new object[] { new YMap() });
+        a.Insert(0, 1);
+        a.Add(new YMap());
         var peer = Doc(2);
         Sync(doc, peer);
         var pa = peer.GetArray("a");
         for (var i = 0; i < 5; i++)
         {
-            pa.Insert(0, new object[] { new YMap() });
+            pa.Insert(0, new YMap());
         }
 
         Sync(peer, doc);
-        a.Get(5);
+        a[5].ToObject();
         peer.Transact(_ =>
         {
-            peer.GetMap("m").Set("k", 1);
-            pa.Delete(0, 5);
+            peer.GetMap("m")["k"] = 1;
+            pa.RemoveRange(0, 5);
         });
         object result = null;
         m.Observe(_ =>

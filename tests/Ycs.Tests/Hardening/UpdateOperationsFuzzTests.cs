@@ -32,9 +32,9 @@ public class UpdateOperationsFuzzTests
         a.GetText("t").Insert(0, "hello world");
         a.GetText("t").Format(0, 5, new Dictionary<string, YValue> { ["bold"] = true });
         a.GetText("t").Remove(2, 3);
-        a.GetMap("m").Set("k", new Dictionary<string, object> { ["n"] = 1.5, ["l"] = new List<object> { "x", null, true } });
-        a.GetArray("a").Insert(0, new object[] { 1, "two", new byte[] { 3 }, new YMap() });
-        a.GetArray("a").Delete(1, 1);
+        a.GetMap("m")["k"] = YValue.FromObject(new Dictionary<string, object> { ["n"] = 1.5, ["l"] = new List<object> { "x", null, true } });
+        a.GetArray("a").Insert(0, 1, "two", new byte[] { 3 }, new YMap());
+        a.GetArray("a").RemoveRange(1, 1);
         var xml = new YXmlElement("p");
         a.GetXmlFragment("x").Insert(0, new[] { xml });
         xml.SetAttribute("class", "c");

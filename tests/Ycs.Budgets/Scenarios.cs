@@ -44,9 +44,9 @@ internal static class Scenarios
             var doc = new YDoc(new YDocOptions { ClientId = 1 });
             doc.GetText("text").Insert(0, "hello world");
             var map = doc.GetMap("map");
-            map.Set("a", 1);
-            map.Set("b", "two");
-            map.Set("c", true);
+            map["a"] = 1;
+            map["b"] = "two";
+            map["c"] = true;
             return _ => doc.EncodeStateAsUpdate();
         }),
 
@@ -109,10 +109,10 @@ internal static class Scenarios
             var keys = Enumerable.Range(0, 100).Select(i => $"key{i}").ToArray();
             foreach (var key in keys)
             {
-                map.Set(key, 0);
+                map[key] = 0;
             }
 
-            return i => map.Set(keys[i % keys.Length], i);
+            return i => map[keys[i % keys.Length]] = i;
         }),
 
         new("text.insert-formatted-char-100k", 500, () =>
@@ -180,7 +180,7 @@ internal static class Scenarios
         new("array.push-100k-in-one-transaction", 3, () =>
         {
             // One operation is the whole transaction, on a fresh document: the pushes and the merge at its end.
-            var values = new object[] { 1L };
+            YValue value = 1L;
             return _ =>
             {
                 var doc = new YDoc(new YDocOptions { ClientId = 1 });
@@ -189,7 +189,7 @@ internal static class Scenarios
                 {
                     for (var i = 0; i < 100_000; i++)
                     {
-                        array.Push(values);
+                        array.Add(value);
                     }
                 });
             };
@@ -218,9 +218,9 @@ internal static class Scenarios
             // other by clock, which a marker lookup must not walk across.
             var doc = new YDoc(new YDocOptions { ClientId = 1 });
             var array = doc.GetArray("array");
-            array.Push(Enumerable.Range(0, 100_000).Select(i => (object)(long)i).ToList());
+            array.Add(Enumerable.Range(0, 100_000).Select(i => (object)(long)i).ToList().Select(YValue.FromObject).ToArray());
             var random = new Random(7);
-            return _ => array.Delete(random.Next(array.Length), 1);
+            return _ => array.RemoveRange(random.Next(array.Count), 1);
         }),
 
         new("doc.encode-state-with-pending-100k", 100, () =>

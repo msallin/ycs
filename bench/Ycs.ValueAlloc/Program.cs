@@ -20,7 +20,7 @@ static long Allocated(Action action)
 }
 
 var source = new YDoc();
-source.GetArray("a").Add(Items());
+source.GetArray("a").Add(Items().Select(YValue.FromObject).ToArray());
 var update = source.EncodeStateAsUpdate();
 for (var warm = 0; warm < 3; warm++)
 {
@@ -30,7 +30,7 @@ for (var warm = 0; warm < 3; warm++)
 var decoded = new YDoc();
 var decode = Allocated(() => decoded.ApplyUpdate(update));
 var encode = Allocated(() => decoded.EncodeStateAsUpdate());
-var items = Items();
+var items = Items().Select(YValue.FromObject).ToArray();
 var target = new YDoc();
 var insert = Allocated(() => target.GetArray("a").Add(items));
 Console.WriteLine($"update {update.Length} B; decode {decode} B; encode {encode} B; insert {insert} B");

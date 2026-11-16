@@ -385,29 +385,24 @@ sealed class Ycs.UpdateMeta : System.IEquatable<UpdateMeta>
     static bool op_Equality(UpdateMeta? left, UpdateMeta? right)
     static bool op_Inequality(UpdateMeta? left, UpdateMeta? right)
     void Deconstruct(out System.Collections.Generic.IReadOnlyDictionary<long, long> From, out System.Collections.Generic.IReadOnlyDictionary<long, long> To)
-sealed class Ycs.YArray : YArrayBase
-    System.Collections.Generic.IList<object> ToArray()
-    System.Collections.Generic.IReadOnlyList<object> Slice(int start = 0)
-    System.Collections.Generic.IReadOnlyList<object> Slice(int start, int end)
-    System.Collections.Generic.List<TResult> Map<TResult>(System.Func<object, int, YArray, TResult> f)
+sealed class Ycs.YArray : YArrayBase, System.Collections.Generic.IEnumerable<YValue>, System.Collections.Generic.IReadOnlyCollection<YValue>, System.Collections.Generic.IReadOnlyList<YValue>, System.Collections.IEnumerable
+    System.Collections.Generic.IEnumerator<YValue> GetEnumerator()
     System.IDisposable Observe(System.Action<YArrayEvent> handler)
     YArray Clone()
     YArray()
-    YArray(System.Collections.Generic.IEnumerable<object> prelimContent = null)
-    object Get(int index)
-    object this[int index] { get; }
-    override int Length { get; }
+    YArray(System.ReadOnlySpan<YValue> values)
+    YValue this[int index] { get; }
+    YValue[] Slice(int start, int length)
+    YValue[] ToArray()
+    YValue[] ToArray(Snapshot snapshot)
+    bool TryGetValue(int index, out YValue value)
+    int Count { get; }
     override object ToJson()
-    static YArray From(System.Collections.Generic.IEnumerable<object> items)
-    void Add(System.Collections.Generic.ICollection<object> content)
-    void Delete(int index, int length = 1)
-    void ForEach(System.Action<object, int, YArray> f)
-    void Insert(int index, System.Collections.Generic.ICollection<object> content)
-    void Push(System.Collections.Generic.ICollection<object> content)
-    void Unshift(System.Collections.Generic.ICollection<object> content)
-abstract class Ycs.YArrayBase : YType, System.Collections.Generic.IEnumerable<object>, System.Collections.IEnumerable
-    System.Collections.Generic.IEnumerator<object> GetEnumerator()
-    System.Collections.Generic.IList<object> ToArraySnapshot(Snapshot snapshot)
+    void Add(System.ReadOnlySpan<YValue> values)
+    void Insert(int index, System.ReadOnlySpan<YValue> values)
+    void RemoveAt(int index)
+    void RemoveRange(int index, int count)
+abstract class Ycs.YArrayBase : YType
 sealed class Ycs.YArrayEvent : YEvent
 readonly struct Ycs.YChange : System.IEquatable<YChange>
     YChange(YChangeKind Kind, long? User)
@@ -501,26 +496,24 @@ abstract class Ycs.YEvent
     bool Deletes(ItemView view)
     virtual System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
     virtual YChanges Changes { get; }
-class Ycs.YMap : YType, System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>>, System.Collections.IEnumerable
-    System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> Entries()
-    System.Collections.Generic.IEnumerable<object> Values()
-    System.Collections.Generic.IEnumerable<string> Keys()
-    System.Collections.Generic.IEnumerator<System.Collections.Generic.KeyValuePair<string, object>> GetEnumerator()
+class Ycs.YMap : YType, System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>>, System.Collections.Generic.IReadOnlyCollection<System.Collections.Generic.KeyValuePair<string, YValue>>, System.Collections.Generic.IReadOnlyDictionary<string, YValue>, System.Collections.IEnumerable
+    System.Collections.Generic.IEnumerable<YValue> Values { get; }
+    System.Collections.Generic.IEnumerable<string> Keys { get; }
+    System.Collections.Generic.IEnumerator<System.Collections.Generic.KeyValuePair<string, YValue>> GetEnumerator()
+    System.Collections.Generic.IReadOnlyDictionary<string, YValue> ToDictionary(Snapshot snapshot)
     System.IDisposable Observe(System.Action<YMapEvent> handler)
     YMap Clone()
     YMap()
-    YMap(System.Collections.Generic.IDictionary<string, object> entries)
+    YMap(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>> entries)
+    YValue this[string key] { get; set; }
     bool ContainsKey(string key)
-    bool Has(string key)
-    bool TryGet(string key, out object value)
+    bool Remove(string key)
+    bool TryGetValue(string key, Snapshot snapshot, out YValue value)
+    bool TryGetValue(string key, out YValue value)
     int Count { get; }
-    int Size { get; }
-    object Get(string key)
     override object ToJson()
+    void Add(string key, YValue value)
     void Clear()
-    void Delete(string key)
-    void ForEach(System.Action<object, string, YMap> f)
-    void Set(string key, object value)
 sealed class Ycs.YMapEvent : YEvent
     System.Collections.Generic.IReadOnlySet<string> KeysChanged { get; }
 class Ycs.YText : YArrayBase
@@ -534,6 +527,7 @@ class Ycs.YText : YArrayBase
     bool RemoveNonText()
     int CleanupFormatting()
     int CopyTo(System.Span<char> destination)
+    int Length { get; }
     override object ToJson()
     override string ToString()
     void ApplyDelta(System.Collections.Generic.IEnumerable<Delta> delta, bool sanitize = true)
@@ -550,13 +544,10 @@ sealed class Ycs.YTextEvent : YEvent
     override System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
     override YChanges Changes { get; }
 abstract class Ycs.YType
-    System.Collections.Generic.IDictionary<string, object> GetAllSnapshot(Snapshot snapshot)
     System.IDisposable ObserveDeep(System.Action<System.Collections.Generic.IReadOnlyList<YEvent>, Transaction> handler)
     YDoc Doc { get; }
     YType Parent { get; }
     abstract object ToJson()
-    object GetSnapshot(string key, Snapshot snapshot)
-    virtual int Length { get; }
 static class Ycs.YUpdate
     static DecodedUpdate Decode(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
     static UpdateMeta ParseMeta(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
@@ -589,6 +580,7 @@ readonly struct Ycs.YValue : System.IEquatable<YValue>
     bool TryGetInt64(out long value)
     bool TryGetMember(string name, out YValue value)
     bool TryGetShared(out YType? value)
+    bool TryGetSharedType<T>(out T? value) where T : YType
     bool TryGetString(out string? value)
     byte[] GetBytes()
     double GetDouble()
@@ -638,42 +630,43 @@ enum Ycs.YValueKind : int
     SharedType = 8
     String = 4
 sealed class Ycs.YXmlElement : YXmlFragment
-    System.Collections.Generic.IDictionary<string, object> GetAttributes(Snapshot snapshot = null)
+    System.Collections.Generic.IReadOnlyDictionary<string, YValue> GetAttributes(Snapshot? snapshot = null)
+    YType? NextSibling { get; }
+    YType? PrevSibling { get; }
+    YValue GetAttribute(string attributeName)
     YXmlElement Clone()
     YXmlElement()
     YXmlElement(string nodeName)
     bool HasAttribute(string attributeName)
-    object GetAttribute(string attributeName)
-    object NextSibling { get; }
-    object PrevSibling { get; }
     override string ToString()
     string NodeName { get; }
     void RemoveAttribute(string attributeName)
-    void SetAttribute(string attributeName, object attributeValue)
+    void SetAttribute(string attributeName, YValue attributeValue)
 sealed class Ycs.YXmlEvent : YEvent
     System.Collections.Generic.IReadOnlySet<string> AttributesChanged { get; }
     bool ChildListChanged { get; }
-class Ycs.YXmlFragment : YArrayBase
+class Ycs.YXmlFragment : YArrayBase, System.Collections.Generic.IEnumerable<YType>, System.Collections.Generic.IReadOnlyCollection<YType>, System.Collections.Generic.IReadOnlyList<YType>, System.Collections.IEnumerable
+    System.Collections.Generic.IEnumerable<YType> CreateTreeWalker(System.Func<YType, bool>? filter = null)
     System.Collections.Generic.IEnumerable<YXmlElement> QuerySelectorAll(string query)
-    System.Collections.Generic.IList<object> ToArray()
-    System.Collections.Generic.IReadOnlyList<object> Slice(int start = 0)
-    System.Collections.Generic.IReadOnlyList<object> Slice(int start, int end)
+    System.Collections.Generic.IEnumerator<YType> GetEnumerator()
     System.IDisposable Observe(System.Action<YXmlEvent> handler)
-    YXmlElement QuerySelector(string query)
+    YType this[int index] { get; }
+    YType? FirstChild { get; }
+    YType[] Slice(int start, int length)
+    YType[] ToArray()
+    YType[] ToArray(Snapshot snapshot)
+    YXmlElement? QuerySelector(string query)
     YXmlFragment Clone()
     YXmlFragment()
-    YXmlTreeWalker CreateTreeWalker(System.Func<YType, bool> filter = null)
-    object FirstChild { get; }
-    object Get(int index)
-    override int Length { get; }
+    bool TryGetValue(int index, out YType? value)
+    int Count { get; }
     override object ToJson()
     override string ToString()
-    void Delete(int index, int length = 1)
-    void ForEach(System.Action<object, int, YXmlFragment> f)
-    void Insert(int index, System.Collections.Generic.ICollection<object> content)
-    void InsertAfter(YType refItem, System.Collections.Generic.ICollection<object> content)
-    void Push(System.Collections.Generic.ICollection<object> content)
-    void Unshift(System.Collections.Generic.ICollection<object> content)
+    void Add(System.ReadOnlySpan<YType> children)
+    void Insert(int index, System.ReadOnlySpan<YType> children)
+    void InsertAfter(YType? reference, System.ReadOnlySpan<YType> children)
+    void RemoveAt(int index)
+    void RemoveRange(int index, int count)
 sealed class Ycs.YXmlHook : YMap
     YXmlHook Clone()
     YXmlHook(string hookName)
@@ -685,9 +678,3 @@ sealed class Ycs.YXmlText : YText
     YXmlText(string? text = null)
     override object ToJson()
     override string ToString()
-sealed class Ycs.YXmlTreeWalker : System.Collections.Generic.IEnumerable<YType>, System.Collections.Generic.IEnumerator<YType>, System.Collections.IEnumerable, System.Collections.IEnumerator, System.IDisposable
-    System.Collections.Generic.IEnumerator<YType> GetEnumerator()
-    YType Current { get; }
-    bool MoveNext()
-    void Dispose()
-    void Reset()

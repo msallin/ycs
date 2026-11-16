@@ -17,13 +17,13 @@ public class EventDispatchParityTests
         var doc = new YDoc();
         var r = doc.GetMap("r");
         var mid = new YMap();
-        r.Set("mid", mid);
+        r["mid"] = mid;
         var leaf = new YArray();
-        mid.Set("leaf", leaf);
+        mid["leaf"] = leaf;
         var log = new List<string>();
         mid.ObserveDeep((deepEvents, _) => log.AddRange(deepEvents.Select(ev => (ev.CurrentTarget == mid ? "mid" : "other") + PathOf(ev))));
 
-        leaf.Add(new object[] { 1 });
+        leaf.Add(1);
 
         CollectionAssert.AreEqual(new[] { "mid[leaf]" }, log);
     }
@@ -34,9 +34,9 @@ public class EventDispatchParityTests
         var doc = new YDoc();
         var r = doc.GetMap("r");
         var mid = new YMap();
-        r.Set("mid", mid);
+        r["mid"] = mid;
         var leaf = new YArray();
-        mid.Set("leaf", leaf);
+        mid["leaf"] = leaf;
         var log = new List<string>();
         doc.AfterTransaction += (_, tr) =>
         {
@@ -46,7 +46,7 @@ public class EventDispatchParityTests
             }
         };
 
-        leaf.Add(new object[] { 1 });
+        leaf.Add(1);
 
         CollectionAssert.AreEqual(new[] { "leaf[]" }, log);
     }
@@ -57,14 +57,14 @@ public class EventDispatchParityTests
         var doc = new YDoc();
         var root = doc.GetMap("root");
         var child = new YMap();
-        root.Set("c", child);
+        root["c"] = child;
         var log = new List<string>();
         root.ObserveDeep((deepEvents, _) => log.AddRange(deepEvents.Select(ev => (ev.Target == root ? "root" : "child") + (ev.CurrentTarget == root ? " root" : " other") + PathOf(ev))));
 
         doc.Transact(_ =>
         {
-            root.Set("x", 1);
-            child.Set("y", 2);
+            root["x"] = 1;
+            child["y"] = 2;
         });
 
         CollectionAssert.AreEqual(new[] { "root root[]", "child root[c]" }, log);
@@ -78,7 +78,7 @@ public class EventDispatchParityTests
         var p = doc.GetMap("P");
         var c = doc.GetArray("C");
         var b = new YArray();
-        p.Set("b", b);
+        p["b"] = b;
         var log = new List<string>();
         a.Observe(_ => log.Add("A"));
         p.Observe(_ => log.Add("P"));
@@ -87,10 +87,10 @@ public class EventDispatchParityTests
 
         doc.Transact(_ =>
         {
-            a.Add(new object[] { 1 });
-            b.Add(new object[] { 1 });
-            p.Delete("b");
-            c.Add(new object[] { 1 });
+            a.Add(1);
+            b.Add(1);
+            p.Remove("b");
+            c.Add(1);
         });
 
         CollectionAssert.AreEqual(new[] { "A", "P", "C" }, log);
@@ -109,7 +109,7 @@ public class EventDispatchParityTests
         });
         a.Observe(_ => log.Add("2"));
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => a.Add(new object[] { 1 }));
+        Assert.ThrowsExactly<InvalidOperationException>(() => a.Add(1));
 
         CollectionAssert.AreEqual(new[] { "1", "2" }, log);
     }
@@ -127,7 +127,7 @@ public class EventDispatchParityTests
         });
         a.ObserveDeep((_, _) => log.Add("2"));
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => a.Add(new object[] { 1 }));
+        Assert.ThrowsExactly<InvalidOperationException>(() => a.Add(1));
 
         CollectionAssert.AreEqual(new[] { "1", "2" }, log);
     }
@@ -139,16 +139,16 @@ public class EventDispatchParityTests
         var root = doc.GetMap("root");
         var x = new YArray();
         var y = new YArray();
-        root.Set("x", x);
-        root.Set("y", y);
-        x.Observe(_ => root.Delete("y"));
+        root["x"] = x;
+        root["y"] = y;
+        x.Observe(_ => root.Remove("y"));
         var log = new List<string>();
         root.ObserveDeep((deepEvents, _) => log.Add(string.Join(",", deepEvents.Select(ev => ev.Target == x ? "x" : ev.Target == y ? "y" : "other"))));
 
         doc.Transact(_ =>
         {
-            y.Add(new object[] { 1 });
-            x.Add(new object[] { 1 });
+            y.Add(1);
+            x.Add(1);
         });
 
         CollectionAssert.AreEqual(new[] { "x", "other" }, log);
@@ -161,8 +161,8 @@ public class EventDispatchParityTests
         var root = doc.GetMap("root");
         var x = new YArray();
         var y = new YArray();
-        root.Set("x", x);
-        root.Set("y", y);
+        root["x"] = x;
+        root["y"] = y;
         var log = new List<string>();
         var attached = false;
         y.Observe(_ =>
@@ -176,8 +176,8 @@ public class EventDispatchParityTests
 
         doc.Transact(_ =>
         {
-            x.Add(new object[] { 1 });
-            y.Add(new object[] { 1 });
+            x.Add(1);
+            y.Add(1);
         });
 
         CollectionAssert.AreEqual(new[] { "x,y" }, log);

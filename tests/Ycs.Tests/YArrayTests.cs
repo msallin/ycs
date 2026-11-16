@@ -21,11 +21,11 @@ public class YArrayTests : YTestBase
         var doc1 = new YDoc();
         var doc2 = new YDoc();
         var content = new List<object> { "hi" };
-        doc1.GetArray("array").Insert(0, content);
+        doc1.GetArray("array").Insert(0, content.Select(YValue.FromObject).ToArray());
         var update = doc1.EncodeStateAsUpdate(format: UpdateFormat.V2);
         doc2.ApplyUpdate(update, format: UpdateFormat.V2);
 
-        CollectionAssert.AreEqual(content, (ICollection)doc2.GetArray("array").ToArray());
+        CollectionAssert.AreEqual(content, doc2.GetArray("array").ToArray().Select(v => v.ToObject()).ToList());
     }
 
     [TestMethod]
@@ -34,12 +34,12 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        array0.Delete(0, 0);
+        array0.RemoveRange(0, 0);
 
-        Assert.ThrowsExactly<Exception>(() => array0.Delete(1, 1));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => array0.RemoveRange(1, 1));
 
-        array0.Insert(0, new List<object> { "A" });
-        array0.Delete(1, 0);
+        array0.Insert(0, "A");
+        array0.RemoveRange(1, 0);
 
         CompareUsers();
     }
@@ -50,13 +50,13 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        array0.Insert(0, new List<object> { 1, true, false });
-        CollectionAssert.AreEqual(new object[] { 1, true, false }, (ICollection)array0.ToArray());
+        array0.Insert(0, 1, true, false);
+        CollectionAssert.AreEqual(new object[] { 1, true, false }, array0.ToArray().Select(v => v.ToObject()).ToList());
 
         Connector.FlushAllMessages();
 
         var array1 = Arrays[Users[1]];
-        CollectionAssert.AreEqual(new object[] { 1, true, false }, (ICollection)array1.ToArray());
+        CollectionAssert.AreEqual(new object[] { 1, true, false }, array1.ToArray().Select(v => v.ToObject()).ToList());
 
         CompareUsers();
     }
@@ -66,9 +66,9 @@ public class YArrayTests : YTestBase
     {
         Init(users: 3);
 
-        Arrays[Users[0]].Insert(0, new object[] { 0 });
-        Arrays[Users[1]].Insert(0, new object[] { 0 });
-        Arrays[Users[2]].Insert(0, new object[] { 0 });
+        Arrays[Users[0]].Insert(0, 0);
+        Arrays[Users[1]].Insert(0, 0);
+        Arrays[Users[2]].Insert(0, 0);
 
         CompareUsers();
     }
@@ -82,14 +82,14 @@ public class YArrayTests : YTestBase
         var array1 = Arrays[Users[1]];
         var array2 = Arrays[Users[2]];
 
-        array0.Insert(0, new List<object> { "x", "y", "z" });
+        array0.Insert(0, "x", "y", "z");
 
         Connector.FlushAllMessages();
 
-        array0.Insert(1, new object[] { 0 });
-        array1.Delete(0);
-        array1.Delete(1, 1);
-        array2.Insert(1, new object[] { 2 });
+        array0.Insert(1, 0);
+        array1.RemoveAt(0);
+        array1.RemoveRange(1, 1);
+        array2.Insert(1, 2);
 
         CompareUsers();
     }
@@ -103,15 +103,15 @@ public class YArrayTests : YTestBase
         var array1 = Arrays[Users[1]];
         var array2 = Arrays[Users[2]];
 
-        array0.Insert(0, new[] { "x", "y" });
+        array0.Insert(0, "x", "y");
         Connector.FlushAllMessages();
 
         Users[1].Disconnect();
         Users[2].Disconnect();
 
-        array0.Insert(1, new[] { "user0" });
-        array1.Insert(1, new[] { "user1" });
-        array2.Insert(1, new[] { "user2" });
+        array0.Insert(1, "user0");
+        array1.Insert(1, "user1");
+        array2.Insert(1, "user2");
 
         Users[1].Connect();
         Users[2].Connect();
@@ -128,17 +128,17 @@ public class YArrayTests : YTestBase
         var array0 = Arrays[Users[0]];
         var array1 = Arrays[Users[1]];
 
-        array0.Insert(0, new[] { "x", "y" });
+        array0.Insert(0, "x", "y");
         Connector.FlushAllMessages();
 
         Users[1].Disconnect();
         Users[2].Disconnect();
 
-        array0.Insert(1, new[] { "user0" });
-        array1.Insert(1, new[] { "user1" });
+        array0.Insert(1, "user0");
+        array1.Insert(1, "user1");
 
-        CollectionAssert.AreEqual(new[] { "x", "user0", "y" }, (ICollection)array0.ToArray());
-        CollectionAssert.AreEqual(new[] { "x", "user1", "y" }, (ICollection)array1.ToArray());
+        CollectionAssert.AreEqual(new[] { "x", "user0", "y" }, array0.ToArray().Select(v => v.ToObject()).ToList());
+        CollectionAssert.AreEqual(new[] { "x", "user1", "y" }, array1.ToArray().Select(v => v.ToObject()).ToList());
 
         Users[1].Connect();
         Users[2].Connect();
@@ -154,12 +154,12 @@ public class YArrayTests : YTestBase
         var array0 = Arrays[Users[0]];
         var array1 = Arrays[Users[1]];
 
-        array0.Insert(0, new[] { "x", "y" });
+        array0.Insert(0, "x", "y");
         Connector.FlushAllMessages();
         Users[1].Disconnect();
 
-        array0.Delete(0, 2);
-        array1.Delete(1, 1);
+        array0.RemoveRange(0, 2);
+        array1.RemoveRange(1, 1);
 
         Users[1].Connect();
 
@@ -174,10 +174,10 @@ public class YArrayTests : YTestBase
         var array0 = Arrays[Users[0]];
         var array1 = Arrays[Users[1]];
 
-        array0.Insert(0, new[] { "x", "y", "z" });
+        array0.Insert(0, "x", "y", "z");
         Connector.FlushAllMessages();
         Users[0].Disconnect();
-        array1.Delete(0, 3);
+        array1.RemoveRange(0, 3);
         Users[0].Connect();
 
         CompareUsers();
@@ -196,15 +196,15 @@ public class YArrayTests : YTestBase
             evt = e;
         });
 
-        array0.Insert(0, new object[] { 0, 1, 2 });
+        array0.Insert(0, 0, 1, 2);
         Assert.IsNotNull(evt);
         evt = null;
 
-        array0.Delete(0);
+        array0.RemoveAt(0);
         Assert.IsNotNull(evt);
         evt = null;
 
-        array0.Delete(0, 2);
+        array0.RemoveRange(0, 2);
         Assert.IsNotNull(evt);
         evt = null;
 
@@ -225,7 +225,7 @@ public class YArrayTests : YTestBase
             {
                 // Inserting, will call this observer again.
                 // We expect that this observer is called after this handler finishes.
-                array0.Insert(1, new object[] { 1 });
+                array0.Insert(1, 1);
                 values.Add(0);
             }
             else
@@ -235,10 +235,10 @@ public class YArrayTests : YTestBase
             }
         });
 
-        array0.Insert(0, new object[] { 0 });
+        array0.Insert(0, 0);
 
         CollectionAssert.AreEqual(new object[] { 0, 1 }, values);
-        CollectionAssert.AreEqual(new object[] { 0, 1 }, (ICollection)array0.ToArray());
+        CollectionAssert.AreEqual(new object[] { 0, 1 }, array0.ToArray().Select(v => v.ToObject()).ToList());
 
         CompareUsers();
     }
@@ -256,11 +256,11 @@ public class YArrayTests : YTestBase
             evt = e;
         });
 
-        array0.Insert(0, new object[] { new YArray() });
+        array0.Insert(0, new YArray());
         Assert.IsNotNull(evt);
         evt = null;
 
-        array0.Delete(0);
+        array0.RemoveAt(0);
         Assert.IsNotNull(evt);
         evt = null;
 
@@ -280,12 +280,12 @@ public class YArrayTests : YTestBase
             events = deepEvents;
         });
 
-        array0.Insert(0, new[] { new YMap() });
+        array0.Insert(0, new YMap());
 
         Users[0].Transact(tr =>
         {
-            ((YMap)array0.Get(0)).Set("a", "a");
-            array0.Insert(0, new object[] { 0 });
+            ((YMap)array0[0].ToObject())["a"] = "a";
+            array0.Insert(0, 0);
         });
 
         for (int i = 1; i < events.Count; i++)
@@ -309,7 +309,7 @@ public class YArrayTests : YTestBase
 
         var newArr = new YArray();
 
-        array0.Insert(0, new object[] { newArr, 4, "dtrn" });
+        array0.Insert(0, newArr, 4, "dtrn");
         Assert.IsNotNull(changes);
         Assert.AreEqual(2, changes.Added.Count);
         Assert.AreEqual(0, changes.Deleted.Count);
@@ -317,14 +317,14 @@ public class YArrayTests : YTestBase
         CollectionAssert.AreEqual(new object[] { newArr, 4, "dtrn" }, ((Delta.InsertItems)changes.Delta[0]).Items.Select(v => v.ToObject()).ToList());
         changes = null;
 
-        array0.Delete(0, 2);
+        array0.RemoveRange(0, 2);
         Assert.IsNotNull(changes);
         Assert.AreEqual(0, changes.Added.Count);
         Assert.AreEqual(2, changes.Deleted.Count);
         Assert.AreEqual(2, changes.Delta[0].Deleted());
         changes = null;
 
-        array0.Insert(1, new object[] { 0.1 });
+        array0.Insert(1, 0.1);
         Assert.IsNotNull(changes);
         Assert.AreEqual(1, changes.Added.Count);
         Assert.AreEqual(0, changes.Deleted.Count);
@@ -348,9 +348,9 @@ public class YArrayTests : YTestBase
             events.Add(e);
         });
 
-        array0.Insert(0, new object[] { "hi", new YMap() });
+        array0.Insert(0, "hi", new YMap());
         Assert.AreEqual(1, events.Count, "Event is triggered exactly once for insertion of two elements");
-        array0.Delete(1);
+        array0.RemoveAt(1);
         Assert.AreEqual(2, events.Count, "Event is triggered exactly once for deletion");
 
         CompareUsers();
@@ -372,8 +372,8 @@ public class YArrayTests : YTestBase
                 fired = true;
             });
 
-            array0.Insert(0, new object[] { newMap });
-            newMap.Set("tst", 42);
+            array0.Insert(0, newMap);
+            newMap["tst"] = 42;
         });
 
         Assert.IsFalse(fired, "Event does not trigger");
@@ -385,11 +385,11 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        array0.Insert(0, new object[] { "x", "y", "z" });
+        array0.Insert(0, "x", "y", "z");
         Connector.FlushAllMessages();
 
         Users[0].Disconnect();
-        array0.Delete(0, 3);
+        array0.RemoveRange(0, 3);
         Users[0].Connect();
         Connector.FlushAllMessages();
 
@@ -409,7 +409,7 @@ public class YArrayTests : YTestBase
             evt = e;
         });
 
-        array0.Insert(0, new object[] { "stuff" });
+        array0.Insert(0, "stuff");
         Assert.AreSame(array0, evt.Target, "Target property is set correctly");
     }
 
@@ -427,7 +427,7 @@ public class YArrayTests : YTestBase
             evt = e;
         });
 
-        array1.Insert(0, new object[] { "stuff" });
+        array1.Insert(0, "stuff");
         Connector.FlushAllMessages();
 
         Assert.AreSame(array0, evt.Target, "Target property is set correctly");
@@ -445,14 +445,14 @@ public class YArrayTests : YTestBase
         for (int i = 0; i < numItems; i++)
         {
             var map = new YMap();
-            map.Set("value", i);
-            arr.Add(new[] { map });
+            map["value"] = i;
+            arr.Add(map);
         }
 
         int cnt = 0;
         foreach (var item in arr)
         {
-            Assert.AreEqual(cnt++, (item as YMap).Get("value"));
+            Assert.AreEqual(cnt++, (item.ToObject() as YMap)["value"].ToObject());
         }
     }
 
@@ -462,14 +462,14 @@ public class YArrayTests : YTestBase
         Init(users: 1);
         var arr = Arrays[Users[0]];
 
-        arr.Insert(0, new object[] { 1, 2, 3 });
-        CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, arr.Slice(0).ToArray());
-        CollectionAssert.AreEqual(new object[] { 2, 3 }, arr.Slice(1).ToArray());
-        CollectionAssert.AreEqual(new object[] { 1, 2 }, arr.Slice(0, -1).ToArray());
+        arr.Insert(0, 1, 2, 3);
+        CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, arr.Slice(0, arr.Count).Select(v => v.ToObject()).ToArray());
+        CollectionAssert.AreEqual(new object[] { 2, 3 }, arr.Slice(1, arr.Count - 1).Select(v => v.ToObject()).ToArray());
+        CollectionAssert.AreEqual(new object[] { 1, 2 }, arr.Slice(0, arr.Count - 1).Select(v => v.ToObject()).ToArray());
 
-        arr.Insert(0, new object[] { 0 });
-        CollectionAssert.AreEqual(new object[] { 0, 1, 2, 3 }, arr.Slice(0).ToArray());
-        CollectionAssert.AreEqual(new object[] { 0, 1 }, arr.Slice(0, 2).ToArray());
+        arr.Insert(0, 0);
+        CollectionAssert.AreEqual(new object[] { 0, 1, 2, 3 }, arr.Slice(0, arr.Count).Select(v => v.ToObject()).ToArray());
+        CollectionAssert.AreEqual(new object[] { 0, 1 }, arr.Slice(0, 2).Select(v => v.ToObject()).ToArray());
     }
 
     [TestMethod]
@@ -513,8 +513,8 @@ public class YArrayTests : YTestBase
                 var oldContent = yarray.ToArray().ToList();
                 // Debug.WriteLine($"INSERT by {user.ClientId} at pos {pos}, oldContent: {string.Join(",", oldContent)}, adds: {string.Join(",", content)}");
 
-                yarray.Insert(pos, content);
-                oldContent.InsertRange(pos, content);
+                yarray.Insert(pos, content.Select(YValue.FromObject).ToArray());
+                oldContent.InsertRange(pos, content.Select(YValue.FromObject));
 
                 var newContent = yarray.ToArray();
                 // Debug.WriteLine($"New content: {string.Join(",", newContent)}");
@@ -528,10 +528,10 @@ public class YArrayTests : YTestBase
                 var pos = rand.Next(0, yarray.Length + 1);
                 // Debug.WriteLine($"ARRAY by {user.ClientId} at pos {pos}");
 
-                yarray.Insert(pos, new[] { new YArray() });
+                yarray.Insert(pos, new YArray());
 
-                var arr = (YArray)yarray.Get(pos);
-                arr.Insert(0, new object[] { 1, 2, 3 });
+                var arr = (YArray)yarray[pos].ToObject();
+                arr.Insert(0, 1, 2, 3);
             },
 
             // Insert map
@@ -541,12 +541,12 @@ public class YArrayTests : YTestBase
                 var pos = rand.Next(0, yarray.Length + 1);
                 // Debug.WriteLine($"MAP by {user.ClientId} at pos {pos}");
 
-                yarray.Insert(pos, new[] { new YMap() });
+                yarray.Insert(pos, new YMap());
 
-                var map = (YMap)yarray.Get(pos);
-                map.Set("someprop", 42);
-                map.Set("someprop", 43);
-                map.Set("someprop", 44);
+                var map = (YMap)yarray[pos].ToObject();
+                map["someprop"] = 42;
+                map["someprop"] = 43;
+                map["someprop"] = 44;
             },
 
             // Delete
@@ -563,7 +563,7 @@ public class YArrayTests : YTestBase
                     var oldContent = yarray.ToArray().ToList();
                     // Debug.WriteLine($"DELETE by {user.ClientId} at pos {somePos}, len: {delLength}, oldContent: {string.Join(",", oldContent)}");
 
-                    yarray.Delete(somePos, delLength);
+                    yarray.RemoveRange(somePos, delLength);
                     oldContent.RemoveRange(somePos, delLength);
 
                     var newContent = yarray.ToArray();

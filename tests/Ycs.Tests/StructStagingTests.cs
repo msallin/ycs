@@ -101,7 +101,7 @@ public class StructStagingTests
         doc.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
-            doc.GetArray("a").Insert(0, new List<object> { i });
+            doc.GetArray("a").Insert(0, i);
         }
 
         var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);

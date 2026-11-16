@@ -13,7 +13,7 @@ public abstract partial class YType
     public YDoc Doc { get; private protected set; }
     public YType Parent => ParentType;
 
-    public virtual int Length { get; internal set; }
+    internal virtual int Length { get; set; }
 
     /// <summary>Transforms this shared type into a JSON-compatible representation (mirrors Yjs' <c>toJSON()</c>).</summary>
     public abstract object ToJson();
@@ -99,21 +99,6 @@ public abstract partial class YType
 
         value = default;
         return false;
-    }
-
-    private protected object TypeMapGetSnapshot(string key, Snapshot snapshot)
-    {
-        if (!_map.TryGetValue(key, out var v))
-        {
-            v = default;
-        }
-
-        while (!v.IsNull && (!snapshot.StateVector.ContainsKey(v.Id.Client) || v.Id.Clock >= snapshot.StateVector[v.Id.Client]))
-        {
-            v = v.Left.AsItem;
-        }
-
-        return !v.IsNull && v.IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
     }
 
     private protected IEnumerable<KeyValuePair<string, object>> TypeMapEnumerateValues()

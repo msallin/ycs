@@ -288,9 +288,9 @@ public class TraceReplayTests
 
         static YType NewType(string name) => name switch
         {
-            "YMap" => new YMap(new Dictionary<string, object> { ["k"] = 1 }),
+            "YMap" => new YMap(YValue.FromObject(new Dictionary<string, object> { ["k"] = 1 }).EnumerateObject()),
             "YText" => new YText("t"),
-            _ => YArray.From([1]),
+            _ => new YArray(1),
         };
     }
 
@@ -318,7 +318,7 @@ public class TraceReplayTests
                 {
                     foreach (var (k, v) in m)
                     {
-                        if (v is YType c)
+                        if (v.TryGetSharedType(out YType c))
                         {
                             Rec(c, [.. path, k]);
                         }
@@ -329,7 +329,7 @@ public class TraceReplayTests
                     var i = 0;
                     foreach (var v in ((YArray)t).ToArray())
                     {
-                        if (v is YType c)
+                        if (v.TryGetSharedType(out YType c))
                         {
                             Rec(c, [.. path, i]);
                         }
@@ -354,7 +354,7 @@ public class TraceReplayTests
             YType t = path[0].GetString() == "m" ? Doc.GetMap("m") : Doc.GetArray("a");
             for (var i = 1; i < path.GetArrayLength(); i++)
             {
-                t = (YType)(t is YMap m ? m.Get(path[i].GetString()) : ((YArray)t).Get(path[i].GetInt32()));
+                t = (YType)(t is YMap m ? m[path[i].GetString()].ToObject() : ((YArray)t)[path[i].GetInt32()].ToObject());
             }
 
             return t;
@@ -370,10 +370,10 @@ public class TraceReplayTests
             var hasInit = v.TryGetProperty("init", out var init);
             if (v.GetProperty("t").GetString() == "map")
             {
-                return hasInit ? new YMap((IDictionary<string, object>)CanonicalJson.FromJson(init)) : new YMap();
+                return hasInit ? new YMap(YValue.FromObject((IDictionary<string, object>)CanonicalJson.FromJson(init)).EnumerateObject()) : new YMap();
             }
 
-            return hasInit ? YArray.From((List<object>)CanonicalJson.FromJson(init)) : new YArray();
+            return hasInit ? new YArray(((List<object>)CanonicalJson.FromJson(init)).Select(YValue.FromObject).ToArray()) : new YArray();
         }
 
         protected override void ApplyOp(JsonElement op)
@@ -381,11 +381,11 @@ public class TraceReplayTests
             var t = Resolve(op[1]);
             switch (op[0].GetString())
             {
-                case "mset": ((YMap)t).Set(op[2].GetString(), MakeValue(op[3])); break;
-                case "mdel": ((YMap)t).Delete(op[2].GetString()); break;
-                case "ains": ((YArray)t).Insert(op[2].GetInt32(), op[3].EnumerateArray().Select(MakeValue).ToList()); break;
-                case "adel": ((YArray)t).Delete(op[2].GetInt32(), op[3].GetInt32()); break;
-                case "apush": ((YArray)t).Push(op[2].EnumerateArray().Select(MakeValue).ToList()); break;
+                case "mset": ((YMap)t)[op[2].GetString()] = YValue.FromObject(MakeValue(op[3])); break;
+                case "mdel": ((YMap)t).Remove(op[2].GetString()); break;
+                case "ains": ((YArray)t).Insert(op[2].GetInt32(), op[3].EnumerateArray().Select(MakeValue).ToList().Select(YValue.FromObject).ToArray()); break;
+                case "adel": ((YArray)t).RemoveRange(op[2].GetInt32(), op[3].GetInt32()); break;
+                case "apush": ((YArray)t).Add(op[2].EnumerateArray().Select(MakeValue).ToList().Select(YValue.FromObject).ToArray()); break;
                 default: throw new InvalidOperationException(op[0].GetString());
             }
         }
@@ -453,7 +453,7 @@ public class TraceReplayTests
             YType t = _root;
             for (var i = 1; i < path.GetArrayLength(); i++)
             {
-                t = (YType)((YXmlFragment)t).Get(path[i].GetInt32());
+                t = (YType)((YXmlFragment)t)[path[i].GetInt32()];
             }
 
             return t;
@@ -476,13 +476,13 @@ public class TraceReplayTests
             {
                 foreach (var a in attrs.EnumerateObject())
                 {
-                    el.SetAttribute(a.Name, CanonicalJson.FromJson(a.Value));
+                    el.SetAttribute(a.Name, YValue.FromObject(CanonicalJson.FromJson(a.Value)));
                 }
             }
 
             if (spec.TryGetProperty("children", out var children))
             {
-                el.Insert(0, children.EnumerateArray().Select(MakeNode).ToList());
+                el.Insert(0, children.EnumerateArray().Select(MakeNode).ToList().Cast<YType>().ToArray());
             }
 
             return el;
@@ -493,12 +493,12 @@ public class TraceReplayTests
             var t = Resolve(op[1]);
             switch (op[0].GetString())
             {
-                case "hset": ((YXmlHook)t).Set(op[2].GetString(), CanonicalJson.FromJson(op[3])); break;
-                case "setAttr": ((YXmlElement)t).SetAttribute(op[2].GetString(), CanonicalJson.FromJson(op[3])); break;
+                case "hset": ((YXmlHook)t)[op[2].GetString()] = YValue.FromObject(CanonicalJson.FromJson(op[3])); break;
+                case "setAttr": ((YXmlElement)t).SetAttribute(op[2].GetString(), YValue.FromObject(CanonicalJson.FromJson(op[3]))); break;
                 case "removeAttr": ((YXmlElement)t).RemoveAttribute(op[2].GetString()); break;
-                case "xinsert": ((YXmlFragment)t).Insert(op[2].GetInt32(), op[3].EnumerateArray().Select(MakeNode).ToList()); break;
-                case "xdelete": ((YXmlFragment)t).Delete(op[2].GetInt32(), op[3].GetInt32()); break;
-                case "xpush": ((YXmlFragment)t).Push(op[2].EnumerateArray().Select(MakeNode).ToList()); break;
+                case "xinsert": ((YXmlFragment)t).Insert(op[2].GetInt32(), op[3].EnumerateArray().Select(MakeNode).ToList().Cast<YType>().ToArray()); break;
+                case "xdelete": ((YXmlFragment)t).RemoveRange(op[2].GetInt32(), op[3].GetInt32()); break;
+                case "xpush": ((YXmlFragment)t).Add(op[2].EnumerateArray().Select(MakeNode).Cast<YType>().ToArray()); break;
                 default: ApplyTextOp((YXmlText)t, op, 2); break;
             }
         }
@@ -511,7 +511,7 @@ public class TraceReplayTests
                 ["json"] = _root.ToJson(),
                 ["nodes"] = Walk().Select(t => (object)(t switch
                 {
-                    YXmlElement el => new Dictionary<string, object> { ["name"] = el.NodeName, ["attrs"] = el.GetAttributes(), ["len"] = el.Length },
+                    YXmlElement el => new Dictionary<string, object> { ["name"] = el.NodeName, ["attrs"] = el.GetAttributes().ToDictionary(kv => kv.Key, kv => kv.Value.ToObject()), ["len"] = el.Length },
                     YXmlText xt => new Dictionary<string, object> { ["delta"] = xt.ToDelta(), ["len"] = xt.Length },
                     YXmlHook h => new Dictionary<string, object> { ["hook"] = h.ToJson() },
                     _ => new Dictionary<string, object> { ["len"] = t.Length },

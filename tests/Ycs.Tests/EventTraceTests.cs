@@ -97,16 +97,16 @@ public class EventTraceTests
                 switch (op[0].GetString())
                 {
                     case "mset":
-                        ((YMap)type).Set(op[2].GetString(), Value(op[3]));
+                        ((YMap)type)[op[2].GetString()] = YValue.FromObject(Value(op[3]));
                         break;
                     case "mdel":
-                        ((YMap)type).Delete(op[2].GetString());
+                        ((YMap)type).Remove(op[2].GetString());
                         break;
                     case "ains":
-                        ((YArray)type).Insert(op[2].GetInt32(), op[3].EnumerateArray().Select(Value).ToList());
+                        ((YArray)type).Insert(op[2].GetInt32(), op[3].EnumerateArray().Select(Value).ToList().Select(YValue.FromObject).ToArray());
                         break;
                     case "adel":
-                        ((YArray)type).Delete(op[2].GetInt32(), op[3].GetInt32());
+                        ((YArray)type).RemoveRange(op[2].GetInt32(), op[3].GetInt32());
                         break;
                     default:
                         throw new InvalidOperationException(op[0].GetString());
@@ -136,10 +136,10 @@ public class EventTraceTests
         var hasInit = v.TryGetProperty("init", out var init);
         if (v.GetProperty("t").GetString() == "map")
         {
-            return hasInit ? new YMap((IDictionary<string, object>)Convert(init)) : new YMap();
+            return hasInit ? new YMap(YValue.FromObject((IDictionary<string, object>)Convert(init)).EnumerateObject()) : new YMap();
         }
 
-        return hasInit ? YArray.From((List<object>)Convert(init)) : new YArray();
+        return hasInit ? new YArray(((List<object>)Convert(init)).Select(YValue.FromObject).ToArray()) : new YArray();
     }
 
     private static YType Resolve(YDoc doc, JsonElement path)
@@ -147,7 +147,7 @@ public class EventTraceTests
         YType type = path[0].GetString() == "m" ? doc.GetMap("m") : doc.GetArray("a");
         for (var i = 1; i < path.GetArrayLength(); i++)
         {
-            type = (YType)(type is YMap m ? m.Get(path[i].GetString()) : ((YArray)type).Get(path[i].GetInt32()));
+            type = (YType)(type is YMap m ? m[path[i].GetString()].ToObject() : ((YArray)type)[path[i].GetInt32()].ToObject());
         }
 
         return type;
@@ -168,7 +168,7 @@ public class EventTraceTests
         {
             foreach (var kv in map)
             {
-                if (kv.Value is YType child)
+                if (kv.Value.TryGetSharedType(out YType child))
                 {
                     path.Add(kv.Key);
                     Walk(child, path, result);
@@ -181,7 +181,7 @@ public class EventTraceTests
             var i = 0;
             foreach (var v in ((YArray)type).ToArray())
             {
-                if (v is YType child)
+                if (v.TryGetSharedType(out YType child))
                 {
                     path.Add(i);
                     Walk(child, path, result);

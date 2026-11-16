@@ -32,8 +32,8 @@ public class PermanentUserDataYjsTests
         pud.SetUserMapping(1, "alice");
         var peer = new YDoc(new YDocOptions { ClientId = 2 });
         Sync(doc, peer);
-        peer.GetMap("users").Set("alice", "oops");
-        peer.GetMap("users").Set("eve", new YMap());
+        peer.GetMap("users")["alice"] = "oops";
+        peer.GetMap("users")["eve"] = new YMap();
 
         Sync(peer, doc);
         text.Remove(0, 1);
@@ -51,10 +51,10 @@ public class PermanentUserDataYjsTests
         var peer = new YDoc(new YDocOptions { ClientId = 2 });
         var users = peer.GetMap("users");
         var nulls = new YMap();
-        users.Set("mallory", null);
-        users.Set("trudy", nulls);
-        nulls.Set("ids", null);
-        nulls.Set("ds", null);
+        users["mallory"] = YValue.Null;
+        users["trudy"] = nulls;
+        nulls["ids"] = YValue.Null;
+        nulls["ds"] = YValue.Null;
 
         Sync(peer, doc);
         var second = new PermanentUserData(doc);
@@ -70,7 +70,7 @@ public class PermanentUserDataYjsTests
         text.Insert(0, "abc");
         var pud = new PermanentUserData(doc);
         pud.SetUserMapping(1, "alice");
-        var ds = (YArray)((YMap)doc.GetMap("users").Get("alice")).Get("ds");
+        var ds = (YArray)((YMap)doc.GetMap("users")["alice"].ToObject())["ds"].ToObject();
         var dsLengthAtUpdates = new List<int>();
         doc.Updated += (_, _) => dsLengthAtUpdates.Add(ds.Length);
 

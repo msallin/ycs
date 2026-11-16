@@ -29,7 +29,7 @@ public sealed partial class YXmlElement : YXmlFragment
 
         foreach (var kvp in _prelimAttrs)
         {
-            SetAttribute(kvp.Key, kvp.Value);
+            SetAttributeRaw(kvp.Key, kvp.Value);
         }
 
         _prelimAttrs = null;
@@ -46,18 +46,18 @@ public sealed partial class YXmlElement : YXmlFragment
         RuntimeHelpers.EnsureSufficientExecutionStack();
         var el = new YXmlElement(NodeName);
 
-        foreach (var kvp in GetAttributes())
+        foreach (var kvp in EnumerateAttributes())
         {
-            el.SetAttribute(kvp.Key, kvp.Value);
+            el.SetAttributeRaw(kvp.Key, kvp.Value);
         }
 
         var children = new List<object>();
-        foreach (var v in ToArray())
+        foreach (var v in EnumerateValues())
         {
             children.Add(v is YType at ? at.InternalClone() : v);
         }
 
-        el.Insert(0, children);
+        el.InsertRaw(0, children);
         return el;
     }
 

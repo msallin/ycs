@@ -60,9 +60,9 @@ public class DeepNestingTests
             _ = doc.GetArray("a").ToJson();
             _ = doc.GetText("t").ToDelta();
             doc.GetMap("m").Clear();
-            doc.GetArray("a").Delete(0, doc.GetArray("a").Length);
+            doc.GetArray("a").RemoveRange(0, doc.GetArray("a").Length);
             doc.GetText("t").Remove(0, doc.GetText("t").Length);
-            doc.GetXmlFragment("x").Delete(0, doc.GetXmlFragment("x").Length);
+            doc.GetXmlFragment("x").RemoveRange(0, doc.GetXmlFragment("x").Length);
             _ = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
         });
 
@@ -72,7 +72,7 @@ public class DeepNestingTests
     [TestMethod]
     public void Values_OneLevelBeyondTheLimit_AreRejected()
     {
-        var update = Encoded(doc => doc.GetMap("m").Set("v", NestedValue(UpdateLimits.Default.MaxDepth + 1)));
+        var update = Encoded(doc => doc.GetMap("m")["v"] = NestedYValue(UpdateLimits.Default.MaxDepth + 1));
         var doc = new YDoc();
 
         var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(update));
@@ -98,7 +98,7 @@ public class DeepNestingTests
     {
         var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 3 } });
 
-        Assert.ThrowsExactly<ArgumentException>(() => doc.GetMap("m").Set("v", NestedValue(4)));
+        Assert.ThrowsExactly<ArgumentException>(() => doc.GetMap("m")["v"] = NestedYValue(4));
         Assert.ThrowsExactly<InvalidOperationException>(() => NestMaps(doc.GetMap("n"), 4));
     }
 
@@ -174,7 +174,7 @@ public class DeepNestingTests
                     switch (what.Split(' ')[0])
                     {
                         case "map":
-                            doc.GetMap("m").Set("v", NestedValue(HostileDepth));
+                            doc.GetMap("m")["v"] = NestedYValue(HostileDepth);
                             break;
                         case "format":
                             doc.GetText("t").Insert(0, "abc", new Dictionary<string, YValue> { ["deep"] = NestedYValue(HostileDepth) });
@@ -265,7 +265,7 @@ public class DeepNestingTests
         for (var i = 0; i < depth; i++)
         {
             var child = new YMap();
-            map.Set("c", child);
+            map["c"] = child;
             map = child;
         }
     }

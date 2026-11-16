@@ -20,7 +20,7 @@ internal static class Workloads
 
     private static bool SameText(YDoc doc, LayoutStore store) => doc.GetText("text").ToString() == Builder.Text(store, "text");
 
-    private static bool SameArray(YDoc doc, LayoutStore store) => doc.GetArray("array").SequenceEqual(Builder.Array(store, "array"));
+    private static bool SameArray(YDoc doc, LayoutStore store) => doc.GetArray("array").Select(v => (object)v.GetInt64()).SequenceEqual(Builder.Array(store, "array"));
 
     private static bool SameMap(YDoc doc, LayoutStore store)
     {
@@ -54,7 +54,7 @@ internal static class Workloads
             var keys = Inputs.Keys;
             for (var i = 0; i < keys.Length; i++)
             {
-                map.Set(keys[i], (long)i);
+                map[keys[i]] = (long)i;
             }
 
             return [doc];
@@ -112,10 +112,10 @@ internal static class Workloads
     {
         var doc = NewDoc();
         var array = doc.GetArray("array");
-        array.Add([.. Enumerable.Range(0, Inputs.ArrayN).Select(i => (object)(long)i)]);
+        array.Add(Enumerable.Range(0, Inputs.ArrayN).Select(i => (YValue)(long)i).ToArray());
         foreach (var p in Inputs.ArrayDeletes)
         {
-            array.Delete(p, 1);
+            array.RemoveRange(p, 1);
         }
 
         return doc;

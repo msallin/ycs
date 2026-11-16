@@ -125,7 +125,7 @@ public class ThrowingObserverTests
         void Change() => doc.Transact(_ =>
         {
             a.Insert(0, [1]);
-            m.Set("k", 1);
+            m["k"] = 1;
             t.Insert(0, "x");
         });
 
@@ -168,14 +168,14 @@ public class ThrowingObserverTests
                 break;
             case "subdocs":
                 throws.Add(name);
-                act = () => doc.Transact(_ => m.Set("sub", new YDoc(new YDocOptions { Guid = "s" })));
+                act = () => doc.Transact(_ => m["sub"] = new YDoc(new YDocOptions { Guid = "s" }));
                 break;
             case "the function and an observer":
                 throws.Add("obs:m");
                 act = () => doc.Transact((Action<Transaction>)(_ =>
                 {
                     a.Insert(0, [1]);
-                    m.Set("k", 1);
+                    m["k"] = 1;
                     throw new InvalidOperationException("function");
                 }));
                 break;
@@ -196,7 +196,7 @@ public class ThrowingObserverTests
                         {
                             once = true;
                             log.Add("obs:a changes m");
-                            m.Set("n", 2);
+                            m["n"] = 2;
                         }
                     });
                     break;
@@ -211,7 +211,7 @@ public class ThrowingObserverTests
                         if (!once)
                         {
                             once = true;
-                            m.Set("n", 2);
+                            m["n"] = 2;
                         }
                     });
                     m.Observe(_ =>

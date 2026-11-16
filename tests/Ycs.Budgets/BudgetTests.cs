@@ -81,7 +81,7 @@ public sealed class BudgetTests
         const int pushes = 1_000_000;
         const long heldBound = 64L << 20;
         const long allocatedBound = 512L << 20;
-        var values = new object[] { 1L };
+        YValue value = 1L;
         var held0 = System.GC.GetTotalMemory(forceFullCollection: true);
         var allocated0 = System.GC.GetAllocatedBytesForCurrentThread();
         var stopwatch = Stopwatch.StartNew();
@@ -91,16 +91,16 @@ public sealed class BudgetTests
         {
             for (var i = 0; i < pushes; i++)
             {
-                array.Push(values);
+                array.Add(value);
             }
         });
         stopwatch.Stop();
         var allocated = System.GC.GetAllocatedBytesForCurrentThread() - allocated0;
         var held = System.GC.GetTotalMemory(forceFullCollection: true) - held0;
-        var result = $"{pushes} pushes: {array.Length} elements, {allocated >> 20} MiB allocated (bound {allocatedBound >> 20}), {held >> 20} MiB held (bound {heldBound >> 20}), {stopwatch.ElapsedMilliseconds} ms";
+        var result = $"{pushes} pushes: {array.Count} elements, {allocated >> 20} MiB allocated (bound {allocatedBound >> 20}), {held >> 20} MiB held (bound {heldBound >> 20}), {stopwatch.ElapsedMilliseconds} ms";
         System.GC.KeepAlive(doc);
         TestContext.WriteLine(result);
-        Assert.IsTrue(array.Length == pushes && allocated <= allocatedBound && held <= heldBound, result);
+        Assert.IsTrue(array.Count == pushes && allocated <= allocatedBound && held <= heldBound, result);
     }
 
     /// <summary>Today's number plus the headroom, rounded up to a multiple of 8 bytes.</summary>

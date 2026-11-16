@@ -143,20 +143,20 @@ internal sealed class HostileRoom
                 text.Remove(at, Math.Min(text.Length - at, rng.Between(1, 6)));
                 break;
             case 3:
-                doc.GetMap("map").Set($"k{rng.Int(8)}", rng.Int(1_000));
+                doc.GetMap("map")[$"k{rng.Int(8)}"] = rng.Int(1_000);
                 break;
             case 5:
-                doc.GetMap("map").Set($"k{rng.Int(8)}", new YMap());
+                doc.GetMap("map")[$"k{rng.Int(8)}"] = new YMap();
                 break;
             default:
                 var array = doc.GetArray("array");
-                if (array.Length > 0 && rng.Chance(0.3))
+                if (array.Count > 0 && rng.Chance(0.3))
                 {
-                    array.Delete(rng.Int(array.Length));
+                    array.RemoveAt(rng.Int(array.Count));
                 }
                 else
                 {
-                    array.Insert(rng.Int(array.Length + 1), [rng.Text(3, hostile)]);
+                    array.Insert(rng.Int(array.Count + 1), [rng.Text(3, hostile)]);
                 }
 
                 break;
@@ -395,7 +395,7 @@ internal sealed class HostileRoom
                                 value = new List<object> { value };
                             }
 
-                            d.GetArray("array").Insert(0, [value]);
+                            d.GetArray("array").Insert(0, YValue.FromObject(value));
                         }
                     });
                     return ([HostileMessages.Sync((uint)SyncMessageType.Update, update)], $"{(asTypes ? "types" : "values")} {depth} deep");

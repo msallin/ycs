@@ -166,7 +166,7 @@ public class SyncServerFindingsTests
         var waiting = new YDoc(new YDocOptions { ClientId = 7 });
         waiting.ApplyUpdate(unknown.EncodeStateAsUpdate());
         var first = Edit(waiting, d => d.GetText("text").Insert(1, "u"));
-        var behind = Edit(waiting, d => d.GetMap("map").Set("k", 1));
+        var behind = Edit(waiting, d => d.GetMap("map")["k"] = 1);
         var integrating = new YDoc(new YDocOptions { ClientId = 7 });
         integrating.ApplyUpdate(a.EncodeStateAsUpdate());
         var second = Edit(integrating, d => d.GetText("text").Insert(1, "u"));

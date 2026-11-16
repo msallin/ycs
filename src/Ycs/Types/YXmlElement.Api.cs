@@ -4,8 +4,6 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
-
 using System.Runtime.CompilerServices;
 
 namespace Ycs;
@@ -29,7 +27,7 @@ public sealed partial class YXmlElement
     /// <summary>
     /// The next sibling in this element's parent, or null.
     /// </summary>
-    public object NextSibling
+    public YType? NextSibling
     {
         get
         {
@@ -41,7 +39,7 @@ public sealed partial class YXmlElement
     /// <summary>
     /// The previous sibling in this element's parent, or null.
     /// </summary>
-    public object PrevSibling
+    public YType? PrevSibling
     {
         get
         {
@@ -50,7 +48,7 @@ public sealed partial class YXmlElement
         }
     }
 
-    public new YXmlElement Clone() => InternalClone() as YXmlElement;
+    public new YXmlElement Clone() => (YXmlElement)InternalClone();
 
     /// <summary>
     /// Removes an attribute from this element.
@@ -68,41 +66,48 @@ public sealed partial class YXmlElement
     }
 
     /// <summary>
-    /// Sets or updates an attribute.
+    /// Sets or updates an attribute; the element holds a copy of the value.
     /// </summary>
-    public void SetAttribute(string attributeName, object attributeValue)
-    {
-        if (Doc != null)
-        {
-            Doc.Transact((self: this, attributeName, attributeValue), static (s, tr) => s.self.TypeMapSet(tr, s.attributeName, s.attributeValue));
-        }
-        else
-        {
-            _prelimAttrs[attributeName] = attributeValue;
-        }
-    }
+    public void SetAttribute(string attributeName, YValue attributeValue) => SetAttributeRaw(attributeName, attributeValue.Stored());
 
     /// <summary>
-    /// Returns the value of the given attribute, or null if it isn't set.
+    /// Returns the value of the given attribute, or null (<see cref="HasAttribute"/> tells it from an attribute set to null)
+    /// if it isn't set.
     /// </summary>
-    public object GetAttribute(string attributeName) => TryTypeMapGet(attributeName, out var value) ? value : null;
+    public YValue GetAttribute(string attributeName)
+    {
+        if (_prelimAttrs != null)
+        {
+            return _prelimAttrs.TryGetValue(attributeName, out var stored) ? YValue.FromStored(stored) : default;
+        }
+
+        return TryTypeMapGet(attributeName, out var value) ? YValue.FromStored(value) : default;
+    }
 
     /// <summary>
     /// Returns whether an attribute exists.
     /// </summary>
-    public bool HasAttribute(string attributeName) => _map.TryGetValue(attributeName, out var item) && !item.Deleted;
+    public bool HasAttribute(string attributeName) =>
+        _prelimAttrs != null ? _prelimAttrs.ContainsKey(attributeName) : _map.TryGetValue(attributeName, out var item) && !item.Deleted;
 
     /// <summary>
-    /// Returns all attribute name/value pairs (null values included), optionally as of a snapshot.
+    /// Returns all attribute name/value pairs (null values included), as of <paramref name="snapshot"/> when it is given
+    /// (it only reads: an item merged across the snapshot's boundary is seen whole, as in Yjs).
     /// </summary>
-    public IDictionary<string, object> GetAttributes(Snapshot snapshot = null)
+    public IReadOnlyDictionary<string, YValue> GetAttributes(Snapshot? snapshot = null)
     {
-        if (snapshot == null)
+        if (snapshot != null)
         {
-            return TypeMapEnumerateValues().ToDictionary(kv => kv.Key, kv => kv.Value);
+            return MapAtSnapshot(snapshot);
         }
 
-        return GetAllSnapshot(snapshot);
+        var attributes = new Dictionary<string, YValue>();
+        foreach (var kvp in EnumerateAttributes())
+        {
+            attributes[kvp.Key] = YValue.FromStored(kvp.Value);
+        }
+
+        return attributes;
     }
 
     /// <summary>
@@ -120,11 +125,25 @@ public sealed partial class YXmlElement
         var parts = new List<string>(keys.Count);
         foreach (var key in keys)
         {
-            parts.Add($"{key}=\"{JsValue.ToJsString(attrs[key])}\"");
+            parts.Add($"{key}=\"{attrs[key]}\"");
         }
 
         var nodeName = NodeName.ToLowerInvariant();
         var attrsString = parts.Count > 0 ? " " + string.Join(" ", parts) : string.Empty;
         return $"<{nodeName}{attrsString}>{base.ToString()}</{nodeName}>";
     }
+
+    internal void SetAttributeRaw(string attributeName, object? stored)
+    {
+        if (Doc != null)
+        {
+            Doc.Transact((self: this, attributeName, stored), static (s, tr) => s.self.TypeMapSet(tr, s.attributeName, s.stored));
+        }
+        else
+        {
+            _prelimAttrs[attributeName] = stored;
+        }
+    }
+
+    private IEnumerable<KeyValuePair<string, object>> EnumerateAttributes() => _prelimAttrs ?? TypeMapEnumerateValues();
 }

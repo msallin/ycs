@@ -220,25 +220,25 @@ public class V14InteropTests
                     break;
                 case "map":
                     var map = doc.GetMap(name);
-                    map.Set("ycs", "c#");
-                    map.Set("max", MaxClient);
-                    map.Delete(map.Keys().First(k => k != "ycs" && k != "max"));
+                    map["ycs"] = "c#";
+                    map["max"] = MaxClient;
+                    map.Remove(map.Keys.First(k => k != "ycs" && k != "max"));
                     break;
                 case "array":
                     var array = doc.GetArray(name);
-                    array.Insert(1, new List<object> { "ycs", 2.5, new Dictionary<string, object> { ["k"] = new List<object> { 1L } } });
-                    array.Delete(0, 1);
+                    array.Insert(1, "ycs", 2.5, YValue.FromObject(new Dictionary<string, object> { ["k"] = new List<object> { 1L } }));
+                    array.RemoveRange(0, 1);
                     break;
                 case "xml":
                     var xml = doc.GetXmlFragment(name);
                     var element = new YXmlElement("ycs");
-                    xml.Insert(0, new List<object> { element });
+                    xml.Insert(0, element);
                     element.SetAttribute("from", "c#");
-                    element.Insert(0, new List<object> { new YXmlText("text") });
-                    var nested = (YXmlElement)xml.Get(1);
+                    element.Insert(0, new YXmlText("text"));
+                    var nested = (YXmlElement)xml[1];
                     nested.SetAttribute("class", "changed");
-                    nested.Insert(0, new List<object> { new YXmlElement("em") });
-                    xml.Delete(xml.Length - 1, 1);
+                    nested.Insert(0, new YXmlElement("em"));
+                    xml.RemoveRange(xml.Length - 1, 1);
                     break;
             }
         }
@@ -353,12 +353,12 @@ public class V14InteropTests
     {
         var node = t switch
         {
-            YXmlElement e => new Dictionary<string, object> { ["$xml"] = e.NodeName, ["attrs"] = Value(e.GetAttributes()), ["children"] = Value(e.ToArray()) },
+            YXmlElement e => new Dictionary<string, object> { ["$xml"] = e.NodeName, ["attrs"] = Value(e.GetAttributes().ToDictionary(kv => kv.Key, kv => kv.Value.ToObject())), ["children"] = Value(e.EnumerateValues().ToList()) },
             YXmlText x => new Dictionary<string, object> { ["$xmltext"] = Delta(x) },
-            YXmlFragment f => new Dictionary<string, object> { ["$fragment"] = Value(f.ToArray()) },
+            YXmlFragment f => new Dictionary<string, object> { ["$fragment"] = Value(f.EnumerateValues().ToList()) },
             YText x => new Dictionary<string, object> { ["$text"] = Delta(x) },
-            YMap m => new Dictionary<string, object> { ["$map"] = Value(m.Entries().ToDictionary(kv => kv.Key, kv => kv.Value)) },
-            YArray a => new Dictionary<string, object> { ["$array"] = Value(a.ToArray()) },
+            YMap m => new Dictionary<string, object> { ["$map"] = Value(m.ToDictionary(kv => kv.Key, kv => kv.Value.ToObject())) },
+            YArray a => new Dictionary<string, object> { ["$array"] = Value(a.Select(v => v.ToObject()).ToList()) },
             _ => throw new ArgumentException(t.GetType().Name),
         };
         return Sorted(node);

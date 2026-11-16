@@ -57,13 +57,13 @@ var textEventCount = 0;
 text.Observe(_ => textEventCount++);
 
 // --- Map ---
-map.Set("str", "hello");
-map.Set("num", 42);
-map.Delete("num");
+map["str"] = "hello";
+map["num"] = 42;
+map.Remove("num");
 
 // --- Array ---
-arr.Insert(0, new object[] { 1, 2, 3 });
-arr.Delete(1, 1);
+arr.Insert(0, 1, 2, 3);
+arr.RemoveRange(1, 1);
 
 // --- Text ---
 text.Insert(0, "hello");
