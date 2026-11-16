@@ -50,9 +50,9 @@ internal class ContentAny : IContentEx
 
     bool IContentEx.Mergeable => true;
 
-    public IReadOnlyList<object> GetContent() => _content.AsReadOnly();
+    public IReadOnlyList<object> GetContent() => new ContentView(_content);
 
-    internal object ValueAt(int index) => _content[index];
+    internal object ValueAt(int index) => ValueFreezer.OnRead(_content[index]);
 
     public IContent Copy() => new ContentAny(_content.ToList());
 

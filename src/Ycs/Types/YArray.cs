@@ -33,7 +33,7 @@ public partial class YArray : YArrayBase
 
     public YArray(IEnumerable<object> prelimContent = null)
     {
-        _prelimContent = prelimContent != null ? new List<object>(prelimContent) : new List<object>();
+        _prelimContent = prelimContent != null ? new List<object>(prelimContent.Select(ValueFreezer.Detach)) : new List<object>();
     }
 
     /// <summary>
@@ -153,7 +153,7 @@ public partial class YArray : YArrayBase
         }
         else
         {
-            _prelimContent.AddRange(content);
+            _prelimContent.AddRange(content.Select(ValueFreezer.Detach));
         }
     }
 

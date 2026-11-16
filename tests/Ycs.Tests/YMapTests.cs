@@ -29,7 +29,8 @@ public class YMapTests : YTestBase
         var obj = new object[] { 1 };
         var m2 = new YMap(new Dictionary<string, object> { { "object", obj }, { "boolean", true } });
         map0.Set("m2", m2);
-        Assert.AreSame(obj, m2.Get("object"));
+        Assert.AreNotSame(obj, m2.Get("object")); // the document holds a copy
+        CollectionAssert.AreEqual(obj, (System.Collections.IList)m2.Get("object"));
         Assert.AreEqual(true, m2.Get("boolean"));
 
         CompareUsers();

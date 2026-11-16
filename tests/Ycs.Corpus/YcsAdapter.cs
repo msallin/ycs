@@ -218,6 +218,7 @@ internal sealed class CorpusDoc
         null => null,
         AbstractType t => Plain(t.ToJson()),
         string or bool or byte[] => value,
+        IDictionary<string, object> map => map.ToDictionary(kv => kv.Key, kv => Plain(kv.Value)),
         IDictionary dict => dict.Keys.Cast<object>().ToDictionary(k => (string)k, k => Plain(dict[k])),
         IEnumerable list => list.Cast<object>().Select(Plain).ToList(),
         float f => (double)f,

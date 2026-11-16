@@ -49,7 +49,7 @@ internal static class StagingDifferential
         Assert.AreEqual(
             (expected.Text, expected.FormatKey, expected.FormatValue, expected.TypeRef, expected.TypeName, expected.DocGuid),
             (actual.Text, actual.FormatKey, actual.FormatValue, actual.TypeRef, actual.TypeName, actual.DocGuid));
-        Assert.IsTrue(expected.Content.SequenceEqual(actual.Content), $"the values of {expected.Id}");
+        Assert.IsTrue(expected.Content.Select(YValue.FromStored).SequenceEqual(actual.Content.Select(YValue.FromStored)), $"the values of {expected.Id}");
     }
 
     private static Dictionary<long, List<AbstractStruct>> Read(byte[] input, bool v2, long maxStructs, StagingTable? staging, out string? error)

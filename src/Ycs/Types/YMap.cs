@@ -42,7 +42,11 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
 
     public YMap(IDictionary<string, object> entries)
     {
-        _prelimContent = entries != null ? new Dictionary<string, object>(entries) : new Dictionary<string, object>();
+        _prelimContent = new Dictionary<string, object>();
+        foreach (var entry in entries ?? Enumerable.Empty<KeyValuePair<string, object>>())
+        {
+            _prelimContent[entry.Key] = ValueFreezer.Detach(entry.Value);
+        }
     }
 
     public int Count => _prelimContent?.Count ?? _mapCount;
@@ -67,7 +71,7 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
         }
         else
         {
-            _prelimContent[key] = value;
+            _prelimContent[key] = ValueFreezer.Detach(value);
         }
     }
 

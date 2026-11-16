@@ -10,12 +10,15 @@ internal class ContentEmbed : IContentEx
 {
     internal const int _ref = 5;
 
-    public readonly object Embed;
+    private readonly object _embed;
 
     internal ContentEmbed(object embed)
     {
-        Embed = embed;
+        _embed = embed;
     }
+
+    /// <summary>The embedded value; a byte array as a copy.</summary>
+    public object Embed => ValueFreezer.OnRead(_embed)!;
 
     int IContentEx.Ref => _ref;
 
@@ -26,7 +29,7 @@ internal class ContentEmbed : IContentEx
 
     public IReadOnlyList<object> GetContent() => new object[] { Embed };
 
-    public IContent Copy() => new ContentEmbed(Embed);
+    public IContent Copy() => new ContentEmbed(_embed);
 
     public IContent Splice(int offset)
     {
@@ -55,7 +58,7 @@ internal class ContentEmbed : IContentEx
 
     void IContentEx.Write(IUpdateEncoder encoder, int offset)
     {
-        encoder.WriteJson(Embed);
+        encoder.WriteJson(_embed);
     }
 
     internal static ContentEmbed Read(IUpdateDecoder decoder)

@@ -428,11 +428,10 @@ public partial class AbstractType
                     content = new ContentType(at);
                     break;
                 case byte[] ba:
-                    content = new ContentBinary(ba);
+                    content = new ContentBinary((byte[])ba.Clone());
                     break;
                 default:
-                    AnyEncoding.Validate(value, transaction.Doc.Limits.MaxDepth);
-                    content = ContentAny.Single(value);
+                    content = ContentAny.Single(ValueFreezer.Freeze(value, transaction.Doc.Limits.MaxDepth));
                     break;
             }
         }

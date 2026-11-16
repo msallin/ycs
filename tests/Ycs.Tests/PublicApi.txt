@@ -426,6 +426,73 @@ sealed class Ycs.YUpdateException : System.FormatException
     YUpdateException(string message)
     YUpdateException(string message, System.Exception innerException)
     bool PartlyApplied { get; init; }
+readonly struct Ycs.YValue : System.IEquatable<YValue>
+    System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>> EnumerateObject()
+    System.Collections.Generic.IEnumerable<YValue> EnumerateArray()
+    System.Numerics.BigInteger GetBigInteger()
+    YValue this[int index] { get; }
+    YValue this[string? name] { get; }
+    YValueKind Kind { get; }
+    bool Equals(YValue other)
+    bool GetBoolean()
+    bool IsNull { get; }
+    bool TryGetBigInteger(out System.Numerics.BigInteger value)
+    bool TryGetBoolean(out bool value)
+    bool TryGetBytes(out System.ReadOnlyMemory<byte> value)
+    bool TryGetDocument(out YDoc? value)
+    bool TryGetDouble(out double value)
+    bool TryGetInt32(out int value)
+    bool TryGetInt64(out long value)
+    bool TryGetMember(string name, out YValue value)
+    bool TryGetShared(out AbstractType? value)
+    bool TryGetString(out string? value)
+    byte[] GetBytes()
+    double GetDouble()
+    int GetInt32()
+    int Length { get; }
+    int MemberCount { get; }
+    long GetInt64()
+    object? ToObject()
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    static System.Numerics.BigInteger op_Explicit(YValue value)
+    static YValue Array(System.ReadOnlySpan<YValue> items)
+    static YValue Bytes(System.ReadOnlySpan<byte> bytes)
+    static YValue False { get; }
+    static YValue FromObject(object? value)
+    static YValue Null { get; }
+    static YValue Object(System.ReadOnlySpan<System.Collections.Generic.KeyValuePair<string, YValue>> members)
+    static YValue True { get; }
+    static YValue op_Implicit(AbstractType? value)
+    static YValue op_Implicit(System.Numerics.BigInteger value)
+    static YValue op_Implicit(YDoc? value)
+    static YValue op_Implicit(bool value)
+    static YValue op_Implicit(byte[]? value)
+    static YValue op_Implicit(double value)
+    static YValue op_Implicit(int value)
+    static YValue op_Implicit(long value)
+    static YValue op_Implicit(string? value)
+    static bool op_Equality(YValue left, YValue right)
+    static bool op_Explicit(YValue value)
+    static bool op_Inequality(YValue left, YValue right)
+    static byte[] op_Explicit(YValue value)
+    static double op_Explicit(YValue value)
+    static int op_Explicit(YValue value)
+    static long op_Explicit(YValue value)
+    static string op_Explicit(YValue value)
+    string GetString()
+enum Ycs.YValueKind : int
+    Array = 6
+    BigInteger = 3
+    Boolean = 1
+    Bytes = 5
+    Document = 9
+    Null = 0
+    Number = 2
+    Object = 7
+    SharedType = 8
+    String = 4
 class Ycs.YXmlElement : YXmlFragment
     System.Collections.Generic.IDictionary<string, object> GetAttributes(Snapshot snapshot = null)
     YXmlElement Clone()

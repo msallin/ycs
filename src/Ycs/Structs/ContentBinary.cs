@@ -24,7 +24,7 @@ internal class ContentBinary : IContentEx
     public bool Countable => true;
     public int Length => 1;
 
-    public IReadOnlyList<object> GetContent() => new object[] { _content };
+    public IReadOnlyList<object> GetContent() => new object[] { _content.Clone() };
 
     public IContent Copy() => new ContentBinary(_content);
 

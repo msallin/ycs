@@ -186,7 +186,7 @@ public class YTextTests : YTestBase
 
         var delta = text0.ToDelta();
         Assert.AreEqual(1, delta?.Count);
-        Assert.AreEqual("s", (delta[0].Insert as IDictionary<string, string>)["linebreak"]);
+        Assert.AreEqual("s", (delta[0].Insert as IDictionary<string, object>)["linebreak"]);
     }
 
     [TestMethod]

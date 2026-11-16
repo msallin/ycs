@@ -420,7 +420,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     /// <summary>JavaScript's <c>splice(index, 0, ...content)</c>, on the content of a type not in a document yet.</summary>
     private protected static void PrelimInsert(List<object> list, int index, ICollection<object> content) =>
-        list.InsertRange(SpliceStart(list, index), content);
+        list.InsertRange(SpliceStart(list, index), content.Select(ValueFreezer.Detach));
 
     /// <summary>JavaScript's <c>splice(index, length)</c>, on the content of a type not in a document yet.</summary>
     private protected static void PrelimDelete(List<object> list, int index, int length)
@@ -527,8 +527,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                     left.Integrate(transaction, 0);
                     break;
                 default:
-                    AnyEncoding.Validate(c, transaction.Doc.Limits.MaxDepth);
-                    jsonContent.Add(c);
+                    jsonContent.Add(ValueFreezer.Freeze(c, transaction.Doc.Limits.MaxDepth));
                     break;
             }
         }

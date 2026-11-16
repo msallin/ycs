@@ -1160,8 +1160,7 @@ public partial class YText : YArrayBase
                 // Save negated attribute (set null if currentVal is not set).
                 (negatedAttributes ??= new OrderedDictionary<string, object>())[key] = currentVal;
 
-                AnyEncoding.Validate(value, doc.Limits.MaxDepth);
-                currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, new ContentFormat(key, value));
+                currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, new ContentFormat(key, ValueFreezer.Freeze(value, doc.Limits.MaxDepth)));
                 currPos.Right.Integrate(transaction, 0);
                 currPos.Forward();
             }
@@ -1591,8 +1590,7 @@ public partial class YText : YArrayBase
     /// </summary>
     private static object Validated(object embed, int maxDepth)
     {
-        AnyEncoding.Validate(embed, maxDepth);
-        return embed;
+        return ValueFreezer.Freeze(embed, maxDepth)!;
     }
 
     internal static bool EqualAttrs(object attr1, object attr2) =>
