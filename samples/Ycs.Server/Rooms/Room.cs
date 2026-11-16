@@ -16,6 +16,9 @@ internal sealed class Room
     private readonly YDoc doc = new();
     private readonly Awareness.Awareness awareness;
 
+    // Under the lock: whether the update being applied may integrate what waited for it, which its origin has not seen.
+    private bool updateReachesOrigin;
+
     // Copy-on-write under the lock, so that a fan-out iterates a snapshot while a full queue removes its session.
     private Session[] sessions = [];
 
@@ -134,6 +137,10 @@ internal sealed class Room
         {
             var reply = new MemoryStream();
             VarUint.Write(reply, MessageType.Sync);
+
+            // Structs and deletions waiting for this session's structs integrate in its transaction, so the update
+            // then holds more than the session sent; without anything pending it holds only what the session sent.
+            updateReachesOrigin = doc.HasPending;
             SyncProtocol.ReadSyncMessage(reader, reply, doc, session);
 
             // Only a step 1 writes a reply; the outer type alone is one byte.
@@ -221,7 +228,7 @@ internal sealed class Room
         var bytes = message.ToArray();
         foreach (var session in sessions)
         {
-            if (!ReferenceEquals(session, e.Origin))
+            if (updateReachesOrigin || !ReferenceEquals(session, e.Origin))
             {
                 session.Enqueue(bytes);
             }
