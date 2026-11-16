@@ -91,7 +91,7 @@ API layer, so layout files need no edits. At most three API packages in flight.
 | A0 | pure move: the public members of the public types into `*.Api.cs` partials | — |
 | A1 | closed hierarchy: `YType` (alias), `private protected`, sealed leaves, accidental members removed | A0 |
 | A2 | plain data: `ItemId` (alias), records (`DeletedRange`, `UpdateMeta`, `UpdateLimits`, `KeyChange`), `StackItem` sealed, the equality fix | A0 |
-| A3 | `YValue`, frozen containers, `AnyEncoding`/`YJson`/`JsValue` on them, copy on insert | — |
+| A3 | `YValue`, frozen containers, `AnyEncoding`/`YJson`/`JsValue` on them, copy on insert (done, branch api-a3) | — |
 | A4a | `YArray`, `YMap`, `YXmlFragment`/`YXmlElement` shapes; snapshot reads on them | A1, A3 |
 | A4b | `YText`, `Delta` records, `YChange`, attributes and embeds as `YValue` | A1, A3 |
 | A5 | events: typed `Observe`/`ObserveDeep`, sealed read-only events, `YChanges`, event args records | A0; before 7.3b and 7.6 |

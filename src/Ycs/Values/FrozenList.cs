@@ -9,17 +9,19 @@ namespace Ycs;
 /// </summary>
 internal sealed class FrozenList : IList<object?>, IReadOnlyList<object?>, IList
 {
-    private readonly List<object?> _items;
+    private object?[] _items;
+    private int _count;
 
+    /// <summary>An empty list with room for <paramref name="capacity"/> elements; a builder that knows the count makes the array exact.</summary>
     internal FrozenList(int capacity)
     {
-        _items = new List<object?>(capacity);
+        _items = capacity == 0 ? [] : new object?[capacity];
     }
 
     /// <summary>How many levels of lists and objects this value has, itself included; set by whoever builds it.</summary>
     internal int Depth { get; set; } = 1;
 
-    public int Count => _items.Count;
+    public int Count => _count;
 
     public bool IsReadOnly => true;
 
@@ -31,21 +33,29 @@ internal sealed class FrozenList : IList<object?>, IReadOnlyList<object?>, IList
 
     public object? this[int index]
     {
-        get => ValueFreezer.OnRead(_items[index]);
+        get => ValueFreezer.OnRead(_items[index < _count ? index : throw new ArgumentOutOfRangeException(nameof(index))]);
         set => throw ValueFreezer.Frozen();
     }
 
     /// <summary>The element at <paramref name="index"/> as stored, a byte array included: not for a caller that keeps it.</summary>
-    internal object? RawAt(int index) => _items[index];
+    internal object? RawAt(int index) => _items[index < _count ? index : throw new ArgumentOutOfRangeException(nameof(index))];
 
     /// <summary>Enumerates the elements as stored (see <see cref="RawAt"/>).</summary>
-    internal IEnumerator RawEnumerator() => _items.GetEnumerator();
+    internal IEnumerator RawEnumerator() => new ArraySegment<object?>(_items, 0, _count).GetEnumerator();
 
-    internal void Append(object? value) => _items.Add(value);
+    internal void Append(object? value)
+    {
+        if (_count == _items.Length)
+        {
+            Array.Resize(ref _items, Math.Max(4, _count * 2));
+        }
+
+        _items[_count++] = value;
+    }
 
     public IEnumerator<object?> GetEnumerator()
     {
-        for (var i = 0; i < _items.Count; i++)
+        for (var i = 0; i < _count; i++)
         {
             yield return ValueFreezer.OnRead(_items[i]);
         }
@@ -55,11 +65,11 @@ internal sealed class FrozenList : IList<object?>, IReadOnlyList<object?>, IList
 
     public bool Contains(object? item) => IndexOf(item) >= 0;
 
-    public int IndexOf(object? item) => _items.IndexOf(item);
+    public int IndexOf(object? item) => Array.IndexOf(_items, item, 0, _count);
 
     public void CopyTo(object?[] array, int arrayIndex)
     {
-        for (var i = 0; i < _items.Count; i++)
+        for (var i = 0; i < _count; i++)
         {
             array[arrayIndex + i] = ValueFreezer.OnRead(_items[i]);
         }
@@ -67,7 +77,7 @@ internal sealed class FrozenList : IList<object?>, IReadOnlyList<object?>, IList
 
     void ICollection.CopyTo(Array array, int index)
     {
-        for (var i = 0; i < _items.Count; i++)
+        for (var i = 0; i < _count; i++)
         {
             array.SetValue(ValueFreezer.OnRead(_items[i]), index + i);
         }

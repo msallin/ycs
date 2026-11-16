@@ -13,18 +13,27 @@ internal static class ValueFreezer
     /// <summary>How many open lists and objects <see cref="Freeze"/> follows before it decides that a value contains itself.</summary>
     private const int CycleDepth = 1 << 20;
 
+    [ThreadStatic]
+    private static Frame[]? t_stack;
+
     private enum EntryKind : byte
     {
         List,
+        CopiedMap,
         Pairs,
         Legacy,
     }
 
-    private struct Frame(EntryKind kind, IEnumerator entries, object container)
+    // One open list or object. A list is read by index; an object of IDictionary<string, object?> has its keys and values copied
+    // into the arrays of its frozen map at once, and the values are replaced by their copies in place; the other objects are enumerated.
+    private struct Frame
     {
-        public readonly EntryKind Kind = kind;
-        public readonly IEnumerator Entries = entries;
-        public readonly object Container = container;
+        public EntryKind Kind;
+        public object Container;
+        public IList? List;
+        public IEnumerator? Entries;
+        public int Index;
+        public int Count;
     }
 
     /// <summary>A value as stored: a byte array is copied, so the stored one stays private to the document.</summary>
@@ -46,72 +55,109 @@ internal static class ValueFreezer
     internal static object? Freeze(object? value, int maxDepth = UpdateLimits.DefaultMaxDepth)
     {
         var limit = Math.Min(maxDepth, CycleDepth);
-        List<Frame>? frames = null;
-        var root = Convert(value, limit, ref frames, out _);
-        if (frames is null)
+        // The stack of the last call that finished is reused: an insert of many values would allocate one per value. A call
+        // that fails leaves it null (it is dirty), and so does one that runs inside another (a collection that inserts).
+        var stack = t_stack;
+        t_stack = null;
+        var top = 0;
+        var root = Convert(value, limit, ref stack, ref top, out _);
+        while (top > 0)
         {
-            return root;
-        }
-
-        while (frames!.Count > 0)
-        {
-            var frame = frames[^1];
-            if (!frame.Entries.MoveNext())
+            ref var frame = ref stack![top - 1];
+            var container = frame.Container;
+            object? child;
+            string? key = null;
+            var slot = -1;
+            switch (frame.Kind)
             {
-                frames.RemoveAt(frames.Count - 1);
-                if (frames.Count > 0)
-                {
-                    Raise(frames[^1].Container, DepthOf(frame.Container));
-                }
+                case EntryKind.List:
+                    if (frame.Index < frame.Count)
+                    {
+                        child = frame.List![frame.Index++];
+                        break;
+                    }
 
-                continue;
+                    Close(stack, ref top);
+                    continue;
+                case EntryKind.CopiedMap:
+                    if (frame.Index < frame.Count)
+                    {
+                        slot = frame.Index++;
+                        child = ((FrozenMap)container).RawValues[slot];
+                        break;
+                    }
+
+                    Close(stack, ref top);
+                    continue;
+                case EntryKind.Pairs:
+                    if (frame.Entries!.MoveNext())
+                    {
+                        var pair = (KeyValuePair<string, object?>)frame.Entries.Current!;
+                        key = pair.Key;
+                        child = pair.Value;
+                        break;
+                    }
+
+                    Close(stack, ref top);
+                    continue;
+                default:
+                    if (frame.Entries!.MoveNext())
+                    {
+                        var entry = (DictionaryEntry)frame.Entries.Current!;
+                        key = entry.Key as string ?? throw new ArgumentException($"Object keys must be strings, not '{entry.Key?.GetType().Name ?? "null"}'.", nameof(value));
+                        child = entry.Value;
+                        break;
+                    }
+
+                    Close(stack, ref top);
+                    continue;
             }
 
-            if (frames.Count > limit)
+            if (top > limit)
             {
                 throw AnyEncoding.TooDeep(maxDepth, nameof(value));
             }
 
-            object? child;
-            string? key = null;
-            switch (frame.Kind)
+            var converted = Convert(child, limit, ref stack, ref top, out var opened);
+            if (container is FrozenList list)
             {
-                case EntryKind.Pairs:
-                    var pair = (KeyValuePair<string, object?>)frame.Entries.Current!;
-                    key = pair.Key;
-                    child = pair.Value;
-                    break;
-                case EntryKind.Legacy:
-                    var entry = (DictionaryEntry)frame.Entries.Current!;
-                    key = entry.Key as string ?? throw new ArgumentException($"Object keys must be strings, not '{entry.Key?.GetType().Name ?? "null"}'.", nameof(value));
-                    child = entry.Value;
-                    break;
-                default:
-                    child = frame.Entries.Current;
-                    break;
+                list.Append(converted);
             }
-
-            var converted = Convert(child, limit, ref frames, out var opened);
-            if (frame.Container is FrozenMap map)
+            else if (slot >= 0)
             {
-                map.Set(key!, converted);
+                ((FrozenMap)container).SetRawAt(slot, converted);
             }
             else
             {
-                ((FrozenList)frame.Container).Append(converted);
+                ((FrozenMap)container).Set(key!, converted);
             }
 
             if (!opened && converted is FrozenList or FrozenMap)
             {
-                Raise(frame.Container, DepthOf(converted));
+                Raise(container, DepthOf(converted));
             }
+        }
+
+        if (stack != null && stack.Length <= 64)
+        {
+            t_stack = stack;
         }
 
         return root;
     }
 
-    /// <summary>A scalar as the document keeps it, a frozen value reused, or a new empty container with its frame opened.</summary>
-    private static object? Convert(object? value, int limit, ref List<Frame>? frames, out bool opened)
+    private static void Close(Frame[] stack, ref int top)
+    {
+        var closed = stack[--top].Container;
+        stack[top] = default;
+        if (top > 0)
+        {
+            Raise(stack[top - 1].Container, DepthOf(closed));
+        }
+    }
+
+    /// <summary>A scalar as the document keeps it, a frozen value reused, or a new container with its frame opened.</summary>
+    private static object? Convert(object? value, int limit, ref Frame[]? stack, ref int top, out bool opened)
     {
         opened = false;
         switch (value)
@@ -131,33 +177,58 @@ internal static class ValueFreezer
                 return value;
             case byte[] bytes:
                 return bytes.Clone();
-            case FrozenList list when (frames?.Count ?? 0) + list.Depth <= limit:
+            case FrozenList list when top + list.Depth <= limit:
                 return list;
-            case FrozenMap map when (frames?.Count ?? 0) + map.Depth <= limit:
+            case FrozenMap map when top + map.Depth <= limit:
                 return map;
         }
 
         // Same order of tests as AnyEncoding.Open, so a value is read as it is written.
-        Frame frame;
+        var frame = new Frame();
         switch (value)
         {
             case IDictionary<string, object?> dictionary:
-                frame = new Frame(EntryKind.Pairs, dictionary.GetEnumerator(), new FrozenMap(dictionary.Count));
-                break;
+                {
+                    var count = dictionary.Count;
+                    var keys = new string[count];
+                    var values = new object?[count];
+                    dictionary.Keys.CopyTo(keys, 0);
+                    dictionary.Values.CopyTo(values, 0);
+                    var map = new FrozenMap(0);
+                    map.Adopt(keys, values, count);
+                    frame.Kind = EntryKind.CopiedMap;
+                    frame.Container = map;
+                    frame.Count = count;
+                    break;
+                }
+
             case IReadOnlyDictionary<string, object?> dictionary:
-                frame = new Frame(EntryKind.Pairs, dictionary.GetEnumerator(), new FrozenMap(dictionary.Count));
+                frame.Kind = EntryKind.Pairs;
+                frame.Container = new FrozenMap(dictionary.Count);
+                frame.Entries = dictionary.GetEnumerator();
                 break;
             case IDictionary dictionary:
-                frame = new Frame(EntryKind.Legacy, dictionary.GetEnumerator(), new FrozenMap(dictionary.Count));
+                frame.Kind = EntryKind.Legacy;
+                frame.Container = new FrozenMap(dictionary.Count);
+                frame.Entries = dictionary.GetEnumerator();
                 break;
             case IList list:
-                frame = new Frame(EntryKind.List, list.GetEnumerator(), new FrozenList(list.Count));
+                frame.Kind = EntryKind.List;
+                frame.Container = new FrozenList(list.Count);
+                frame.List = list;
+                frame.Count = list.Count;
                 break;
             default:
                 throw AnyEncoding.Unsupported(value);
         }
 
-        (frames ??= new List<Frame>()).Add(frame);
+        stack ??= new Frame[8];
+        if (top == stack.Length)
+        {
+            Array.Resize(ref stack, top * 2);
+        }
+
+        stack[top++] = frame;
         opened = true;
         return frame.Container;
     }
