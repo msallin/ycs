@@ -115,4 +115,22 @@ public class PlanItemKeysTests
 
         Assert.AreEqual(Yjs, Convert.ToBase64String(doc.EncodeStateAsUpdate()));
     }
+
+    // Store S (2,0) "ab" under map N (3,0) key "k"; a resend D (2,0) "abcd" (same parent and key, no origins) whose tail
+    // a range (2,3,1) splits, then N deleted. Integrated from the store's state on, D's tail follows S, which leaves two
+    // live parts of the key's value in a deleted map: Yjs 13.6.32 throws "Unexpected case" in the cleanup.
+    private const string OverlapStore = "AgEDACcBAXIBbgEBAgAkAAMAAWsCYWIA";
+    private const string OverlapResend = "AQECACQAAwABawRhYmNkAgIBAwEDAQAB";
+
+    [TestMethod]
+    public void ApplyUpdate_OverlappingResendSplitInADeletedMap_RejectsAndLeavesTheDocumentUnchanged()
+    {
+        var doc = new YDoc(new YDocOptions { Gc = true });
+        doc.ApplyUpdate(Convert.FromBase64String(OverlapStore));
+        var before = Convert.ToBase64String(doc.EncodeStateAsUpdate());
+
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(Convert.FromBase64String(OverlapResend)));
+
+        Assert.AreEqual(before, Convert.ToBase64String(doc.EncodeStateAsUpdate()));
+    }
 }

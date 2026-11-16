@@ -573,9 +573,9 @@ internal sealed partial class StructStore
             }
 
             var chains = new KeyChains();
-            foreach (var (str, _, integrate) in _steps)
+            foreach (var (str, offset, integrate) in _steps)
             {
-                if (integrate && str is Item item && LandsLast(doc, PlanItem.Decoded(item), chains) is { IsNull: false, Deleted: false } replaced)
+                if (integrate && str is Item item && LandsLast(doc, PlanItem.Decoded(item), offset, chains) is { IsNull: false, Deleted: false } replaced)
                 {
                     Add(replaced, ValueReplaced);
                 }
@@ -629,8 +629,10 @@ internal sealed partial class StructStore
         /// is of a lower client; after an origin only when that is the end of the key's value; without origins, after
         /// the key's first item only when that item's client is lower. Items under a deleted type are deleted.
         /// </summary>
-        private PlanItem LandsLast(YDoc doc, PlanItem item, KeyChains chains)
+        private PlanItem LandsLast(YDoc doc, PlanItem item, int offset, KeyChains chains)
         {
+            // Integrated from the store's state on, an item that overlaps the store has the item before as its origin.
+            var leftOrigin = offset > 0 ? new ID(item.Id.Client, item.Id.Clock + offset - 1) : item.LeftOrigin;
             var (parent, key) = KeyOf(item);
             if (parent is PlanItem parentItem ? parentItem.Deleted || chains.Deleted.Contains(parentItem) : parent is AbstractType { IsCollected: true } collectedParent && collectedParent.ItemDeleted)
             {
@@ -678,7 +680,7 @@ internal sealed partial class StructStore
             {
                 last = false;
             }
-            else if (item.LeftOrigin is ID origin)
+            else if (leftOrigin is ID origin)
             {
                 last = origin.Equals(chain.Value.LastId)
                     || (Target(origin).Item is { IsNull: false } left && !origin.Equals(left.LastId) && left.Id.Client < item.Id.Client && left == chain.Value);
@@ -689,7 +691,7 @@ internal sealed partial class StructStore
             }
 
             // Without origins and not last, it lands before the key's first item.
-            var first = chain.Head.IsNull || (!last && item.LeftOrigin == null) ? item : chain.Head;
+            var first = chain.Head.IsNull || (!last && leftOrigin == null) ? item : chain.Head;
             chains.Keys[(parent, key)] = (first, last ? item : chain.Value);
             if (!last)
             {
@@ -735,12 +737,12 @@ internal sealed partial class StructStore
                         // The planned items that become a key's value when they integrate, a later planned item replacing them or not.
                         values = new HashSet<PlanItem>();
                         var chains = new KeyChains();
-                        foreach (var (str, _, integrate) in _steps)
+                        foreach (var (str, offset, integrate) in _steps)
                         {
                             if (integrate && str is Item decoded)
                             {
                                 var item = PlanItem.Decoded(decoded);
-                                LandsLast(doc, item, chains);
+                                LandsLast(doc, item, offset, chains);
                                 if (!chains.Deleted.Contains(item) && item.Content is not ContentDeleted && KeyOf(item).Key != null)
                                 {
                                     values.Add(item);
@@ -767,7 +769,7 @@ internal sealed partial class StructStore
 
                 var client = target.Id.Client;
                 var valueEnd = target.Id.Clock + target.Length;
-                var boundaries = new List<long> { Target(target.Id).Start, valueEnd };
+                var boundaries = new List<long> { target.IsStored ? target.Id.Clock : Math.Max(target.Id.Clock, _store.GetState(client)), valueEnd };
                 events.Sort((a, b) => a.Time.CompareTo(b.Time));
                 foreach (var (boundary, time) in events)
                 {
