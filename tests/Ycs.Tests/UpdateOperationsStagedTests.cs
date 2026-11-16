@@ -58,6 +58,74 @@ public class UpdateOperationsStagedTests
             Decode(v2, merged).Select(s => (s.Kind, s.Length)).ToArray());
     }
 
+    [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void LazyStructReader_ManyOriginClients_ForgetsTheClientsItStreamedPast(bool v2)
+    {
+        var structs = Enumerable.Range(0, 1000).Select(k => (Action<IUpdateEncoder, ItemId>)((e, id) =>
+            Item.WriteItem(e, 0, id, new ItemId(100 + k, 0), null, null, new ContentDeleted(1), null, default))).ToArray();
+        var bytes = Update(v2, (1, 0, structs));
+        var reader = new LazyStructReader(
+            v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue),
+            filterSkips: false,
+            new StagingTable());
+        var most = 0;
+        var read = 0;
+
+        for (; reader.Curr >= 0; reader.Next())
+        {
+            most = Math.Max(most, reader.Table.ClientCount);
+            read++;
+        }
+
+        Assert.AreEqual((1000, true), (read, most <= 70));
+    }
+
+    [TestMethod]
+    public void DecodedStruct_AnyContent_IsAReadOnlyViewAndByteArraysAreCopiedOnRead()
+    {
+        var values = DecodedStructTests.RichUpdates()
+            .SelectMany(u => UpdateOperations.DecodeUpdate(u).Structs)
+            .Where(s => s.Kind == ItemKind.Any)
+            .Select(s => s.Content)
+            .ToList();
+
+        Assert.IsNotEmpty(values);
+        Assert.IsTrue(values.All(c => c is not object?[] && c is not IList<object?>));
+        var bytes = values.SelectMany(c => c).OfType<byte[]>().ToList();
+        if (bytes.Count > 0)
+        {
+            var first = values.First(c => c.Any(v => v is byte[]));
+            var at = first.ToList().FindIndex(v => v is byte[]);
+            Assert.AreNotSame(first[at], first[at]);
+        }
+    }
+
+    [TestMethod]
+    public void Return_ManyLargeTables_KeepsAtMostTheRetainedBytes()
+    {
+        var tables = Enumerable.Range(0, 20).Select(_ => StagingTable.Rent()).ToList();
+        foreach (var t in tables)
+        {
+            t.BeginClient(1, 0);
+            t.Chars(t.Add(StagedKind.String, 50_000, new ItemId(2, 0)))[0] = 'x';
+        }
+
+        foreach (var t in tables)
+        {
+            StagingTable.Return(t);
+        }
+
+        var kept = new List<StagingTable>();
+        for (var k = 0; k < 20; k++)
+        {
+            kept.Add(StagingTable.Rent());
+        }
+
+        Assert.IsTrue(kept.Sum(t => t.CapacityBytes) <= StagingTable.RetainedBytesCap);
+    }
+
     private static byte[] Merge(bool v2, params byte[][] updates) =>
         v2 ? UpdateOperations.MergeUpdatesV2(updates) : UpdateOperations.MergeUpdates(updates);
 

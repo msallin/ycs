@@ -99,46 +99,20 @@ internal sealed class LazyStructWriter
         lazyWriter.TotalWritten++;
     }
 
-    // Yjs' Item#write: the parent is written only when neither origin is, and an offset makes the left origin the id before it.
-    private static void WriteItem(IUpdateEncoder encoder, StagingTable table, int i, ID id, int offset)
+    // Yjs' Item#write: the header is Item.WriteItemHeader's, the content is written from the staged fields.
+    private static void WriteItem(IUpdateEncoder encoder, StagingTable table, int i, ItemId id, int offset)
     {
         ref readonly var s = ref table.At(i);
-        var origin = offset > 0 ? new ID(id.Client, id.Clock + offset - 1) : table.LeftOrigin(i);
-        var rightOrigin = table.RightOrigin(i);
-        var info = ((int)s.Kind & Bits.Bits5) |
-            (origin == null ? 0 : Bit.Bit8) |
-            (rightOrigin == null ? 0 : Bit.Bit7) |
-            (s.ParentSub < 0 ? 0 : Bit.Bit6);
-        encoder.WriteInfo((byte)info);
-
-        if (origin != null)
-        {
-            encoder.WriteLeftId(origin.Value);
-        }
-
-        if (rightOrigin != null)
-        {
-            encoder.WriteRightId(rightOrigin.Value);
-        }
-
-        if (origin == null && rightOrigin == null)
-        {
-            if (s.ParentKind == StagedParent.Root)
-            {
-                encoder.WriteParentInfo(true);
-                encoder.WriteString(table.ParentName(i));
-            }
-            else
-            {
-                encoder.WriteParentInfo(false);
-                encoder.WriteLeftId(table.ParentId(i));
-            }
-
-            if (s.ParentSub >= 0)
-            {
-                encoder.WriteString(table.ParentSub(i)!);
-            }
-        }
+        Item.WriteItemHeader(
+            encoder,
+            (int)s.Kind,
+            offset,
+            id,
+            table.LeftOrigin(i),
+            table.RightOrigin(i),
+            table.ParentSub(i),
+            s.ParentKind == StagedParent.Root ? table.ParentName(i) : null,
+            s.ParentKind == StagedParent.Id ? table.ParentId(i) : default);
 
         switch (s.Kind)
         {

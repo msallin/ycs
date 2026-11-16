@@ -94,7 +94,7 @@ public class StructStagingTests
     }
 
     [TestMethod]
-    public void LazyStructReader_WithStaging_StagesSkipsToo()
+    public void NextStaged_AGappedUpdate_StagesSkipsToo()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var updates = new List<byte[]>();
@@ -106,8 +106,8 @@ public class StructStagingTests
 
         var gapped = UpdateOperations.MergeUpdatesV2(new[] { updates[0], updates[2] });
         var table = new StagingTable();
-        var reader = new LazyStructReader(new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited), filterSkips: false, table, keep: true);
-        while (reader.Next())
+        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited), staging: table);
+        while (cursor.NextStaged() >= 0)
         {
         }
 

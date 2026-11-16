@@ -4,6 +4,8 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
+using System.Diagnostics;
+
 namespace Ycs;
 
 /// <summary>
@@ -18,25 +20,23 @@ internal sealed class LazyStructReader
     // Not readonly: Next() advances it in place.
     private EncodingUtils.StructCursor _cursor;
     private readonly bool _filterSkips;
-    private readonly bool _keep;
 
     /// <param name="table">An empty table, the reader's own until the update is read.</param>
-    /// <param name="keep">
-    /// Whether the table keeps every struct read. By default it holds the current struct only (the table is
-    /// <see cref="StagingTable.Truncate"/>d before each read), so what a caller needs of an earlier one it copies first.
-    /// </param>
-    public LazyStructReader(IUpdateDecoder decoder, bool filterSkips, StagingTable table, bool keep = false)
+    /// <remarks>
+    /// The table holds the current struct only (it is <see cref="StagingTable.Truncate"/>d before each read), so what a
+    /// caller needs of an earlier one it copies first.
+    /// </remarks>
+    public LazyStructReader(IUpdateDecoder decoder, bool filterSkips, StagingTable table)
     {
         _cursor = new EncodingUtils.StructCursor(decoder, staging: table);
         _filterSkips = filterSkips;
-        _keep = keep;
         Table = table;
         Curr = -1;
 
         Next();
     }
 
-    public StagingTable Table { get; }
+    public StagingTable Table { get; private set; }
 
     /// <summary>The index in <see cref="Table"/> of the struct last read by <see cref="Next"/>, or -1 once the update is exhausted.</summary>
     public int Curr { get; private set; }
@@ -51,6 +51,21 @@ internal sealed class LazyStructReader
     public StagedKind Kind { get; private set; }
 
     /// <summary>
+    /// Gives away the table, which holds the current struct (at index 0) and nothing else, and reads on into
+    /// <paramref name="spare"/>. The caller must call <see cref="Next"/> before it reads this reader again.
+    /// </summary>
+    public StagingTable SwapTable(StagingTable spare)
+    {
+        Debug.Assert(Curr == 0 && Table.Count == 1);
+        var table = Table;
+        spare.Truncate();
+        spare.BeginClient(Client, Clock + Length);
+        _cursor.UseStaging(spare);
+        Table = spare;
+        return table;
+    }
+
+    /// <summary>
     /// Advances to the next struct, skipping over 'Skip' structs when <c>filterSkips</c> was requested in the
     /// constructor. Returns whether there is one.
     /// </summary>
@@ -58,7 +73,7 @@ internal sealed class LazyStructReader
     {
         do
         {
-            if (!_keep && Table.Count > 0)
+            if (Table.Count > 0)
             {
                 Table.Truncate();
             }

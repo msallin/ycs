@@ -23,9 +23,12 @@ of 2 and 4 and page 0 of the slab at one slot. *Full review* marks a package rev
 * **D6**: an internal `SlotKind` (with Skip and Free = `Slab.FreeKind`) mapped to the public `ItemKind`.
 * **D7**: a detached view's hint becomes (staging, version) in step 9; after the staging is released or reused the view
   looks its id up in the store and throws if the struct is not there.
-* **D8, staging**: one staging per `UpdateReader` lease (its re-entrancy rule), one per `UpdateOperations` call, never
-  reset during the call; pages kept per thread up to about 256 KiB. Moving staging pages into an empty document's arena
-  is deferred until measured.
+* **D8, staging**: one staging per `UpdateReader` lease (its re-entrancy rule). An `UpdateOperations` call rents tables
+  from a per-thread pool (`StagingTable.Rent`/`Return`; the tables kept hold about 256 KiB between them): a merge of k
+  updates uses k+1 (a reader per update, each holding its current struct only, `Truncate`d before every read, and the
+  pending struct, which takes the reader's table when the struct moves whole and is `Truncate`d and copied into when it is
+  cut). A streaming table forgets the clients it streamed past beyond 64. `DecodeUpdate` owns a table of its own. Moving
+  staging pages into an empty document's arena is deferred until measured.
 * **Staging is not the slab** (design 2.5 says "the same slots"): a staged struct has no type-table index and no
   `AbstractType` yet, so its client, parent and payload mean other things (9.0).
 * **The model's split is not ported**: `Countable` comes from the right part's kind, as Yjs takes it from the spliced

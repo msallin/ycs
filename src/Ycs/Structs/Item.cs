@@ -240,8 +240,18 @@ internal partial class Item : AbstractStruct
     /// </summary>
     internal static void WriteItem(IUpdateEncoder encoder, int offset, ID id, ID? leftOrigin, ID? rightOrigin, string parentSub, IContentEx content, string parentRoot, ID parentId)
     {
+        WriteItemHeader(encoder, content.Ref, offset, id, leftOrigin, rightOrigin, parentSub, parentRoot, parentId);
+        content.Write(encoder, offset);
+    }
+
+    /// <summary>
+    /// What <see cref="WriteItem"/> writes before the content: the info byte (<paramref name="contentRef"/>, the origins
+    /// and the parentSub flag), the origins, and the parent when neither origin is written.
+    /// </summary>
+    internal static void WriteItemHeader(IUpdateEncoder encoder, int contentRef, int offset, ID id, ID? leftOrigin, ID? rightOrigin, string parentSub, string parentRoot, ID parentId)
+    {
         var origin = offset > 0 ? new ID(id.Client, id.Clock + offset - 1) : leftOrigin;
-        var info = (content.Ref & Bits.Bits5) |
+        var info = (contentRef & Bits.Bits5) |
             (origin == null ? 0 : Bit.Bit8) |
             (rightOrigin == null ? 0 : Bit.Bit7) |
             (parentSub == null ? 0 : Bit.Bit6);
@@ -275,8 +285,6 @@ internal partial class Item : AbstractStruct
                 encoder.WriteString(parentSub);
             }
         }
-
-        content.Write(encoder, offset);
     }
 
     /// <summary>

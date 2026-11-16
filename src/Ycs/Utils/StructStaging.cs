@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Ycs;
 
 /// <summary>
@@ -113,9 +115,11 @@ internal static class StructStaging
                 from.Values(i)[cut..].CopyTo(to.Values(j));
                 break;
             case StagedKind.Type:
+                // A cut needs a struct of two clocks at least; a Type has one.
+                Debug.Assert(cut == 0);
                 if (cut > 0)
                 {
-                    throw new NotImplementedException();
+                    throw new UnreachableException();
                 }
 
                 to.SetType(j, from.At(i).TypeRef, from.TypeName(i));
@@ -147,7 +151,7 @@ internal static class StructStaging
                 text = new string(table.Chars(i));
                 break;
             case ItemKind.Any:
-                values = Array.ConvertAll(table.Values(i).ToArray(), ValueFreezer.OnRead);
+                values = new ContentView([.. table.Values(i)]);
                 break;
             case ItemKind.Json or ItemKind.Binary or ItemKind.Embed:
                 values = ((IContent)table.Cold(i)).GetContent();

@@ -309,7 +309,7 @@ internal static class EncodingUtils
         private readonly IUpdateDecoder _decoder;
         private readonly long _sections;
         private readonly HashSet<long> _clients;
-        private readonly StagingTable _staging;
+        private StagingTable _staging;
         private long _section;
         private long _structsLeft;
         private long _structCount;
@@ -329,6 +329,9 @@ internal static class EncodingUtils
             _sections = decoder.Reader.ReadVarUint();
             _clients = _sections > 1 ? seenClients ?? new HashSet<long>() : null;
         }
+
+        /// <summary>Stages the structs from here on into <paramref name="staging"/>, which has begun the open client's range.</summary>
+        public void UseStaging(StagingTable staging) => _staging = staging;
 
         /// <summary>The next struct, or null after the last.</summary>
         public AbstractStruct Next()

@@ -6,6 +6,7 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Diagnostics;
 using System.Text;
 
 namespace Ycs;
@@ -226,8 +227,10 @@ public static class UpdateOperations
     /// The struct being written by <see cref="MergeStructs"/>, held in a one-struct table of its own: the readers hold
     /// the current struct only, and it can grow (a GC), be trimmed or extended (a Skip) before it is written.
     /// </summary>
-    private sealed class PendingStruct(LazyStructWriter writer, StagingTable table)
+    private sealed class PendingStruct(LazyStructWriter writer, StagingTable initial)
     {
+        private StagingTable table = initial;
+
         public bool Has { get; private set; }
         public long Client { get; private set; }
         public long Clock { get; private set; }
@@ -236,16 +239,28 @@ public static class UpdateOperations
         public long End => Clock + Length;
 
         /// <summary>Takes <paramref name="reader"/>'s current struct, from <paramref name="cut"/> clocks in (Yjs' <c>splice</c>).</summary>
+        /// <remarks>
+        /// Whole, the struct moves: the reader's table is swapped for this one, so the reader must advance before it is read
+        /// again. Cut, it is copied.
+        /// </remarks>
         public void Set(LazyStructReader reader, int cut)
         {
-            table.Reset();
-            StructStaging.CopyFrom(table, reader.Table, reader.Curr, cut);
+            if (cut == 0)
+            {
+                table = reader.SwapTable(table);
+            }
+            else
+            {
+                table.Truncate();
+                StructStaging.CopyFrom(table, reader.Table, reader.Curr, cut);
+            }
+
             Load();
         }
 
         public void SetSkip(long client, long clock, int length)
         {
-            table.Reset();
+            table.Truncate();
             table.BeginClient(client, clock);
             table.Add(StagedKind.Skip, length);
             Load();
@@ -344,8 +359,12 @@ public static class UpdateOperations
                 {
                     if (currWrite.End < currDecoder.Clock)
                     {
+                        // Yjs' structure kept line by line: the Skip branches here and below are dead. The readers filter Skips,
+                        // and the Skip made by SetSkip is replaced by the loop at the bottom before another round starts.
                         if (currWrite.Kind == StagedKind.Skip)
                         {
+                            Debug.Fail("A pending Skip does not survive a round.");
+
                             // Extend existing skip.
                             currWrite.SetLength((int)(currDecoder.Clock + currDecoder.Length - currWrite.Clock));
                         }
@@ -364,6 +383,8 @@ public static class UpdateOperations
                         {
                             if (currWrite.Kind == StagedKind.Skip)
                             {
+                                Debug.Fail("A pending Skip does not survive a round.");
+
                                 // Prefer to slice Skip because the other struct might contain more information.
                                 currWrite.SetLength((int)(currWrite.Length - diff));
                             }
