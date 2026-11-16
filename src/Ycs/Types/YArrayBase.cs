@@ -10,7 +10,7 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
+public abstract partial class YArrayBase : YType, IEnumerable<object>
 {
     internal sealed class ArraySearchMarker
     {
@@ -237,7 +237,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     /// <summary>
     /// What is wrong with the search markers, or null: each must point at an item of this list (reached from
-    /// <see cref="AbstractType._start"/>) whose index (the countable, undeleted length before it) is the marker's.
+    /// <see cref="YType._start"/>) whose index (the countable, undeleted length before it) is the marker's.
     /// Walks the whole list: for tests and Debug checks.
     /// </summary>
     internal string SearchMarkerViolations()
@@ -287,7 +287,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     /// <summary>
     /// Appends after the last item, deleted ones included (Yjs' <c>typeListPushGenerics</c>): the new
-    /// item has no right origin, unlike an insert at <see cref="AbstractType.Length"/>.
+    /// item has no right origin, unlike an insert at <see cref="YType.Length"/>.
     /// </summary>
     private protected void PushGenerics(Transaction transaction, ICollection<object> content)
     {
@@ -359,14 +359,14 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         {
             for (var i = 0; i < count; i++)
             {
-                if (list[i] is AbstractType)
+                if (list[i] is YType)
                 {
                     CheckCanNest();
                     break;
                 }
             }
         }
-        else if (content.Any(static c => c is AbstractType))
+        else if (content.Any(static c => c is YType))
         {
             CheckCanNest();
         }
@@ -432,7 +432,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                     left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentDoc(d));
                     left.Integrate(transaction, 0);
                     break;
-                case AbstractType at:
+                case YType at:
                     packJsonContent();
                     left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentType(at));
                     left.Integrate(transaction, 0);
@@ -489,7 +489,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         Debug.Assert(!indexed || Walk(start, startIndex, index, null, 0) == (p, pIndex), "The run-head index ends the marker walk where Yjs' loops end.");
         Doc.MarkerLookupsForTests?.Add((p.Id, pIndex));
 
-        if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as AbstractType).Length / (double)MaxSearchMarkers)
+        if (marker != null && Math.Abs(marker.Index - pIndex) < (p.Parent as YType).Length / (double)MaxSearchMarkers)
         {
             // Adjust existing marker.
             marker.Update(p, pIndex, _searchMarkers.NextTimestamp());

@@ -15,7 +15,7 @@ public class CollectedTypeFactsTests
     protected virtual bool PoisonHandles => false;
 
     [TestInitialize]
-    public void SetPoison() => AbstractType.PoisonCollectedHandleForTests = PoisonHandles || AbstractType.PoisonCollectedHandleForTests;
+    public void SetPoison() => YType.PoisonCollectedHandleForTests = PoisonHandles || YType.PoisonCollectedHandleForTests;
 
     // inner's item is a GC struct that merges with its neighbours' (all one client, consecutive clocks); outer's item
     // is a deleted item that merges into the deleted item left of it.
@@ -221,5 +221,5 @@ public class CollectedTypeFactsPoisonedTests : CollectedTypeFactsTests
     protected override bool PoisonHandles => true;
 
     [TestCleanup]
-    public void ClearPoison() => AbstractType.PoisonCollectedHandleForTests = false;
+    public void ClearPoison() => YType.PoisonCollectedHandleForTests = false;
 }

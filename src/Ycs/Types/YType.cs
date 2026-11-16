@@ -34,11 +34,15 @@ public class YDeepEventArgs
     public Transaction Transaction { get; }
 }
 
-public partial class AbstractType
+public abstract partial class YType
 {
     // The item the type is in. Once the type is collected (Collect), nothing but the XML siblings' links (NextSibling,
     // PrevSibling, InsertAfter) and StructStore.IntegrationPlan's keys may read it; the rest asks IsRoot, ParentType,
     // ItemId, ItemParentSub, ItemDeleted or ItemKeep.
+    private protected YType()
+    {
+    }
+
     internal ItemRef _item;
     internal ItemRef _start;
     internal Dictionary<string, ItemRef> _map = new Dictionary<string, ItemRef>();
@@ -51,7 +55,7 @@ public partial class AbstractType
     // The facts of the item a collected type was in. Its struct can merge away once the type is collected, and its slot
     // be reused, while user code still holds the type: Collect sets them before the struct is replaced; none changes later.
     private bool _collected;
-    private AbstractType _collectedParent;
+    private YType _collectedParent;
     private ID _collectedId;
     private string _collectedParentSub;
     private bool _collectedKeep;
@@ -61,7 +65,7 @@ public partial class AbstractType
     /// <summary>Whether the type was collected: its facts are kept, its item may be gone.</summary>
     internal bool IsCollected => _collected;
 
-    internal AbstractType ParentType => _collected ? _collectedParent : _item.IsNull ? null : _item.Parent as AbstractType;
+    internal YType ParentType => _collected ? _collectedParent : _item.IsNull ? null : _item.Parent as YType;
 
     /// <summary>The id of the item the type is in; a root type has none.</summary>
     internal ID ItemId => _collected ? _collectedId : _item.Id;
@@ -105,7 +109,7 @@ public partial class AbstractType
             return;
         }
 
-        _collectedParent = _item.Parent as AbstractType;
+        _collectedParent = _item.Parent as YType;
         _collectedId = _item.Id;
         _collectedParentSub = _item.ParentSub;
         _collectedKeep = _item.Keep;
@@ -136,7 +140,7 @@ public partial class AbstractType
         Doc = doc;
         _item = item;
         _collected = false;
-        Depth = !item.IsNull && item.Parent is AbstractType parent ? parent.Depth + 1 : 0;
+        Depth = !item.IsNull && item.Parent is YType parent ? parent.Depth + 1 : 0;
 
         // A root type that was read from an update before it was defined takes over the map of
         // its placeholder (YDoc.Get).
@@ -153,8 +157,8 @@ public partial class AbstractType
         }
     }
 
-    internal virtual AbstractType InternalCopy() { throw new NotImplementedException(); }
-    internal virtual AbstractType InternalClone() { throw new NotImplementedException(); }
+    internal virtual YType InternalCopy() { throw new NotImplementedException(); }
+    internal virtual YType InternalClone() { throw new NotImplementedException(); }
 
     internal virtual void Write(IUpdateEncoder encoder) { throw new NotImplementedException(); }
 
@@ -162,15 +166,15 @@ public partial class AbstractType
     /// For a type whose JSON holds the JSON of the types nested in it (a map, an array): its JSON without them,
     /// each listed in <paramref name="nested"/> with where it goes; null for any other type.
     /// </summary>
-    internal virtual object ShallowJson(List<(AbstractType Type, object Container, string Key, int Index)> nested) => null;
+    internal virtual object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested) => null;
 
     /// <summary>
     /// <see cref="ToJson"/> of <paramref name="root"/> and the maps and arrays nested in it, without recursion: they
     /// may be nested as deep as an update allows (<see cref="UpdateLimits.MaxDepth"/>).
     /// </summary>
-    internal static object JsonTree(AbstractType root)
+    internal static object JsonTree(YType root)
     {
-        var nested = new List<(AbstractType Type, object Container, string Key, int Index)>();
+        var nested = new List<(YType Type, object Container, string Key, int Index)>();
         var result = root.ShallowJson(nested);
         while (nested.Count > 0)
         {

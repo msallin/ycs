@@ -16,7 +16,7 @@ namespace Ycs;
 /// <summary>
 /// Small helpers shared by the Xml node types (<see cref="YXmlElement"/>, <see cref="YXmlText"/>)
 /// that need to walk 'Item.Left'/'Item.Right' the way Yjs' 'Item.prototype.next'/'.prev' getters do
-/// (i.e. skipping deleted items), and to unwrap the 'AbstractType' a list 'Item' carries.
+/// (i.e. skipping deleted items), and to unwrap the 'YType' a list 'Item' carries.
 /// </summary>
 internal static class YXmlNodeHelpers
 {
@@ -42,7 +42,7 @@ internal static class YXmlNodeHelpers
         return n;
     }
 
-    internal static AbstractType ContentTypeOf(ItemRef item)
+    internal static YType ContentTypeOf(ItemRef item)
     {
         if (item.IsNull)
         {
@@ -50,7 +50,7 @@ internal static class YXmlNodeHelpers
         }
 
         var content = item.Content.GetContent();
-        return content.Count > 0 ? content[0] as AbstractType : null;
+        return content.Count > 0 ? content[0] as YType : null;
     }
 }
 
@@ -58,10 +58,10 @@ internal static class YXmlNodeHelpers
 /// Represents a subset of the nodes of a YXmlFragment / YXmlElement and a position within them.
 /// Created via <see cref="YXmlFragment.CreateTreeWalker"/>.
 /// </summary>
-public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<AbstractType>
+public sealed class YXmlTreeWalker : IEnumerator<YType>, IEnumerable<YType>
 {
-    private readonly Func<AbstractType, bool> _filter;
-    private readonly AbstractType _root;
+    private readonly Func<YType, bool> _filter;
+    private readonly YType _root;
     // The current node, held across the caller's code between two nodes: _currentNode is valid while
     // StructStore.Departures is still _departures, else the node is looked up by _currentId.
     private ItemRef _currentNode;
@@ -69,7 +69,7 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
     private int _departures;
     private bool _firstCall;
 
-    internal YXmlTreeWalker(AbstractType root, Func<AbstractType, bool> filter = null)
+    internal YXmlTreeWalker(YType root, Func<YType, bool> filter = null)
     {
         _root = root;
         _filter = filter ?? (_ => true);
@@ -87,7 +87,7 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
         }
     }
 
-    public AbstractType Current { get; private set; }
+    public YType Current { get; private set; }
 
     object IEnumerator.Current => Current;
 
@@ -133,7 +133,7 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
                         }
                         else
                         {
-                            n = (n.Parent as AbstractType)._item;
+                            n = (n.Parent as YType)._item;
                         }
                     }
                 }
@@ -161,7 +161,7 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
         // Do nothing.
     }
 
-    public IEnumerator<AbstractType> GetEnumerator() => this;
+    public IEnumerator<YType> GetEnumerator() => this;
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
@@ -192,12 +192,12 @@ public partial class YXmlFragment : YArrayBase
         Insert(0, prelimContent);
     }
 
-    internal override AbstractType InternalCopy()
+    internal override YType InternalCopy()
     {
         return new YXmlFragment();
     }
 
-    internal override AbstractType InternalClone()
+    internal override YType InternalClone()
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -205,7 +205,7 @@ public partial class YXmlFragment : YArrayBase
         var children = new List<object>();
         foreach (var v in ToArray())
         {
-            children.Add(v is AbstractType at ? at.InternalClone() : v);
+            children.Add(v is YType at ? at.InternalClone() : v);
         }
 
         el.Insert(0, children);

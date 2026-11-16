@@ -11,7 +11,7 @@ namespace Ycs.Fuzz;
 internal static class Consistency
 {
     [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_share")]
-    private static extern ref Dictionary<string, AbstractType> Share(YDoc doc);
+    private static extern ref Dictionary<string, YType> Share(YDoc doc);
 
     /// <summary>What is wrong with <paramref name="doc"/>, or null.</summary>
     public static string? Failure(YDoc doc)
@@ -78,8 +78,8 @@ internal static class Consistency
     // element, and a deleted run may be 2^31 - 1 long.
     private static string? ListInvariants(YDoc doc)
     {
-        var open = new Stack<(string Path, AbstractType Type)>(Share(doc).Select(kv => (kv.Key, kv.Value)));
-        var seen = new HashSet<AbstractType>(ReferenceEqualityComparer.Instance);
+        var open = new Stack<(string Path, YType Type)>(Share(doc).Select(kv => (kv.Key, kv.Value)));
+        var seen = new HashSet<YType>(ReferenceEqualityComparer.Instance);
         while (open.Count > 0)
         {
             var (path, type) = open.Pop();

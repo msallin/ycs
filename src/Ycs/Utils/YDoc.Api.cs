@@ -229,23 +229,23 @@ public partial class YDoc
         return Get<YText>(name);
     }
 
-    public T Get<T>(string name)
-        where T : AbstractType, new()
+    internal T Get<T>(string name)
+        where T : YType
     {
         if (!_share.TryGetValue(name, out var type))
         {
-            type = new T();
+            type = CreateRoot<T>();
             type.Integrate(this, default);
             _share[name] = type;
         }
 
         // Remote type is realized when this method is called.
         // As Yjs' constructor check: a subclass (YXmlElement for YXmlFragment) is another type.
-        if (typeof(T) != typeof(AbstractType) && type.GetType() != typeof(T))
+        if (typeof(T) != typeof(YType) && type.GetType() != typeof(T))
         {
-            if (type.GetType() == typeof(AbstractType))
+            if (type is YTypePlaceholder)
             {
-                var t = new T();
+                var t = CreateRoot<T>();
                 t._map = type._map;
 
                 foreach (var kvp in type._map)
@@ -276,6 +276,23 @@ public partial class YDoc
         }
 
         return (T)type;
+    }
+
+    // No reflection: the root types are a closed set. YType asks for the placeholder of a type the document learned
+    // of from an update before anyone defined it.
+    private static T CreateRoot<T>()
+        where T : YType
+    {
+        YType created =
+            typeof(T) == typeof(YArray) ? new YArray() :
+            typeof(T) == typeof(YMap) ? new YMap() :
+            typeof(T) == typeof(YText) ? new YText() :
+            typeof(T) == typeof(YXmlFragment) ? new YXmlFragment() :
+            typeof(T) == typeof(YXmlElement) ? new YXmlElement() :
+            typeof(T) == typeof(YXmlText) ? new YXmlText() :
+            typeof(T) == typeof(YType) ? new YTypePlaceholder() :
+            throw new InvalidOperationException($"{typeof(T).Name} is not a type a document can define by name");
+        return (T)created;
     }
 
     /// <summary>

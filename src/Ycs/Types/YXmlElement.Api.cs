@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 
 namespace Ycs;
 
-public partial class YXmlElement
+public sealed partial class YXmlElement
 {
     public YXmlElement()
         : this("UNDEFINED")

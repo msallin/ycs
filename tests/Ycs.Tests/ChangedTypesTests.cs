@@ -51,7 +51,7 @@ public class ChangedTypesTests
         var array = doc.GetArray("a");
         var (first, gone, last) = (new YMap(), new YMap(), new YMap());
         array.Add(new object[] { first, gone, last });
-        var changed = new List<AbstractType>();
+        var changed = new List<YType>();
         doc.AfterTransaction += (_, tr) => changed = tr.Changed.Keys.ToList();
 
         doc.Transact(_ =>
@@ -62,7 +62,7 @@ public class ChangedTypesTests
             last.Set("k", 1);
         });
 
-        CollectionAssert.AreEqual(new AbstractType[] { first, array, last }, changed);
+        CollectionAssert.AreEqual(new YType[] { first, array, last }, changed);
     }
 
     [TestMethod]
@@ -75,7 +75,7 @@ public class ChangedTypesTests
         var array = doc.GetArray("a");
         var inner = new YMap();
         array.Insert(0, new object[] { inner });
-        var names = new Dictionary<AbstractType, string> { [text] = "t", [map] = "m", [array] = "a", [inner] = "inner" };
+        var names = new Dictionary<YType, string> { [text] = "t", [map] = "m", [array] = "a", [inner] = "inner" };
         string order = null;
         map.EventHandler += (_, _) => doc.AfterTransaction += (_, tr) => order ??= string.Join(",", tr.ChangedParentTypes.Keys.Select(k => names[k]));
 

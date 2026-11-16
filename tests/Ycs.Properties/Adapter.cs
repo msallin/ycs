@@ -823,14 +823,14 @@ namespace Ycs.Properties
                         }
 
                         var child = s.Get("ref") == null || f.Length == 0 ? null : f.Get(Clamp(s.Int("ref"), f.Length - 1));
-                        if (child is not (null or AbstractType))
+                        if (child is not (null or YType))
                         {
                             // Yjs takes a reference that is not a type as the item itself and throws on it ('n'.right)
                             // before it changes anything; InsertAfter's parameter cannot hold one.
                             throw new InvalidOperationException("The reference is not a type: Yjs' insertAfter throws.");
                         }
 
-                        f.InsertAfter((AbstractType)child, Values(s));
+                        f.InsertAfter((YType)child, Values(s));
                         return Missing.Value;
                     }
                 case "set":
@@ -1036,7 +1036,7 @@ namespace Ycs.Properties
 
         private static List<object> Values(Dictionary<string, object> s) => s.List("values").Select(Val).ToList();
 
-        private static void SeqInsert(AbstractType t, int at, List<object> values)
+        private static void SeqInsert(YType t, int at, List<object> values)
         {
             if (t is YArray a)
             {
@@ -1139,7 +1139,7 @@ namespace Ycs.Properties
             _ => BitConverter.Int64BitsToDouble(unchecked((long)ulong.Parse(tag, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture))),
         };
 
-        private static AbstractType NewType(Dictionary<string, object> s)
+        private static YType NewType(Dictionary<string, object> s)
         {
             switch (s.Str("$t"))
             {
@@ -1218,7 +1218,7 @@ namespace Ycs.Properties
 
         public long ClientId => Doc.ClientId;
 
-        internal AbstractType Root(string name)
+        internal YType Root(string name)
         {
             foreach (var (n, kind) in _roots)
             {
@@ -1231,7 +1231,7 @@ namespace Ycs.Properties
             return null;
         }
 
-        internal static AbstractType RootOf(YDoc doc, string name, string kind) => kind switch
+        internal static YType RootOf(YDoc doc, string name, string kind) => kind switch
         {
             "text" => doc.GetText(name),
             "array" => doc.GetArray(name),
@@ -1291,7 +1291,7 @@ namespace Ycs.Properties
             return roots;
         }
 
-        private static object JsonView(AbstractType t)
+        private static object JsonView(YType t)
         {
             try
             {
@@ -1338,7 +1338,7 @@ namespace Ycs.Properties
 
         // ---- views
 
-        internal static string KindOf(AbstractType t) => t switch
+        internal static string KindOf(YType t) => t switch
         {
             YXmlText => "xmlt",
             YText => "text",
@@ -1350,7 +1350,7 @@ namespace Ycs.Properties
             _ => null,
         };
 
-        internal static int LengthOf(AbstractType t) => t is YMap m ? m.Count : t.Length;
+        internal static int LengthOf(YType t) => t is YMap m ? m.Count : t.Length;
 
         private const long MaxSafeInteger = (1L << 53) - 1;
 
@@ -1437,7 +1437,7 @@ namespace Ycs.Properties
                 case YText.YTextChangeAttributes ychange:
                     // Yjs' default computeYChange gives { type: 'added' | 'removed' }.
                     return Obj(("type", ychange.Type == YText.YTextChangeType.Added ? "added" : "removed"));
-                case AbstractType t:
+                case YType t:
                     return TypeView(t);
                 case IDictionary<string, object> map:
                     return map.ToDictionary(kv => kv.Key, kv => View(kv.Value));
@@ -1511,7 +1511,7 @@ namespace Ycs.Properties
             return o;
         }
 
-        private static object TypeView(AbstractType t) => KindOf(t) switch
+        private static object TypeView(YType t) => KindOf(t) switch
         {
             "text" => Obj(("$t", "text"), ("d", DeltaView(((YText)t).ToDelta())), ("a", AttrsView(((YText)t).GetAttributes()))),
             "xmlt" => Obj(("$t", "xmlt"), ("d", DeltaView(((YText)t).ToDelta())), ("a", AttrsView(((YText)t).GetAttributes()))),
@@ -1526,7 +1526,7 @@ namespace Ycs.Properties
         // ---- paths
 
         /// <summary>The path of a type from its root, by visible content only ("~" where it is not visible).</summary>
-        internal List<object> PathOf(AbstractType t)
+        internal List<object> PathOf(YType t)
         {
             var steps = new List<object>();
             while (true)
@@ -1553,7 +1553,7 @@ namespace Ycs.Properties
             }
         }
 
-        private static object ChildStep(AbstractType parent, AbstractType t)
+        private static object ChildStep(YType parent, YType t)
         {
             switch (KindOf(parent))
             {
@@ -1600,7 +1600,7 @@ namespace Ycs.Properties
             }
         }
 
-        internal AbstractType Resolve(List<object> path)
+        internal YType Resolve(List<object> path)
         {
             if (path == null || path.Count == 0 || path[0] is not string rootName)
             {
@@ -1633,7 +1633,7 @@ namespace Ycs.Properties
                     next = map.ContainsKey((string)path[i]) ? map.Get((string)path[i]) : null;
                 }
 
-                t = next as AbstractType;
+                t = next as YType;
                 if (t == null)
                 {
                     return null;
@@ -1655,7 +1655,7 @@ namespace Ycs.Properties
             return result;
         }
 
-        private static void Visit(AbstractType t, List<object> path, List<Target> into, int depth)
+        private static void Visit(YType t, List<object> path, List<Target> into, int depth)
         {
             var k = KindOf(t);
             var keys = t is YMap m ? m.Keys().ToList() : (IReadOnlyList<string>)[];
@@ -1669,7 +1669,7 @@ namespace Ycs.Properties
             {
                 foreach (var (key, v) in map)
                 {
-                    if (v is AbstractType child)
+                    if (v is YType child)
                     {
                         Visit(child, [.. path, key], into, depth + 1);
                     }
@@ -1680,7 +1680,7 @@ namespace Ycs.Properties
                 var items = t is YArray a ? a.ToArray() : ((YXmlFragment)t).ToArray();
                 for (var i = 0; i < items.Count; i++)
                 {
-                    if (items[i] is AbstractType child)
+                    if (items[i] is YType child)
                     {
                         Visit(child, [.. path, (long)i], into, depth + 1);
                     }
@@ -1708,19 +1708,19 @@ namespace Ycs.Properties
         private static extern IEnumerable<(ItemId Item, YArrayBase List)> NestedListsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "MapIdsForTests")]
-        private static extern IEnumerable<KeyValuePair<string, ItemId>> MapIdsOf(AbstractType type);
+        private static extern IEnumerable<KeyValuePair<string, ItemId>> MapIdsOf(YType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_OwnerIdForTests")]
-        private static extern ItemId? OwnerIdOf(AbstractType type);
+        private static extern ItemId? OwnerIdOf(YType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "InDeletedTypeForTests")]
-        private static extern bool InDeletedTypeOf(AbstractType type);
+        private static extern bool InDeletedTypeOf(YType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "CountedForTests")]
-        private static extern (int Length, string Text) CountedOf(AbstractType type);
+        private static extern (int Length, string Text) CountedOf(YType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "ListForTests")]
-        private static extern List<(long Client, long Clock, int Length, ItemId? LeftOrigin, ItemId? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListOf(AbstractType type);
+        private static extern List<(long Client, long Clock, int Length, ItemId? LeftOrigin, ItemId? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListOf(YType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DescribeSearchMarkers")]
         private static extern string DescribeSearchMarkers(YArrayBase type);
@@ -1781,7 +1781,7 @@ namespace Ycs.Properties
 
         private static string IdOf(ItemId? id) => id is ItemId i ? $"{i.Client}:{i.Clock}" : "-";
 
-        private string TypeName(AbstractType t)
+        private string TypeName(YType t)
         {
             foreach (var (name, _) in _roots)
             {
@@ -1802,7 +1802,7 @@ namespace Ycs.Properties
         public string StoreDump(bool markers = true)
         {
             var sb = new StringBuilder();
-            var types = new List<AbstractType>();
+            var types = new List<YType>();
             foreach (var (name, _) in _roots)
             {
                 types.Add(Root(name));
@@ -1812,7 +1812,7 @@ namespace Ycs.Properties
                 StoreOf(Doc),
                 sb,
                 markers,
-                parent => parent is AbstractType pt ? TypeName(pt) : parent?.ToString() ?? "-",
+                parent => parent is YType pt ? TypeName(pt) : parent?.ToString() ?? "-",
                 (kind, values) => ContentText(kind, values, types));
 
             foreach (var t in types)
@@ -1834,7 +1834,7 @@ namespace Ycs.Properties
             return sb.ToString();
         }
 
-        private static string ContentText(string kind, IReadOnlyList<object> values, List<AbstractType> types)
+        private static string ContentText(string kind, IReadOnlyList<object> values, List<YType> types)
         {
             if (kind == "ContentString")
             {
@@ -1844,7 +1844,7 @@ namespace Ycs.Properties
             var parts = new List<string>();
             foreach (var v in values)
             {
-                if (v is AbstractType t)
+                if (v is YType t)
                 {
                     types.Add(t);
                     parts.Add("type " + t.GetType().Name);
@@ -1903,7 +1903,7 @@ namespace Ycs.Properties
             return result;
         }
 
-        private static List<ItemRun> ItemsOf(AbstractType type) =>
+        private static List<ItemRun> ItemsOf(YType type) =>
             [.. ListOf(type).Select(r => new ItemRun(
                 r.Client,
                 r.Clock,

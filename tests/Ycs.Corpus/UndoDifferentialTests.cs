@@ -79,7 +79,7 @@ internal static class UndoReplay
         var seed = script.GetProperty("seed").GetInt32();
         var config = script.GetProperty("config");
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
-        var roots = new Dictionary<string, AbstractType>
+        var roots = new Dictionary<string, YType>
         {
             ["t"] = doc.GetText("t"),
             ["m"] = doc.GetMap("m"),

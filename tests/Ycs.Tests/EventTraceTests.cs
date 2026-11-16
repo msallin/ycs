@@ -39,7 +39,7 @@ public class EventTraceTests
         var trace = Fixture.Value.RootElement[index];
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var log = new List<object>();
-        var seen = new HashSet<AbstractType>();
+        var seen = new HashSet<YType>();
         var nextId = 0;
 
         void Register()
@@ -142,33 +142,33 @@ public class EventTraceTests
         return hasInit ? YArray.From((List<object>)Convert(init)) : new YArray();
     }
 
-    private static AbstractType Resolve(YDoc doc, JsonElement path)
+    private static YType Resolve(YDoc doc, JsonElement path)
     {
-        AbstractType type = path[0].GetString() == "m" ? doc.GetMap("m") : doc.GetArray("a");
+        YType type = path[0].GetString() == "m" ? doc.GetMap("m") : doc.GetArray("a");
         for (var i = 1; i < path.GetArrayLength(); i++)
         {
-            type = (AbstractType)(type is YMap m ? m.Get(path[i].GetString()) : ((YArray)type).Get(path[i].GetInt32()));
+            type = (YType)(type is YMap m ? m.Get(path[i].GetString()) : ((YArray)type).Get(path[i].GetInt32()));
         }
 
         return type;
     }
 
-    private static List<(AbstractType Type, string Path)> Walk(YDoc doc)
+    private static List<(YType Type, string Path)> Walk(YDoc doc)
     {
-        var result = new List<(AbstractType, string)>();
+        var result = new List<(YType, string)>();
         Walk(doc.GetMap("m"), new List<object> { "m" }, result);
         Walk(doc.GetArray("a"), new List<object> { "a" }, result);
         return result;
     }
 
-    private static void Walk(AbstractType type, List<object> path, List<(AbstractType, string)> result)
+    private static void Walk(YType type, List<object> path, List<(YType, string)> result)
     {
         result.Add((type, JsJson(path)));
         if (type is YMap map)
         {
             foreach (var kv in map)
             {
-                if (kv.Value is AbstractType child)
+                if (kv.Value is YType child)
                 {
                     path.Add(kv.Key);
                     Walk(child, path, result);
@@ -181,7 +181,7 @@ public class EventTraceTests
             var i = 0;
             foreach (var v in ((YArray)type).ToArray())
             {
-                if (v is AbstractType child)
+                if (v is YType child)
                 {
                     path.Add(i);
                     Walk(child, path, result);
@@ -227,7 +227,7 @@ public class EventTraceTests
             case bool b:
                 sb.Append(b ? "true" : "false");
                 break;
-            case AbstractType:
+            case YType:
                 sb.Append("\"<type>\"");
                 break;
             case Delta d:

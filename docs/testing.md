@@ -38,7 +38,7 @@ edit lands. What proves both:
 | `run-extension`, `merge-order` (`tests/Ycs.Properties`) | the reference | see [reference comparisons](#reference-comparisons) |
 | the live soak, `fixtures/windows.jsonl` (`tests/Ycs.Properties`) | Yjs | scripts with quiet clients, filters, typing runs with an update applied or a snapshot read in the middle, reacting observers (`GenOptions.Windows`); the soak reports how many steps and scripts extended a run |
 
-"Observed" (`AbstractType.IsObserved`): a handler on the type, a deep handler on it or an ancestor, or
+"Observed" (`YType.IsObserved`): a handler on the type, a deep handler on it or an ancestor, or
 an `AfterTransaction`, `AfterTransactionCleanup` or `AfterAllTransactions` handler on the document; with
 a `BeforeObserverCalls` handler nothing extends either. Update handlers do not count. An observed type,
 and every type of a document with an UndoManager (an `AfterTransaction` handler), makes Yjs' items.

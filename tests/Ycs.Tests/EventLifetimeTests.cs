@@ -103,7 +103,7 @@ public class EventLifetimeTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var undo = new UndoManager(text);
-        IDictionary<AbstractType, IList<YEvent>> kept = null;
+        IDictionary<YType, IList<YEvent>> kept = null;
         undo.StackItemAdded += (_, e) => kept = e.ChangedParentTypes;
         text.Insert(0, "a");
         undo.Undo();

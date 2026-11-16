@@ -161,7 +161,7 @@ public class TraceReplayTests
             return d;
         }
 
-        protected void ObserveType(AbstractType t, int id)
+        protected void ObserveType(YType t, int id)
         {
             t.Observe((_, e) => Log.Add(new List<object> { "obs", id, Describe(e.Event) }));
             if (id % 3 == 0)
@@ -284,7 +284,7 @@ public class TraceReplayTests
                 throw new InvalidOperationException(op[0].GetString());
         }
 
-        static AbstractType NewType(string name) => name switch
+        static YType NewType(string name) => name switch
         {
             "YMap" => new YMap(new Dictionary<string, object> { ["k"] = 1 }),
             "YText" => new YText("t"),
@@ -294,7 +294,7 @@ public class TraceReplayTests
 
     private sealed class ListMapReplay : Replay
     {
-        private readonly HashSet<AbstractType> _seen = new();
+        private readonly HashSet<YType> _seen = new();
 
         public ListMapReplay()
         {
@@ -302,21 +302,21 @@ public class TraceReplayTests
             ObserveNew();
         }
 
-        private List<(AbstractType Type, string Path)> Walk()
+        private List<(YType Type, string Path)> Walk()
         {
-            var res = new List<(AbstractType, string)>();
+            var res = new List<(YType, string)>();
             Rec(Doc.GetMap("m"), ["m"]);
             Rec(Doc.GetArray("a"), ["a"]);
             return res;
 
-            void Rec(AbstractType t, List<object> path)
+            void Rec(YType t, List<object> path)
             {
                 res.Add((t, JsonSerializer.Serialize(path)));
                 if (t is YMap m)
                 {
                     foreach (var (k, v) in m)
                     {
-                        if (v is AbstractType c)
+                        if (v is YType c)
                         {
                             Rec(c, [.. path, k]);
                         }
@@ -327,7 +327,7 @@ public class TraceReplayTests
                     var i = 0;
                     foreach (var v in ((YArray)t).ToArray())
                     {
-                        if (v is AbstractType c)
+                        if (v is YType c)
                         {
                             Rec(c, [.. path, i]);
                         }
@@ -347,12 +347,12 @@ public class TraceReplayTests
             }
         }
 
-        private AbstractType Resolve(JsonElement path)
+        private YType Resolve(JsonElement path)
         {
-            AbstractType t = path[0].GetString() == "m" ? Doc.GetMap("m") : Doc.GetArray("a");
+            YType t = path[0].GetString() == "m" ? Doc.GetMap("m") : Doc.GetArray("a");
             for (var i = 1; i < path.GetArrayLength(); i++)
             {
-                t = (AbstractType)(t is YMap m ? m.Get(path[i].GetString()) : ((YArray)t).Get(path[i].GetInt32()));
+                t = (YType)(t is YMap m ? m.Get(path[i].GetString()) : ((YArray)t).Get(path[i].GetInt32()));
             }
 
             return t;
@@ -405,7 +405,7 @@ public class TraceReplayTests
 
     private sealed class XmlReplay : Replay
     {
-        private readonly HashSet<AbstractType> _seen = new();
+        private readonly HashSet<YType> _seen = new();
         private readonly YXmlFragment _root;
 
         public XmlReplay()
@@ -415,20 +415,20 @@ public class TraceReplayTests
             ObserveNew();
         }
 
-        private List<AbstractType> Walk()
+        private List<YType> Walk()
         {
-            var res = new List<AbstractType>();
+            var res = new List<YType>();
             Rec(_root);
             return res;
 
-            void Rec(AbstractType t)
+            void Rec(YType t)
             {
                 res.Add(t);
                 if (t is YXmlFragment f)
                 {
                     foreach (var v in f.ToArray())
                     {
-                        if (v is AbstractType c)
+                        if (v is YType c)
                         {
                             Rec(c);
                         }
@@ -446,12 +446,12 @@ public class TraceReplayTests
             }
         }
 
-        private AbstractType Resolve(JsonElement path)
+        private YType Resolve(JsonElement path)
         {
-            AbstractType t = _root;
+            YType t = _root;
             for (var i = 1; i < path.GetArrayLength(); i++)
             {
-                t = (AbstractType)((YXmlFragment)t).Get(path[i].GetInt32());
+                t = (YType)((YXmlFragment)t).Get(path[i].GetInt32());
             }
 
             return t;

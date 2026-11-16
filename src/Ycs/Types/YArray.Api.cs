@@ -8,7 +8,7 @@
 
 namespace Ycs;
 
-public partial class YArray
+public sealed partial class YArray
 {
     public YArray()
         : this(null)
@@ -178,7 +178,7 @@ public partial class YArray
 
     /// <summary>
     /// Transforms this Shared Type to a JSON-compatible list. Mirrors Yjs' <c>toJSON()</c>
-    /// (<c>this.map(c =&gt; c instanceof AbstractType ? c.toJSON() : c)</c>).
+    /// (<c>this.map(c =&gt; c instanceof YType ? c.toJSON() : c)</c>).
     /// </summary>
     public override object ToJson() => JsonTree(this);
 }

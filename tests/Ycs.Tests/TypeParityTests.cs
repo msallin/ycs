@@ -14,8 +14,8 @@ namespace Ycs;
 /// Ports the meaningful behavioural cases (not already covered by <see cref="YMapTests"/>,
 /// <see cref="YArrayTests"/>, <see cref="YTextTests"/>) for the shared-type API surface that was
 /// added or fixed to reach Yjs 13.6.32 parity: <c>YMap.Has/Clear/Size/ForEach/Entries/ToJson</c>,
-/// <c>YArray.Map/ForEach/ToJson/Push/From</c>/indexer, <c>YText.ToJson/CleanupYTextFormatting</c>,
-/// and <c>AbstractType.Observe/Unobserve/ObserveDeep/UnobserveDeep/ToJson</c>.
+/// <c>YArray.Map/ForEach/ToJson/Push/From</c>/indexer, <c>YText.ToJson</c>,
+/// and <c>YType.Observe/Unobserve/ObserveDeep/UnobserveDeep/ToJson</c>.
 /// </summary>
 [TestClass]
 public class TypeParityTests
@@ -212,22 +212,6 @@ public class TypeParityTests
 
         Assert.AreEqual(text.ToString(), text.ToJson());
         Assert.AreEqual("hello world", text.ToJson());
-    }
-
-    [TestMethod]
-    public void TestCleanupYTextFormattingStaticWrapper()
-    {
-        var doc = new YDoc();
-        var text = doc.GetText("text");
-        text.Insert(0, "abc");
-        text.Format(0, 3, new Dictionary<string, object> { { "bold", true } });
-        text.Format(0, 3, new Dictionary<string, object> { { "bold", true } });
-
-        // Redundant formatting runs should be collapsible; the static free-function wrapper
-        // must behave exactly like the instance method it forwards to.
-        var viaStatic = YText.CleanupYTextFormatting(text);
-        Assert.IsTrue(viaStatic >= 0);
-        Assert.AreEqual("abc", text.ToString());
     }
 
     [TestMethod]

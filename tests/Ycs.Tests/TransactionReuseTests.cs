@@ -322,8 +322,8 @@ public class TransactionReuseTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var undo = new UndoManager(text);
-        var added = new List<IDictionary<AbstractType, IList<YEvent>>>();
-        var popped = new List<IDictionary<AbstractType, IList<YEvent>>>();
+        var added = new List<IDictionary<YType, IList<YEvent>>>();
+        var popped = new List<IDictionary<YType, IList<YEvent>>>();
         undo.StackItemAdded += (_, e) => added.Add(e.ChangedParentTypes);
         undo.StackItemPopped += (_, e) => popped.Add(e.ChangedParentTypes);
         text.Insert(0, "a");

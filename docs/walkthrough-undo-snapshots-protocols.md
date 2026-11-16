@@ -105,11 +105,11 @@ Severity classes: wrong document / wrong bytes / wrong event or order / exceptio
 ### 4. Undoing the deletion of a nested `YText` throws `NotImplementedException` — exception
 
 - Scenario (confirmed by run): array in scope; insert a `YText`, write into it, delete it from the array,
-  `undo()`. Yjs: `["pq"]`. Ycs: `NotImplementedException` from `AbstractType.InternalCopy`
-  (`AbstractType.cs:75`), thrown inside the transaction; the stack item is lost.
+  `undo()`. Yjs: `["pq"]`. Ycs: `NotImplementedException` from `YType.InternalCopy`
+  (`YType.cs:75`), thrown inside the transaction; the stack item is lost.
 - Cause: `ContentType.Copy()` calls `Type.InternalCopy()`; `YText` does not override it
   (`YMap`, `YArray`, `YXmlElement`, `YXmlFragment`, `YXmlText`, `YXmlHook` do). Yjs: `YText._copy()` returns `new YText()`.
-- Fix: `internal override AbstractType InternalCopy() => new YText();` in `YText`.
+- Fix: `internal override YType InternalCopy() => new YText();` in `YText`.
 - In the fuzz the first divergence is an exception in 499 of the 741 diverging scripts; every one inspected was this one.
   Without nested texts, single-client scripts with every change tracked and no merging do not diverge (0 of 250).
 
