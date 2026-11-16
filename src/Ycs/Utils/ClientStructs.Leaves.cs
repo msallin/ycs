@@ -65,7 +65,7 @@ internal sealed partial class ClientStructs
     // The cursor's leaf's structs, first position and count, for the lookup by position (the indexer): valid while
     // _cursorCount is not 0. A change of the leaves' positions sets it to 0 (ForgetCursor); one that only appends
     // leaves it valid, the count it holds then being at most the leaf's.
-    private AbstractStruct[] _cursorStructs;
+    private ItemRef[] _cursorStructs;
     private int _cursorFirst;
     private int _cursorCount;
 
@@ -337,7 +337,7 @@ internal sealed partial class ClientStructs
     }
 
     /// <summary>Appends <paramref name="str"/> in a new leaf after the last one, which is full.</summary>
-    private void AppendLeaf(AbstractStruct str)
+    private void AppendLeaf(ItemRef str)
     {
         var leaf = new Leaf(_leafCapacity);
         ReserveLeaves(_leafCount + 1);
@@ -642,7 +642,7 @@ internal sealed partial class ClientStructs
         {
             if (i >= leaf.Count)
             {
-                if (leaf.Structs[i] != null)
+                if (!leaf.Structs[i].IsNull)
                 {
                     return $"leaf {k} holds a struct at {i}, beyond its {leaf.Count}";
                 }
@@ -665,7 +665,7 @@ internal sealed partial class ClientStructs
     /// <summary>A run of positions of one client's list, and what the run-head index holds of them.</summary>
     private sealed class Leaf(int capacity)
     {
-        public readonly AbstractStruct[] Structs = new AbstractStruct[capacity];
+        public readonly ItemRef[] Structs = new ItemRef[capacity];
 
         public readonly long[] Starts = new long[capacity];
 

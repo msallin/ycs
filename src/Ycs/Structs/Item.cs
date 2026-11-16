@@ -583,7 +583,7 @@ public partial class Item : AbstractStruct
         }
         else if (Parent is ID pid)
         {
-            var parentItem = store.Find(pid);
+            var parentItem = store.Find(pid).ToStruct();
             Parent = parentItem is GC ? null : ((parentItem as Item)?.Content as ContentType)?.Type;
         }
     }

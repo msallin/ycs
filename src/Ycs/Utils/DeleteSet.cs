@@ -143,7 +143,7 @@ internal class DeleteSet
     /// <summary>
     /// Iterate over all structs that the DeleteSet gc'd.
     /// </summary>
-    public void IterateDeletedStructs(Transaction transaction, Predicate<AbstractStruct> fun)
+    public void IterateDeletedStructs(Transaction transaction, Predicate<ItemRef> fun)
     {
         // As Yjs: a client the store does not have is skipped, and a client's ranges end at the
         // first one that starts beyond its state (a snapshot can be newer than the document).
@@ -275,9 +275,9 @@ internal class DeleteSet
                         break;
                     }
 
-                    if (str is Item strItem && strItem.Deleted && !strItem.Keep && gcFilter(strItem))
+                    if (str.IsItem && str.Deleted && !str.Keep && gcFilter(str.ToItem()))
                     {
-                        strItem.Gc(store, parentGCd: false);
+                        str.ToItem().Gc(store, parentGCd: false);
                     }
                 }
             }
@@ -328,7 +328,7 @@ internal class DeleteSet
         {
             var l = structs[first - 1];
             var r = structs[first];
-            if (l.Deleted != r.Deleted || l.GetType() != r.GetType() || !l.CanMergeWith(r))
+            if (l.Deleted != r.Deleted || !l.IsSameKind(r) || !l.CanMergeWith(r))
             {
                 break;
             }
@@ -371,9 +371,9 @@ internal class DeleteSet
         var right = structs[pos];
         var left = structs[pos - 1];
         var i = pos;
-        for (; i > 0; right = left, left = --i > 0 ? structs[i - 1] : null)
+        for (; i > 0; right = left, left = --i > 0 ? structs[i - 1] : default)
         {
-            if (left.Deleted != right.Deleted || left.GetType() != right.GetType() || !left.MergeWith(right))
+            if (left.Deleted != right.Deleted || !left.IsSameKind(right) || !left.MergeWith(right))
             {
                 break;
             }
@@ -390,14 +390,14 @@ internal class DeleteSet
         return merged;
     }
 
-    private static void RetargetMapEntry(AbstractStruct left, AbstractStruct right)
+    private static void RetargetMapEntry(ItemRef left, ItemRef right)
     {
-        if (right is Item rightItem && rightItem.ParentSub != null)
+        if (right.IsItem && right.ParentSub != null)
         {
-            var parent = (AbstractType)rightItem.Parent;
-            if (parent._map.TryGetValue(rightItem.ParentSub, out var value) && value == right)
+            var parent = (AbstractType)right.Parent;
+            if (parent._map.TryGetValue(right.ParentSub, out var value) && value == right.ToStruct())
             {
-                parent._map[rightItem.ParentSub] = (Item)left;
+                parent._map[right.ParentSub] = left.ToItem();
             }
         }
     }

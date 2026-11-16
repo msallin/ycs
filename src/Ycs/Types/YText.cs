@@ -415,7 +415,7 @@ public partial class YText : YArrayBase
                 {
                     steps = 0;
                     var before = count;
-                    var reached = doc.Store.SeekRight(Right, ref count, stopAtFormats: true);
+                    var reached = doc.Store.SeekRight(Right, ref count, stopAtFormats: true).ToItem();
                     if (reached != Right)
                     {
                         Index += before - count;
@@ -1456,7 +1456,7 @@ public partial class YText : YArrayBase
             // As Yjs, with the end clock as the length: to the end of the client's structs.
             store.IterateStructs(transaction, store.Clients[client], clock, afterClock, str =>
             {
-                if (str is Item { Deleted: false, Content: ContentFormat, Parent: YText text })
+                if (str.ToStruct() is Item { Deleted: false, Content: ContentFormat, Parent: YText text })
                 {
                     AddOnce(ref needFullCleanup, text);
                 }
@@ -1470,7 +1470,7 @@ public partial class YText : YArrayBase
         {
             transaction.DeleteSet.IterateDeletedStructs(transaction, str =>
             {
-                if (str is not Item item || item.Parent is not YText { HasFormatting: true } parent || (needFullCleanup?.Contains(parent) ?? false))
+                if (str.ToStruct() is not Item item || item.Parent is not YText { HasFormatting: true } parent || (needFullCleanup?.Contains(parent) ?? false))
                 {
                     return true;
                 }

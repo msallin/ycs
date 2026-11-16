@@ -285,7 +285,7 @@ public class UndoManager
     {
         stackItem.Deletions.IterateDeletedStructs(tr, i =>
         {
-            if (i is Item item && InScope(item))
+            if (i.ToStruct() is Item item && InScope(item))
             {
                 item.KeepItemAndParents(false);
             }
@@ -426,7 +426,7 @@ public class UndoManager
         // Deleted structs must not be garbage collected while a stack item can restore them.
         transaction.DeleteSet.IterateDeletedStructs(transaction, i =>
         {
-            if (i is Item item && InScope(item))
+            if (i.ToStruct() is Item item && InScope(item))
             {
                 item.KeepItemAndParents(true);
             }
@@ -498,7 +498,7 @@ public class UndoManager
 
                     stackItem.Insertions.IterateDeletedStructs(transaction, str =>
                     {
-                        if (str is Item item)
+                        if (str.ToStruct() is Item item)
                         {
                             if (item.Redone != null)
                             {
@@ -509,7 +509,7 @@ public class UndoManager
                                 }
 
                                 // A garbage-collected copy counts as deleted.
-                                item = redone as Item;
+                                item = redone.ToStruct() as Item;
                             }
 
                             if (item != null && !item.Deleted && InScope(item))
@@ -524,7 +524,7 @@ public class UndoManager
                     stackItem.Deletions.IterateDeletedStructs(transaction, str =>
                     {
                         // Structs in the insertions were created and deleted in the same capture interval: never redo them.
-                        if (str is Item item && InScope(item) && !stackItem.Insertions.IsDeleted(item.Id))
+                        if (str.ToStruct() is Item item && InScope(item) && !stackItem.Insertions.IsDeleted(item.Id))
                         {
                             itemsToRedo.Add(item);
                         }

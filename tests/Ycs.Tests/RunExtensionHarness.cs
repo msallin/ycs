@@ -168,8 +168,9 @@ internal sealed class ReferenceRun
         foreach (var (client, structs) in doc.Store.Clients.OrderBy(kv => kv.Key))
         {
             sb.Append("  c").Append(client).Append(':');
-            foreach (var s in structs)
+            foreach (var reference in structs)
             {
+                var s = reference.ToStruct();
                 sb.Append(' ').Append(s is Item ? "I" : s.GetType().Name).Append(s.Id.Clock).Append('+').Append(s.Length);
                 if (s.Deleted)
                 {

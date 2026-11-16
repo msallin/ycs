@@ -24,7 +24,7 @@ namespace Ycs;
 /// content integrated (<see cref="ContentDeleted"/>), an item integrated between a struct and its predecessor
 /// (<see cref="Item.Left"/>).
 /// </remarks>
-internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
+internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
 {
     private int _count;
     private long _end;
@@ -40,7 +40,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
     {
         for (var i = 0; i < count; i++)
         {
-            Add(source[start + i]);
+            Add(ItemRef.Of(source[start + i]));
         }
     }
 
@@ -49,7 +49,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
     /// <summary>The clock after the last struct (the client's state).</summary>
     public long End => _end;
 
-    public AbstractStruct this[int index]
+    public ItemRef this[int index]
     {
         get
         {
@@ -76,7 +76,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
 
     public Enumerator GetEnumerator() => new(this);
 
-    IEnumerator<AbstractStruct> IEnumerable<AbstractStruct>.GetEnumerator()
+    IEnumerator<ItemRef> IEnumerable<ItemRef>.GetEnumerator()
     {
         for (var k = 0; k < _leafCount; k++)
         {
@@ -88,7 +88,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
         }
     }
 
-    IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<AbstractStruct>)this).GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => ((IEnumerable<ItemRef>)this).GetEnumerator();
 
     public void EnsureCapacity(int capacity)
     {
@@ -106,7 +106,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
     }
 
     /// <summary>Appends <paramref name="str"/>, which starts where the last struct ends (the caller checked).</summary>
-    public void Add(AbstractStruct str)
+    public void Add(ItemRef str)
     {
         var k = _leafCount - 1;
         var leaf = LeafAt(k);
@@ -138,7 +138,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
     }
 
     /// <summary>Inserts the right part of a split at <paramref name="index"/>, right after its left part.</summary>
-    public void InsertSplit(int index, AbstractStruct right)
+    public void InsertSplit(int index, ItemRef right)
     {
         Debug.Assert(index > 0 && index <= _count && this[index - 1].Id.Clock + this[index - 1].Length == right.Id.Clock);
 
@@ -292,7 +292,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
     }
 
     /// <summary>Puts <paramref name="str"/> (a GC struct of the same clocks) in place of the struct at <paramref name="index"/>.</summary>
-    public void Replace(int index, AbstractStruct str)
+    public void Replace(int index, ItemRef str)
     {
         var k = Locate(index, out var offset);
         var leaf = LeafAt(k);
@@ -551,7 +551,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<AbstractStruct>
         private int _leaf;
         private int _offset = -1;
 
-        public readonly AbstractStruct Current => list.LeafAt(_leaf).Structs[_offset];
+        public readonly ItemRef Current => list.LeafAt(_leaf).Structs[_offset];
 
         public bool MoveNext()
         {

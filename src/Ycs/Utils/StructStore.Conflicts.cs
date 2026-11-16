@@ -8,8 +8,8 @@ internal sealed partial class StructStore
     private const int KeepConflictSetCapacity = 1024;
 
     // Yjs' itemsBeforeOrigin and conflictingItems, reused from item to item; only Integrate uses them.
-    private HashSet<AbstractStruct> _itemsBeforeOrigin;
-    private HashSet<AbstractStruct> _conflictingItems;
+    private HashSet<ItemRef> _itemsBeforeOrigin;
+    private HashSet<ItemRef> _conflictingItems;
 
     /// <summary>
     /// The steps the conflict resolution may still take for the update being applied
@@ -29,17 +29,17 @@ internal sealed partial class StructStore
     /// another, or before a run of n: n^2 steps) neither allocates nor hashes. Each step counts
     /// against <see cref="IntegrationSteps"/>.
     /// </summary>
-    internal AbstractStruct ResolveConflict(Item item, AbstractStruct left, AbstractStruct o)
+    internal ItemRef ResolveConflict(ItemRef item, ItemRef left, ItemRef o)
     {
         var first = o;
-        AbstractStruct prev = null;
+        ItemRef prev = default;
         var leftMoved = false;
-        HashSet<AbstractStruct> itemsBeforeOrigin = null;
-        HashSet<AbstractStruct> conflictingItems = null;
+        HashSet<ItemRef> itemsBeforeOrigin = null;
+        HashSet<ItemRef> conflictingItems = null;
 
         try
         {
-            while (o != null && o != item.Right)
+            while (!o.IsNull && o != item.Right)
             {
                 if (--IntegrationSteps < 0)
                 {
@@ -51,11 +51,11 @@ internal sealed partial class StructStore
                     };
                 }
 
-                var oItem = o as Item;
+                var oIsItem = o.IsItem;
                 itemsBeforeOrigin?.Add(o);
                 conflictingItems?.Add(o);
 
-                if (ID.Equals(item.LeftOrigin, oItem?.LeftOrigin))
+                if (ID.Equals(item.LeftOrigin, oIsItem ? o.LeftOrigin : null))
                 {
                     // Case 1
                     if (o.Id.Client < item.Id.Client)
@@ -64,7 +64,7 @@ internal sealed partial class StructStore
                         leftMoved = true;
                         conflictingItems?.Clear();
                     }
-                    else if (ID.Equals(item.RightOrigin, oItem?.RightOrigin))
+                    else if (ID.Equals(item.RightOrigin, oIsItem ? o.RightOrigin : null))
                     {
                         // This and 'o' are conflicting and point to the same integration points. The id
                         // decides which item comes first: this is to the left of 'o'.
@@ -74,10 +74,11 @@ internal sealed partial class StructStore
                     // Else, 'o' might be integrated before an item that this conflicts with. If so, we
                     // will find it in the next iterations.
                 }
-                else if (oItem?.LeftOrigin is { } leftOrigin)
+                else if (oIsItem && o.LeftOrigin is { } leftOrigin)
                 {
                     bool beforeOrigin, conflicting;
-                    if (prev is Item p && leftOrigin.Client == p.Id.Client && leftOrigin.Clock >= p.Id.Clock && leftOrigin.Clock < p.Id.Clock + p.Length)
+                    var p = prev;
+                    if (p.IsItem && leftOrigin.Client == p.Id.Client && leftOrigin.Clock >= p.Id.Clock && leftOrigin.Clock < p.Id.Clock + p.Length)
                     {
                         // The origin is the item scanned last (a run typed after it): scanned, and
                         // conflicting unless 'left' moved there.
@@ -88,10 +89,10 @@ internal sealed partial class StructStore
                     {
                         if (itemsBeforeOrigin == null)
                         {
-                            itemsBeforeOrigin = _itemsBeforeOrigin ??= new HashSet<AbstractStruct>();
-                            conflictingItems = _conflictingItems ??= new HashSet<AbstractStruct>();
+                            itemsBeforeOrigin = _itemsBeforeOrigin ??= new HashSet<ItemRef>();
+                            conflictingItems = _conflictingItems ??= new HashSet<ItemRef>();
                             Fill(itemsBeforeOrigin, first, o);
-                            Fill(conflictingItems, leftMoved ? ((Item)left).Right : first, o);
+                            Fill(conflictingItems, leftMoved ? left.Right : first, o);
                         }
 
                         // Find, not GetItemCleanEnd: nothing needs to be split.
@@ -119,7 +120,7 @@ internal sealed partial class StructStore
                 }
 
                 prev = o;
-                o = oItem?.Right;
+                o = oIsItem ? o.Right : default;
             }
         }
         finally
@@ -134,9 +135,9 @@ internal sealed partial class StructStore
         return left;
 
         // The walk from 'from' to 'to', both included.
-        static void Fill(HashSet<AbstractStruct> set, AbstractStruct from, AbstractStruct to)
+        static void Fill(HashSet<ItemRef> set, ItemRef from, ItemRef to)
         {
-            for (var s = from; s != null; s = (s as Item)?.Right)
+            for (var s = from; !s.IsNull; s = s.IsItem ? s.Right : default)
             {
                 set.Add(s);
                 if (s == to)
@@ -146,7 +147,7 @@ internal sealed partial class StructStore
             }
         }
 
-        static void Release(ref HashSet<AbstractStruct> set)
+        static void Release(ref HashSet<ItemRef> set)
         {
             if (set.Count > KeepConflictSetCapacity)
             {

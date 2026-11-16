@@ -258,8 +258,8 @@ public class YTestBase
 
             for (int i = 0; i < structs1.Count; i++)
             {
-                var s1 = structs1[i];
-                var s2 = structs2[i];
+                var s1 = structs1[i].ToStruct();
+                var s2 = structs2[i].ToStruct();
 
                 // Checks for abstract struct.
                 if (!s1.GetType().IsAssignableFrom(s2.GetType()) ||

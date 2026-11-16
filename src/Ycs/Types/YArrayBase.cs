@@ -408,7 +408,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// <paramref name="n"/> with the reference walk.
     /// </summary>
     private protected Item SeekRight(Item n, ref int index) =>
-        Doc.RunHeadIndexDisabledForTests ? n : Doc.Store.SeekRight(n, ref index, stopAtFormats: false);
+        Doc.RunHeadIndexDisabledForTests ? n : Doc.Store.SeekRight(n, ref index, stopAtFormats: false).ToItem();
 
     /// <summary>JavaScript's <c>splice(index, 0, ...content)</c>, on the content of a type not in a document yet.</summary>
     private protected static void PrelimInsert(List<object> list, int index, ICollection<object> content) =>
@@ -791,7 +791,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             {
                 steps = 0;
                 var remaining = index - pIndex;
-                var reached = store.SeekRight(p, ref remaining, stopAtFormats: false);
+                var reached = store.SeekRight(p, ref remaining, stopAtFormats: false).ToItem();
                 if (reached != p)
                 {
                     (p, pIndex) = (reached, index - remaining);

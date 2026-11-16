@@ -129,6 +129,17 @@ internal readonly struct ItemRef : IEquatable<ItemRef>
 
     public ID LastId => AsItem.LastId;
 
+    // What every kind of struct does in its own way.
+    public void Delete(Transaction transaction) => _struct.Delete(transaction);
+
+    public void Integrate(Transaction transaction, int offset) => _struct.Integrate(transaction, offset);
+
+    public bool CanMergeWith(ItemRef right) => _struct.CanMergeWith(right._struct);
+
+    public bool MergeWith(ItemRef right) => _struct.MergeWith(right._struct);
+
+    public void Write(IUpdateEncoder encoder, int offset) => _struct.Write(encoder, offset);
+
     public static bool operator ==(ItemRef left, ItemRef right) => ReferenceEquals(left._struct, right._struct);
 
     public static bool operator !=(ItemRef left, ItemRef right) => !ReferenceEquals(left._struct, right._struct);

@@ -71,7 +71,7 @@ public class AbsolutePosition
             }
 
             var res = followUndoneDeletions ? store.FollowRedone(rightId.Value) : GetItemWithOffset(store, rightId.Value);
-            var right = res.item as Item;
+            var right = res.item.ToStruct() as Item;
             if (right == null)
             {
                 return null;
@@ -112,7 +112,7 @@ public class AbsolutePosition
                 }
 
                 var res = followUndoneDeletions ? store.FollowRedone(typeId.Value) : GetItemWithOffset(store, typeId.Value);
-                var item = res.item as Item;
+                var item = res.item.ToStruct() as Item;
                 if (item != null && item.Content is ContentType)
                 {
                     type = (item.Content as ContentType).Type;
@@ -134,7 +134,7 @@ public class AbsolutePosition
     /// Yjs parity: <c>getItemWithOffset(store, id)</c> - the non-redone-following counterpart to
     /// <see cref="StructStore.FollowRedone"/>, used when <c>followUndoneDeletions</c> is <c>false</c>.
     /// </summary>
-    private static (AbstractStruct item, int diff) GetItemWithOffset(StructStore store, ID id)
+    private static (ItemRef item, int diff) GetItemWithOffset(StructStore store, ID id)
     {
         var item = store.Find(id);
         return (item, (int)(id.Clock - item.Id.Clock));

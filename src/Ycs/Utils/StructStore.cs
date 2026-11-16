@@ -74,7 +74,7 @@ internal sealed partial class StructStore
             {
                 for (var i = 0; i < list.Count; i++)
                 {
-                    var str = list[i];
+                    var str = list[i].ToStruct();
                     if (str is not Skip)
                     {
                         _clocks.Add(client, str.Id.Clock, str.Id.Clock + str.Length);
@@ -89,7 +89,7 @@ internal sealed partial class StructStore
             {
                 for (var i = 0; i < list.Count; i++)
                 {
-                    var str = list[i];
+                    var str = list[i].ToStruct();
                     if (str is not Skip && _clocks.Overlaps(client, str.Id.Clock, str.Id.Clock + str.Length))
                     {
                         return true;
@@ -123,7 +123,7 @@ internal sealed partial class StructStore
 
     /// <summary>The struct lists by client, as the property tests read them (they reach no internal type).</summary>
     internal IEnumerable<KeyValuePair<long, IReadOnlyList<AbstractStruct>>> StructListsForTests() =>
-        Clients.Select(kv => new KeyValuePair<long, IReadOnlyList<AbstractStruct>>(kv.Key, kv.Value));
+        Clients.Select(kv => new KeyValuePair<long, IReadOnlyList<AbstractStruct>>(kv.Key, kv.Value.Select(s => s.ToStruct()).ToArray()));
 
     // The plan of the last update, kept for the next one (null while one is in use).
     private IntegrationPlan _spare;
@@ -150,7 +150,7 @@ internal sealed partial class StructStore
     internal long Version { get; private set; }
 
     /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="Item.ExtendRun"/>).</summary>
-    internal void NoteRunExtended(Item item, int length)
+    internal void NoteRunExtended(ItemRef item, int length)
     {
         Clients[item.Id.Client].LastExtended(length);
         Version++;
@@ -218,7 +218,7 @@ internal sealed partial class StructStore
         }
     }
 
-    public void AddStruct(AbstractStruct str)
+    public void AddStruct(ItemRef str)
     {
         if (!Clients.TryGetValue(str.Id.Client, out var structs))
         {
@@ -241,23 +241,23 @@ internal sealed partial class StructStore
     /// <paramref name="item"/> changed what the run-head index holds of it (<see cref="ClientStructs.Refresh"/>): it
     /// was deleted, or an item was integrated between it and its left neighbour.
     /// </summary>
-    internal void Refresh(Item item)
+    internal void Refresh(ItemRef item)
     {
         var structs = Clients[item.Id.Client];
         var index = structs.FindIndex(item.Id.Clock);
-        Debug.Assert(ReferenceEquals(structs[index], item), "Only a struct of the store changes the run-head index.");
+        Debug.Assert(structs[index] == item, "Only a struct of the store changes the run-head index.");
 
         // Recounted from the struct at the position, which is the item.
         structs.Refresh(index);
     }
 
     /// <summary>The list and position of <paramref name="item"/>, if the store holds it (a collected type's items it does not).</summary>
-    internal bool TryFindPosition(Item item, out ClientStructs structs, out int index)
+    internal bool TryFindPosition(ItemRef item, out ClientStructs structs, out int index)
     {
         if (Clients.TryGetValue(item.Id.Client, out structs) && item.Id.Clock < structs.End)
         {
             index = structs.FindIndex(item.Id.Clock);
-            if (ReferenceEquals(structs[index], item))
+            if (structs[index] == item)
             {
                 return true;
             }
@@ -272,7 +272,7 @@ internal sealed partial class StructStore
     /// elements to go reaches by jumping (<see cref="ClientStructs.SeekRight"/>); <paramref name="remaining"/> is
     /// lowered by what it jumped over.
     /// </summary>
-    internal Item SeekRight(Item item, ref int remaining, bool stopAtFormats)
+    internal ItemRef SeekRight(ItemRef item, ref int remaining, bool stopAtFormats)
     {
         if (remaining <= 0 || !TryFindPosition(item, out var structs, out var position))
         {
@@ -281,7 +281,7 @@ internal sealed partial class StructStore
 
         var reached = structs.SeekRight(position, remaining, stopAtFormats, out var passed);
         remaining -= checked((int)passed);
-        return (Item)structs[reached];
+        return structs[reached];
     }
 
     /// <summary>Recounts the struct lists after every transaction and throws on a difference (the tests switch it on).</summary>
@@ -335,11 +335,11 @@ internal sealed partial class StructStore
     /// </summary>
     internal bool MaySplitMapValues { get; private set; }
 
-    private Item SplitItem(Transaction transaction, Item item, int diff)
+    private ItemRef SplitItem(Transaction transaction, ItemRef item, int diff)
     {
         Version++;
         MaySplitMapValues |= item.ParentSub != null && !item.Deleted;
-        return item.SplitItem(transaction, diff);
+        return item.ToItem().SplitItem(transaction, diff);
     }
 
     /// <inheritdoc cref="ClientStructs.FindIndex(long)"/>
@@ -351,7 +351,7 @@ internal sealed partial class StructStore
     /// <summary>
     /// Expects that id is actually in store. This function throws or is an infinite loop otherwise.
     /// </summary>
-    public AbstractStruct Find(ID id)
+    public ItemRef Find(ID id)
     {
         if (!Clients.TryGetValue(id.Client, out var structs))
         {
@@ -371,22 +371,22 @@ internal sealed partial class StructStore
     {
         int index = FindIndexSS(structs, clock);
         var str = structs[index];
-        if (str.Id.Clock < clock && str is Item item)
+        if (str.Id.Clock < clock && str.IsItem)
         {
-            structs.InsertSplit(index + 1, SplitItem(transaction, item, (int)(clock - item.Id.Clock)));
+            structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(clock - str.Id.Clock)));
             return index + 1;
         }
 
         return index;
     }
 
-    public AbstractStruct GetItemCleanStart(Transaction transaction, ID id) => GetItemCleanStart(transaction, id.Client, id.Clock);
+    public ItemRef GetItemCleanStart(Transaction transaction, ID id) => GetItemCleanStart(transaction, id.Client, id.Clock);
 
     /// <summary>
     /// <see cref="GetItemCleanStart(Transaction, ID)"/> for a clock that can be negative (no <see cref="ID"/> is made of
     /// one): it throws then, as <see cref="ClientStructs.FindIndex(long)"/> does for any clock not in the store.
     /// </summary>
-    public AbstractStruct GetItemCleanStart(Transaction transaction, long client, long clock)
+    public ItemRef GetItemCleanStart(Transaction transaction, long client, long clock)
     {
         if (!Clients.TryGetValue(client, out var structs))
         {
@@ -398,7 +398,7 @@ internal sealed partial class StructStore
         return structs[indexCleanStart];
     }
 
-    public AbstractStruct GetItemCleanEnd(Transaction transaction, ID id)
+    public ItemRef GetItemCleanEnd(Transaction transaction, ID id)
     {
         if (!Clients.TryGetValue(id.Client, out var structs))
         {
@@ -408,15 +408,15 @@ internal sealed partial class StructStore
         int index = FindIndexSS(structs, id.Clock);
         var str = structs[index];
 
-        if ((id.Clock != str.Id.Clock + str.Length - 1) && !(str is GC))
+        if ((id.Clock != str.Id.Clock + str.Length - 1) && !str.IsGC)
         {
-            structs.InsertSplit(index + 1, SplitItem(transaction, (Item)str, (int)(id.Clock - str.Id.Clock + 1)));
+            structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(id.Clock - str.Id.Clock + 1)));
         }
 
         return str;
     }
 
-    public void ReplaceStruct(AbstractStruct oldStruct, AbstractStruct newStruct)
+    public void ReplaceStruct(ItemRef oldStruct, ItemRef newStruct)
     {
         if (!Clients.TryGetValue(oldStruct.Id.Client, out var structs))
         {
@@ -427,7 +427,7 @@ internal sealed partial class StructStore
         structs.Replace(index, newStruct);
     }
 
-    public void IterateStructs(Transaction transaction, ClientStructs structs, long clockStart, long length, Predicate<AbstractStruct> fun)
+    public void IterateStructs(Transaction transaction, ClientStructs structs, long clockStart, long length, Predicate<ItemRef> fun)
     {
         if (length <= 0)
         {
@@ -437,7 +437,7 @@ internal sealed partial class StructStore
         var clockEnd = clockStart + length;
 
         var index = FindIndexCleanStart(transaction, structs, clockStart);
-        AbstractStruct str;
+        ItemRef str;
 
         do
         {
@@ -457,11 +457,11 @@ internal sealed partial class StructStore
         } while (index < structs.Count && structs[index].Id.Clock < clockEnd);
     }
 
-    public (AbstractStruct item, int diff) FollowRedone(ID id)
+    public (ItemRef item, int diff) FollowRedone(ID id)
     {
         ID? nextId = id;
         int diff = 0;
-        AbstractStruct item;
+        ItemRef item;
 
         do
         {
@@ -472,8 +472,8 @@ internal sealed partial class StructStore
 
             item = Find(nextId.Value);
             diff = (int)(nextId.Value.Clock - item.Id.Clock);
-            nextId = (item as Item)?.Redone;
-        } while (nextId != null && item is Item);
+            nextId = item.IsItem ? item.Redone : null;
+        } while (nextId != null && item.IsItem);
 
         return (item, diff);
     }
@@ -689,7 +689,7 @@ internal sealed partial class StructStore
                 // Split the first item if necessary.
                 if (!str.Deleted && str.Id.Clock < clock)
                 {
-                    structs.InsertSplit(index + 1, SplitItem(transaction, (Item)str, (int)(clock - str.Id.Clock)));
+                    structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(clock - str.Id.Clock)));
 
                     // Increase, we now want to use the next struct.
                     index++;
@@ -707,7 +707,7 @@ internal sealed partial class StructStore
                     {
                         if (clockEnd < str.Id.Clock + str.Length)
                         {
-                            structs.InsertSplit(index, SplitItem(transaction, (Item)str, (int)(clockEnd - str.Id.Clock)));
+                            structs.InsertSplit(index, SplitItem(transaction, str, (int)(clockEnd - str.Id.Clock)));
                         }
 
                         str.Delete(transaction);
@@ -1079,7 +1079,8 @@ internal sealed partial class StructStore
                 var origin = (item.LeftOrigin ?? item.RightOrigin).Value;
                 if (origin.Clock < _store.GetState(origin.Client))
                 {
-                    depth = _store.Find(origin) is Item { Parent: AbstractType parent } ? parent.Depth : -1;
+                    var found = _store.Find(origin);
+                    depth = found.IsItem && found.Parent is AbstractType parent ? parent.Depth : -1;
                     break;
                 }
 
@@ -1105,7 +1106,8 @@ internal sealed partial class StructStore
         {
             if (id.Clock < _store.GetState(id.Client))
             {
-                return _store.Find(id) is Item { Content: ContentType ct } ? ct.Type.Depth : -1;
+                var found = _store.Find(id);
+                return found.IsItem && found.Content is ContentType ct ? ct.Type.Depth : -1;
             }
 
             return _typeDepths != null && _typeDepths.TryGetValue(id, out var depth) ? depth : -1;
@@ -1274,7 +1276,7 @@ internal sealed partial class StructStore
                 end = Math.Min(end, GetState(client));
                 for (var clock = start; clock < end;)
                 {
-                    var str = clock < known ? _store.Find(new ID(client, clock)) : FindPlanned(new ID(client, clock));
+                    var str = clock < known ? _store.Find(new ID(client, clock)).ToStruct() : FindPlanned(new ID(client, clock));
                     if (str == null)
                     {
                         break;
@@ -1555,7 +1557,7 @@ internal sealed partial class StructStore
             var known = _store.GetState(id.Client);
             if (id.Clock < known)
             {
-                return _store.Find(id) is Item item ? (item, item.Id.Clock) : (null, 0);
+                return _store.Find(id).ToStruct() is Item item ? (item, item.Id.Clock) : (null, 0);
             }
 
             return id.Clock < GetState(id.Client) && FindPlanned(id) is Item planned ? (planned, Math.Max(planned.Id.Clock, known)) : (null, 0);
