@@ -149,6 +149,36 @@ internal sealed partial class StructStore
     /// </summary>
     internal long Version { get; private set; }
 
+    /// <summary>
+    /// Counts the structs that left a list: merged into their left neighbour, or replaced by a GC struct. A holder that
+    /// runs the caller's code between two steps keeps the id of its struct and this count, and looks the id up again
+    /// when the count moved (<see cref="NextAfter"/>).
+    /// </summary>
+    internal int Departures { get; private set; }
+
+    internal void NoteDeparture() => Departures++;
+
+    /// <summary>
+    /// The item right of <paramref name="held"/>, a struct that began at <paramref name="id"/> when
+    /// <paramref name="departures"/> was read, after caller's code ran. When structs left since, <paramref name="held"/>
+    /// can be one of them: the walk goes on from the struct that holds <paramref name="id"/> now, which is where Yjs'
+    /// orphan continues unless the list changed right of it since. <c>default</c> at the end of the list, and when
+    /// the id lies in a GC struct (its type was collected: nothing visible follows).
+    /// </summary>
+    internal ItemRef NextAfter(ItemRef held, ID id, int departures)
+    {
+        if (departures != Departures)
+        {
+            held = Find(id).AsItem;
+            if (held.IsNull)
+            {
+                return default;
+            }
+        }
+
+        return held.Right.AsItem;
+    }
+
     /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="Item.ExtendRun"/>).</summary>
     internal void NoteRunExtended(ItemRef item, int length)
     {
@@ -425,6 +455,7 @@ internal sealed partial class StructStore
 
         int index = FindIndexSS(structs, oldStruct.Id.Clock);
         structs.Replace(index, newStruct);
+        Departures++;
     }
 
     public void IterateStructs(Transaction transaction, ClientStructs structs, long clockStart, long length, Predicate<ItemRef> fun)

@@ -288,12 +288,12 @@ public partial class YArray : YArrayBase
 
     private IEnumerable<object> EnumerateList()
     {
-        // ItemRef lifetime (docs/design-item-layout.md, 3.1): n is held across the code of Map's and ForEach's callers
-        // between two values, which can end transactions that merge it away or collect the type.
         var n = _start;
 
         while (!n.IsNull)
         {
+            var id = n.Id;
+            var departures = Doc.Store.Departures;
             if (n.Countable && !n.Deleted)
             {
                 var c = n.Content.GetContent();
@@ -303,7 +303,7 @@ public partial class YArray : YArrayBase
                 }
             }
 
-            n = n.Right.AsItem;
+            n = Doc.Store.NextAfter(n, id, departures);
         }
     }
 }

@@ -131,6 +131,7 @@ internal readonly partial struct ItemRef
                 "Ycs). Nothing was changed.");
         }
 
+        (Parent as AbstractType)?.Doc?.Store.NoteDeparture();
         (Parent as YArrayBase)?.OnMerge(this, right);
 
         if (right.Keep)
@@ -517,7 +518,7 @@ internal readonly partial struct ItemRef
         }
 
         // Right is more specific.
-        transaction._mergeStructs.Add(rightItem);
+        transaction._mergeStructs.Add(rightItem.Id);
 
         // Update parent._map.
         if (rightItem.ParentSub != null && rightItem.Right.IsNull)

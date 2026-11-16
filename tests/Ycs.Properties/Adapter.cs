@@ -895,9 +895,11 @@ namespace Ycs.Properties
                 case "react":
                     {
                         // The first time the type changes, its observer makes the operations (in a transaction of their
-                        // own with "txn"; else each in its own), also during another transaction's cleanup.
+                        // own with "txn"; else each in its own), also during another transaction's cleanup. With "on" the
+                        // trigger is the document's handler instead: the first transaction's "cleanup" (after its merge
+                        // pass), "update" or "after" (afterTransaction), whatever type it changed.
                         var fired = false;
-                        target.Observe((_, e) =>
+                        void Fire(bool local)
                         {
                             if (fired)
                             {
@@ -905,6 +907,11 @@ namespace Ycs.Properties
                             }
 
                             fired = true;
+                            if (s.Has("on"))
+                            {
+                                _run.FixClientIds();
+                            }
+
                             var results = new List<object>();
                             void Each()
                             {
@@ -931,8 +938,25 @@ namespace Ycs.Properties
                                 Each();
                             }
 
-                            Push(Obj(("w", "react"), ("id", s.Get("id")), ("local", e.Transaction.Local), ("r", results)));
-                        });
+                            Push(Obj(("w", "react"), ("id", s.Get("id")), ("local", local), ("r", results)));
+                        }
+
+                        switch (s.Get("on") as string)
+                        {
+                            case "cleanup":
+                                Doc.AfterTransactionCleanup += (_, tr) => Fire(tr.Local);
+                                break;
+                            case "update":
+                                Doc.Update += (_, e) => Fire(e.Item3.Local);
+                                break;
+                            case "after":
+                                Doc.AfterTransaction += (_, tr) => Fire(tr.Local);
+                                break;
+                            default:
+                                target.Observe((_, e) => Fire(e.Transaction.Local));
+                                break;
+                        }
+
                         return Missing.Value;
                     }
                 case "readSnap":

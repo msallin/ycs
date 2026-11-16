@@ -103,7 +103,7 @@ public class ContentType : IContentEx
             else if (IsOlderThan(item, transaction))
             {
                 // Collected with the type later, but not in the transaction's delete set: merge it then.
-                transaction._mergeStructs.Add(item);
+                transaction._mergeStructs.Add(item.Id);
             }
         }
     }
@@ -143,7 +143,7 @@ public class ContentType : IContentEx
                 }
 
                 frame.Type._start = default;
-                (frame.Type as YArrayBase)?.ForgetPushHint();
+                (frame.Type as YArrayBase)?.ForgetList();
                 frame.Type._map.Clear();
                 frame.Type._mapCount = 0;
                 open.RemoveAt(open.Count - 1);
