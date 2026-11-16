@@ -154,9 +154,9 @@ public class DecodedStructTests
                 result.Add(str);
             }
         }
-        catch (YUpdateException e)
+        catch (Exception e) when (e is YUpdateException || YUpdateException.IsDecodingFailure(e))
         {
-            rawError = e.Message;
+            rawError = YUpdateException.Wrap(e).Message;
         }
 
         return result;
