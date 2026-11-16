@@ -59,7 +59,7 @@ public class HostileFuzzTests
         var spec = Environment.GetEnvironmentVariable("YCS_SERVER_FUZZ");
         if (string.IsNullOrEmpty(spec))
         {
-            return (1, 10);
+            return (1, 40);
         }
 
         var parts = spec.Split(':');
