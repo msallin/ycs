@@ -13,8 +13,6 @@ internal static partial class WebSocketEndpoint
 {
     public const int MaxRoomNameLength = 256;
 
-    // How long the server waits for the client's answer to its close frame before it drops the connection.
-    private static readonly TimeSpan CloseTimeout = TimeSpan.FromSeconds(5);
 
     // RFC 6455 "Try Again Later"; WebSocketCloseStatus has no member for it.
     internal const WebSocketCloseStatus TryAgainLater = (WebSocketCloseStatus)1013;
@@ -40,10 +38,10 @@ internal static partial class WebSocketEndpoint
         var room = services.GetRequiredService<RoomRegistry>().GetOrCreate(name);
 
         using var socket = await context.WebSockets.AcceptWebSocketAsync();
-        var connection = new Connection(socket, new Session(room), options.MaxMessageBytes);
+        var connection = new Connection(socket, new Session(room), options.MaxMessageBytes, options.CloseTimeout);
         LogOpened(logger, context.Connection.Id);
         var status = await connection.RunAsync(stopping);
-        LogClosed(logger, context.Connection.Id, connection.Session.CloseReason, status);
+        LogClosed(logger, context.Connection.Id, connection.Session.CloseReason, status, connection.Session.CloseCause);
     }
 
     // The path segment as sent, decoded once: the route value would already be decoded except for "%2F".
@@ -56,22 +54,25 @@ internal static partial class WebSocketEndpoint
             raw = raw[..query];
         }
 
+        // A dot segment is what the route removed ("/ws/y/." is routed as "y"): refused rather than taken as a name.
         var name = Uri.UnescapeDataString(raw[(raw.LastIndexOf('/') + 1)..]);
-        return name.Length is >= 1 and <= MaxRoomNameLength ? name : null;
+        return name.Length is >= 1 and <= MaxRoomNameLength && name is not ("." or "..") ? name : null;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "WebSocket connection {ConnectionId} opened")]
     private static partial void LogOpened(ILogger logger, string connectionId);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "WebSocket connection {ConnectionId} closed: {Reason}, close status {Status}")]
-    private static partial void LogClosed(ILogger logger, string connectionId, SessionCloseReason reason, WebSocketCloseStatus? status);
+    // The cause is the exception's type and message, without its stack: Ycs' and the awareness decoder's messages
+    // name a limit or a part of the message, never its content.
+    [LoggerMessage(Level = LogLevel.Information, Message = "WebSocket connection {ConnectionId} closed: {Reason}, close status {Status}, cause {Cause}")]
+    private static partial void LogClosed(ILogger logger, string connectionId, SessionCloseReason reason, WebSocketCloseStatus? status, CloseCause cause);
 
     /// <summary>
     /// One socket and its session: a receive loop feeding <see cref="Session.Receive"/> and a send loop draining
     /// <see cref="Session.Outgoing"/>. Whoever ends the connection closes the session; its outgoing queue then
     /// completes, and the send loop sends the close frame. The send loop is the only writer of the socket.
     /// </summary>
-    internal sealed class Connection(WebSocket socket, Session session, int maxMessageBytes)
+    internal sealed class Connection(WebSocket socket, Session session, int maxMessageBytes, TimeSpan closeTimeout)
     {
         // Set by the receive loop before it closes the session, for a close the session has no reason for.
         private WebSocketCloseStatus? transportStatus;
@@ -84,12 +85,22 @@ internal static partial class WebSocketEndpoint
             using var onStopping = stopping.Register(() => Close(WebSocketCloseStatus.EndpointUnavailable));
             session.Start();
             var receiving = ReceiveLoopAsync();
-            var sent = await SendLoopAsync();
+            var sending = SendLoopAsync();
+
+            // A send to a client that stopped reading waits until the keep-alive gives up, if it is on: once the
+            // session closed, the send loop has the close timeout to finish, as the client has to answer the close.
+            if (await Task.WhenAny(sending, session.Closed) != sending
+                && await Task.WhenAny(sending, Task.Delay(closeTimeout, CancellationToken.None)) != sending)
+            {
+                socket.Abort();
+            }
+
+            var sent = await sending;
 
             // The close frame is out (or the socket is gone): give the client a moment to answer it.
             try
             {
-                await receiving.WaitAsync(CloseTimeout, CancellationToken.None);
+                await receiving.WaitAsync(closeTimeout, CancellationToken.None);
             }
             catch (TimeoutException)
             {
