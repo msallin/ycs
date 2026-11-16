@@ -1,0 +1,2206 @@
+{
+ "generator": "interop/server/gen-awareness.mjs",
+ "versions": {
+  "y-protocols": "1.0.7",
+  "lib0": "0.2.120"
+ },
+ "maxSafeInteger": 9007199254740991,
+ "steps": [
+  {
+   "name": "add 1",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010101487b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223666630303030227d2c22637572736f72223a7b22616e63686f72223a332c2268656164223a377d7d",
+   "change": {
+    "added": [
+     1
+    ],
+    "updated": [],
+    "removed": []
+   },
+   "update": {
+    "added": [
+     1
+    ],
+    "updated": [],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#ff0000"
+       },
+       "cursor": {
+        "anchor": 3,
+        "head": 7
+       }
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1
+    ],
+    "encodedAll": "010101487b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223666630303030227d2c22637572736f72223a7b22616e63686f72223a332c2268656164223a377d7d"
+   }
+  },
+  {
+   "name": "add 2 and 3 in one message",
+   "op": "apply",
+   "reformatted": false,
+   "input": "02020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0301027b7d",
+   "change": {
+    "added": [
+     2,
+     3
+    ],
+    "updated": [],
+    "removed": []
+   },
+   "update": {
+    "added": [
+     2,
+     3
+    ],
+    "updated": [],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#ff0000"
+       },
+       "cursor": {
+        "anchor": 3,
+        "head": 7
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 1,
+      "state": {},
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030101487b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223666630303030227d2c22637572736f72223a7b22616e63686f72223a332c2268656164223a377d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0301027b7d"
+   }
+  },
+  {
+   "name": "repeat 2",
+   "op": "apply",
+   "reformatted": false,
+   "input": "01020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#ff0000"
+       },
+       "cursor": {
+        "anchor": 3,
+        "head": 7
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 1,
+      "state": {},
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030101487b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223666630303030227d2c22637572736f72223a7b22616e63686f72223a332c2268656164223a377d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0301027b7d"
+   }
+  },
+  {
+   "name": "update 1",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d",
+   "change": {
+    "added": [],
+    "updated": [
+     1
+    ],
+    "removed": []
+   },
+   "update": {
+    "added": [],
+    "updated": [
+     1
+    ],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 1,
+      "state": {},
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0301027b7d"
+   }
+  },
+  {
+   "name": "renew 3",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010302027b7d",
+   "change": null,
+   "update": {
+    "added": [],
+    "updated": [
+     3
+    ],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 2,
+      "state": {},
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0302027b7d"
+   }
+  },
+  {
+   "name": "stale 1 (old clock)",
+   "op": "apply",
+   "reformatted": false,
+   "input": "0101010e7b227374616c65223a747275657d",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 2,
+      "state": {},
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0302027b7d"
+   }
+  },
+  {
+   "name": "older again",
+   "op": "apply",
+   "reformatted": false,
+   "input": "0101000e7b227374616c65223a747275657d",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 2,
+      "state": {},
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0302027b7d"
+   }
+  },
+  {
+   "name": "reformatted 3",
+   "op": "apply",
+   "reformatted": true,
+   "input": "0103631b207b20227a22203a2031202c0a202261223a5b312c20325d207d20",
+   "change": {
+    "added": [],
+    "updated": [
+     3
+    ],
+    "removed": []
+   },
+   "update": {
+    "added": [],
+    "updated": [
+     3
+    ],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 99,
+      "state": {
+       "z": 1,
+       "a": [
+        1,
+        2
+       ]
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0363117b227a223a312c2261223a5b312c325d7d"
+   }
+  },
+  {
+   "name": "reordered 3",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010364117b2261223a5b312c325d2c227a223a317d",
+   "change": null,
+   "update": {
+    "added": [],
+    "updated": [
+     3
+    ],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 100,
+      "state": {
+       "a": [
+        1,
+        2
+       ],
+       "z": 1
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0364117b2261223a5b312c325d2c227a223a317d"
+   }
+  },
+  {
+   "name": "null 3 with old clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010305046e756c6c",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 100,
+      "state": {
+       "a": [
+        1,
+        2
+       ],
+       "z": 1
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d0364117b2261223a5b312c325d2c227a223a317d"
+   }
+  },
+  {
+   "name": "null 3 with current clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010364046e756c6c",
+   "change": {
+    "added": [],
+    "updated": [],
+    "removed": [
+     3
+    ]
+   },
+   "update": {
+    "added": [],
+    "updated": [],
+    "removed": [
+     3
+    ]
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 100,
+      "state": null,
+      "present": false
+     }
+    ],
+    "present": [
+     1,
+     2
+    ],
+    "encodedAll": "020102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d"
+   }
+  },
+  {
+   "name": "null 3 again (nothing to remove)",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010364046e756c6c",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 100,
+      "state": null,
+      "present": false
+     }
+    ],
+    "present": [
+     1,
+     2
+    ],
+    "encodedAll": "020102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d"
+   }
+  },
+  {
+   "name": "null 3 with higher clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010365046e756c6c",
+   "change": {
+    "added": [],
+    "updated": [],
+    "removed": [
+     3
+    ]
+   },
+   "update": {
+    "added": [],
+    "updated": [],
+    "removed": [
+     3
+    ]
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 101,
+      "state": null,
+      "present": false
+     }
+    ],
+    "present": [
+     1,
+     2
+    ],
+    "encodedAll": "020102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d"
+   }
+  },
+  {
+   "name": "3 back with its old clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "0103650a7b226261636b223a317d",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 101,
+      "state": null,
+      "present": false
+     }
+    ],
+    "present": [
+     1,
+     2
+    ],
+    "encodedAll": "020102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d"
+   }
+  },
+  {
+   "name": "3 back with a higher clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "0103660a7b226261636b223a327d",
+   "change": {
+    "added": [],
+    "updated": [
+     3
+    ],
+    "removed": []
+   },
+   "update": {
+    "added": [],
+    "updated": [
+     3
+    ],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d03660a7b226261636b223a327d"
+   }
+  },
+  {
+   "name": "null 9 never seen",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010904046e756c6c",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 4,
+      "state": null,
+      "present": false
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d03660a7b226261636b223a327d"
+   }
+  },
+  {
+   "name": "9 appears with an older clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010903077b2278223a317d",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 4,
+      "state": null,
+      "present": false
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3
+    ],
+    "encodedAll": "030102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d03660a7b226261636b223a327d"
+   }
+  },
+  {
+   "name": "9 appears with a newer clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010905077b2278223a327d",
+   "change": {
+    "added": [],
+    "updated": [
+     9
+    ],
+    "removed": []
+   },
+   "update": {
+    "added": [],
+    "updated": [
+     9
+    ],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3,
+     9
+    ],
+    "encodedAll": "040102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d03660a7b226261636b223a327d0905077b2278223a327d"
+   }
+  },
+  {
+   "name": "twice in one message",
+   "op": "apply",
+   "reformatted": false,
+   "input": "040701077b2269223a317d0702077b2269223a327d0702077b2269223a337d0801046e756c6c",
+   "change": {
+    "added": [
+     7
+    ],
+    "updated": [
+     7
+    ],
+    "removed": []
+   },
+   "update": {
+    "added": [
+     7
+    ],
+    "updated": [
+     7
+    ],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     },
+     {
+      "id": 7,
+      "clock": 2,
+      "state": {
+       "i": 2
+      },
+      "present": true
+     },
+     {
+      "id": 8,
+      "clock": 1,
+      "state": null,
+      "present": false
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3,
+     9,
+     7
+    ],
+    "encodedAll": "050102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d03660a7b226261636b223a327d0905077b2278223a327d0702077b2269223a327d"
+   }
+  },
+  {
+   "name": "large ids",
+   "op": "apply",
+   "reformatted": false,
+   "input": "0480808080108080808010077b2261223a317dffffffff0f01077b2261223a327dffffffffffffff0fffffffffffffff0f077b2261223a337d858080808020808080808001077b2261223a347d",
+   "change": {
+    "added": [
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781
+    ],
+    "updated": [],
+    "removed": []
+   },
+   "update": {
+    "added": [
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781
+    ],
+    "updated": [],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     },
+     {
+      "id": 7,
+      "clock": 2,
+      "state": {
+       "i": 2
+      },
+      "present": true
+     },
+     {
+      "id": 8,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 4294967296,
+      "clock": 4294967296,
+      "state": {
+       "a": 1
+      },
+      "present": true
+     },
+     {
+      "id": 4294967295,
+      "clock": 1,
+      "state": {
+       "a": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9007199254740991,
+      "clock": 9007199254740991,
+      "state": {
+       "a": 3
+      },
+      "present": true
+     },
+     {
+      "id": 1099511627781,
+      "clock": 34359738368,
+      "state": {
+       "a": 4
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3,
+     9,
+     7,
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781
+    ],
+    "encodedAll": "090102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d03660a7b226261636b223a327d0905077b2278223a327d0702077b2269223a327d80808080108080808010077b2261223a317dffffffff0f01077b2261223a327dffffffffffffff0fffffffffffffff0f077b2261223a337d858080808020808080808001077b2261223a347d"
+   }
+  },
+  {
+   "name": "32 bit id",
+   "op": "apply",
+   "reformatted": false,
+   "input": "01effdb6f50d01177b2275736572223a7b226e616d65223a224d6178227d7d",
+   "change": {
+    "added": [
+     3735928559
+    ],
+    "updated": [],
+    "removed": []
+   },
+   "update": {
+    "added": [
+     3735928559
+    ],
+    "updated": [],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     },
+     {
+      "id": 7,
+      "clock": 2,
+      "state": {
+       "i": 2
+      },
+      "present": true
+     },
+     {
+      "id": 8,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 4294967296,
+      "clock": 4294967296,
+      "state": {
+       "a": 1
+      },
+      "present": true
+     },
+     {
+      "id": 4294967295,
+      "clock": 1,
+      "state": {
+       "a": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9007199254740991,
+      "clock": 9007199254740991,
+      "state": {
+       "a": 3
+      },
+      "present": true
+     },
+     {
+      "id": 1099511627781,
+      "clock": 34359738368,
+      "state": {
+       "a": 4
+      },
+      "present": true
+     },
+     {
+      "id": 3735928559,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Max"
+       }
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3,
+     9,
+     7,
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781,
+     3735928559
+    ],
+    "encodedAll": "0a0102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d03660a7b226261636b223a327d0905077b2278223a327d0702077b2269223a327d80808080108080808010077b2261223a317dffffffff0f01077b2261223a327dffffffffffffff0fffffffffffffff0f077b2261223a337d858080808020808080808001077b2261223a347deffdb6f50d01177b2275736572223a7b226e616d65223a224d6178227d7d"
+   }
+  },
+  {
+   "name": "empty message",
+   "op": "apply",
+   "reformatted": false,
+   "input": "00",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": {
+       "user": {
+        "name": "Ada",
+        "color": "#0000ff"
+       }
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Zoë 日本語 😀",
+        "color": "#00ff00"
+       },
+       "tags": [
+        "a",
+        [
+         "b",
+         {
+          "c": null
+         }
+        ]
+       ],
+       "n": 1.5e-7,
+       "big": 12345678901234567000,
+       "esc": "q\"\\\n\u0001"
+      },
+      "present": true
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     },
+     {
+      "id": 7,
+      "clock": 2,
+      "state": {
+       "i": 2
+      },
+      "present": true
+     },
+     {
+      "id": 8,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 4294967296,
+      "clock": 4294967296,
+      "state": {
+       "a": 1
+      },
+      "present": true
+     },
+     {
+      "id": 4294967295,
+      "clock": 1,
+      "state": {
+       "a": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9007199254740991,
+      "clock": 9007199254740991,
+      "state": {
+       "a": 3
+      },
+      "present": true
+     },
+     {
+      "id": 1099511627781,
+      "clock": 34359738368,
+      "state": {
+       "a": 4
+      },
+      "present": true
+     },
+     {
+      "id": 3735928559,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Max"
+       }
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     1,
+     2,
+     3,
+     9,
+     7,
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781,
+     3735928559
+    ],
+    "encodedAll": "0a0102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d020193017b2275736572223a7b226e616d65223a225a6fc3ab20e697a5e69cace8aa9e20f09f9880222c22636f6c6f72223a2223303066663030227d2c2274616773223a5b2261222c5b2262222c7b2263223a6e756c6c7d5d5d2c226e223a312e35652d372c22626967223a31323334353637383930313233343536373030302c22657363223a22715c225c5c5c6e5c7530303031227d03660a7b226261636b223a327d0905077b2278223a327d0702077b2269223a327d80808080108080808010077b2261223a317dffffffff0f01077b2261223a327dffffffffffffff0fffffffffffffff0f077b2261223a337d858080808020808080808001077b2261223a347deffdb6f50d01177b2275736572223a7b226e616d65223a224d6178227d7d"
+   }
+  },
+  {
+   "name": "remove 1 and 2 and an unknown id",
+   "op": "remove",
+   "ids": [
+    1,
+    2,
+    123456
+   ],
+   "change": {
+    "added": [],
+    "updated": [],
+    "removed": [
+     1,
+     2
+    ]
+   },
+   "update": {
+    "added": [],
+    "updated": [],
+    "removed": [
+     1,
+     2
+    ]
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     },
+     {
+      "id": 7,
+      "clock": 2,
+      "state": {
+       "i": 2
+      },
+      "present": true
+     },
+     {
+      "id": 8,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 4294967296,
+      "clock": 4294967296,
+      "state": {
+       "a": 1
+      },
+      "present": true
+     },
+     {
+      "id": 4294967295,
+      "clock": 1,
+      "state": {
+       "a": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9007199254740991,
+      "clock": 9007199254740991,
+      "state": {
+       "a": 3
+      },
+      "present": true
+     },
+     {
+      "id": 1099511627781,
+      "clock": 34359738368,
+      "state": {
+       "a": 4
+      },
+      "present": true
+     },
+     {
+      "id": 3735928559,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Max"
+       }
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     3,
+     9,
+     7,
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781,
+     3735928559
+    ],
+    "encodedAll": "0803660a7b226261636b223a327d0905077b2278223a327d0702077b2269223a327d80808080108080808010077b2261223a317dffffffff0f01077b2261223a327dffffffffffffff0fffffffffffffff0f077b2261223a337d858080808020808080808001077b2261223a347deffdb6f50d01177b2275736572223a7b226e616d65223a224d6178227d7d"
+   },
+   "encodedRemoved": "020102046e756c6c0201046e756c6c",
+   "encodedIds": [
+    1,
+    2
+   ]
+  },
+  {
+   "name": "remove again",
+   "op": "remove",
+   "ids": [
+    1,
+    2
+   ],
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     },
+     {
+      "id": 7,
+      "clock": 2,
+      "state": {
+       "i": 2
+      },
+      "present": true
+     },
+     {
+      "id": 8,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 4294967296,
+      "clock": 4294967296,
+      "state": {
+       "a": 1
+      },
+      "present": true
+     },
+     {
+      "id": 4294967295,
+      "clock": 1,
+      "state": {
+       "a": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9007199254740991,
+      "clock": 9007199254740991,
+      "state": {
+       "a": 3
+      },
+      "present": true
+     },
+     {
+      "id": 1099511627781,
+      "clock": 34359738368,
+      "state": {
+       "a": 4
+      },
+      "present": true
+     },
+     {
+      "id": 3735928559,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Max"
+       }
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     3,
+     9,
+     7,
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781,
+     3735928559
+    ],
+    "encodedAll": "0803660a7b226261636b223a327d0905077b2278223a327d0702077b2269223a327d80808080108080808010077b2261223a317dffffffff0f01077b2261223a327dffffffffffffff0fffffffffffffff0f077b2261223a337d858080808020808080808001077b2261223a347deffdb6f50d01177b2275736572223a7b226e616d65223a224d6178227d7d"
+   },
+   "encodedRemoved": "020102046e756c6c0201046e756c6c",
+   "encodedIds": [
+    1,
+    2
+   ]
+  },
+  {
+   "name": "1 returns with the old clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "010102297b2275736572223a7b226e616d65223a22416461222c22636f6c6f72223a2223303030306666227d7d",
+   "change": null,
+   "update": null,
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 2,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     },
+     {
+      "id": 7,
+      "clock": 2,
+      "state": {
+       "i": 2
+      },
+      "present": true
+     },
+     {
+      "id": 8,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 4294967296,
+      "clock": 4294967296,
+      "state": {
+       "a": 1
+      },
+      "present": true
+     },
+     {
+      "id": 4294967295,
+      "clock": 1,
+      "state": {
+       "a": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9007199254740991,
+      "clock": 9007199254740991,
+      "state": {
+       "a": 3
+      },
+      "present": true
+     },
+     {
+      "id": 1099511627781,
+      "clock": 34359738368,
+      "state": {
+       "a": 4
+      },
+      "present": true
+     },
+     {
+      "id": 3735928559,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Max"
+       }
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     3,
+     9,
+     7,
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781,
+     3735928559
+    ],
+    "encodedAll": "0803660a7b226261636b223a327d0905077b2278223a327d0702077b2269223a327d80808080108080808010077b2261223a317dffffffff0f01077b2261223a327dffffffffffffff0fffffffffffffff0f077b2261223a337d858080808020808080808001077b2261223a347deffdb6f50d01177b2275736572223a7b226e616d65223a224d6178227d7d"
+   }
+  },
+  {
+   "name": "1 returns with a higher clock",
+   "op": "apply",
+   "reformatted": false,
+   "input": "0101030e7b22616761696e223a747275657d",
+   "change": {
+    "added": [],
+    "updated": [
+     1
+    ],
+    "removed": []
+   },
+   "update": {
+    "added": [],
+    "updated": [
+     1
+    ],
+    "removed": []
+   },
+   "after": {
+    "clients": [
+     {
+      "id": 1,
+      "clock": 3,
+      "state": {
+       "again": true
+      },
+      "present": true
+     },
+     {
+      "id": 2,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 3,
+      "clock": 102,
+      "state": {
+       "back": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9,
+      "clock": 5,
+      "state": {
+       "x": 2
+      },
+      "present": true
+     },
+     {
+      "id": 7,
+      "clock": 2,
+      "state": {
+       "i": 2
+      },
+      "present": true
+     },
+     {
+      "id": 8,
+      "clock": 1,
+      "state": null,
+      "present": false
+     },
+     {
+      "id": 4294967296,
+      "clock": 4294967296,
+      "state": {
+       "a": 1
+      },
+      "present": true
+     },
+     {
+      "id": 4294967295,
+      "clock": 1,
+      "state": {
+       "a": 2
+      },
+      "present": true
+     },
+     {
+      "id": 9007199254740991,
+      "clock": 9007199254740991,
+      "state": {
+       "a": 3
+      },
+      "present": true
+     },
+     {
+      "id": 1099511627781,
+      "clock": 34359738368,
+      "state": {
+       "a": 4
+      },
+      "present": true
+     },
+     {
+      "id": 3735928559,
+      "clock": 1,
+      "state": {
+       "user": {
+        "name": "Max"
+       }
+      },
+      "present": true
+     }
+    ],
+    "present": [
+     3,
+     9,
+     7,
+     4294967296,
+     4294967295,
+     9007199254740991,
+     1099511627781,
+     3735928559,
+     1
+    ],
+    "encodedAll": "0903660a7b226261636b223a327d0905077b2278223a327d0702077b2269223a327d80808080108080808010077b2261223a317dffffffff0f01077b2261223a327dffffffffffffff0fffffffffffffff0f077b2261223a337d858080808020808080808001077b2261223a347deffdb6f50d01177b2275736572223a7b226e616d65223a224d6178227d7d01030e7b22616761696e223a747275657d"
+   }
+  }
+ ],
+ "encodes": [
+  {
+   "ids": [
+    2,
+    1
+   ],
+   "hex": "020201046e756c6c01030e7b22616761696e223a747275657d"
+  },
+  {
+   "ids": [
+    1,
+    1
+   ],
+   "hex": "0201030e7b22616761696e223a747275657d01030e7b22616761696e223a747275657d"
+  },
+  {
+   "ids": [],
+   "hex": "00"
+  },
+  {
+   "ids": [
+    9007199254740991,
+    4294967296,
+    2
+   ],
+   "hex": "03ffffffffffffff0fffffffffffffff0f077b2261223a337d80808080108080808010077b2261223a317d0201046e756c6c"
+  },
+  {
+   "ids": [
+    3
+   ],
+   "hex": "0103660a7b226261636b223a327d"
+  }
+ ]
+}
