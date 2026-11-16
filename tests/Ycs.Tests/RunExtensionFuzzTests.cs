@@ -469,9 +469,9 @@ public class RunExtensionFuzzTests
             }
             else if (r < 87)
             {
-                relpos.Add(RelativePosition.FromTypeIndex(t, rng.Int(t.Length + 1), rng.Chance(0.5) ? 0 : -1));
-                relpos.Add(RelativePosition.FromTypeIndex(a, rng.Int(a.Length + 1), rng.Chance(0.5) ? 0 : -1));
-                c.L("rp " + ReferenceRun.Hex(relpos[^2].ToArray()) + " " + ReferenceRun.Hex(relpos[^1].ToArray()));
+                relpos.Add(RelativePosition.FromIndex(t, rng.Int(t.Length + 1), rng.Chance(0.5) ? 0 : -1));
+                relpos.Add(RelativePosition.FromIndex(a, rng.Int(a.Length + 1), rng.Chance(0.5) ? 0 : -1));
+                c.L("rp " + ReferenceRun.Hex(relpos[^2].Encode()) + " " + ReferenceRun.Hex(relpos[^1].Encode()));
             }
             else if (r < 89)
             {
@@ -616,8 +616,8 @@ public class RunExtensionFuzzTests
             c.L(ReferenceRun.Dump(doc, t, a));
             foreach (var rp in relpos)
             {
-                var abs = AbsolutePosition.TryCreateFromRelativePosition(rp, doc);
-                c.Log.Append(abs?.Index).Append(',');
+                var found = rp.TryResolve(doc, out var abs);
+                c.Log.Append(found ? abs.Index : null).Append(',');
             }
 
             c.L("");

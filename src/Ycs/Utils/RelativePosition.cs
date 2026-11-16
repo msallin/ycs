@@ -6,97 +6,41 @@
 
 #nullable enable
 
+using System.Buffers;
+using System.Text.Json;
+
 namespace Ycs;
 
 /// <summary>
-/// A relative position is based on the YUjs model and is not affected by document changes.
-/// E.g. if you place a relative position before a certain character, it will always point to this character.
-/// If you place a relative position at the end of a type, it will always point to the end of the type.
+/// A position in a shared type that survives edits: placed before a character, it keeps pointing at that
+/// character; placed at the end of a type, it keeps pointing at the end. Exactly one of <see cref="Item"/>,
+/// <see cref="RootName"/> and <see cref="TypeId"/> locates it (<see cref="Item"/> wins in the encoding, then
+/// <see cref="RootName"/>); <c>default</c> locates nothing and neither encodes nor resolves.
 /// <br/>
-/// A numberic position is often unsuited for user selections, because it does not change when content is inserted
-/// before or after.
-/// <br/>
-/// <c>Insert(0, 'x')('a|bc') = 'xa|bc'</c> Where | is tehre relative position.
-/// <br/>
-/// Only one property must be defined.
-/// <br/>
-/// This type mirrors Yjs 13.6.32's <c>RelativePosition</c> (src/utils/RelativePosition.js). It is
-/// public - rather than the <c>internal</c> it started as - because it is the basis for the
-/// shared-cursor / awareness use case (y-protocols' awareness carries an encoded
-/// <see cref="RelativePosition"/> per peer), which is unreachable from outside this assembly
-/// otherwise.
+/// The binary form and the JSON form are those of Yjs' <c>encodeRelativePosition</c> and
+/// <c>relativePositionToJSON</c>, so a position travels between peers (y-protocols' awareness carries one per
+/// cursor).
 /// </summary>
-public partial class RelativePosition : IEquatable<RelativePosition>
+/// <param name="TypeId">The id of the type that holds the position, when that type is not a root type.</param>
+/// <param name="RootName">The name of the root type that holds the position.</param>
+/// <param name="Item">The id of the character the position is associated with.</param>
+/// <param name="Assoc">
+/// <c>&gt;= 0</c>: associated with the character after the position (position 1 in <c>'ab'</c> is associated with
+/// <c>'b'</c>); <c>&lt; 0</c>: with the character before it.
+/// </param>
+public readonly record struct RelativePosition(ItemId? TypeId, string? RootName, ItemId? Item, int Assoc = 0)
 {
-    public readonly ID? Item;
-    public readonly ID? TypeId;
-    public readonly string? TName;
-
-    /// <summary>
-    /// A relative position is associated to a specific character.
-    /// By default, the value is <c>&gt;&eq; 0</c>, the relative position is associated to the character
-    /// after the meant position.
-    /// I.e. position <c>1</c> in <c>'ab'</c> is associated with the character <c>'b'</c>.
-    /// <br/>
-    /// If the value is <c>&lt; 0</c>, then the relative position is associated with the caharacter
-    /// before the meant position.
-    /// </summary>
-    public int Assoc;
-
-    public RelativePosition(AbstractType type, ID? item, int assoc = 0)
+    /// <summary>The position of <paramref name="index"/> in <paramref name="type"/>.</summary>
+    public static RelativePosition FromIndex(AbstractType type, int index, int assoc = 0)
     {
-        Item = item;
-        Assoc = assoc;
+        ArgumentNullException.ThrowIfNull(type);
 
-        if (type.IsRoot)
-        {
-            TName = type.FindRootTypeKey();
-        }
-        else
-        {
-            var id = type.ItemId;
-            TypeId = new ID(id.Client, id.Clock);
-        }
-    }
-
-    private RelativePosition(ID? typeId, string? tname, ID? item, int assoc)
-    {
-        TypeId = typeId;
-        TName = tname;
-        Item = item;
-        Assoc = assoc;
-    }
-
-    public bool Equals(RelativePosition? other)
-    {
-        if (ReferenceEquals(this, other))
-        {
-            return true;
-        }
-
-        return other != null
-            && string.Equals(TName, other.TName)
-            && Item == other.Item
-            && TypeId == other.TypeId
-            && Assoc == other.Assoc;
-    }
-
-    public override bool Equals(object? obj) => obj is RelativePosition other && Equals(other);
-
-    // Assoc is a mutable field: do not change it while the position is a key of a hash table.
-    public override int GetHashCode() => HashCode.Combine(TName, Item, TypeId, Assoc);
-
-    /// <summary>
-    /// Create a relative position based on an absolute position.
-    /// </summary>
-    public static RelativePosition FromTypeIndex(AbstractType type, int index, int assoc = 0)
-    {
         if (assoc < 0)
         {
             // Associated with the left character or the beginning of a type, decrement index if possible.
             if (index == 0)
             {
-                return new RelativePosition(type, null, assoc);
+                return In(type, null, assoc);
             }
 
             index--;
@@ -110,7 +54,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
                 if (t.Length > index)
                 {
                     // Case 1: found position somewhere in the linked list.
-                    return new RelativePosition(type, new ID(t.Id.Client, t.Id.Clock + index), assoc);
+                    return In(type, new ItemId(t.Id.Client, t.Id.Clock + index), assoc);
                 }
 
                 index -= t.Length;
@@ -119,94 +63,136 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             if (t.Right.IsNull && assoc < 0)
             {
                 // Left-associated position, return last available id.
-                return new RelativePosition(type, t.LastId, assoc);
+                return In(type, t.LastId, assoc);
             }
 
             t = t.Right.AsItem;
         }
 
-        return new RelativePosition(type, null, assoc);
+        return In(type, null, assoc);
     }
 
     /// <summary>
-    /// Yjs parity: <c>createRelativePositionFromTypeIndex(type, index, assoc)</c>. Alias for
-    /// <see cref="FromTypeIndex"/>, kept under the Yjs name for discoverability.
+    /// The index in <paramref name="doc"/> this position is at now; <c>false</c> when the position names a
+    /// struct the document does not have (yet) or has garbage collected.
+    /// <br/>
+    /// To share the position with other users, pass <paramref name="followUndoneDeletions"/> <c>false</c> to get
+    /// the same result on every client: by default an undone deletion is followed to the content that recreated
+    /// it, which is better for the user who undid but only for that user. See
+    /// https://github.com/yjs/yjs/issues/638.
     /// </summary>
-    public static RelativePosition CreateRelativePositionFromTypeIndex(AbstractType type, int index, int assoc = 0)
-        => FromTypeIndex(type, index, assoc);
+    public bool TryResolve(YDoc doc, out AbsolutePosition position, bool followUndoneDeletions = true)
+    {
+        ArgumentNullException.ThrowIfNull(doc);
+        return AbsolutePosition.TryResolve(this, doc, followUndoneDeletions, out position);
+    }
+
+    /// <summary>The bytes of Yjs' <c>encodeRelativePosition</c>.</summary>
+    /// <exception cref="InvalidOperationException">The position is <c>default</c>: it locates nothing.</exception>
+    public byte[] Encode()
+    {
+        var writer = new Lib0Writer();
+        Write(writer);
+        return writer.ToArray();
+    }
+
+    /// <summary><see cref="Encode()"/> into <paramref name="destination"/>.</summary>
+    public void Encode(IBufferWriter<byte> destination)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        var writer = new Lib0Writer();
+        Write(writer);
+        writer.CopyTo(destination);
+    }
+
+    /// <summary>Reads the bytes of Yjs' <c>encodeRelativePosition</c>.</summary>
+    /// <exception cref="YUpdateException">The bytes are truncated or name an unknown kind of position.</exception>
+    public static RelativePosition Decode(ReadOnlySpan<byte> encoded) => Read(new Lib0Reader(encoded.ToArray()));
 
     /// <summary>
-    /// Yjs parity: <c>compareRelativePositions(a, b)</c>.
+    /// Writes Yjs' <c>relativePositionToJSON</c> object: <c>type</c>, <c>tname</c> and <c>item</c> only where set
+    /// (Yjs leaves out an empty <c>tname</c>, so its JSON of a position at the end of the root <c>""</c> cannot
+    /// be resolved; this keeps it), then <c>assoc</c>.
     /// </summary>
-    public static bool CompareRelativePositions(RelativePosition a, RelativePosition b)
+    public void WriteJson(Utf8JsonWriter writer)
     {
-        return ReferenceEquals(a, b) || (a != null && b != null && a.Equals(b));
+        ArgumentNullException.ThrowIfNull(writer);
+        writer.WriteStartObject();
+        if (TypeId is { } typeId)
+        {
+            WriteJsonId(writer, "type", typeId);
+        }
+
+        if (RootName != null)
+        {
+            writer.WriteString("tname", RootName);
+        }
+
+        if (Item is { } item)
+        {
+            WriteJsonId(writer, "item", item);
+        }
+
+        writer.WriteNumber("assoc", Assoc);
+        writer.WriteEndObject();
     }
 
     /// <summary>
-    /// Yjs parity: <c>relativePositionToJSON(rpos)</c>. Mirrors the plain-object shape Yjs produces:
-    /// only the properties that are actually set are present in the result.
+    /// Reads the object of Yjs' <c>relativePositionToJSON</c>. The JSON may come from another peer: <c>null</c>
+    /// members count as absent, <c>assoc</c> is clamped to the range of an <see cref="int"/>.
     /// </summary>
-    public IDictionary<string, object> RelativePositionToJSON()
+    /// <exception cref="YUpdateException">
+    /// Not an object; an id that is not an object of two integers from 0 to 2^53 - 1; an <c>assoc</c> that is
+    /// not an integer; a <c>tname</c> that is not a string; none of <c>item</c>, <c>type</c> and <c>tname</c>.
+    /// </exception>
+    public static RelativePosition FromJson(JsonElement json)
     {
-        var json = new Dictionary<string, object>();
-
-        if (TypeId != null)
+        if (json.ValueKind != JsonValueKind.Object)
         {
-            json["type"] = IdToJson(TypeId.Value);
+            throw new YUpdateException("A relative position is not a JSON object.");
         }
 
-        // Yjs leaves out an empty tname, so its JSON of a position at the end of the root "" cannot be
-        // resolved; this keeps it.
-        if (TName != null)
-        {
-            json["tname"] = TName;
-        }
-
-        if (Item != null)
-        {
-            json["item"] = IdToJson(Item.Value);
-        }
-
-        json["assoc"] = Assoc;
-
-        return json;
-    }
-
-    /// <summary>
-    /// Yjs parity: <c>createRelativePositionFromJSON(json)</c>. The JSON may come from another peer: a
-    /// malformed one (an id that is not an object of two integers from 0 to 2^53 - 1, an <c>assoc</c>
-    /// that is not an integer, neither <c>item</c>, <c>type</c> nor <c>tname</c>) throws
-    /// <see cref="YUpdateException"/>. <c>assoc</c> is clamped to the range of an <see cref="int"/>.
-    /// </summary>
-    public static RelativePosition CreateRelativePositionFromJSON(IDictionary<string, object> json)
-    {
-        ArgumentNullException.ThrowIfNull(json);
-        ID? typeId = json.TryGetValue("type", out var type) && type != null ? JsonToId(type, "type") : null;
-        string? tname = json.TryGetValue("tname", out var tn) && tn != null
-            ? tn as string ?? throw new YUpdateException("The tname of a relative position is not a string.")
+        ItemId? typeId = Member(json, "type", out var type) ? JsonToId(type, "type") : null;
+        string? rootName = Member(json, "tname", out var tname)
+            ? tname.ValueKind == JsonValueKind.String ? tname.GetString() : throw new YUpdateException("The tname of a relative position is not a string.")
             : null;
-        ID? item = json.TryGetValue("item", out var it) && it != null ? JsonToId(it, "item") : null;
-        int assoc = json.TryGetValue("assoc", out var a) && a != null ? (int)Math.Clamp(JsonInteger(a, "assoc"), int.MinValue, int.MaxValue) : 0;
+        ItemId? item = Member(json, "item", out var itemJson) ? JsonToId(itemJson, "item") : null;
+        var assoc = Member(json, "assoc", out var assocJson) ? (int)Math.Clamp(JsonInteger(assocJson, "assoc"), int.MinValue, int.MaxValue) : 0;
 
-        if (item == null && tname == null && typeId == null)
+        if (item == null && rootName == null && typeId == null)
         {
             throw new YUpdateException("A relative position names neither an item, a type nor a root type.");
         }
 
-        return new RelativePosition(typeId, tname, item, assoc);
+        return new RelativePosition(typeId, rootName, item, assoc);
     }
 
-    private static IDictionary<string, object> IdToJson(ID id) => new Dictionary<string, object>
+    private static RelativePosition In(AbstractType type, ItemId? item, int assoc)
     {
-        ["client"] = id.Client,
-        ["clock"] = id.Clock
-    };
+        if (type.IsRoot)
+        {
+            return new RelativePosition(null, type.FindRootTypeKey(), item, assoc);
+        }
 
-    private static ID JsonToId(object json, string name)
+        var id = type.ItemId;
+        return new RelativePosition(new ItemId(id.Client, id.Clock), null, item, assoc);
+    }
+
+    private static void WriteJsonId(Utf8JsonWriter writer, string name, ItemId id)
     {
-        if (json is not IDictionary<string, object> dict
-            || !dict.TryGetValue("client", out var client) || !dict.TryGetValue("clock", out var clock))
+        writer.WriteStartObject(name);
+        writer.WriteNumber("client", id.Client);
+        writer.WriteNumber("clock", id.Clock);
+        writer.WriteEndObject();
+    }
+
+    private static bool Member(JsonElement json, string name, out JsonElement value) =>
+        json.TryGetProperty(name, out value) && value.ValueKind != JsonValueKind.Null;
+
+    private static ItemId JsonToId(JsonElement json, string name)
+    {
+        if (json.ValueKind != JsonValueKind.Object
+            || !json.TryGetProperty("client", out var client) || !json.TryGetProperty("clock", out var clock))
         {
             throw new YUpdateException($"The {name} of a relative position is not an object with a client and a clock.");
         }
@@ -218,11 +204,26 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             throw new YUpdateException($"The {name} of a relative position is out of range (0 to 2^53 - 1).");
         }
 
-        return new ID(clientValue, clockValue);
+        return new ItemId(clientValue, clockValue);
     }
 
-    private static long JsonInteger(object value, string name) =>
-        JsValue.IsInteger(value, out var integer) ? integer : throw new YUpdateException($"The {name} of a relative position is not an integer.");
+    private static long JsonInteger(JsonElement value, string name)
+    {
+        if (value.ValueKind == JsonValueKind.Number)
+        {
+            if (value.TryGetInt64(out var integer))
+            {
+                return integer;
+            }
+
+            if (JsValue.IsInteger(value.GetDouble(), out integer))
+            {
+                return integer;
+            }
+        }
+
+        throw new YUpdateException($"The {name} of a relative position is not an integer.");
+    }
 
     internal void Write(Lib0Writer writer)
     {
@@ -232,71 +233,51 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             writer.WriteVarUint(0);
             Item.Value.Write(writer);
         }
-        else if (TName != null)
+        else if (RootName != null)
         {
             // Case 2: Found position at the end of the list and type is stored in y.share.
             writer.WriteVarUint(1);
-            writer.WriteVarString(TName);
+            writer.WriteVarString(RootName);
+        }
+        else if (TypeId != null)
+        {
+            // Case 3: Found position at the end of the list and type is attached to an item.
+            writer.WriteVarUint(2);
+            TypeId.Value.Write(writer);
         }
         else
         {
-            // Case 3: Found position at the end of the list and type is attached to an item.
-            // Every constructor sets one of the three.
-            writer.WriteVarUint(2);
-            TypeId!.Value.Write(writer);
+            throw new InvalidOperationException("A default RelativePosition locates nothing: it has no item, type or root type to encode.");
         }
 
         writer.WriteVarInt(Assoc);
     }
 
-    public static RelativePosition Read(byte[] encodedPosition)
-    {
-        return Read(new Lib0Reader(encodedPosition));
-    }
-
     internal static RelativePosition Read(Lib0Reader reader)
     {
-        ID? itemId = null;
-        ID? typeId = null;
-        string? tName = null;
+        ItemId? itemId = null;
+        ItemId? typeId = null;
+        string? rootName = null;
 
         switch (reader.ReadVarUint())
         {
             case 0:
                 // Case 1: Found position somewhere in the linked list.
-                itemId = ID.Read(reader);
+                itemId = ItemId.Read(reader);
                 break;
             case 1:
                 // Case 2: Found position at the end of the list and type is stored in y.share.
-                tName = reader.ReadVarString();
+                rootName = reader.ReadVarString();
                 break;
             case 2:
                 // Case 3: Found position at the end of the list and type is attached to an item.
-                typeId = ID.Read(reader);
+                typeId = ItemId.Read(reader);
                 break;
             default:
                 throw new YUpdateException("Unknown kind of relative position.");
         }
 
         var assoc = reader.HasContent ? (int)Math.Clamp(reader.ReadVarInt().Value, int.MinValue, int.MaxValue) : 0;
-        return new RelativePosition(typeId, tName, itemId, assoc);
+        return new RelativePosition(typeId, rootName, itemId, assoc);
     }
-
-    public byte[] ToArray()
-    {
-        var writer = new Lib0Writer();
-        Write(writer);
-        return writer.ToArray();
-    }
-
-    /// <summary>
-    /// Yjs parity: <c>encodeRelativePosition(rpos)</c>. Alias for <see cref="ToArray"/> - this is the
-    /// binary form used by y-protocols' awareness.
-    /// </summary>
-    public static byte[] EncodeRelativePosition(RelativePosition rpos) => rpos.ToArray();
-
-    /// <summary>
-    /// Yjs parity: <c>decodeRelativePosition(uint8Array)</c>. Alias for <see cref="Read(byte[])"/>.
-    /// </summary>
-    public static RelativePosition DecodeRelativePosition(byte[] encoded) => Read(encoded);
 }

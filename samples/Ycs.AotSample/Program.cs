@@ -38,6 +38,18 @@ foreach (var v2 in new[] { false, true })
     var added = (IDictionary<string, object>)copy.GetMap("map").Get("added");
     Check(added["n"] is 42, $"v{(v2 ? 2 : 1)}: map value lost");
     Console.WriteLine($"v{(v2 ? 2 : 1)}: {update.Length} bytes, text '{copyText}'");
+
+    var position = RelativePosition.FromIndex(copyText, 4, -1);
+    var buffer = new System.Buffers.ArrayBufferWriter<byte>();
+    using (var json = new System.Text.Json.Utf8JsonWriter(buffer))
+    {
+        position.WriteJson(json);
+    }
+
+    using var parsed = System.Text.Json.JsonDocument.Parse(buffer.WrittenMemory);
+    var decoded = RelativePosition.Decode(position.Encode());
+    Check(decoded.Encode().AsSpan().SequenceEqual(position.Encode()) && RelativePosition.FromJson(parsed.RootElement) == position, $"v{(v2 ? 2 : 1)}: position lost");
+    Check(decoded.TryResolve(copy, out var absolute) && absolute.Index == 4, $"v{(v2 ? 2 : 1)}: position resolves elsewhere");
 }
 
 Console.WriteLine("OK");

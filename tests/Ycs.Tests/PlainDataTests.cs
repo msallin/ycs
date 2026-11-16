@@ -36,10 +36,10 @@ public class PlainDataTests
         text.Insert(0, "abc");
         var set = new HashSet<RelativePosition>
         {
-            RelativePosition.FromTypeIndex(text, 1),
-            RelativePosition.FromTypeIndex(text, 1),
-            RelativePosition.FromTypeIndex(text, 2),
-            RelativePosition.FromTypeIndex(text, 1, -1),
+            RelativePosition.FromIndex(text, 1),
+            RelativePosition.FromIndex(text, 1),
+            RelativePosition.FromIndex(text, 2),
+            RelativePosition.FromIndex(text, 1, -1),
         };
 
         Assert.AreEqual(3, set.Count);
@@ -51,8 +51,8 @@ public class PlainDataTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         text.Insert(0, "abc");
-        var a = RelativePosition.FromTypeIndex(text, 1);
-        var b = RelativePosition.FromTypeIndex(text, 1);
+        var a = RelativePosition.FromIndex(text, 1);
+        var b = RelativePosition.FromIndex(text, 1);
 
         Assert.AreEqual((true, true, false), (a.Equals((object)b), a.GetHashCode() == b.GetHashCode(), a.Equals((object)"x")));
     }

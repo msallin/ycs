@@ -244,7 +244,7 @@ XML children and map keys):
 | `transact` | `origin`, `ops` (local steps without `c`, and `deliver`s to this client: an update applied inside the transaction) | `YDoc.Transact` |
 | `um`, `undo`, `redo`, `stop`, `umclear` | `id`, `scope` (paths or `"$doc"`), `timeout` (`"0"` or `"inf"`), `origins` | `UndoManager` |
 | `snap`, `readSnap`, `docFromSnap` | `id`, `prev` | `CreateSnapshot`, `ToDelta(snapshot, prev)`, `ToArraySnapshot`, `GetAllSnapshot`, `CreateDocFromSnapshot`, `EncodeSnapshot(V2)` |
-| `rpos`, `rres` | `id`, `at`, `assoc` (`rres` on any client) | `RelativePosition.FromTypeIndex`, `EncodeRelativePosition`, `RelativePositionToJSON`, `DecodeRelativePosition`, `AbsolutePosition.TryCreateFromRelativePosition` |
+| `rpos`, `rres` | `id`, `at`, `assoc` (`rres` on any client) | `RelativePosition.FromIndex`, `Encode`, `WriteJson`, `Decode`, `TryResolve` |
 | `observe` | | `Observe`/`ObserveDeep` on a nested type |
 | `react` | `id`, `ops`, `txn` | `Observe` on any type: the first time it changes, the handler makes `ops` (in one `Transact` with `txn`, else each in its own), also during another transaction's cleanup; the results are an event (`react`) |
 

@@ -461,7 +461,7 @@ public class HardeningTests
         Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.ConvertUpdateFormatV1ToV2(bad));
         Assert.ThrowsExactly<YUpdateException>(() => UpdateOperations.MergeUpdatesV2(new[] { ValidA, ValidA }));
         Assert.ThrowsExactly<YUpdateException>(() => Snapshot.DecodeSnapshot(Hex("01 01 01")));
-        Assert.ThrowsExactly<YUpdateException>(() => RelativePosition.Read(Hex("07")));
+        Assert.ThrowsExactly<YUpdateException>(() => RelativePosition.Decode(Hex("07")));
     }
 
     // 9. A subdocument's options of the wrong type.

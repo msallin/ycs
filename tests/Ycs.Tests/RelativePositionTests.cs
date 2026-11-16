@@ -91,16 +91,13 @@ public class RelativePositionTests : YTestBase
         yText.Insert(0, "2");
         yText.Insert(0, "1");
 
-        var rposRight = RelativePosition.FromTypeIndex(yText, 1, 0);
-        var rposLeft = RelativePosition.FromTypeIndex(yText, 1, -1);
+        var rposRight = RelativePosition.FromIndex(yText, 1, 0);
+        var rposLeft = RelativePosition.FromIndex(yText, 1, -1);
 
         yText.Insert(1, "x");
 
-        var posRight = AbsolutePosition.TryCreateFromRelativePosition(rposRight, Users[0]);
-        var posLeft = AbsolutePosition.TryCreateFromRelativePosition(rposLeft, Users[0]);
-
-        Assert.IsNotNull(posRight);
-        Assert.IsNotNull(posLeft);
+        Assert.IsTrue(rposRight.TryResolve(Users[0], out var posRight));
+        Assert.IsTrue(rposLeft.TryResolve(Users[0], out var posLeft));
         Assert.AreEqual(2, posRight.Index);
         Assert.AreEqual(1, posLeft.Index);
     }
@@ -113,10 +110,10 @@ public class RelativePositionTests : YTestBase
             // For all types of assotiations.
             for (int assoc = -1; assoc < 2; assoc++)
             {
-                var rpos = RelativePosition.FromTypeIndex(yText, i, assoc);
-                var encodedRpos = rpos.ToArray();
-                var decodedRpos = RelativePosition.Read(encodedRpos);
-                var absPos = AbsolutePosition.TryCreateFromRelativePosition(decodedRpos, yText.Doc);
+                var rpos = RelativePosition.FromIndex(yText, i, assoc);
+                var encodedRpos = rpos.Encode();
+                var decodedRpos = RelativePosition.Decode(encodedRpos);
+                Assert.IsTrue(decodedRpos.TryResolve(yText.Doc, out var absPos));
 
                 Assert.AreEqual(i, absPos.Index);
                 Assert.AreEqual(assoc, absPos.Assoc);

@@ -692,10 +692,10 @@ namespace Ycs.Properties
                             return "skip";
                         }
 
-                        var rp = RelativePosition.FromTypeIndex(t, Clamp(s.Int("at"), t.Length), (int)s.Int("assoc"));
-                        var bytes = RelativePosition.EncodeRelativePosition(rp);
+                        var rp = RelativePosition.FromIndex(t, Clamp(s.Int("at"), t.Length), (int)s.Int("assoc"));
+                        var bytes = rp.Encode();
                         _run.RelativePositions[ScriptRun.IdText(s.Get("id"))] = bytes;
-                        return Obj(("b", ScriptRun.B64(bytes)), ("j", Replica.View(rp.RelativePositionToJSON())));
+                        return Obj(("b", ScriptRun.B64(bytes)), ("j", Replica.View(Replica.JsonOf(rp))));
                     }
                 case "rres":
                     {
@@ -704,8 +704,7 @@ namespace Ycs.Properties
                             return "skip";
                         }
 
-                        var abs = AbsolutePosition.TryCreateFromRelativePosition(RelativePosition.DecodeRelativePosition(bytes), Doc);
-                        return abs == null ? null : Obj(("p", Replica.PathOf(abs.Type)), ("i", (long)abs.Index), ("a", (long)abs.Assoc));
+                        return !RelativePosition.Decode(bytes).TryResolve(Doc, out var abs) ? null : Obj(("p", Replica.PathOf(abs.Type)), ("i", (long)abs.Index), ("a", (long)abs.Assoc));
                     }
             }
 
@@ -1388,6 +1387,25 @@ namespace Ycs.Properties
         private static object NumberView(long l) => Math.Abs(l) <= MaxSafeInteger ? l : NumberView((double)l);
 
         /// <summary>What a value looks like (oracle.mjs' view): shared types with their kind and content.</summary>
+        internal static object JsonOf(RelativePosition position)
+        {
+            using var stream = new MemoryStream();
+            using (var writer = new System.Text.Json.Utf8JsonWriter(stream))
+            {
+                position.WriteJson(writer);
+            }
+
+            using var document = System.Text.Json.JsonDocument.Parse(stream.ToArray());
+            return Plain(document.RootElement);
+        }
+
+        private static object Plain(System.Text.Json.JsonElement e) => e.ValueKind switch
+        {
+            System.Text.Json.JsonValueKind.Object => e.EnumerateObject().ToDictionary(p => p.Name, p => Plain(p.Value)),
+            System.Text.Json.JsonValueKind.String => e.GetString(),
+            _ => e.GetInt64(),
+        };
+
         internal static object View(object v)
         {
             switch (v)

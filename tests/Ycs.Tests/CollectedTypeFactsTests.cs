@@ -50,7 +50,7 @@ public class CollectedTypeFactsTests
     {
         var (_, _, outer, inner) = Collected();
 
-        var ids = new[] { inner, outer }.Select(t => RelativePosition.FromTypeIndex(t, 0).TypeId).ToArray();
+        var ids = new[] { inner, outer }.Select(t => RelativePosition.FromIndex(t, 0).TypeId).ToArray();
 
         CollectionAssert.AreEqual(new ItemId?[] { new ItemId(1, 3), new ItemId(1, 1) }, ids);
     }
