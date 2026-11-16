@@ -258,11 +258,11 @@ public class YTestBase
 
             for (int i = 0; i < structs1.Count; i++)
             {
-                var s1 = structs1[i].ToStruct();
-                var s2 = structs2[i].ToStruct();
+                var s1 = structs1[i];
+                var s2 = structs2[i];
 
                 // Checks for abstract struct.
-                if (!s1.GetType().IsAssignableFrom(s2.GetType()) ||
+                if (!s1.IsSameKind(s2) ||
                     !ID.Equals(s1.Id, s2.Id) ||
                     s1.Deleted != s2.Deleted ||
                     s1.Length != s2.Length)
@@ -270,27 +270,29 @@ public class YTestBase
                     Assert.Fail("Structs don't match");
                 }
 
-                if (s1 is Item s1Item)
+                if (s1.IsItem)
                 {
-                    if (!(s2 is Item s2Item) ||
-                        !((s1Item.Left == null && s2Item.Left == null) || (s1Item.Left != null && s2Item.Left != null && ID.Equals((s1Item.Left as Item)?.LastId, (s2Item.Left as Item)?.LastId))) ||
-                        !CompareItemIds(s1Item.Right as Item, s2Item.Right as Item) ||
-                        !ID.Equals(s1Item.LeftOrigin, s2Item.LeftOrigin) ||
-                        !ID.Equals(s1Item.RightOrigin, s2Item.RightOrigin) ||
-                        !string.Equals(s1Item.ParentSub, s2Item.ParentSub))
+                    if (!s2.IsItem ||
+                        !((s1.Left.IsNull && s2.Left.IsNull) || (!s1.Left.IsNull && !s2.Left.IsNull && ID.Equals(LastIdOfItem(s1.Left), LastIdOfItem(s2.Left)))) ||
+                        !CompareItemIds(s1.Right.AsItem, s2.Right.AsItem) ||
+                        !ID.Equals(s1.LeftOrigin, s2.LeftOrigin) ||
+                        !ID.Equals(s1.RightOrigin, s2.RightOrigin) ||
+                        !string.Equals(s1.ParentSub, s2.ParentSub))
                     {
                         Assert.Fail("Items don't match");
                     }
 
                     // Make sure that items are connected correctly.
-                    Assert.IsTrue(s1Item.Left == null || (s1Item.Left as Item)?.Right == s1Item);
-                    Assert.IsTrue(s1Item.Right == null || (s1Item.Right as Item)?.Left == s1Item);
-                    Assert.IsTrue((s2 as Item).Left == null || ((s2 as Item).Left as Item).Right == s2);
-                    Assert.IsTrue((s2 as Item).Right == null || ((s2 as Item).Right as Item).Left == s2);
+                    Assert.IsTrue(s1.Left.IsNull || (s1.Left.IsItem && s1.Left.Right == s1));
+                    Assert.IsTrue(s1.Right.IsNull || (s1.Right.IsItem && s1.Right.Left == s1));
+                    Assert.IsTrue(s2.Left.IsNull || (s2.Left.IsItem && s2.Left.Right == s2));
+                    Assert.IsTrue(s2.Right.IsNull || (s2.Right.IsItem && s2.Right.Left == s2));
                 }
             }
         }
     }
+
+    private static ID? LastIdOfItem(ItemRef reference) => reference.IsItem ? reference.LastId : null;
 
     internal void CompareDS(DeleteSet ds1, DeleteSet ds2)
     {
@@ -316,9 +318,9 @@ public class YTestBase
         }
     }
 
-    protected bool CompareItemIds(Item a, Item b)
+    internal static bool CompareItemIds(ItemRef a, ItemRef b)
     {
-        var result = a == b || (a != null && b != null & ID.Equals(a.Id, b.Id));
+        var result = a == b || (!a.IsNull && !b.IsNull && ID.Equals(a.Id, b.Id));
         Assert.IsTrue(result);
         return result;
     }
