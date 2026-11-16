@@ -81,5 +81,10 @@ internal static class FixedFailures
             "and a remainder that shares a clock with a pending struct is merged into what waits at once, " +
             "as Yjs merges every one. Ycs kept the earlier update's struct.",
             """{"clients":[{"gc":false,"id":4,"quiet":true},{"gc":true,"id":4294966843},{"gc":false,"gcf":3,"id":9,"quiet":true}],"roots":[{"kind":"text","name":"t"},{"kind":"array","name":"a"}],"steps":[{"at":0,"c":1,"op":"ains","path":["a"],"values":[{"$t":"xmle","n":"p","v":[{"$t":"xmlt"}]}]},{"at":0,"c":0,"op":"insert","path":["t"],"text":"a"},{"c":1,"id":"x0","op":"react","ops":[{"at":0,"op":"insert","path":["a",0,0],"text":"a"},{"at":0,"len":1,"op":"delete","path":["a"]}],"path":["t"],"txn":true},{"from":0,"k":0,"op":"deliver","to":1,"via":"v1"},{"from":1,"k":2,"op":"deliver","to":2,"via":"v1to2"},{"from":1,"k":1,"op":"deliver","to":2,"via":"v2"}]}"""),
+        new("xafter-reference-not-a-type",
+            "Not a Ycs bug, the adapter's: InsertAfter with a child that is not a type (a string pushed into an element) as the " +
+            "reference. Yjs takes the string as the item and throws on it ('n'.right) before it changes anything; InsertAfter's " +
+            "parameter cannot hold one, and the adapter passed null (insert at the front). The adapter throws as Yjs does now.",
+            """{"clients":[{"gc":false,"id":18,"quiet":true},{"gc":false,"id":1232,"quiet":true}],"roots":[{"kind":"map","name":"m"}],"steps":[{"c":1,"key":"c","op":"set","path":["m"],"value":{"$t":"xmle","n":"span"}},{"c":0,"op":"transact","ops":[{"from":1,"k":0,"op":"deliver","to":0,"via":"v2"},{"op":"push","path":["m","c"],"values":["n"]}]},{"c":0,"op":"transact","ops":[{"op":"xafter","path":["m","c"],"ref":0,"values":[{"$t":"xmlt"}]}]}]}"""),
     ];
 }

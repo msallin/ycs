@@ -820,8 +820,15 @@ namespace Ycs.Properties
                             return "skip";
                         }
 
-                        var reference = s.Get("ref") == null || f.Length == 0 ? null : f.Get(Clamp(s.Int("ref"), f.Length - 1)) as AbstractType;
-                        f.InsertAfter(reference, Values(s));
+                        var child = s.Get("ref") == null || f.Length == 0 ? null : f.Get(Clamp(s.Int("ref"), f.Length - 1));
+                        if (child is not (null or AbstractType))
+                        {
+                            // Yjs takes a reference that is not a type as the item itself and throws on it ('n'.right)
+                            // before it changes anything; InsertAfter's parameter cannot hold one.
+                            throw new InvalidOperationException("The reference is not a type: Yjs' insertAfter throws.");
+                        }
+
+                        f.InsertAfter((AbstractType)child, Values(s));
                         return Missing.Value;
                     }
                 case "set":
