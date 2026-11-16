@@ -170,6 +170,8 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// Yjs only enables them for Y.Array and Y.Text, and disables them for a text as soon as it
     /// holds formatting (see <see cref="ContentFormat"/>).
     /// </summary>
+    // ItemRef lifetime (docs/design-item-layout.md, 3.1): the type's collection does not clear the markers, so a
+    // collected type keeps references to items that are gone (2.4, H5).
     private protected ArraySearchMarkerCollection _searchMarkers;
 
     // An item of this list (any: a push walks from it to the end), or null. Items leave a list only by merging into
@@ -647,6 +649,8 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     protected void ForEach(Action<object, int, YArrayBase> fun)
     {
+        // ItemRef lifetime (docs/design-item-layout.md, 3.1): n is held across fun, which can end transactions that
+        // merge it away or collect the type.
         int index = 0;
         var n = _start;
 
