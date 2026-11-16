@@ -118,6 +118,12 @@ per leaf in 64-bit words, and a Fenwick tree of the leaves' sums. Positions stay
   placeholder text with leaves of 2; the review's differential fuzz with leaves of 2, 16 and 128 against the walks item
   by item; the soak against Yjs. Sabotages caught by `Ycs.Tests`, and the measurements: bench/Ycs.Compare/README.md,
   "The leaf order".
+* **Cost**: against c9f673a `apply-state-v1` +7 %, `apply-state-v2` +9 %, `concurrent-20` +10 %, the price of the leaf
+  object and the two-level lookup (a few nanoseconds per `FindIndex`, `Add` and `Refresh`, half of it with a single
+  leaf; open question 6). The +21 % first measured on `apply-state-v1` was mostly a gen0 collection that promoted dead
+  documents: `UpdateReader.Release` dropped a large decoded list without clearing it, and its array on the large object
+  heap kept the loaded document alive until a gen2 collection; it clears every list now (bench/Ycs.Compare/README.md,
+  "The leaf order").
 
 ### 1.4 Known gaps of what is built
 
@@ -407,3 +413,9 @@ decided (open question 2), and then right before 7; 7 to 9 are the rewrite (7 al
 4. **Leaf capacity**: decided, 128 (measured against 64 and 256 in step 3, bench/Ycs.Compare/README.md).
 5. **Plenum's client** (`SharedText.cs` reads `Structs` as `Item`/`Skip`). Recommendation: change it in the Plenum
    commit that moves the ycs submodule past step 6, with `Plenum.Blazor.Tests` as the check.
+6. **What the leaf order costs where nothing splits** (open): `apply-state-v1` +7 %, `apply-state-v2` +9 %,
+   `concurrent-20` +10 % against c9f673a; per call `FindIndex` 8 to 12 ns and `Add` 9 to 15 ns more, half of it even
+   with a single leaf (every operation goes through the leaf object). Six variants (the cursor not rewritten when
+   unchanged, a plain binary search in the leaf, no pivot among the leaves, the pivot from 8 leaves on, a 32-bit
+   division, the indexer's cursor test inlined) gave nothing beyond 2 %. Candidates not tried: a flat list without a
+   leaf object below 128 structs, and the slab's own layout (step 7), which replaces the lists.

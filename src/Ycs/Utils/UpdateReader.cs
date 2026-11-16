@@ -127,9 +127,12 @@ internal sealed class UpdateReader
 
         static void Recycle<T>(List<T> list, Stack<List<T>> spare)
         {
+            // Also a list that is not kept: an array of 85,000 bytes or more is on the large object heap, where a dead
+            // one counts as live until a gen2 collection, so the references of an uncleared one keep the structs and
+            // their document alive through every gen0 and gen1 collection.
+            list.Clear();
             if (list.Capacity <= MaxRetainedListCapacity && spare.Count < MaxSpareLists)
             {
-                list.Clear();
                 spare.Push(list);
             }
         }

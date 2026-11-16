@@ -498,14 +498,35 @@ ycs child of c9f673a (`modernize`) and of the branch (42f0687), interleaved with
 * **Memory:** held memory is the same within 1 MiB, and halved for the observed typing (no doubling slack of one
   array of 400,000 positions; the last leaf fills before the next comes). `apply-updates` allocates 4.3 MiB more: a
   leaf that splits allocates a new one of 128 positions (2.2 KB) and a merge of leaves drops one.
-* **Lost:** `apply-state-v1` (+1.1 ms per load of the trace's 10,971 structs), `apply-state-v2` and `concurrent-20`.
-  Where: a list with a directory pays an indirection per lookup (99,000 lookups by position and 38,000 by clock per
-  load of the trace, counted); with leaves of 2^24 (one leaf, no directory) `apply-state-v1` is 54.1 against 53.1 ms,
-  and with 8,192 (a directory for the last quarter of the structs only) as slow as with 128, so it is the paths with a
-  directory, not the number of leaves. Part of it is garbage collection: with a gen0 budget of 512 MiB
-  (`DOTNET_GCgen0size`, no collection during a run) `apply-state-v1` is 53.0 against 55.0-56.5 ms and `text-random`
-  even; `concurrent-20` stays +9%. A cursor kept on the leaf of the last lookup (42f0687) did not change it measurably.
-  Not resolved; recorded as an open issue.
+* **Lost, and explained:** `apply-state-v1` +21 %, `apply-state-v2` +10 %, `concurrent-20` +13 % in the table above.
+  Not the directory search, tree rebuilds, leaf splits or the cursor (counted per struct of a state load: 2.7 lookups
+  by clock, 9 by position, 99.5 % of those served by the cursor; no tree rebuild, no split).
+  * `apply-state-v1`, two thirds of it: a garbage collection. `UpdateReader.Release` dropped a decoded list of more
+    than 1,024 structs without clearing it; from 10,625 structs its array is on the large object heap, where a dead
+    array counts as live until a gen2 collection, so it kept every struct of the loaded document, and the document,
+    alive through gen0 and gen1 collections. c9f673a's two arrays of 10,971 entries per list are on that heap too:
+    their allocations trigger gen2 collections and no gen0 collection runs in the benchmark. The leaves are small, so
+    the gen0 budget is reached instead, and that collection promoted the dead documents of the earlier loads (13.6 MiB,
+    about 9 ms). The reader now clears every list it drops (`results/2026-11-16-reader-clear/`, `ab.py 4 6`):
+    five dropped documents of 11,000 structs alive after a gen0 collection 5 before, 0 after
+    (`bench/Ycs.Benchmarks -- gcsurvive`; c9f673a: 5, where its own flat arrays do the same).
+
+    | workload | c9f673a | 4f5eedb | with the reader clearing | against c9f673a | against 4f5eedb |
+    | --- | ---: | ---: | ---: | ---: | ---: |
+    | `apply-state-v1/ycs` | 50.3 ms | 61.8 ms | 53.7 / 54.0 ms | +7 % | -13 % |
+    | `apply-state-v2/ycs` | 52.2 ms | 58.1 ms | 56.8 / 57.2 ms | +9 % | -2 % (noise) |
+    | `concurrent-20` | 62.8 ms | 70.2 ms | 68.8 / 70.4 ms | +10 % | 0 % |
+
+  * What remains (`apply-state-v1` +7 %, `apply-state-v2` +9 %, `concurrent-20` +10 % against c9f673a): the list's
+    operations cost a few nanoseconds more each. No collection runs in `concurrent-20`'s body; per call (a
+    `Stopwatch` around each public operation in both builds, review of step 3) `FindIndex` costs 8 to 12 ns more
+    (480,000 calls per run), with a hint 10 to 14, `Add` 9 to 15, `Refresh` 7 to 9, the indexer 1; `InsertSplit` is
+    22 to 27 ns faster. Half of it is there with a single leaf of any size (+3 to +5 % on `concurrent-20`: every
+    operation goes through the leaf object), the rest is the two-level lookup (+8.5 to +11 % with leaves of 128).
+    No cheap fix found in six variants (the cursor not rewritten when unchanged, a plain binary search in the leaf,
+    no pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined):
+    none beyond 2 %. Recorded as open question 6 of the design. It is the price of the leaf object and the two-level
+    lookup, against -26 % and -29 % on the workloads that split.
 * **Capacity** (`capacity-128-vs-64.txt`, `capacity-128-vs-256.txt`; 3 x 6 for the first two rows, 2 x 3 for the
   others): 128 is best or within noise on the split-heavy workloads and clearly best on `array-delete-random`; 64 is
   faster on the observed typing, 256 slower.

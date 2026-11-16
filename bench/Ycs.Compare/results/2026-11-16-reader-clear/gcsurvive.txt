@@ -1,0 +1,5 @@
+c9: 11000 structs, five documents loaded and dropped: alive after a gen0 collection 5, gen1 5, gen2 0
+base: 11000 structs, five documents loaded and dropped: alive after a gen0 collection 5, gen1 5, gen2 0
+fix2: 11000 structs, five documents loaded and dropped: alive after a gen0 collection 0, gen1 0, gen2 0
+base: no older document                      five loaded : alive after a gen0 collection 5, gen1 5, gen2 0
+fix2: no older document                      five loaded : alive after a gen0 collection 0, gen1 0, gen2 0
