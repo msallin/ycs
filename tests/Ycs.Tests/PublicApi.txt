@@ -38,10 +38,17 @@ sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
 sealed class Ycs.DecodedUpdate
     System.Collections.Generic.IReadOnlyDictionary<long, System.Collections.Generic.IReadOnlyList<DeletedRange>> DeleteSet { get; }
     System.Collections.Generic.IReadOnlyList<DecodedStruct> Structs { get; }
-readonly struct Ycs.DeletedRange
-    DeletedRange(long clock, long length)
-    long Clock { get; }
-    long Length { get; }
+readonly struct Ycs.DeletedRange : System.IEquatable<DeletedRange>
+    DeletedRange(long Clock, long Length)
+    bool Equals(DeletedRange other)
+    long Clock { get; init; }
+    long Length { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(DeletedRange left, DeletedRange right)
+    static bool op_Inequality(DeletedRange left, DeletedRange right)
+    void Deconstruct(out long Clock, out long Length)
 class Ycs.Delta
     Delta()
     System.Collections.Generic.IDictionary<string, object> Attributes
@@ -162,18 +169,14 @@ readonly struct Ycs.RelativePosition : System.IEquatable<RelativePosition>
     void Encode(System.Buffers.IBufferWriter<byte> destination)
     void WriteJson(System.Text.Json.Utf8JsonWriter writer)
 sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
-    YDoc RestoreDocument(YDoc originDoc, YDocOptions? opts = null)
+    bool ContainsUpdate(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
     bool Equals(Snapshot? other)
-    bool SnapshotContainsUpdate(byte[] update, UpdateLimits? limits = null)
-    bool SnapshotContainsUpdateV2(byte[] update, UpdateLimits? limits = null)
-    byte[] EncodeSnapshot()
-    byte[] EncodeSnapshotV2()
+    byte[] Encode(UpdateFormat format = 0)
     override bool Equals(object? obj)
     override int GetHashCode()
-    static Snapshot DecodeSnapshot(byte[] buf)
-    static Snapshot DecodeSnapshotV2(byte[] buf)
-    static bool EqualSnapshots(Snapshot? snap1, Snapshot? snap2)
+    static Snapshot Decode(System.ReadOnlySpan<byte> bytes, UpdateFormat format = 0)
     static readonly Snapshot Empty
+    void Encode(System.Buffers.IBufferWriter<byte> destination, UpdateFormat format = 0)
 sealed class Ycs.StackItem
     System.Collections.Generic.IDictionary<string, object> Meta { get; }
 readonly struct Ycs.SubdocsEventArgs : System.IEquatable<SubdocsEventArgs>
@@ -193,10 +196,10 @@ enum Ycs.SyncMessageType : uint
     SyncStep2 = 1
     Update = 2
 static class Ycs.SyncProtocol
-    static SyncMessageType ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
-    static SyncMessageType ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
+    static SyncMessageType ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, UpdateFormat format = 0)
+    static SyncMessageType ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, UpdateFormat format = 0)
     static void WriteSyncStep1(System.Buffers.IBufferWriter<byte> destination, YDoc doc)
-    static void WriteSyncStep2(System.Buffers.IBufferWriter<byte> destination, YDoc doc, System.ReadOnlySpan<byte> encodedStateVector, bool v2 = false)
+    static void WriteSyncStep2(System.Buffers.IBufferWriter<byte> destination, YDoc doc, System.ReadOnlySpan<byte> encodedStateVector, UpdateFormat format = 0)
     static void WriteUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update)
 class Ycs.Transaction
     System.Collections.Generic.IDictionary<YType, System.Collections.Generic.IList<YEvent>> ChangedParentTypes { get; }
@@ -268,6 +271,9 @@ readonly struct Ycs.UpdateEventArgs : System.IEquatable<UpdateEventArgs>
     static bool op_Equality(UpdateEventArgs left, UpdateEventArgs right)
     static bool op_Inequality(UpdateEventArgs left, UpdateEventArgs right)
     void Deconstruct(out System.ReadOnlyMemory<byte> Update, out object? Origin, out Transaction Transaction)
+enum Ycs.UpdateFormat : int
+    V1 = 0
+    V2 = 1
 sealed class Ycs.UpdateLimits : System.IEquatable<UpdateLimits>
     UpdateLimits <Clone>$()
     UpdateLimits()
@@ -284,26 +290,18 @@ sealed class Ycs.UpdateLimits : System.IEquatable<UpdateLimits>
     static UpdateLimits Unlimited { get; }
     static bool op_Equality(UpdateLimits? left, UpdateLimits? right)
     static bool op_Inequality(UpdateLimits? left, UpdateLimits? right)
-sealed class Ycs.UpdateMeta
-    System.Collections.Generic.IReadOnlyDictionary<long, long> From { get; }
-    System.Collections.Generic.IReadOnlyDictionary<long, long> To { get; }
-static class Ycs.UpdateOperations
-    static DecodedUpdate DecodeUpdate(byte[] update, UpdateLimits limits = null)
-    static DecodedUpdate DecodeUpdateV2(byte[] update, UpdateLimits limits = null)
-    static UpdateMeta ParseUpdateMeta(byte[] update, UpdateLimits limits = null)
-    static UpdateMeta ParseUpdateMetaV2(byte[] update, UpdateLimits limits = null)
-    static byte[] ConvertUpdateFormatV1ToV2(byte[] update, UpdateLimits limits = null)
-    static byte[] ConvertUpdateFormatV2ToV1(byte[] update, UpdateLimits limits = null)
-    static byte[] DiffUpdate(byte[] update, byte[] stateVector, UpdateLimits limits = null)
-    static byte[] DiffUpdateV2(byte[] update, byte[] stateVector, UpdateLimits limits = null)
-    static byte[] EncodeStateVectorFromUpdate(byte[] update, UpdateLimits limits = null)
-    static byte[] EncodeStateVectorFromUpdateV2(byte[] update, UpdateLimits limits = null)
-    static byte[] MergeUpdates(System.Collections.Generic.IList<byte[]> updates, UpdateLimits limits = null)
-    static byte[] MergeUpdatesV2(System.Collections.Generic.IList<byte[]> updates, UpdateLimits limits = null)
-    static string DescribeUpdate(byte[] update, UpdateLimits limits = null)
-    static string DescribeUpdateV2(byte[] update, UpdateLimits limits = null)
-    static void LogUpdate(byte[] update)
-    static void LogUpdateV2(byte[] update)
+sealed class Ycs.UpdateMeta : System.IEquatable<UpdateMeta>
+    System.Collections.Generic.IReadOnlyDictionary<long, long> From { get; init; }
+    System.Collections.Generic.IReadOnlyDictionary<long, long> To { get; init; }
+    UpdateMeta <Clone>$()
+    UpdateMeta(System.Collections.Generic.IReadOnlyDictionary<long, long> From, System.Collections.Generic.IReadOnlyDictionary<long, long> To)
+    bool Equals(UpdateMeta? other)
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(UpdateMeta? left, UpdateMeta? right)
+    static bool op_Inequality(UpdateMeta? left, UpdateMeta? right)
+    void Deconstruct(out System.Collections.Generic.IReadOnlyDictionary<long, long> From, out System.Collections.Generic.IReadOnlyDictionary<long, long> To)
 sealed class Ycs.YArray : YArrayBase
     System.Collections.Generic.IList<object> ToArray()
     System.Collections.Generic.IReadOnlyList<object> Slice(int start = 0)
@@ -339,7 +337,7 @@ class Ycs.YDoc
     System.Predicate<ItemView> GcFilter { get; }
     UpdateLimits Limits { get; }
     YArray GetArray(string name = "")
-    YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc newDoc = null)
+    YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc? newDoc = null)
     YDoc(YDocOptions opts = null)
     YMap GetMap(string name = "")
     YText GetText(string name = "")
@@ -350,14 +348,9 @@ class Ycs.YDoc
     bool Gc { get; }
     bool HasPending { get; }
     bool ShouldLoad { get; }
-    bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
-    bool TryApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
-    byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
-    byte[] EncodeStateAsUpdateV1(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
-    byte[] EncodeStateAsUpdateV2(System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = 0, UpdateLimits? limits = null)
+    byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     byte[] EncodeStateVector()
-    byte[] EncodeStateVectorV1()
-    byte[] EncodeStateVectorV2()
     event System.EventHandler BeforeAllTransactions
     event System.EventHandler Destroyed
     event System.EventHandler<PendingDrop> PendingDropped
@@ -373,16 +366,9 @@ class Ycs.YDoc
     object Meta { get; }
     string CollectionId { get; }
     string Guid { get; }
-    void ApplyUpdate(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
-    void ApplyUpdate(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
-    void ApplyUpdateV1(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
-    void ApplyUpdateV1(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
-    void ApplyUpdateV2(System.ReadOnlySpan<byte> update, object transactionOrigin = null, UpdateLimits limits = null)
-    void ApplyUpdateV2(byte[] update, object transactionOrigin = null, UpdateLimits limits = null)
+    void ApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = 0, UpdateLimits? limits = null)
     void Destroy()
-    void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
-    void EncodeStateAsUpdateV1(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
-    void EncodeStateAsUpdateV2(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> encodedTargetStateVector = null)
+    void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     void EncodeStateVector(System.Buffers.IBufferWriter<byte> destination)
     void Load()
     void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
@@ -471,6 +457,14 @@ abstract class Ycs.YType
     abstract object ToJson()
     object GetSnapshot(string key, Snapshot snapshot)
     virtual int Length { get; }
+static class Ycs.YUpdate
+    static DecodedUpdate Decode(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static UpdateMeta ParseMeta(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static byte[] Convert(System.ReadOnlySpan<byte> update, UpdateFormat from, UpdateFormat to, UpdateLimits? limits = null)
+    static byte[] Diff(System.ReadOnlySpan<byte> update, System.ReadOnlySpan<byte> stateVector, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static byte[] EncodeStateVector(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static byte[] Merge(System.ReadOnlySpan<System.ReadOnlyMemory<byte>> updates, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static string Describe(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
 sealed class Ycs.YUpdateException : System.FormatException
     YUpdateException()
     YUpdateException(string message)

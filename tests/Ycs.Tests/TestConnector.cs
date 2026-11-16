@@ -42,7 +42,7 @@ public class TestConnector
 
         {
             var writer = new ArrayBufferWriter<byte>();
-            SyncProtocol.ReadSyncMessage(m, writer, receiver, receiver._tc, v2: true);
+            SyncProtocol.ReadSyncMessage(m, writer, receiver, receiver._tc, format: UpdateFormat.V2);
 
             if (writer.WrittenCount > 0)
             {

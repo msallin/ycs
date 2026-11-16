@@ -7,7 +7,7 @@ Ycs is built for that. This page says what is guaranteed and what is left to you
 ## Malformed updates
 
 Every API that decodes bytes (`ApplyUpdate…`, `TryApplyUpdate…`, `EncodeStateAsUpdate(stateVector)`, everything in
-`UpdateOperations`, the snapshot and relative-position readers, `SyncProtocol.Read…`) throws only `YUpdateException`
+`YUpdate`, the snapshot and relative-position readers, `SyncProtocol.Read…`) throws only `YUpdateException`
 for malformed input. Its message says what was wrong, never the input's content.
 
 ```csharp
@@ -27,7 +27,7 @@ normally. The document raises `YDoc.PendingDropped` (the number of structs and t
 server can log it and resync the peers it handed the waiting structs to. Only when structs of the update itself waited
 for the dropped ones is the update cut short (`PartlyApplied`).
 
-`TryApplyUpdate` and `TryApplyUpdateV2` return false instead of throwing.
+`TryApplyUpdate` returns false instead of throwing.
 
 `ApplyUpdate` decodes and checks the whole update before it changes the document, so a rejected update leaves it
 unchanged: same content, same state vector, no observer or `Update` event (`AfterTransaction` fires for the empty
@@ -61,10 +61,10 @@ Your own stored state can exceed the defaults: a million characters typed one at
 input you trust without limits, per call:
 
 ```csharp
-doc.ApplyUpdate(stored, null, UpdateLimits.Unlimited);
+doc.ApplyUpdate(stored, null, limits: UpdateLimits.Unlimited);
 ```
 
-`new YDocOptions { Limits = … }` sets a document's limits for every update, and every `UpdateOperations` function
+`new YDocOptions { Limits = … }` sets a document's limits for every update, and every `YUpdate` function
 takes a `limits` argument. `UpdateLimits` is immutable; one instance can be shared.
 
 ## Exceptions from your handlers

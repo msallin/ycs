@@ -62,9 +62,9 @@ public class ClientStructsTests
                         array.Delete(random.Next(array.Length), 1);
                         break;
                     case 4:
-                        remote.ApplyUpdateV2(doc.EncodeStateAsUpdateV2(remote.EncodeStateVectorV2()));
+                        remote.ApplyUpdate(doc.EncodeStateAsUpdate(remote.EncodeStateVector(), format: UpdateFormat.V2), format: UpdateFormat.V2);
                         remote.GetText("t").Insert(0, "r");
-                        doc.ApplyUpdateV2(remote.EncodeStateAsUpdateV2(doc.EncodeStateVectorV2()));
+                        doc.ApplyUpdate(remote.EncodeStateAsUpdate(doc.EncodeStateVector(), format: UpdateFormat.V2), format: UpdateFormat.V2);
                         break;
                     default:
                         doc.Transact(_ =>

@@ -10,7 +10,7 @@ using Ycs;
 const string YjsUpdateV1 = "ART60JjOBAAoAQNtYXADc3RyAXcQaGVsbG8g4pyTINC80LjRgCgBA21hcANpbnQBfSooAQNtYXAFZmxvYXQBfEBgAAAoAQNtYXAEYm9vbAF4KAEDbWFwBG51bGwBfigBA21hcARqc29uAXYCAWF9AQFidQJ3AXh3AXkjAQNtYXADYmluBAECA/onAQNtYXAGbmVzdGVkASgA+tCYzgQHBGRlZXABdwV2YWx1ZQgBBWFycmF5AXcBYYH60JjOBAkBiPrQmM4ECgJ5dgEBa3cBdof60JjOBAwACAD60JjOBA0CdwJpMHcCaTEEAQR0ZXh0BnBsYWluIIb60JjOBBUEYm9sZAR0cnVlhPrQmM4EFgRib2xkhvrQmM4EGgRib2xkBG51bGzE+tCYzgQa+tCYzgQbBSB0YWlshfrQmM4EGxF7ImltYWdlIjoieC5wbmcifQH60JjOBAEKAQ==";
 
 var doc = new YDoc();
-doc.ApplyUpdateV1(Convert.FromBase64String(YjsUpdateV1));
+doc.ApplyUpdate(Convert.FromBase64String(YjsUpdateV1));
 
 var text = doc.GetText("text");
 Check(text.ToString() == "plain bold tail", $"unexpected text '{text}'");
@@ -32,15 +32,15 @@ Check(observed > 0 && deepObserved == 2 && !kept.IsEmpty, $"events: observed {ob
 
 foreach (var v2 in new[] { false, true })
 {
-    var update = v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1();
+    var update = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
     var copy = new YDoc();
     if (v2)
     {
-        copy.ApplyUpdateV2(update);
+        copy.ApplyUpdate(update, format: UpdateFormat.V2);
     }
     else
     {
-        copy.ApplyUpdateV1(update);
+        copy.ApplyUpdate(update);
     }
 
     var copyText = copy.GetText("text");

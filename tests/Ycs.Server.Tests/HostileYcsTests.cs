@@ -32,14 +32,14 @@ public class HostileYcsTests
         var c = Waiting(8, 150);
         var e = Waiting(9, 290);
         var room = new YDoc(new YDocOptions { Limits = Small });
-        room.ApplyUpdateV1(b.Waiting);
-        room.ApplyUpdateV1(c.Waiting);
-        room.ApplyUpdateV1(UpdateOperations.MergeUpdates([b.Missing, e.Waiting]));
+        room.ApplyUpdate(b.Waiting);
+        room.ApplyUpdate(c.Waiting);
+        room.ApplyUpdate(YUpdate.Merge([b.Missing, e.Waiting], format: UpdateFormat.V1));
         var client = new YDoc(new YDocOptions { ClientId = 20 });
-        client.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
+        client.ApplyUpdate(room.EncodeStateAsUpdate());
         client.GetText("other").Insert(0, "offline");
 
-        var accepted = room.TryApplyUpdate(client.EncodeStateAsUpdateV1(room.EncodeStateVectorV1()));
+        var accepted = room.TryApplyUpdate(client.EncodeStateAsUpdate(room.EncodeStateVector()));
 
         Assert.AreEqual((true, "offline"), (accepted, room.GetText("other").ToString()));
     }
@@ -51,9 +51,9 @@ public class HostileYcsTests
         var c = Waiting(8, 150);
         var e = Waiting(9, 290);
         var room = new YDoc(new YDocOptions { Limits = Small });
-        room.ApplyUpdateV1(b.Waiting);
-        room.ApplyUpdateV1(c.Waiting);
-        room.ApplyUpdateV1(UpdateOperations.MergeUpdates([b.Missing, e.Waiting]));
+        room.ApplyUpdate(b.Waiting);
+        room.ApplyUpdate(c.Waiting);
+        room.ApplyUpdate(YUpdate.Merge([b.Missing, e.Waiting], format: UpdateFormat.V1));
         var other = new YDoc(new YDocOptions { ClientId = 21 });
 
         var accepted = room.TryApplyUpdate(HostileUpdates.Edit(other, d => d.GetText("other").Insert(0, "y")));
@@ -80,13 +80,13 @@ public class HostileYcsTests
             }
         });
         var room = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 32 } });
-        room.ApplyUpdateV1(deep);
+        room.ApplyUpdate(deep);
 
         var dropped = 0;
         room.PendingDropped += (_, _) => dropped++;
 
         var accepted = room.TryApplyUpdate(missing);
 
-        Assert.AreEqual((true, 1, false, "010701"), (accepted, dropped, room.HasPending, Convert.ToHexString(room.EncodeStateVectorV1())));
+        Assert.AreEqual((true, 1, false, "010701"), (accepted, dropped, room.HasPending, Convert.ToHexString(room.EncodeStateVector())));
     }
 }

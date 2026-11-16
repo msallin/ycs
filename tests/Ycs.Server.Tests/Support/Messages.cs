@@ -132,7 +132,7 @@ internal static class Messages
     public static string TextOf(byte[] state)
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(state);
+        doc.ApplyUpdate(state);
         return doc.GetText("text").ToString();
     }
 }

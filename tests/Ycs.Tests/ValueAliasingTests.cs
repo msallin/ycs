@@ -47,11 +47,11 @@ public class ValueAliasingTests
         var map = Sample(out var inner, out var bytes);
         var list = new List<object?> { map, inner, bytes };
         doc.GetArray("a").Add(list.Cast<object>().ToList());
-        var before = doc.EncodeStateAsUpdateV2();
+        var before = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
 
         Mutate(map, inner, bytes);
 
-        CollectionAssert.AreEqual(before, doc.EncodeStateAsUpdateV2());
+        CollectionAssert.AreEqual(before, doc.EncodeStateAsUpdate(format: UpdateFormat.V2));
     }
 
     [TestMethod]

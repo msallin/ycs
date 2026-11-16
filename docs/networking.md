@@ -77,7 +77,7 @@ Console.WriteLine(server.GetText("content").ToString() == client.GetText("conten
   a whole message as a `ReadOnlySpan<byte>` or a `ReadOnlySequence<byte>` and write the answer to a step 1 to `reply`.
   Bytes after the message are ignored; `ReadSyncMessage` returns its `SyncMessageType`. Nothing is allocated per
   message beyond pooled buffers and the update's own decoding.
-- `SyncProtocol` uses the v1 update format, as y-protocols does. Pass `v2: true` on both ends for v2.
+- `SyncProtocol` uses the v1 update format, as y-protocols does. Pass `UpdateFormat.V2` as `format` on both ends for v2.
 - A malformed message throws `YUpdateException`, an unknown message type and a truncated one included. y-protocols'
   `readSyncStep2` passes the error of the apply to a handler and carries on; here the exception propagates and the
   document is as it was, so drop the message (and, from an untrusted peer, the peer), or catch it where you read.

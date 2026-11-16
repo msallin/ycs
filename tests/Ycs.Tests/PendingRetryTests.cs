@@ -53,7 +53,7 @@ public class PendingRetryTests
 
         var mismatches = session.GetProperty("runs").EnumerateArray()
             .Select(run => (Order: run.GetProperty("order").GetString(), Doc: Apply(updates, run.GetProperty("order").GetString().Split(',').Select(int.Parse))))
-            .Where(r => (false, full) != (r.Doc.HasPending, Convert.ToBase64String(r.Doc.EncodeStateAsUpdateV2())))
+            .Where(r => (false, full) != (r.Doc.HasPending, Convert.ToBase64String(r.Doc.EncodeStateAsUpdate(format: UpdateFormat.V2))))
             .Select(r => r.Order)
             .ToList();
 
@@ -80,7 +80,7 @@ public class PendingRetryTests
             e.GetProperty("stateV2").GetString(), e.GetProperty("text").GetString(), Canonical(e.GetProperty("array").GetString()), Canonical(e.GetProperty("map").GetString()));
 
     private static (bool Pending, string StateVector, string StateV2, string Text, string Array, string Map) Observe(YDoc doc) =>
-        (doc.HasPending, Convert.ToBase64String(doc.EncodeStateVector()), Convert.ToBase64String(doc.EncodeStateAsUpdateV2()), doc.GetText("text").ToString(),
+        (doc.HasPending, Convert.ToBase64String(doc.EncodeStateVector()), Convert.ToBase64String(doc.EncodeStateAsUpdate(format: UpdateFormat.V2)), doc.GetText("text").ToString(),
             Canonical(YJson.Stringify(doc.GetArray("array").ToJson())), Canonical(YJson.Stringify(doc.GetMap("map").ToJson())));
 
     // Object keys sorted: Yjs and Ycs list a map's keys in different orders.

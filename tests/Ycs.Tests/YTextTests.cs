@@ -27,7 +27,7 @@ public class YTextTests : YTestBase
     public void EmbeddedTypeCountsAsOnePosition()
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(Convert.FromBase64String(TextWithEmbeddedType));
+        doc.ApplyUpdate(Convert.FromBase64String(TextWithEmbeddedType));
         var text = doc.GetText("text");
         Assert.AreEqual(3, text.Length);
 

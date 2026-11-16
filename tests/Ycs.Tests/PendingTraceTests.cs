@@ -59,7 +59,7 @@ public class PendingTraceTests
             Assert.AreEqual(s.GetProperty("text").GetString(), doc.GetText("t").ToString(), $"{at}: text");
             Assert.AreEqual(Canonical(s.GetProperty("map").GetString()), Canonical(YJson.Stringify(doc.GetMap("m").ToJson())), $"{at}: map");
             Assert.AreEqual(s.GetProperty("v1").GetString(), Convert.ToHexString(doc.EncodeStateAsUpdate()).ToLowerInvariant(), $"{at}: v1");
-            Assert.AreEqual(s.GetProperty("v2").GetString(), Convert.ToHexString(doc.EncodeStateAsUpdateV2()).ToLowerInvariant(), $"{at}: v2");
+            Assert.AreEqual(s.GetProperty("v2").GetString(), Convert.ToHexString(doc.EncodeStateAsUpdate(format: UpdateFormat.V2)).ToLowerInvariant(), $"{at}: v2");
         }
     }
 

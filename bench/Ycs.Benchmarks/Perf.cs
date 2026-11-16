@@ -117,7 +117,7 @@ internal static class Perf
         Case("P4 Get(i) for every i of a ContentJSON item of 80,000 values", () =>
         {
             var doc = new YDoc();
-            doc.ApplyUpdate(ContentJsonUpdate(80_000), null, UpdateLimits.Unlimited);
+            doc.ApplyUpdate(ContentJsonUpdate(80_000), null, limits: UpdateLimits.Unlimited);
             var array = doc.GetArray("a");
             return () =>
             {
@@ -133,7 +133,7 @@ internal static class Perf
         {
             var updates = Enumerable.Range(100, 8_000).Select(WaitingForClient99).ToList();
             var doc = new YDoc();
-            return () => updates.ForEach(u => doc.ApplyUpdateV1(u));
+            return () => updates.ForEach(u => doc.ApplyUpdate(u));
         });
 
         Case("pending: 8,000 keystrokes delivered last first, then retried", () =>
@@ -141,7 +141,7 @@ internal static class Perf
             var updates = Keystrokes(8_000);
             updates.Reverse();
             var doc = new YDoc();
-            return () => updates.ForEach(u => doc.ApplyUpdateV1(u));
+            return () => updates.ForEach(u => doc.ApplyUpdate(u));
         });
 
         Case("pending: 8,000 keystrokes, the first withheld, then retried", () =>
@@ -150,7 +150,7 @@ internal static class Perf
             updates.Add(updates[0]);
             updates.RemoveAt(0);
             var doc = new YDoc();
-            return () => updates.ForEach(u => doc.ApplyUpdateV1(u));
+            return () => updates.ForEach(u => doc.ApplyUpdate(u));
         });
     }
 

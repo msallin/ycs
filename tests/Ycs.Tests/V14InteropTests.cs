@@ -47,7 +47,7 @@ public class V14InteropTests
         }
         else
         {
-            doc.ApplyUpdateV2(Bytes(c, "updateV2"));
+            doc.ApplyUpdate(Bytes(c, "updateV2"), format: UpdateFormat.V2);
         }
 
         return doc;
@@ -74,7 +74,7 @@ public class V14InteropTests
         var c = Case(name);
         var doc = Read(c, format);
 
-        var reencoded = format == "v1" ? doc.EncodeStateAsUpdate() : doc.EncodeStateAsUpdateV2();
+        var reencoded = format == "v1" ? doc.EncodeStateAsUpdate() : doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
 
         // Yjs 13 re-encodes it byte for byte too (recorded); Ycs must as well.
         var expected = format == "v1" ? "updateV1" : "updateV2";
@@ -107,10 +107,10 @@ public class V14InteropTests
 
         var actual = new[]
         {
-            doc.CreateSnapshot().EncodeSnapshot(),
-            doc.CreateSnapshot().EncodeSnapshotV2(),
-            Snapshot.DecodeSnapshot(v1).EncodeSnapshot(),
-            Snapshot.DecodeSnapshotV2(v2).EncodeSnapshotV2(),
+            doc.CreateSnapshot().Encode(),
+            doc.CreateSnapshot().Encode(UpdateFormat.V2),
+            Snapshot.Decode(v1).Encode(),
+            Snapshot.Decode(v2, UpdateFormat.V2).Encode(UpdateFormat.V2),
         };
 
         Assert.AreEqual(
@@ -158,11 +158,11 @@ public class V14InteropTests
 
         var actual = new[]
         {
-            UpdateOperations.DiffUpdate(Bytes(c, "updateV1"), sv),
-            UpdateOperations.DiffUpdateV2(Bytes(c, "updateV2"), sv),
+            YUpdate.Diff(Bytes(c, "updateV1"), sv, format: UpdateFormat.V1),
+            YUpdate.Diff(Bytes(c, "updateV2"), sv, format: UpdateFormat.V2),
             doc.EncodeStateAsUpdate(sv),
-            UpdateOperations.MergeUpdates(updates),
-            UpdateOperations.MergeUpdatesV2(updates.Select(u => UpdateOperations.ConvertUpdateFormatV1ToV2(u)).ToList()),
+            YUpdate.Merge([.. updates], format: UpdateFormat.V1),
+            YUpdate.Merge([.. updates.Select(u => YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2)).ToList()], format: UpdateFormat.V2),
         };
 
         var merged = c.GetProperty("merged");
@@ -269,11 +269,11 @@ public class V14InteropTests
                     ["clientId"] = clientId,
                     ["edits"] = edits.Select(Convert.ToBase64String).ToList(),
                     ["diffV1"] = Convert.ToBase64String(doc.EncodeStateAsUpdate(concurrentSv)),
-                    ["diffV2"] = Convert.ToBase64String(doc.EncodeStateAsUpdateV2(concurrentSv)),
+                    ["diffV2"] = Convert.ToBase64String(doc.EncodeStateAsUpdate(concurrentSv, format: UpdateFormat.V2)),
                     ["stateV1"] = Convert.ToBase64String(doc.EncodeStateAsUpdate()),
-                    ["stateV2"] = Convert.ToBase64String(doc.EncodeStateAsUpdateV2()),
+                    ["stateV2"] = Convert.ToBase64String(doc.EncodeStateAsUpdate(format: UpdateFormat.V2)),
                     ["stateVector"] = Convert.ToBase64String(doc.EncodeStateVector()),
-                    ["snapshotV1"] = Convert.ToBase64String(doc.CreateSnapshot().EncodeSnapshot()),
+                    ["snapshotV1"] = Convert.ToBase64String(doc.CreateSnapshot().Encode()),
                     ["view"] = View(doc, Roots(c)),
                 };
                 File.WriteAllText(Path.Combine(dir, $"{c.GetProperty("name").GetString()}-{clientId}.json"), YJson.Stringify(content));

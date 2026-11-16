@@ -18,7 +18,7 @@ public class HugeLengthTests
         doc.GetText("t").Insert(0, "kept");
         var before = Convert.ToHexString(doc.EncodeStateAsUpdate());
 
-        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(Hex(updateHex)));
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(Hex(updateHex)));
         Assert.AreEqual(before + "|kept", Convert.ToHexString(doc.EncodeStateAsUpdate()) + "|" + doc.GetText("t"));
     }
 

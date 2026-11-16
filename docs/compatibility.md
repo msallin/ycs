@@ -21,10 +21,10 @@ Editor documents written by `y-prosemirror`, `y-quill`, Tiptap and BlockNote dec
 | | Yjs | Ycs |
 | --- | --- | --- |
 | v1 (the default; what y-protocols and every provider speaks) | `Y.encodeStateAsUpdate` / `Y.applyUpdate` | `EncodeStateAsUpdate` / `ApplyUpdate` (or `…V1`) |
-| v2 (denser) | `Y.encodeStateAsUpdateV2` / `Y.applyUpdateV2` | `EncodeStateAsUpdateV2` / `ApplyUpdateV2` |
+| v2 (denser) | `Y.encodeStateAsUpdateV2` / `Y.applyUpdateV2` | `EncodeStateAsUpdate(format: UpdateFormat.V2)` / `ApplyUpdate(format: UpdateFormat.V2)` |
 | state vector | `Y.encodeStateVector` | `EncodeStateVector` |
 | update events | `doc.on('update')`, `doc.on('updateV2')` | `YDoc.Updated`, `YDoc.UpdatedV2` |
-| sync messages | `y-protocols/sync` | `SyncProtocol` (v1; `v2: true` on both ends for v2) |
+| sync messages | `y-protocols/sync` | `SyncProtocol` (v1; `UpdateFormat.V2` on both ends for v2) |
 | awareness | `y-protocols/awareness` | not in the library; a port in `samples/Ycs.Server/Awareness` |
 
 ## What is there

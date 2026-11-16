@@ -64,15 +64,15 @@ public class YTextToStringTests
     {
         var local = NewText("hello");
         var remote = new YDoc(new YDocOptions { ClientId = 2 });
-        remote.ApplyUpdateV1(local.Doc.EncodeStateAsUpdateV1());
+        remote.ApplyUpdate(local.Doc.EncodeStateAsUpdate());
         var remoteText = remote.GetText("text");
         _ = local.ToString();
 
         remoteText.Insert(0, ">");
-        local.Doc.ApplyUpdateV1(remote.EncodeStateAsUpdateV1(local.Doc.EncodeStateVector()));
+        local.Doc.ApplyUpdate(remote.EncodeStateAsUpdate(local.Doc.EncodeStateVector()));
         var afterInsert = local.ToString();
         remoteText.Remove(1, 2);
-        local.Doc.ApplyUpdateV1(remote.EncodeStateAsUpdateV1(local.Doc.EncodeStateVector()));
+        local.Doc.ApplyUpdate(remote.EncodeStateAsUpdate(local.Doc.EncodeStateVector()));
 
         Assert.AreEqual(">hello", afterInsert);
         Assert.AreEqual(">llo", local.ToString());
@@ -188,7 +188,7 @@ public class YTextToStringTests
     private static YText Reloaded(YDoc doc)
     {
         var copy = new YDoc(new YDocOptions { ClientId = 9 });
-        copy.ApplyUpdateV1(doc.EncodeStateAsUpdateV1());
+        copy.ApplyUpdate(doc.EncodeStateAsUpdate());
         return copy.GetText("text");
     }
 }

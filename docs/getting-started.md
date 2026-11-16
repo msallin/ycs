@@ -177,12 +177,12 @@ File.WriteAllBytes(path, doc.EncodeStateAsUpdate());
 
 // The file is your own state: apply it without the limits meant for peers.
 var restored = new YDoc();
-restored.ApplyUpdate(File.ReadAllBytes(path), null, UpdateLimits.Unlimited);
+restored.ApplyUpdate(File.ReadAllBytes(path), null, limits: UpdateLimits.Unlimited);
 Console.WriteLine(restored.GetText("content")); // Saved text
 ```
 
 To keep a log instead, append each update as it happens and compact the log now and then with
-`UpdateOperations.MergeUpdates`, which needs no document.
+`YUpdate.Merge`, which needs no document.
 
 ## Updates from others
 

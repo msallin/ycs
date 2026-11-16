@@ -157,7 +157,7 @@ internal sealed class ReferenceRun
     }
 
     public void State(YDoc doc, string label) =>
-        L($"{label} v1={Hex(doc.EncodeStateAsUpdateV1())} v2={Hex(doc.EncodeStateAsUpdateV2())} sv={Hex(doc.EncodeStateVectorV1())}");
+        L($"{label} v1={Hex(doc.EncodeStateAsUpdate())} v2={Hex(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))} sv={Hex(doc.EncodeStateVector())}");
 
     /// <summary>
     /// The structs of every client (kind, clock, length, deletion, content, keep, origins, marker flag), then the

@@ -109,10 +109,10 @@ public class PermanentUserDataTests
 
         // Sync both ways: each doc's PermanentUserData should learn about the other user, and doc2
         // should learn that 'a' was deleted by user1 even though it never performed the delete.
-        var update1 = doc1.EncodeStateAsUpdateV2();
-        var update2 = doc2.EncodeStateAsUpdateV2();
-        doc2.ApplyUpdateV2(update1);
-        doc1.ApplyUpdateV2(update2);
+        var update1 = doc1.EncodeStateAsUpdate(format: UpdateFormat.V2);
+        var update2 = doc2.EncodeStateAsUpdate(format: UpdateFormat.V2);
+        doc2.ApplyUpdate(update1, format: UpdateFormat.V2);
+        doc1.ApplyUpdate(update2, format: UpdateFormat.V2);
 
         Assert.AreEqual("user1", pud2.GetUserByClientId(1));
         Assert.AreEqual("user2", pud1.GetUserByClientId(2));
@@ -131,7 +131,7 @@ public class PermanentUserDataTests
         pud1.SetUserMapping(doc1, doc1.ClientId, "user1");
 
         var doc2 = new YDoc();
-        doc2.ApplyUpdateV2(doc1.EncodeStateAsUpdateV2());
+        doc2.ApplyUpdate(doc1.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
         var pud2 = new PermanentUserData(doc2); // constructed after the sync
 
         Assert.AreEqual("user1", pud2.GetUserByClientId(1));

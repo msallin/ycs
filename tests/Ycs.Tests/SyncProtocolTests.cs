@@ -46,7 +46,7 @@ public class SyncProtocolTests
                 var step1 = new ArrayBufferWriter<byte>();
                 SyncProtocol.WriteSyncStep1(step1, doc);
                 var step2 = new ArrayBufferWriter<byte>();
-                SyncProtocol.WriteSyncStep2(step2, doc, vectors[entry.GetProperty("sv").GetString()!], v2);
+                SyncProtocol.WriteSyncStep2(step2, doc, vectors[entry.GetProperty("sv").GetString()!], v2 ? UpdateFormat.V2 : UpdateFormat.V1);
                 actual.Add($"{name} {v2} {entry.GetProperty("sv")} {SyncGoldenDocs.Describe(step1.WrittenSpan)} {SyncGoldenDocs.Describe(step2.WrittenSpan)}");
                 expected.Add($"{name} {v2} {entry.GetProperty("sv")} {entry.GetProperty("step1").GetString()} {entry.GetProperty("step2").GetString()}");
             }
@@ -77,11 +77,11 @@ public class SyncProtocolTests
     {
         var source = new YDoc(new YDocOptions { ClientId = 1 });
         source.GetText("t").Insert(0, "v2");
-        var message = UpdateMessage(source.EncodeStateAsUpdateV2());
+        var message = UpdateMessage(source.EncodeStateAsUpdate(format: UpdateFormat.V2));
         var doc = new YDoc();
         var reply = new ArrayBufferWriter<byte>();
 
-        var type = SyncProtocol.ReadSyncMessage(message, reply, doc, null, v2: true);
+        var type = SyncProtocol.ReadSyncMessage(message, reply, doc, null, format: UpdateFormat.V2);
 
         Assert.AreEqual((SyncMessageType.Update, 0, "v2"), (type, reply.WrittenCount, doc.GetText("t").ToString()));
     }

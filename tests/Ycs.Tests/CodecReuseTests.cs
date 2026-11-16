@@ -139,7 +139,7 @@ public class CodecReuseTests
         reused.Reset();
         EncodingUtils.WriteStateAsUpdate(reused, second.Store, new Dictionary<long, long>());
 
-        CollectionAssert.AreEqual(v2 ? second.EncodeStateAsUpdateV2() : second.EncodeStateAsUpdateV1(), reused.ToArray());
+        CollectionAssert.AreEqual(v2 ? second.EncodeStateAsUpdate(format: UpdateFormat.V2) : second.EncodeStateAsUpdate(), reused.ToArray());
     }
 
     [TestMethod]
@@ -194,7 +194,7 @@ public class CodecReuseTests
 
         var before = BufferPool<long>.OutstandingOnCurrentThread;
         var update = EncodingUtils.EncodeStateAsUpdate(doc.Store, default, v2);
-        var decoded = v2 ? UpdateOperations.DecodeUpdateV2(update) : UpdateOperations.DecodeUpdate(update);
+        var decoded = v2 ? YUpdate.Decode(update, format: UpdateFormat.V2) : YUpdate.Decode(update, format: UpdateFormat.V1);
 
         CollectionAssert.AreEqual(Enumerable.Range(1, 100).Reverse().Select(c => (long)c).ToList(), decoded.Structs.Select(s => s.Id.Client).Distinct().ToList());
         Assert.HasCount(100, decoded.DeleteSet);
@@ -261,7 +261,7 @@ public class CodecReuseTests
     [TestMethod]
     public void UpdateReader_SecondRead_ReusesTheDecoders()
     {
-        var update = SampleDoc(1).EncodeStateAsUpdateV2();
+        var update = SampleDoc(1).EncodeStateAsUpdate(format: UpdateFormat.V2);
 
         var reused = Allocated(() =>
         {
@@ -281,7 +281,7 @@ public class CodecReuseTests
     [TestMethod]
     public void UpdateReader_MalformedUpdate_ThrowsAndStaysUsable()
     {
-        var update = SampleDoc(1).EncodeStateAsUpdateV1();
+        var update = SampleDoc(1).EncodeStateAsUpdate();
 
         Assert.ThrowsExactly<YUpdateException>(() => UpdateReader.Read(update, 0, update.Length - 3, v2: false, long.MaxValue));
         using var lease = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
@@ -292,8 +292,8 @@ public class CodecReuseTests
     [TestMethod]
     public void UpdateReader_ReadWhileALeaseIsOpen_GetsItsOwnReader()
     {
-        var first = SampleDoc(1).EncodeStateAsUpdateV1();
-        var second = SampleDoc(2).EncodeStateAsUpdateV1();
+        var first = SampleDoc(1).EncodeStateAsUpdate();
+        var second = SampleDoc(2).EncodeStateAsUpdate();
 
         using var outer = UpdateReader.Read(first, 0, first.Length, v2: false, long.MaxValue);
         var expected = Describe(outer.Structs);
@@ -308,7 +308,7 @@ public class CodecReuseTests
     [TestMethod]
     public void UpdateReader_LeaseDisposedTwice_StaysReleased()
     {
-        var update = SampleDoc(1).EncodeStateAsUpdateV1();
+        var update = SampleDoc(1).EncodeStateAsUpdate();
         var lease = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
         lease.Dispose();
         using var next = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
@@ -322,7 +322,7 @@ public class CodecReuseTests
     [TestMethod]
     public void ApplyUpdate_ObserverThrows_ReleasesTheDecodedUpdateAndTheCopy()
     {
-        var update = SampleDoc(1).EncodeStateAsUpdateV1();
+        var update = SampleDoc(1).EncodeStateAsUpdate();
         var doc = new YDoc();
         doc.GetText("text").Observe(_ => throw new InvalidOperationException("observer"));
         var outstanding = BufferPool<byte>.OutstandingOnCurrentThread;
@@ -337,10 +337,10 @@ public class CodecReuseTests
     [DataRow(true)]
     public void TryApplyUpdate_Malformed_ReleasesTheDecodedUpdate(bool v2)
     {
-        var update = v2 ? SampleDoc(1).EncodeStateAsUpdateV2() : SampleDoc(1).EncodeStateAsUpdateV1();
+        var update = v2 ? SampleDoc(1).EncodeStateAsUpdate(format: UpdateFormat.V2) : SampleDoc(1).EncodeStateAsUpdate();
         var doc = new YDoc();
 
-        var applied = v2 ? doc.TryApplyUpdateV2(update.AsSpan(0, update.Length - 3)) : doc.TryApplyUpdate(update.AsSpan(0, update.Length - 3));
+        var applied = v2 ? doc.TryApplyUpdate(update.AsSpan(0, update.Length - 3), format: UpdateFormat.V2) : doc.TryApplyUpdate(update.AsSpan(0, update.Length - 3));
 
         Assert.AreEqual("False|True", $"{applied}|{UpdateReader.IsFreeOnCurrentThread}");
     }
@@ -348,8 +348,8 @@ public class CodecReuseTests
     [TestMethod]
     public void ApplyUpdate_ObserverAppliesAnotherUpdate_AppliesBothAndReleasesThem()
     {
-        var first = SampleDoc(1).EncodeStateAsUpdateV1();
-        var second = SampleDoc(2).EncodeStateAsUpdateV1();
+        var first = SampleDoc(1).EncodeStateAsUpdate();
+        var second = SampleDoc(2).EncodeStateAsUpdate();
         var doc = new YDoc();
         var text = doc.GetText("text");
         var applied = false;
@@ -390,7 +390,7 @@ public class CodecReuseTests
         {
             if (v2)
             {
-                doc.ApplyUpdateV2(updates[i]);
+                doc.ApplyUpdate(updates[i], format: UpdateFormat.V2);
             }
             else
             {
@@ -417,7 +417,7 @@ public class CodecReuseTests
     {
         var doc = SampleDoc(3);
 
-        CollectionAssert.AreEqual(doc.EncodeStateVectorV1(), doc.EncodeStateVectorV2());
+        CollectionAssert.AreEqual(doc.EncodeStateVector(), doc.EncodeStateVector());
     }
 
     [TestMethod]
@@ -431,7 +431,7 @@ public class CodecReuseTests
         EventHandler<UpdateEventArgs> handler = (_, e) =>
         {
             received.Add(e.Update.ToArray());
-            encodedInTheHandler.Add(v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1());
+            encodedInTheHandler.Add(v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate());
         };
         if (v2)
         {
@@ -456,7 +456,7 @@ public class CodecReuseTests
         // Reused after every failure, the reader must still read (or reject) each update exactly as new decoders do.
         var random = new Random(7);
         var docs = new[] { SampleDoc(1), SampleDoc(2), ManyItemsDoc() };
-        var updates = docs.SelectMany(d => new[] { (V2: false, Bytes: d.EncodeStateAsUpdateV1()), (V2: true, Bytes: d.EncodeStateAsUpdateV2()) }).ToArray();
+        var updates = docs.SelectMany(d => new[] { (V2: false, Bytes: d.EncodeStateAsUpdate()), (V2: true, Bytes: d.EncodeStateAsUpdate(format: UpdateFormat.V2)) }).ToArray();
 
         for (var i = 0; i < 20_000; i++)
         {
@@ -484,11 +484,11 @@ public class CodecReuseTests
     public void MergeUpdates_MalformedUpdate_ReturnsEverything(bool v2)
     {
         var doc = SampleDoc(1);
-        var update = v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1();
+        var update = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
         var truncated = update.AsSpan(0, update.Length - 2).ToArray();
         var before = BufferPool<byte>.OutstandingOnCurrentThread;
 
-        Assert.ThrowsExactly<YUpdateException>(() => _ = v2 ? UpdateOperations.MergeUpdatesV2([update, truncated]) : UpdateOperations.MergeUpdates([update, truncated]));
+        Assert.ThrowsExactly<YUpdateException>(() => _ = v2 ? YUpdate.Merge([update, truncated], format: UpdateFormat.V2) : YUpdate.Merge([update, truncated], format: UpdateFormat.V1));
 
         Assert.AreEqual(before, BufferPool<byte>.OutstandingOnCurrentThread);
     }

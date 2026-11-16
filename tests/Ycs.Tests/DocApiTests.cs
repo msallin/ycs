@@ -19,8 +19,8 @@ public class DocApiTests
         var doc = new YDoc(new YDocOptions { ClientId = 7 });
         doc.GetText("text").Insert(0, "hello");
 
-        CollectionAssert.AreEqual(doc.EncodeStateAsUpdateV1(), doc.EncodeStateAsUpdate());
-        CollectionAssert.AreEqual(doc.EncodeStateVectorV1(), doc.EncodeStateVector());
+        CollectionAssert.AreEqual(doc.EncodeStateAsUpdate(), doc.EncodeStateAsUpdate());
+        CollectionAssert.AreEqual(doc.EncodeStateVector(), doc.EncodeStateVector());
 
         var copy = new YDoc();
         copy.ApplyUpdate(doc.EncodeStateAsUpdate().AsSpan());
@@ -36,11 +36,11 @@ public class DocApiTests
 
         var v1 = new ArrayBufferWriter<byte>();
         doc.EncodeStateAsUpdate(v1);
-        CollectionAssert.AreEqual(doc.EncodeStateAsUpdateV1(), v1.WrittenSpan.ToArray());
+        CollectionAssert.AreEqual(doc.EncodeStateAsUpdate(), v1.WrittenSpan.ToArray());
 
         var v2 = new ArrayBufferWriter<byte>();
-        doc.EncodeStateAsUpdateV2(v2);
-        CollectionAssert.AreEqual(doc.EncodeStateAsUpdateV2(), v2.WrittenSpan.ToArray());
+        doc.EncodeStateAsUpdate(v2, format: UpdateFormat.V2);
+        CollectionAssert.AreEqual(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), v2.WrittenSpan.ToArray());
 
         // Diffed against a remote state vector: nothing is missing.
         var remote = new YDoc();

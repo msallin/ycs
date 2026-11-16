@@ -47,7 +47,7 @@ if (mode is "memory" or "all")
         var m0 = Held();
         var docs = w.Build();
         var m1 = Held();
-        var states = docs.Select(d => d.EncodeStateAsUpdateV1()).ToArray();
+        var states = docs.Select(d => d.EncodeStateAsUpdate()).ToArray();
         var structs = docs.Sum(d => d.Store.Clients.Values.Sum(l => (long)l.Count));
 
         if (w.Reference != null)
@@ -75,7 +75,7 @@ if (mode is "memory" or "all")
         var loaded = states.Select(s =>
         {
             var d = new YDoc();
-            d.ApplyUpdateV1(s, null, UpdateLimits.Unlimited);
+            d.ApplyUpdate(s, null, limits: UpdateLimits.Unlimited);
             return d;
         }).ToArray();
         var loadedHeld = Held() - m3;

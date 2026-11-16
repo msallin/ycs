@@ -207,7 +207,7 @@ internal sealed class HostileRoom
         var forger = new YDoc(new YDocOptions { ClientId = nextForgerId++ });
         if (basedOn is not null || rng.Chance(0.5))
         {
-            forger.ApplyUpdateV1(basedOn?.EncodeStateAsUpdateV1() ?? Room.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
+            forger.ApplyUpdate(basedOn?.EncodeStateAsUpdate() ?? Room.EncodeStateAsUpdate(), null, limits: UpdateLimits.Unlimited);
         }
 
         return forger;
@@ -271,7 +271,7 @@ internal sealed class HostileRoom
 
             case < 62:
                 {
-                    var vector = rng.Chance(0.5) ? h.Forger.EncodeStateVectorV1() : rng.Bytes(rng.Int(24));
+                    var vector = rng.Chance(0.5) ? h.Forger.EncodeStateVector() : rng.Bytes(rng.Int(24));
                     return rng.Chance(0.5)
                         ? ([HostileMessages.Sync((uint)SyncMessageType.SyncStep1, vector)], "step 1")
                         : ([HostileMessages.Sync((uint)SyncMessageType.Update, vector)], "state vector as an update");
@@ -504,9 +504,9 @@ internal sealed class HostileRoom
         var vector = Vector(Room.EncodeStateVector());
         foreach (var peer in honest.Where(p => p.Connected).Append(listener))
         {
-            if (Vector(peer.Doc.EncodeStateVectorV1()) != vector && !RoomDiffersFromItsState(vector))
+            if (Vector(peer.Doc.EncodeStateVector()) != vector && !RoomDiffersFromItsState(vector))
             {
-                throw Fail($"the state vector of {peer.ClientId}, {Vector(peer.Doc.EncodeStateVectorV1())}, is not the room's, {vector}");
+                throw Fail($"the state vector of {peer.ClientId}, {Vector(peer.Doc.EncodeStateVector())}, is not the room's, {vector}");
             }
         }
 
@@ -532,13 +532,13 @@ internal sealed class HostileRoom
 
         var roomState = Room.EncodeStateAsUpdate();
         var fromRoom = new YDoc();
-        fromRoom.ApplyUpdateV1(roomState, null, UpdateLimits.Unlimited);
+        fromRoom.ApplyUpdate(roomState, null, limits: UpdateLimits.Unlimited);
         if (Signature(fromRoom) != expected)
         {
             throw Fail($"the room's state diverged from what it broadcast:\n  {Signature(fromRoom)}\n  {expected}");
         }
 
-        var excess = roomState.Length - listener.Doc.EncodeStateAsUpdateV1().Length;
+        var excess = roomState.Length - listener.Doc.EncodeStateAsUpdate().Length;
         Stats.PendingExcess(excess);
         if (excess > MaxPendingExcess)
         {
@@ -594,7 +594,7 @@ internal sealed class HostileRoom
     private bool SelfInconsistent(YDoc doc, string signature)
     {
         var copy = new YDoc();
-        copy.ApplyUpdateV1(doc.EncodeStateAsUpdateV1(), null, UpdateLimits.Unlimited);
+        copy.ApplyUpdate(doc.EncodeStateAsUpdate(), null, limits: UpdateLimits.Unlimited);
         selfInconsistent = Signature(copy) != signature;
         if (selfInconsistent)
         {
@@ -610,8 +610,8 @@ internal sealed class HostileRoom
     private bool RoomDiffersFromItsState(string vector)
     {
         var copy = new YDoc();
-        copy.ApplyUpdateV1(Room.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
-        selfInconsistent = Vector(copy.EncodeStateVectorV1()) != vector;
+        copy.ApplyUpdate(Room.EncodeStateAsUpdate(), null, limits: UpdateLimits.Unlimited);
+        selfInconsistent = Vector(copy.EncodeStateVector()) != vector;
         if (selfInconsistent)
         {
             Stats.SelfInconsistent();
@@ -636,7 +636,7 @@ internal sealed class HostileRoom
         }
 
         var snapshot = doc.CreateSnapshot();
-        return $"sv {Vector(doc.EncodeStateVectorV1())} ds {Convert.ToHexString(snapshot.EncodeSnapshot())} text {Safe(() => doc.GetText("text").ToString())} map {Safe(() => doc.GetMap("map").ToJson())} array {Safe(() => doc.GetArray("array").ToJson())}";
+        return $"sv {Vector(doc.EncodeStateVector())} ds {Convert.ToHexString(snapshot.Encode())} text {Safe(() => doc.GetText("text").ToString())} map {Safe(() => doc.GetMap("map").ToJson())} array {Safe(() => doc.GetArray("array").ToJson())}";
     }
 
     private static string Vector(byte[] encoded)

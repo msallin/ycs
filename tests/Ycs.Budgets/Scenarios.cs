@@ -27,7 +27,7 @@ internal static class Scenarios
         {
             var (doc, _) = LargeText();
             var remote = new YDoc(new YDocOptions { ClientId = 2 });
-            remote.ApplyUpdateV1(doc.EncodeStateAsUpdateV1());
+            remote.ApplyUpdate(doc.EncodeStateAsUpdate());
             var updates = new List<byte[]>();
             remote.Updated += (_, e) => updates.Add(e.Update.ToArray());
             var remoteText = remote.GetText("text");
@@ -36,7 +36,7 @@ internal static class Scenarios
                 remoteText.Insert(TextLength / 3 + i, "y");
             }
 
-            return i => doc.ApplyUpdateV1(updates[i]);
+            return i => doc.ApplyUpdate(updates[i]);
         }),
 
         new("doc.encode-small-document-v1", 500, () =>
@@ -47,7 +47,7 @@ internal static class Scenarios
             map.Set("a", 1);
             map.Set("b", "two");
             map.Set("c", true);
-            return _ => doc.EncodeStateAsUpdateV1();
+            return _ => doc.EncodeStateAsUpdate();
         }),
 
         new("doc.encode-diff-of-one-edit-100k", 500, () =>
@@ -55,7 +55,7 @@ internal static class Scenarios
             var (doc, text) = LargeText();
             var stateVector = doc.EncodeStateVector();
             text.Insert(TextLength / 2, "z");
-            return _ => doc.EncodeStateAsUpdateV1(stateVector);
+            return _ => doc.EncodeStateAsUpdate(stateVector);
         }),
 
         new("doc.encode-diff-100k-into-buffer-writer", 500, () =>
@@ -67,7 +67,7 @@ internal static class Scenarios
             return _ =>
             {
                 destination.ResetWrittenCount();
-                doc.EncodeStateAsUpdateV1(destination, stateVector);
+                doc.EncodeStateAsUpdate(destination, stateVector);
             };
         }),
 

@@ -52,7 +52,7 @@ public class HostileSyncTests
         var foreseen = new YDoc(new YDocOptions { ClientId = HonestA });
         foreseen.GetText("text").Insert(0, "abc");
         var forger = new YDoc(new YDocOptions { ClientId = 7 });
-        forger.ApplyUpdateV1(foreseen.EncodeStateAsUpdateV1());
+        forger.ApplyUpdate(foreseen.EncodeStateAsUpdate());
         var hostile = Join(room);
         hostile.Receive(Messages.Update(HostileUpdates.Edit(forger, d => d.GetText("text").Insert(3, "X"))));
 
@@ -95,7 +95,7 @@ public class HostileSyncTests
         var text = Messages.TextOf(room.EncodeStateAsUpdate());
         Assert.AreEqual(
             (SessionCloseReason.ProtocolError, true, 150 + 66, text, text, Convert.ToHexString(room.EncodeStateVector()), Convert.ToHexString(room.EncodeStateVector())),
-            (hostile.CloseReason, text.Contains('b', StringComparison.Ordinal), text.Length, a.Text, b.Text, Convert.ToHexString(a.Doc.EncodeStateVectorV1()), Convert.ToHexString(b.Doc.EncodeStateVectorV1())));
+            (hostile.CloseReason, text.Contains('b', StringComparison.Ordinal), text.Length, a.Text, b.Text, Convert.ToHexString(a.Doc.EncodeStateVector()), Convert.ToHexString(b.Doc.EncodeStateVector())));
     }
 
     // Yjs 13.6.32 applies it and places the item one way when it arrives after the run it points into, another when it
@@ -155,7 +155,7 @@ public class HostileSyncTests
         TestClient.PumpAll(client);
 
         var copy = new YDoc();
-        copy.ApplyUpdateV1(room.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
+        copy.ApplyUpdate(room.EncodeStateAsUpdate(), null, limits: UpdateLimits.Unlimited);
         Assert.AreEqual((SessionCloseReason.None, structs), (client.Session!.CloseReason, copy.GetText("text").Length));
     }
 
@@ -172,14 +172,14 @@ public class HostileSyncTests
         a.Insert(0, "ab");
         TestClient.PumpAll(a);
         var unknown = new YDoc(new YDocOptions { ClientId = 999 });
-        unknown.ApplyUpdateV1(a.Doc.EncodeStateAsUpdateV1());
+        unknown.ApplyUpdate(a.Doc.EncodeStateAsUpdate());
         unknown.GetText("text").Insert(1, "z");
         var waiting = new YDoc(new YDocOptions { ClientId = 7 });
-        waiting.ApplyUpdateV1(unknown.EncodeStateAsUpdateV1());
+        waiting.ApplyUpdate(unknown.EncodeStateAsUpdate());
         var first = HostileUpdates.Edit(waiting, d => d.GetText("text").Insert(1, "u"));
         var behind = HostileUpdates.Edit(waiting, d => d.GetMap("map").Set("k", 1));
         var integrating = new YDoc(new YDocOptions { ClientId = 7 });
-        integrating.ApplyUpdateV1(a.Doc.EncodeStateAsUpdateV1());
+        integrating.ApplyUpdate(a.Doc.EncodeStateAsUpdate());
         var second = HostileUpdates.Edit(integrating, d => d.GetText("text").Insert(1, "u"));
         var hostile = Join(room);
         hostile.Receive(Messages.Update(behind));
@@ -192,7 +192,7 @@ public class HostileSyncTests
 
         Assert.AreEqual(
             (SessionCloseReason.None, 1UL, 1UL),
-            (hostile.CloseReason, Clock(room.EncodeStateVector(), 7), Clock(joiner.Doc.EncodeStateVectorV1(), 7)));
+            (hostile.CloseReason, Clock(room.EncodeStateVector(), 7), Clock(joiner.Doc.EncodeStateVector(), 7)));
     }
 
     private static ulong Clock(byte[] vector, ulong client)

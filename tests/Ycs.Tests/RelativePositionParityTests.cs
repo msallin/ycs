@@ -57,7 +57,7 @@ public class RelativePositionParityTests
     private static YDoc BuildDoc()
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(B(UpdateV1));
+        doc.ApplyUpdate(B(UpdateV1));
         return doc;
     }
 

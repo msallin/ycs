@@ -141,13 +141,13 @@ public class ContentStringTests
         }
 
         text.Insert(50, "|");
-        var update = doc.EncodeStateAsUpdateV1();
+        var update = doc.EncodeStateAsUpdate();
         var copy = new YDoc(new YDocOptions { ClientId = 2 });
-        copy.ApplyUpdateV1(update);
+        copy.ApplyUpdate(update);
 
         Assert.AreEqual(text.ToString(), copy.GetText("text").ToString());
-        Assert.AreEqual(Convert.ToBase64String(update), Convert.ToBase64String(copy.EncodeStateAsUpdateV1()));
-        Assert.AreEqual(Convert.ToBase64String(doc.EncodeStateAsUpdateV2()), Convert.ToBase64String(copy.EncodeStateAsUpdateV2()));
+        Assert.AreEqual(Convert.ToBase64String(update), Convert.ToBase64String(copy.EncodeStateAsUpdate()));
+        Assert.AreEqual(Convert.ToBase64String(doc.EncodeStateAsUpdate(format: UpdateFormat.V2)), Convert.ToBase64String(copy.EncodeStateAsUpdate(format: UpdateFormat.V2)));
     }
 
     [TestMethod]
@@ -210,7 +210,7 @@ public class ContentStringTests
         text.Format(2, 2, new Dictionary<string, YValue> { ["bold"] = true });
         var copy = new YDoc(new YDocOptions { ClientId = 2 });
 
-        copy.ApplyUpdateV2(doc.EncodeStateAsUpdateV2());
+        copy.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
 
         Assert.AreEqual(Json(text.ToDelta()), Json(copy.GetText("text").ToDelta()));
     }

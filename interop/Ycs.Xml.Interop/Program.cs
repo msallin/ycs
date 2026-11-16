@@ -29,7 +29,7 @@ void Check(bool condition, string message)
 }
 
 var doc = new YDoc();
-doc.ApplyUpdateV1(Convert.FromBase64String(args[0]));
+doc.ApplyUpdate(Convert.FromBase64String(args[0]));
 
 var frag = doc.GetXmlFragment("xml");
 
@@ -103,6 +103,6 @@ Console.WriteLine(JsonSerializer.Serialize(new
     },
     toStringBeforeEdit,
     toStringAfterEdit,
-    updateV1 = Convert.ToBase64String(doc.EncodeStateAsUpdateV1()),
-    updateV2 = Convert.ToBase64String(doc.EncodeStateAsUpdateV2())
+    updateV1 = Convert.ToBase64String(doc.EncodeStateAsUpdate()),
+    updateV2 = Convert.ToBase64String(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))
 }, jsonOptions));

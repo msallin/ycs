@@ -540,7 +540,7 @@ public class TraceReplayTests
         protected override void Special(string kind, JsonElement step)
         {
             Assert.AreEqual("snapshot", kind);
-            _snapshots.Add(Snapshot.DecodeSnapshot(Convert.FromBase64String(step.GetProperty("snapshot").GetString())));
+            _snapshots.Add(Snapshot.Decode(Convert.FromBase64String(step.GetProperty("snapshot").GetString())));
         }
 
         protected override void ApplyOp(JsonElement op) => ApplyTextOp(_text, op, 1);

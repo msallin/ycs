@@ -274,21 +274,21 @@ namespace Ycs.Properties
             switch (via)
             {
                 case "v1":
-                    to.Doc.ApplyUpdateV1(u, Net);
+                    to.Doc.ApplyUpdate(u, Net);
                     return Missing.Value;
                 case "v2":
-                    to.Doc.ApplyUpdateV2(u, Net);
+                    to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
                     return Missing.Value;
                 case "v1to2":
                     {
-                        var c = UpdateOperations.ConvertUpdateFormatV1ToV2(u);
-                        to.Doc.ApplyUpdateV2(c, Net);
+                        var c = YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2);
+                        to.Doc.ApplyUpdate(c, Net, UpdateFormat.V2);
                         return Obj(("u", B64(c)));
                     }
                 case "v2to1":
                     {
-                        var c = UpdateOperations.ConvertUpdateFormatV2ToV1(u);
-                        to.Doc.ApplyUpdateV1(c, Net);
+                        var c = YUpdate.Convert(u, UpdateFormat.V2, UpdateFormat.V1);
+                        to.Doc.ApplyUpdate(c, Net);
                         return Obj(("u", B64(c)));
                     }
                 default:
@@ -316,7 +316,7 @@ namespace Ycs.Properties
                 reader.ReadByte();
                 var sv = new byte[ReadVarUint(reader)];
                 reader.ReadExactly(sv);
-                var update = v2 ? UpdateOperations.DiffUpdateV2(from.Doc.EncodeStateAsUpdateV2(), sv) : UpdateOperations.DiffUpdate(from.Doc.EncodeStateAsUpdateV1(), sv);
+                var update = v2 ? YUpdate.Diff(from.Doc.EncodeStateAsUpdate(format: UpdateFormat.V2), sv, format: UpdateFormat.V2) : YUpdate.Diff(from.Doc.EncodeStateAsUpdate(), sv, format: UpdateFormat.V1);
                 var m2 = new MemoryStream();
                 m2.WriteByte(1);
                 WriteVarUint(m2, update.Length);
@@ -326,11 +326,11 @@ namespace Ycs.Properties
             else
             {
                 var m2 = new System.Buffers.ArrayBufferWriter<byte>();
-                SyncProtocol.ReadSyncMessage(step1, m2, from.Doc, Net, v2);
+                SyncProtocol.ReadSyncMessage(step1, m2, from.Doc, Net, v2 ? UpdateFormat.V2 : UpdateFormat.V1);
                 step2 = m2.WrittenSpan.ToArray();
             }
 
-            SyncProtocol.ReadSyncMessage(step2, new System.Buffers.ArrayBufferWriter<byte>(), to.Doc, Net, v2);
+            SyncProtocol.ReadSyncMessage(step2, new System.Buffers.ArrayBufferWriter<byte>(), to.Doc, Net, v2 ? UpdateFormat.V2 : UpdateFormat.V1);
             return Obj(("s1", B64(step1)), ("s2", B64(step2)));
         }
 
@@ -368,21 +368,21 @@ namespace Ycs.Properties
         private object Raw(Dictionary<string, object> s, Client to)
         {
             var u = Convert.FromBase64String(s.Str("u"));
-            var before = (Canonical(to.Replica.Content()), B64(to.Doc.EncodeStateAsUpdateV1()), B64(to.Doc.EncodeStateVectorV1()));
+            var before = (Canonical(to.Replica.Content()), B64(to.Doc.EncodeStateAsUpdate()), B64(to.Doc.EncodeStateVector()));
             try
             {
                 switch (s.Str("via") ?? "v1")
                 {
                     case "v1":
-                        to.Doc.ApplyUpdateV1(u, Net);
+                        to.Doc.ApplyUpdate(u, Net);
                         return Missing.Value;
                     case "v2":
-                        to.Doc.ApplyUpdateV2(u, Net);
+                        to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
                         return Missing.Value;
                     case "v1to2":
                         {
-                            var c = UpdateOperations.ConvertUpdateFormatV1ToV2(u);
-                            to.Doc.ApplyUpdateV2(c, Net);
+                            var c = YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2);
+                            to.Doc.ApplyUpdate(c, Net, UpdateFormat.V2);
                             return Obj(("u", B64(c)));
                         }
                     default:
@@ -391,7 +391,7 @@ namespace Ycs.Properties
             }
             catch (Exception e)
             {
-                var after = (Canonical(to.Replica.Content()), B64(to.Doc.EncodeStateAsUpdateV1()), B64(to.Doc.EncodeStateVectorV1()));
+                var after = (Canonical(to.Replica.Content()), B64(to.Doc.EncodeStateAsUpdate()), B64(to.Doc.EncodeStateVector()));
                 if (e is not YUpdateException)
                 {
                     RejectionViolations.Add($"threw {e.GetType().Name}: {e.Message}");
@@ -417,27 +417,27 @@ namespace Ycs.Properties
                 return "skip";
             }
 
-            var u = v2 ? UpdateOperations.MergeUpdatesV2(updates) : UpdateOperations.MergeUpdates(updates);
+            var u = v2 ? YUpdate.Merge([.. updates], format: UpdateFormat.V2) : YUpdate.Merge([.. updates], format: UpdateFormat.V1);
             var merged = u;
             if (s.Bool("diff"))
             {
-                u = v2 ? UpdateOperations.DiffUpdateV2(u, to.Doc.EncodeStateVector()) : UpdateOperations.DiffUpdate(u, to.Doc.EncodeStateVector());
+                u = v2 ? YUpdate.Diff(u, to.Doc.EncodeStateVector(), format: UpdateFormat.V2) : YUpdate.Diff(u, to.Doc.EncodeStateVector(), format: UpdateFormat.V1);
             }
 
-            var meta = v2 ? UpdateOperations.ParseUpdateMetaV2(u) : UpdateOperations.ParseUpdateMeta(u);
+            var meta = v2 ? YUpdate.ParseMeta(u, format: UpdateFormat.V2) : YUpdate.ParseMeta(u, format: UpdateFormat.V1);
             var r = Obj(
                 ("m", B64(merged)),
                 ("u", B64(u)),
-                ("sv", B64(v2 ? UpdateOperations.EncodeStateVectorFromUpdateV2(u) : UpdateOperations.EncodeStateVectorFromUpdate(u))),
+                ("sv", B64(v2 ? YUpdate.EncodeStateVector(u, format: UpdateFormat.V2) : YUpdate.EncodeStateVector(u, format: UpdateFormat.V1))),
                 ("from", Clocks(meta.From)),
                 ("to", Clocks(meta.To)));
             if (v2)
             {
-                to.Doc.ApplyUpdateV2(u, Net);
+                to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
             }
             else
             {
-                to.Doc.ApplyUpdateV1(u, Net);
+                to.Doc.ApplyUpdate(u, Net);
             }
 
             return r;
@@ -470,7 +470,7 @@ namespace Ycs.Properties
         {
             try
             {
-                return UpdateOperations.DecodeUpdate(Convert.FromBase64String(base64V1)).DeleteSet.Values
+                return YUpdate.Decode(Convert.FromBase64String(base64V1), format: UpdateFormat.V1).DeleteSet.Values
                     .Any(ranges => ranges.Zip(ranges.Skip(1)).Any(p => p.Second.Clock < p.First.Clock + p.First.Length));
             }
             catch (YUpdateException)
@@ -676,7 +676,7 @@ namespace Ycs.Properties
                     {
                         var snap = Doc.CreateSnapshot();
                         Snapshots[ScriptRun.IdText(s.Get("id"))] = snap;
-                        return Obj(("s1", ScriptRun.B64(snap.EncodeSnapshot())), ("s2", ScriptRun.B64(snap.EncodeSnapshotV2())));
+                        return Obj(("s1", ScriptRun.B64(snap.Encode())), ("s2", ScriptRun.B64(snap.Encode(UpdateFormat.V2))));
                     }
                 case "docFromSnap":
                     {
@@ -692,7 +692,7 @@ namespace Ycs.Properties
                             roots[name] = Replica.View(Replica.RootOf(d, name, kind));
                         }
 
-                        return Obj(("roots", roots), ("v1", ScriptRun.B64(d.EncodeStateAsUpdateV1())));
+                        return Obj(("roots", roots), ("v1", ScriptRun.B64(d.EncodeStateAsUpdate())));
                     }
                 case "rpos":
                     {
@@ -1255,15 +1255,15 @@ namespace Ycs.Properties
 
         // ---- bytes
 
-        public byte[] EncodeV1(byte[] stateVector = null) => Doc.EncodeStateAsUpdateV1(stateVector);
+        public byte[] EncodeV1(byte[] stateVector = null) => Doc.EncodeStateAsUpdate(stateVector);
 
-        public byte[] EncodeV2(byte[] stateVector = null) => Doc.EncodeStateAsUpdateV2(stateVector);
+        public byte[] EncodeV2(byte[] stateVector = null) => Doc.EncodeStateAsUpdate(stateVector, format: UpdateFormat.V2);
 
-        public byte[] StateVector() => Doc.EncodeStateVectorV1();
+        public byte[] StateVector() => Doc.EncodeStateVector();
 
-        public void ApplyV1(byte[] update, object origin = null) => Doc.ApplyUpdateV1(update, origin ?? ScriptRun.Net);
+        public void ApplyV1(byte[] update, object origin = null) => Doc.ApplyUpdate(update, origin ?? ScriptRun.Net);
 
-        public void ApplyV2(byte[] update, object origin = null) => Doc.ApplyUpdateV2(update, origin ?? ScriptRun.Net);
+        public void ApplyV2(byte[] update, object origin = null) => Doc.ApplyUpdate(update, origin ?? ScriptRun.Net, UpdateFormat.V2);
 
         public bool HasPending => Doc.HasPending;
 
@@ -1278,13 +1278,13 @@ namespace Ycs.Properties
 
         public Dictionary<string, object> State(bool full)
         {
-            var v1 = Doc.EncodeStateAsUpdateV1();
-            var v2 = Doc.EncodeStateAsUpdateV2();
-            var sv = Doc.EncodeStateVectorV1();
+            var v1 = Doc.EncodeStateAsUpdate();
+            var v2 = Doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
+            var sv = Doc.EncodeStateVector();
             return Obj(
                 ("sv", ScriptRun.Clocks(Lib0.DecodeStateVector(sv))),
                 ("svb", ScriptRun.B64(sv)),
-                ("ds", DsView(UpdateOperations.DecodeUpdate(v1).DeleteSet)),
+                ("ds", DsView(YUpdate.Decode(v1, format: UpdateFormat.V1).DeleteSet)),
                 ("v1", full ? ScriptRun.B64(v1) : Hash(v1)),
                 ("v2", full ? ScriptRun.B64(v2) : Hash(v2)),
                 ("pend", Doc.HasPending),
@@ -1318,7 +1318,7 @@ namespace Ycs.Properties
 
         /// <summary>The delete set of an update, merged and sorted, as plain values.</summary>
         public static Dictionary<string, object> DeleteSetOf(byte[] update, bool v2) =>
-            DsView((v2 ? UpdateOperations.DecodeUpdateV2(update) : UpdateOperations.DecodeUpdate(update)).DeleteSet);
+            DsView((v2 ? YUpdate.Decode(update, format: UpdateFormat.V2) : YUpdate.Decode(update, format: UpdateFormat.V1)).DeleteSet);
 
         private static Dictionary<string, object> DsView(IReadOnlyDictionary<long, IReadOnlyList<DeletedRange>> ds)
         {
@@ -1968,21 +1968,21 @@ namespace Ycs.Properties
         }
 
         /// <summary>Whether everything <paramref name="update"/> (v1) holds is in this document (a snapshot of it contains it).</summary>
-        public bool Contains(byte[] update) => Doc.CreateSnapshot().SnapshotContainsUpdate(update);
+        public bool Contains(byte[] update) => Doc.CreateSnapshot().ContainsUpdate(update);
     }
 
     /// <summary>Operations on encoded updates and snapshots, without a script.</summary>
     internal static class Updates
     {
-        public static byte[] Merge(IList<byte[]> updates, bool v2) => v2 ? UpdateOperations.MergeUpdatesV2(updates) : UpdateOperations.MergeUpdates(updates);
+        public static byte[] Merge(IList<byte[]> updates, bool v2) => v2 ? YUpdate.Merge([.. updates], format: UpdateFormat.V2) : YUpdate.Merge([.. updates], format: UpdateFormat.V1);
 
-        public static byte[] Diff(byte[] update, byte[] stateVector, bool v2) => v2 ? UpdateOperations.DiffUpdateV2(update, stateVector) : UpdateOperations.DiffUpdate(update, stateVector);
+        public static byte[] Diff(byte[] update, byte[] stateVector, bool v2) => v2 ? YUpdate.Diff(update, stateVector, format: UpdateFormat.V2) : YUpdate.Diff(update, stateVector, format: UpdateFormat.V1);
 
-        public static byte[] V1ToV2(byte[] update) => UpdateOperations.ConvertUpdateFormatV1ToV2(update);
+        public static byte[] V1ToV2(byte[] update) => YUpdate.Convert(update, UpdateFormat.V1, UpdateFormat.V2);
 
-        public static byte[] V2ToV1(byte[] update) => UpdateOperations.ConvertUpdateFormatV2ToV1(update);
+        public static byte[] V2ToV1(byte[] update) => YUpdate.Convert(update, UpdateFormat.V2, UpdateFormat.V1);
 
-        public static byte[] StateVectorFromUpdate(byte[] update, bool v2) => v2 ? UpdateOperations.EncodeStateVectorFromUpdateV2(update) : UpdateOperations.EncodeStateVectorFromUpdate(update);
+        public static byte[] StateVectorFromUpdate(byte[] update, bool v2) => v2 ? YUpdate.EncodeStateVector(update, format: UpdateFormat.V2) : YUpdate.EncodeStateVector(update, format: UpdateFormat.V1);
 
         public static bool IsUpdateException(Exception e) => e is YUpdateException;
     }

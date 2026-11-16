@@ -84,16 +84,16 @@ public class YXmlTests
     public void ReEncodesXmlToAnUpdateYjsCanRead(string base64Update, bool v2)
     {
         var doc = Apply(base64Update, v2);
-        var reEncoded = v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1();
+        var reEncoded = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
 
         var copy = new YDoc();
         if (v2)
         {
-            copy.ApplyUpdateV2(reEncoded);
+            copy.ApplyUpdate(reEncoded, format: UpdateFormat.V2);
         }
         else
         {
-            copy.ApplyUpdateV1(reEncoded);
+            copy.ApplyUpdate(reEncoded);
         }
 
         Assert.AreEqual(doc.GetXmlFragment("xml").ToString(), copy.GetXmlFragment("xml").ToString());
@@ -225,10 +225,10 @@ public class YXmlTests
         hook.Set("editable", false);
         doc1.GetXmlFragment("xml").Insert(0, new object[] { hook });
 
-        var update = doc1.EncodeStateAsUpdateV1();
+        var update = doc1.EncodeStateAsUpdate();
 
         var doc2 = new YDoc();
-        doc2.ApplyUpdateV1(update);
+        doc2.ApplyUpdate(update);
 
         var readBack = doc2.GetXmlFragment("xml").Get(0) as YXmlHook;
         Assert.IsNotNull(readBack);
@@ -237,7 +237,7 @@ public class YXmlTests
 
         // Also round-trips through v2.
         var doc3 = new YDoc();
-        doc3.ApplyUpdateV2(doc1.EncodeStateAsUpdateV2());
+        doc3.ApplyUpdate(doc1.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
         var readBack2 = doc3.GetXmlFragment("xml").Get(0) as YXmlHook;
         Assert.AreEqual("custom-widget", readBack2.HookName);
     }
@@ -249,9 +249,9 @@ public class YXmlTests
         doc.GetXmlElement("el").SetAttribute("a", "b");
         doc.GetXmlText("txt").Insert(0, "hello", null);
 
-        var update = doc.EncodeStateAsUpdateV1();
+        var update = doc.EncodeStateAsUpdate();
         var copy = new YDoc();
-        copy.ApplyUpdateV1(update);
+        copy.ApplyUpdate(update);
 
         Assert.AreEqual("b", copy.GetXmlElement("el").GetAttribute("a"));
         Assert.AreEqual("hello", copy.GetXmlText("txt").ToString());
@@ -283,11 +283,11 @@ public class YXmlTests
         var update = Convert.FromBase64String(base64Update);
         if (v2)
         {
-            doc.ApplyUpdateV2(update);
+            doc.ApplyUpdate(update, format: UpdateFormat.V2);
         }
         else
         {
-            doc.ApplyUpdateV1(update);
+            doc.ApplyUpdate(update);
         }
 
         return doc;

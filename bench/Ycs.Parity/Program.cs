@@ -79,52 +79,52 @@ string HS(Func<string> f)
 void Do(string label, IList<byte[]> v1)
 {
     current = label;
-    var v2 = v1.Select(u => { try { return UpdateOperations.ConvertUpdateFormatV1ToV2(u); } catch (Exception e) { Note(e); return null; } }).ToList();
+    var v2 = v1.Select(u => { try { return YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2); } catch (Exception e) { Note(e); return null; } }).ToList();
     for (var i = 0; i < v1.Count; i++)
     {
         var u = v1[i];
-        lines.Add($"{label} conv12[{i}] {H(() => UpdateOperations.ConvertUpdateFormatV1ToV2(u))}");
+        lines.Add($"{label} conv12[{i}] {H(() => YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2))}");
         if (v2[i] != null)
         {
-            lines.Add($"{label} conv21[{i}] {H(() => UpdateOperations.ConvertUpdateFormatV2ToV1(v2[i]))}");
+            lines.Add($"{label} conv21[{i}] {H(() => YUpdate.Convert(v2[i], UpdateFormat.V2, UpdateFormat.V1))}");
         }
     }
 
     for (var i = 0; i < v1.Count; i++)
     {
         var u = v1[i];
-        lines.Add($"{label} describe1[{i}] {HS(() => UpdateOperations.DescribeUpdate(u))}");
-        lines.Add($"{label} decode1[{i}] {HS(() => Dump(UpdateOperations.DecodeUpdate(u)))}");
-        lines.Add($"{label} meta1[{i}] {HS(() => Meta(UpdateOperations.ParseUpdateMeta(u)))}");
-        lines.Add($"{label} sv1[{i}] {H(() => UpdateOperations.EncodeStateVectorFromUpdate(u))}");
+        lines.Add($"{label} describe1[{i}] {HS(() => YUpdate.Describe(u, format: UpdateFormat.V1))}");
+        lines.Add($"{label} decode1[{i}] {HS(() => Dump(YUpdate.Decode(u, format: UpdateFormat.V1)))}");
+        lines.Add($"{label} meta1[{i}] {HS(() => Meta(YUpdate.ParseMeta(u, format: UpdateFormat.V1)))}");
+        lines.Add($"{label} sv1[{i}] {H(() => YUpdate.EncodeStateVector(u, format: UpdateFormat.V1))}");
         if (v2[i] != null)
         {
             var u2 = v2[i];
-            lines.Add($"{label} describe2[{i}] {HS(() => UpdateOperations.DescribeUpdateV2(u2))}");
-            lines.Add($"{label} decode2[{i}] {HS(() => Dump(UpdateOperations.DecodeUpdateV2(u2)))}");
-            lines.Add($"{label} meta2[{i}] {HS(() => Meta(UpdateOperations.ParseUpdateMetaV2(u2)))}");
-            lines.Add($"{label} sv2[{i}] {H(() => UpdateOperations.EncodeStateVectorFromUpdateV2(u2))}");
+            lines.Add($"{label} describe2[{i}] {HS(() => YUpdate.Describe(u2, format: UpdateFormat.V2))}");
+            lines.Add($"{label} decode2[{i}] {HS(() => Dump(YUpdate.Decode(u2, format: UpdateFormat.V2)))}");
+            lines.Add($"{label} meta2[{i}] {HS(() => Meta(YUpdate.ParseMeta(u2, format: UpdateFormat.V2)))}");
+            lines.Add($"{label} sv2[{i}] {H(() => YUpdate.EncodeStateVector(u2, format: UpdateFormat.V2))}");
         }
     }
 
-    lines.Add($"{label} merge {H(() => UpdateOperations.MergeUpdates(v1))}");
+    lines.Add($"{label} merge {H(() => YUpdate.Merge([.. v1], format: UpdateFormat.V1))}");
     var rev = v1.Reverse().ToList();
-    lines.Add($"{label} mergeRev {H(() => UpdateOperations.MergeUpdates(rev))}");
+    lines.Add($"{label} mergeRev {H(() => YUpdate.Merge([.. rev], format: UpdateFormat.V1))}");
     if (v2.All(x => x != null))
     {
-        lines.Add($"{label} merge2 {H(() => UpdateOperations.MergeUpdatesV2(v2))}");
+        lines.Add($"{label} merge2 {H(() => YUpdate.Merge([.. v2], format: UpdateFormat.V2))}");
         var r2 = v2.AsEnumerable().Reverse().ToList();
-        lines.Add($"{label} merge2Rev {H(() => UpdateOperations.MergeUpdatesV2(r2))}");
+        lines.Add($"{label} merge2Rev {H(() => YUpdate.Merge([.. r2], format: UpdateFormat.V2))}");
     }
 
     for (var i = 0; i + 1 < v1.Count; i++)
     {
         var pair = new List<byte[]> { v1[i], v1[i + 1] };
-        lines.Add($"{label} mergePair[{i}] {H(() => UpdateOperations.MergeUpdates(pair))}");
+        lines.Add($"{label} mergePair[{i}] {H(() => YUpdate.Merge([.. pair], format: UpdateFormat.V1))}");
     }
 
     byte[] merged = null;
-    try { merged = UpdateOperations.MergeUpdates(v1); } catch (Exception e) { Note(e); }
+    try { merged = YUpdate.Merge([.. v1], format: UpdateFormat.V1); } catch (Exception e) { Note(e); }
 
     // State vectors of every prefix, applied in order and reversed (the reversed ones leave structs pending).
     var svs = new List<byte[]> { new byte[] { 0 } };
@@ -143,16 +143,16 @@ void Do(string label, IList<byte[]> v1)
         var sv = svs[s];
         if (merged != null)
         {
-            lines.Add($"{label} diff[{s}] {H(() => UpdateOperations.DiffUpdate(merged, sv))}");
+            lines.Add($"{label} diff[{s}] {H(() => YUpdate.Diff(merged, sv, format: UpdateFormat.V1))}");
             byte[] m2;
-            try { m2 = UpdateOperations.ConvertUpdateFormatV1ToV2(merged); } catch (Exception e) { Note(e); continue; }
-            lines.Add($"{label} diff2[{s}] {H(() => UpdateOperations.DiffUpdateV2(m2, sv))}");
+            try { m2 = YUpdate.Convert(merged, UpdateFormat.V1, UpdateFormat.V2); } catch (Exception e) { Note(e); continue; }
+            lines.Add($"{label} diff2[{s}] {H(() => YUpdate.Diff(m2, sv, format: UpdateFormat.V2))}");
         }
 
         for (var i = 0; i < v1.Count; i++)
         {
             var u = v1[i];
-            lines.Add($"{label} diffU[{s},{i}] {H(() => UpdateOperations.DiffUpdate(u, sv))}");
+            lines.Add($"{label} diffU[{s},{i}] {H(() => YUpdate.Diff(u, sv, format: UpdateFormat.V1))}");
         }
     }
 
@@ -169,19 +169,19 @@ void Do(string label, IList<byte[]> v1)
     {
         var d = new YDoc();
         try { foreach (var u in orders[o]) { d.ApplyUpdate(u); } } catch (Exception e) { Note(e); lines.Add($"{label} rest[{o}] applyEX"); continue; }
-        lines.Add($"{label} rest[{o}] v1 {H(() => d.EncodeStateAsUpdateV1())}");
-        lines.Add($"{label} rest[{o}] v2 {H(() => d.EncodeStateAsUpdateV2())}");
+        lines.Add($"{label} rest[{o}] v1 {H(() => d.EncodeStateAsUpdate())}");
+        lines.Add($"{label} rest[{o}] v2 {H(() => d.EncodeStateAsUpdate(format: UpdateFormat.V2))}");
         foreach (var (x, i) in svs.Take(6).Select((x, i) => (x, i)))
         {
-            lines.Add($"{label} rest[{o}] v1sv{i} {H(() => d.EncodeStateAsUpdateV1(x))}");
-            lines.Add($"{label} rest[{o}] v2sv{i} {H(() => d.EncodeStateAsUpdateV2(x))}");
+            lines.Add($"{label} rest[{o}] v1sv{i} {H(() => d.EncodeStateAsUpdate(x))}");
+            lines.Add($"{label} rest[{o}] v2sv{i} {H(() => d.EncodeStateAsUpdate(x, format: UpdateFormat.V2))}");
         }
 
         var d2 = new YDoc();
         try
         {
-            foreach (var u in orders[o]) { d2.ApplyUpdateV2(UpdateOperations.ConvertUpdateFormatV1ToV2(u)); }
-            lines.Add($"{label} rest[{o}] via2 {H(() => d2.EncodeStateAsUpdateV1())}");
+            foreach (var u in orders[o]) { d2.ApplyUpdate(YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2), format: UpdateFormat.V2); }
+            lines.Add($"{label} rest[{o}] via2 {H(() => d2.EncodeStateAsUpdate())}");
         }
         catch (Exception e)
         {

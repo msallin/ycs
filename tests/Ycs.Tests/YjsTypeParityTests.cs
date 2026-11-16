@@ -153,8 +153,8 @@ public class YjsTypeParityTests
         // 'abc', then 'z' at 0, snapshot, delete 'a' and 'b', insert 'X' at 1, snapshot.
         var doc = new YDoc(new YDocOptions { Gc = false });
         doc.ApplyUpdate(System.Convert.FromBase64String("AQSBvMGWCwAEAQF0AmFihIG8wZYLAQFjRIG8wZYLAAF6xIG8wZYLAYG8wZYLAgFYAYG8wZYLAQAC"));
-        var before = Snapshot.DecodeSnapshot(System.Convert.FromBase64String("AAGBvMGWCwQ="));
-        var after = Snapshot.DecodeSnapshot(System.Convert.FromBase64String("AYG8wZYLAQACAYG8wZYLBQ=="));
+        var before = Snapshot.Decode(System.Convert.FromBase64String("AAGBvMGWCwQ="));
+        var after = Snapshot.Decode(System.Convert.FromBase64String("AYG8wZYLAQACAYG8wZYLBQ=="));
         var text = doc.GetText("t");
 
         var delta = text.ToDelta(after, before, (type, id) => new YChange(type, id.Client));

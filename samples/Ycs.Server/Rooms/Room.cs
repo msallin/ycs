@@ -251,7 +251,7 @@ internal sealed partial class Room
     {
         lock (gate)
         {
-            return doc.EncodeStateAsUpdateV1();
+            return doc.EncodeStateAsUpdate();
         }
     }
 
@@ -259,7 +259,7 @@ internal sealed partial class Room
     {
         lock (gate)
         {
-            return doc.EncodeStateVectorV1();
+            return doc.EncodeStateVector();
         }
     }
 

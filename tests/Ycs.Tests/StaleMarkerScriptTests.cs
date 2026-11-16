@@ -121,13 +121,13 @@ public class StaleMarkerScriptTests
                         break;
                     case "applyobs":
                         armed = step[1];
-                        doc.ApplyUpdateV1(peer.EncodeStateAsUpdateV1(doc.EncodeStateVectorV1()));
+                        doc.ApplyUpdate(peer.EncodeStateAsUpdate(doc.EncodeStateVector()));
                         break;
                     case "pm":
                         peer.GetMap("m").Set("k", 1);
                         break;
                     case "sync":
-                        peer.ApplyUpdateV1(doc.EncodeStateAsUpdateV1(peer.EncodeStateVectorV1()));
+                        peer.ApplyUpdate(doc.EncodeStateAsUpdate(peer.EncodeStateVector()));
                         break;
                     case "txn":
                         doc.Transact(_ =>
@@ -161,13 +161,13 @@ public class StaleMarkerScriptTests
             }
         }
 
-        return script.GetProperty("v1").GetString() == Convert.ToHexString(doc.EncodeStateAsUpdateV1()) ? null : $"{name}: the final state differs";
+        return script.GetProperty("v1").GetString() == Convert.ToHexString(doc.EncodeStateAsUpdate()) ? null : $"{name}: the final state differs";
 
         void Run(JsonElement op)
         {
             if (op[0].GetString() == "apply")
             {
-                doc.ApplyUpdateV1(peer.EncodeStateAsUpdateV1(doc.EncodeStateVectorV1()));
+                doc.ApplyUpdate(peer.EncodeStateAsUpdate(doc.EncodeStateVector()));
                 return;
             }
 
