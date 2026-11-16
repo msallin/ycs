@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <!--
+    A Blazor WebAssembly page that edits a text through the sync server (docs/plan-server.md, P8): Ycs as a client in
+    the browser, with Yjs clients in the same room. The room is the URL's fragment, the server the query parameter
+    "server" (by default ws(s)://<the page's host>/ws). It must publish without trim warnings.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <BlazorEnableTimeZoneSupport>false</BlazorEnableTimeZoneSupport>
+    <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <IsPackable>false</IsPackable>
+    <!-- BL0016 wants every JS interop call in a try/catch, for a server circuit that can drop. In the browser the
+         interop is in-process and synchronous; a failure there is a bug, not a condition to handle. -->
+    <NoWarn>$(NoWarn);BL0016</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="11.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ycs.Client\Ycs.Client.csproj" />
+  </ItemGroup>
+
+</Project>
