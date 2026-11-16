@@ -14,4 +14,3 @@ exclude:
   - walkthrough-*.md
   - findings-*.md
   - testing.md
-  - ycs.gif
