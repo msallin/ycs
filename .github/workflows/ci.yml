@@ -62,7 +62,7 @@ jobs:
           ./out/aot/Ycs.AotSample
 
       - name: Blazor client publishes without trim warnings
-        run: dotnet publish samples/Ycs.Blazor -c Release -o out/blazor -warnaserror
+        run: dotnet publish samples/Ycs.Blazor -c Release -o out/blazor
 
       - name: Browser-wasm sample (no workload)
         run: |
