@@ -619,7 +619,7 @@ public class UndoManager
             return store.GetItemCleanStart(transaction, item.Redone.Value);
         }
 
-        var parentItem = ((AbstractType)item.Parent)._item;
+        var parentItem = ((AbstractType)item.Parent)._item.ToItem();
         Item left = null;
         Item right;
 
@@ -704,13 +704,13 @@ public class UndoManager
             }
             else
             {
-                left = parentType._map.GetValueOrDefault(item.ParentSub);
+                left = parentType._map.GetValueOrDefault(item.ParentSub).ToItem();
             }
 
             // A left neighbour in another parent would give the copy an origin that misleads remote peers.
             if (left != null && ((AbstractType)left.Parent)._item != parentItem)
             {
-                left = parentType._map.GetValueOrDefault(item.ParentSub);
+                left = parentType._map.GetValueOrDefault(item.ParentSub).ToItem();
             }
         }
 
@@ -731,7 +731,7 @@ public class UndoManager
                 return true;
             }
 
-            child = ((AbstractType)child.Parent)._item;
+            child = ((AbstractType)child.Parent)._item.ToItem();
         }
 
         return false;

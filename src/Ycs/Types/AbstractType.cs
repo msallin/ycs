@@ -36,9 +36,9 @@ public class YDeepEventArgs
 
 public partial class AbstractType
 {
-    internal Item _item = null;
-    internal Item _start = null;
-    internal Dictionary<string, Item> _map = new Dictionary<string, Item>();
+    internal ItemRef _item;
+    internal ItemRef _start;
+    internal Dictionary<string, ItemRef> _map = new Dictionary<string, ItemRef>();
 
     // How many keys of _map have a value that is not deleted, kept by Item.Integrate and Item.Delete.
     internal int _mapCount;
@@ -47,18 +47,18 @@ public partial class AbstractType
     public event EventHandler<YDeepEventArgs> DeepEventHandler;
 
     public YDoc Doc { get; protected set; }
-    public AbstractType Parent => _item != null ? _item.Parent as AbstractType : null;
+    public AbstractType Parent => !_item.IsNull ? _item.Parent as AbstractType : null;
 
     public virtual int Length { get; internal set; }
 
     /// <summary>How deeply this type is nested in other types: 0 for a root type (see <see cref="UpdateLimits.MaxDepth"/>).</summary>
     internal int Depth { get; private set; }
 
-    internal virtual void Integrate(YDoc doc, Item item)
+    internal virtual void Integrate(YDoc doc, ItemRef item)
     {
         Doc = doc;
         _item = item;
-        Depth = item?.Parent is AbstractType parent ? parent.Depth + 1 : 0;
+        Depth = !item.IsNull && item.Parent is AbstractType parent ? parent.Depth + 1 : 0;
 
         // A root type that was read from an update before it was defined takes over the map of
         // its placeholder (YDoc.Get).
@@ -194,7 +194,7 @@ public partial class AbstractType
             return true;
         }
 
-        for (var type = this; type != null; type = type._item?.Parent as AbstractType)
+        for (var type = this; type != null; type = type._item.IsNull ? null : type._item.Parent as AbstractType)
         {
             if (type.DeepEventHandler != null)
             {
@@ -223,7 +223,7 @@ public partial class AbstractType
 
             values.Add(evt);
 
-            if (type._item == null)
+            if (type._item.IsNull)
             {
                 break;
             }
@@ -243,12 +243,12 @@ public partial class AbstractType
         // Do nothing.
     }
 
-    internal Item _First()
+    internal ItemRef _First()
     {
         var n = _start;
-        while (n != null && n.Deleted)
+        while (!n.IsNull && n.Deleted)
         {
-            n = n.Right as Item;
+            n = n.Right.AsItem;
         }
         return n;
     }
@@ -319,7 +319,7 @@ public partial class AbstractType
     {
         if (!_map.TryGetValue(key, out var left))
         {
-            left = null;
+            left = default;
         }
 
         var doc = transaction.Doc;
@@ -351,7 +351,7 @@ public partial class AbstractType
             }
         }
 
-        var newItem = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), left, left?.LastId, null, null, this, key, content);
+        var newItem = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), left, default, this, key, content);
         newItem.Integrate(transaction, 0);
     }
 
@@ -371,18 +371,19 @@ public partial class AbstractType
     {
         if (!_map.TryGetValue(key, out var v))
         {
-            v = null;
+            v = default;
         }
 
-        while (v != null && (!snapshot.StateVector.ContainsKey(v.Id.Client) || v.Id.Clock >= snapshot.StateVector[v.Id.Client]))
+        while (!v.IsNull && (!snapshot.StateVector.ContainsKey(v.Id.Client) || v.Id.Clock >= snapshot.StateVector[v.Id.Client]))
         {
-            v = v.Left as Item;
+            v = v.Left.AsItem;
         }
 
-        return v != null && ItemRef.Of(v).IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
+        return !v.IsNull && v.IsVisible(snapshot) ? ValueAt(v.Content, v.Length - 1) : null;
     }
 
-    protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
+    protected IEnumerable<KeyValuePair<string, Item>> TypeMapEnumerate() =>
+        _map.Where(kvp => !kvp.Value.Deleted).Select(kvp => new KeyValuePair<string, Item>(kvp.Key, kvp.Value.ToItem()));
 
     /// <summary>
     /// The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.
@@ -413,8 +414,13 @@ public partial class AbstractType
 
     protected IEnumerable<KeyValuePair<string, object>> TypeMapEnumerateValues()
     {
-        foreach (var kvp in TypeMapEnumerate())
+        foreach (var kvp in _map)
         {
+            if (kvp.Value.Deleted)
+            {
+                continue;
+            }
+
             var key = kvp.Key;
             var value = ValueAt(kvp.Value.Content, kvp.Value.Length - 1);
             yield return new KeyValuePair<string, object>(key, value);

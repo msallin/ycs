@@ -70,7 +70,7 @@ internal class ContentDoc : IContentEx
         _doc ??= _read.Create(transaction.Doc.Limits);
 
         // This needs to be reflected in doc.destroy as well.
-        Doc._item = item.ToItem();
+        Doc._item = item;
         transaction.SubdocsAdded.Add(Doc);
 
         if (Doc.ShouldLoad)

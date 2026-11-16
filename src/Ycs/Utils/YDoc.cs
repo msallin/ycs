@@ -115,7 +115,7 @@ public partial class YDoc
     private int _freeTransactionCount;
 
     // If this document is a subdocument - a document integrated into another document - them _item is defined.
-    internal Item _item;
+    internal ItemRef _item;
 
     private readonly Dictionary<string, AbstractType> _share;
 
@@ -154,7 +154,7 @@ public partial class YDoc
     public void Load()
     {
         var item = _item;
-        if (item != null && !ShouldLoad)
+        if (!item.IsNull && !ShouldLoad)
         {
             Debug.Assert(item.Parent is AbstractType);
             (item.Parent as AbstractType).Doc.Transact(this, static (doc, tr) => tr.SubdocsLoaded.Add(doc));
@@ -178,9 +178,9 @@ public partial class YDoc
         }
 
         var item = _item;
-        if (item != null)
+        if (!item.IsNull)
         {
-            _item = null;
+            _item = default;
             // A collected item holds ContentDeleted already (Yjs sets a property nothing reads).
             var content = item.Content as ContentDoc;
             if (content != null)
@@ -375,14 +375,14 @@ public partial class YDoc
                 foreach (var kvp in type._map)
                 {
                     var n = kvp.Value;
-                    for (; n != null; n = n.Left as Item)
+                    for (; !n.IsNull; n = n.Left.AsItem)
                     {
                         n.Parent = t;
                     }
                 }
 
                 t._start = type._start;
-                for (var n = t._start; n != null; n = n.Right as Item)
+                for (var n = t._start; !n.IsNull; n = n.Right.AsItem)
                 {
                     n.Parent = t;
                 }

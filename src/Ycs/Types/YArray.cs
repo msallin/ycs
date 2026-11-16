@@ -57,7 +57,7 @@ public partial class YArray : YArrayBase
 
     public YArray Clone() => InternalClone() as YArray;
 
-    internal override void Integrate(YDoc doc, Item item)
+    internal override void Integrate(YDoc doc, ItemRef item)
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -188,7 +188,7 @@ public partial class YArray : YArrayBase
 
         if (marker != null)
         {
-            n = marker.P.ToItem();
+            n = marker.P;
             index -= marker.Index;
         }
 
@@ -201,7 +201,7 @@ public partial class YArray : YArrayBase
         }
 
         var steps = 0;
-        for (; n != null; n = n.Right as Item)
+        for (; !n.IsNull; n = n.Right.AsItem)
         {
             if (++steps == Doc.LiteralWalkStepsForTests)
             {
@@ -288,9 +288,11 @@ public partial class YArray : YArrayBase
 
     private IEnumerable<object> EnumerateList()
     {
+        // ItemRef lifetime (docs/design-item-layout.md, 3.1): n is held across the code of Map's and ForEach's callers
+        // between two values, which can end transactions that merge it away or collect the type.
         var n = _start;
 
-        while (n != null)
+        while (!n.IsNull)
         {
             if (n.Countable && !n.Deleted)
             {
@@ -301,7 +303,7 @@ public partial class YArray : YArrayBase
                 }
             }
 
-            n = n.Right as Item;
+            n = n.Right.AsItem;
         }
     }
 }

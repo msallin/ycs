@@ -34,6 +34,13 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static ItemRef Of(AbstractStruct str) => new(str);
 
+    /// <summary>
+    /// A new item (not integrated) between <paramref name="left"/> and <paramref name="right"/>, which are its origins
+    /// (Yjs' <c>new Item(id, left, left &amp;&amp; left.lastId, right, right &amp;&amp; right.id, parent, parentSub, content)</c>).
+    /// </summary>
+    public static ItemRef New(ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, IContent content) =>
+        new(new Item(id, left._struct, left.IsNull ? null : left.LastId, right._struct, right.IsNull ? null : right.Id, parent, parentSub, content));
+
     /// <summary>The object, where the library hands a struct out (a public member, the decoded form): null for <c>default</c>.</summary>
     public AbstractStruct ToStruct() => _struct;
 
@@ -54,85 +61,88 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public ID Id
     {
         get => _struct.Id;
-        set => AsItem.SetStart(value);
+        set => ItemObject.SetStart(value);
     }
 
     public int Length
     {
         get => _struct.Length;
-        set => AsItem.SetLength(value);
+        set => ItemObject.SetLength(value);
     }
 
     public bool Deleted => _struct.Deleted;
 
+    /// <summary>This reference when the struct is an item, else <c>default</c> (what <c>as Item</c> gives).</summary>
+    public ItemRef AsItem => _struct is Item ? this : default;
+
     // The members of an item.
-    private Item AsItem => (Item)_struct;
+    private Item ItemObject => (Item)_struct;
 
     public ItemRef Left
     {
-        get => new(AsItem.Left);
-        set => AsItem.Left = value._struct;
+        get => new(ItemObject.Left);
+        set => ItemObject.Left = value._struct;
     }
 
     public ItemRef Right
     {
-        get => new(AsItem.Right);
-        set => AsItem.Right = value._struct;
+        get => new(ItemObject.Right);
+        set => ItemObject.Right = value._struct;
     }
 
     public ID? LeftOrigin
     {
-        get => AsItem.LeftOrigin;
-        set => AsItem.LeftOrigin = value;
+        get => ItemObject.LeftOrigin;
+        set => ItemObject.LeftOrigin = value;
     }
 
     public ID? RightOrigin
     {
-        get => AsItem.RightOrigin;
-        set => AsItem.RightOrigin = value;
+        get => ItemObject.RightOrigin;
+        set => ItemObject.RightOrigin = value;
     }
 
     /// <summary>The type (<see cref="AbstractType"/>), or before integration a root's name or the type item's id.</summary>
     public object Parent
     {
-        get => AsItem.Parent;
-        set => AsItem.Parent = value;
+        get => ItemObject.Parent;
+        set => ItemObject.Parent = value;
     }
 
     public string ParentSub
     {
-        get => AsItem.ParentSub;
-        set => AsItem.ParentSub = value;
+        get => ItemObject.ParentSub;
+        set => ItemObject.ParentSub = value;
     }
 
     public ID? Redone
     {
-        get => AsItem.Redone;
-        set => AsItem.Redone = value;
+        get => ItemObject.Redone;
+        set => ItemObject.Redone = value;
     }
 
     public IContentEx Content
     {
-        get => AsItem.Content;
-        set => AsItem.Content = value;
+        get => ItemObject.Content;
+        set => ItemObject.Content = value;
     }
 
     public bool Marker
     {
-        get => AsItem.Marker;
-        set => AsItem.Marker = value;
+        get => ItemObject.Marker;
+        set => ItemObject.Marker = value;
     }
 
     public bool Keep
     {
-        get => AsItem.Keep;
-        set => AsItem.Keep = value;
+        get => ItemObject.Keep;
+        set => ItemObject.Keep = value;
     }
 
     public bool Countable
     {
-        get => AsItem.Countable;
-        set => AsItem.Countable = value;
+        get => ItemObject.Countable;
+        set => ItemObject.Countable = value;
     }
 
 

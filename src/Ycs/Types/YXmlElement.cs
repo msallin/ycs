@@ -43,7 +43,7 @@ public class YXmlElement : YXmlFragment
         get
         {
             var n = YXmlNodeHelpers.NextVisible(_item);
-            return n != null ? YXmlNodeHelpers.ContentTypeOf(n) : null;
+            return !n.IsNull ? YXmlNodeHelpers.ContentTypeOf(n) : null;
         }
     }
 
@@ -55,11 +55,11 @@ public class YXmlElement : YXmlFragment
         get
         {
             var n = YXmlNodeHelpers.PrevVisible(_item);
-            return n != null ? YXmlNodeHelpers.ContentTypeOf(n) : null;
+            return !n.IsNull ? YXmlNodeHelpers.ContentTypeOf(n) : null;
         }
     }
 
-    internal override void Integrate(YDoc doc, Item item)
+    internal override void Integrate(YDoc doc, ItemRef item)
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();

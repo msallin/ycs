@@ -105,7 +105,7 @@ public class ConflictResolutionTests
         doc.ApplyUpdate(ItemsWithoutOrigins(9, 3));
 
         var order = string.Empty;
-        for (var item = doc.GetText("t")._start; item != null; item = item.Right as Item)
+        for (var item = doc.GetText("t")._start.ToItem(); item != null; item = item.Right as Item)
         {
             order += item.Id.Client + ":" + item.Id.Clock + " ";
         }

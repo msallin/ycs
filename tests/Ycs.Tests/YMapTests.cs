@@ -308,7 +308,7 @@ public class YMapTests : YTestBase
                 Assert.IsTrue(evt.Changes.Keys.ContainsKey("deepmap"));
                 Assert.AreEqual(1, evt.Path.Count);
                 Assert.AreEqual("map", evt.Path.First());
-                dmapId = ((evt.Target as YMap).Get("deepmap") as YMap)._item?.Id;
+                dmapId = ((evt.Target as YMap).Get("deepmap") as YMap)._item.ToItem()?.Id;
             }
         };
 
@@ -327,9 +327,9 @@ public class YMapTests : YTestBase
         var dmap3 = _map3.Get("deepmap") as YMap;
 
         Assert.IsTrue(calls > 0);
-        Assert.IsTrue(ID.Equals(dmap1._item?.Id, dmap2._item?.Id));
-        Assert.IsTrue(ID.Equals(dmap1._item?.Id, dmap3._item?.Id));
-        Assert.IsTrue(ID.Equals(dmap1._item?.Id, dmapId));
+        Assert.IsTrue(ID.Equals(dmap1._item.ToItem()?.Id, dmap2._item.ToItem()?.Id));
+        Assert.IsTrue(ID.Equals(dmap1._item.ToItem()?.Id, dmap3._item.ToItem()?.Id));
+        Assert.IsTrue(ID.Equals(dmap1._item.ToItem()?.Id, dmapId));
 
         CompareUsers();
     }

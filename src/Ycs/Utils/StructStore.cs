@@ -1334,12 +1334,12 @@ internal sealed partial class StructStore
                 if (type != null && type._map.TryGetValue(key, out var value))
                 {
                     var head = value;
-                    while (head.Left is Item l)
+                    while (head.Left.IsItem)
                     {
-                        head = l;
+                        head = head.Left;
                     }
 
-                    chain = (head, value);
+                    chain = (head.ToItem(), value.ToItem());
                 }
             }
 
@@ -1489,7 +1489,7 @@ internal sealed partial class StructStore
                 stack.RemoveAt(stack.Count - 1);
                 foreach (var value in t._map.Values)
                 {
-                    for (var item = value; item != null; item = item.Left as Item)
+                    for (var item = value; !item.IsNull; item = item.Left.AsItem)
                     {
                         if (c && item != value && !item.Deleted && !IsCovered(item.Id.Client, item.Id.Clock, item.Id.Clock + item.Length, ranges, int.MaxValue))
                         {
@@ -1500,16 +1500,16 @@ internal sealed partial class StructStore
                     }
                 }
 
-                for (var item = t._start; item != null; item = item.Right as Item)
+                for (var item = t._start; !item.IsNull; item = item.Right.AsItem)
                 {
                     Push(item);
                 }
 
-                void Push(Item item)
+                void Push(ItemRef item)
                 {
                     if (item.Content is ContentType child)
                     {
-                        stack.Add((child.Type, c || (!item.Keep && gcFilter(item))));
+                        stack.Add((child.Type, c || (!item.Keep && gcFilter(item.ToItem()))));
                     }
                 }
             }
@@ -1586,7 +1586,7 @@ internal sealed partial class StructStore
                 {
                     result = (item.Parent switch
                     {
-                        AbstractType type => (object)type._item ?? type,
+                        AbstractType type => type._item.IsNull ? type : type._item.ToItem(),
                         ID id => Target(id).Item,
                         var root => root,
                     }, item.ParentSub);

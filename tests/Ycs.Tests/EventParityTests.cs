@@ -187,7 +187,7 @@ public class EventParityTests
         arr.EventHandler += (s, e) =>
         {
             var addedItem = e.Event.Changes.Added.Single();
-            result = (e.Event.Adds(addedItem), e.Event.Deletes(addedItem));
+            result = (e.Event.Adds((AbstractStruct)addedItem), e.Event.Deletes((AbstractStruct)addedItem));
         };
 
         arr.Insert(0, new object[] { "x" });

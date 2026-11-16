@@ -121,7 +121,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                     while (!p.IsNull && (p.Deleted || !p.Countable))
                     {
                         Debug.Assert(p.Left != p);
-                        p = p.Left.IsItem ? p.Left : default;
+                        p = p.Left.AsItem;
                         if (!p.IsNull && !p.Deleted && p.Countable)
                         {
                             // Adjust position. The loop should break now.
@@ -155,11 +155,11 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// The item right before <paramref name="right"/>, from <paramref name="left"/>, which was right before it until
     /// <see cref="ArraySearchMarkerCollection.UpdateMarkerChanges"/> perhaps split it.
     /// </summary>
-    private protected static Item LeftOf(Item left, AbstractStruct right)
+    private protected static ItemRef LeftOf(ItemRef left, ItemRef right)
     {
-        while (left != null && left.Right != right)
+        while (!left.IsNull && left.Right != right)
         {
-            left = (Item)left.Right;
+            left = left.Right;
         }
 
         return left;
@@ -257,7 +257,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         var indexes = new Dictionary<ItemRef, int>();
         var index = 0;
-        for (ItemRef n = _start; !n.IsNull; n = n.Right.IsItem ? n.Right : default)
+        for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
             indexes[n] = index;
             if (!n.Deleted && n.Countable)
@@ -317,20 +317,20 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (marker != null)
         {
-            n = marker.P.ToItem();
+            n = marker.P;
             index -= marker.Index;
 
             // We need to iterate one to the left so that the algorithm works.
             if (index == 0)
             {
                 // @todo: refactor this as it actually doesn't consider formats.
-                n = n.Prev as Item;
-                index += n != null && n.Countable && !n.Deleted ? n.Length : 0;
+                n = n.Prev.AsItem;
+                index += !n.IsNull && n.Countable && !n.Deleted ? n.Length : 0;
             }
         }
 
         var steps = 0;
-        for (; n != null; n = n.Right as Item)
+        for (; !n.IsNull; n = n.Right.AsItem)
         {
             if (++steps == transaction.Doc.LiteralWalkStepsForTests)
             {
@@ -359,12 +359,12 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (_searchMarkers?.Count > 0)
         {
-            var right = n == null ? null : n.Right;
+            var right = n.IsNull ? default : n.Right;
             _searchMarkers.UpdateMarkerChanges(transaction, startIndex, content.Count);
             n = LeftOf(n, right);
         }
 
-        InsertGenericsAfter(transaction, n, content);
+        InsertGenericsAfterReturningLast(transaction, n, content);
     }
 
     /// <summary>
@@ -399,7 +399,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             n = n.Right;
         }
 
-        _pushHint = InsertGenericsAfterReturningLast(transaction, n.ToItem(), content);
+        _pushHint = InsertGenericsAfterReturningLast(transaction, n, content);
     }
 
     /// <summary>
@@ -408,8 +408,8 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// (<see cref="StructStore.SeekRight"/>), with <paramref name="index"/> lowered by what was passed; or
     /// <paramref name="n"/> with the reference walk.
     /// </summary>
-    private protected Item SeekRight(Item n, ref int index) =>
-        Doc.RunHeadIndexDisabledForTests ? n : Doc.Store.SeekRight(n, ref index, stopAtFormats: false).ToItem();
+    private protected ItemRef SeekRight(ItemRef n, ref int index) =>
+        Doc.RunHeadIndexDisabledForTests ? n : Doc.Store.SeekRight(n, ref index, stopAtFormats: false);
 
     /// <summary>JavaScript's <c>splice(index, 0, ...content)</c>, on the content of a type not in a document yet.</summary>
     private protected static void PrelimInsert(List<object> list, int index, ICollection<object> content) =>
@@ -426,16 +426,16 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         index < 0 ? Math.Max(list.Count + index, 0) : Math.Min(index, list.Count);
 
     protected void InsertGenericsAfter(Transaction transaction, Item referenceItem, ICollection<object> content) =>
-        InsertGenericsAfterReturningLast(transaction, referenceItem, content);
+        InsertGenericsAfterReturningLast(transaction, ItemRef.Of(referenceItem), content);
 
     /// <returns>The last item inserted, or <paramref name="referenceItem"/> when there was no content.</returns>
-    private protected Item InsertGenericsAfterReturningLast(Transaction transaction, Item referenceItem, ICollection<object> content)
+    private protected ItemRef InsertGenericsAfterReturningLast(Transaction transaction, ItemRef referenceItem, ICollection<object> content)
     {
         var left = referenceItem;
         var doc = transaction.Doc;
         var ownClientId = doc.ClientId;
         var store = doc.Store;
-        var right = referenceItem == null ? _start : referenceItem.Right as Item;
+        var right = referenceItem.IsNull ? _start : referenceItem.Right.AsItem;
 
         // Indexed where the content allows it: a foreach over the interface boxes the enumerator.
         var list = content as IList<object>;
@@ -463,16 +463,16 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         void packJsonContent()
         {
-            if (jsonContent.Count > 0 && left != null && ItemRef.Of(left).CanExtendRun(transaction, this, right, typeof(ContentAny), ownClientId))
+            if (jsonContent.Count > 0 && !left.IsNull && left.CanExtendRun(transaction, this, right, typeof(ContentAny), ownClientId))
             {
                 // Appending to this client's run: the run takes the values in place of a new item.
                 ((ContentAny)left.Content).Append(jsonContent);
-                ItemRef.Of(left).ExtendRun(transaction, jsonContent.Count);
+                left.ExtendRun(transaction, jsonContent.Count);
                 jsonContent.Clear();
             }
             else if (jsonContent.Count > 0)
             {
-                left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, ContentAny.Own(jsonContent));
+                left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, ContentAny.Own(jsonContent));
                 left.Integrate(transaction, 0);
                 jsonContent = new List<object>();
             }
@@ -509,17 +509,17 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                     packJsonContent();
 
                     // A copy, as Yjs: the caller's array must not change the document later.
-                    left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, new ContentBinary((byte[])arr.Clone()));
+                    left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentBinary((byte[])arr.Clone()));
                     left.Integrate(transaction, 0);
                     break;
                 case YDoc d:
                     packJsonContent();
-                    left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, new ContentDoc(d));
+                    left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentDoc(d));
                     left.Integrate(transaction, 0);
                     break;
                 case AbstractType at:
                     packJsonContent();
-                    left = new Item(new ID(ownClientId, store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, this, null, new ContentType(at));
+                    left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentType(at));
                     left.Integrate(transaction, 0);
                     break;
                 default:
@@ -544,13 +544,13 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (marker != null)
         {
-            n = marker.P.ToItem();
+            n = marker.P;
             index -= marker.Index;
         }
 
         // Compute the first item to be deleted.
         var steps = 0;
-        for (; n != null && index > 0; n = n.Right as Item)
+        for (; !n.IsNull && index > 0; n = n.Right.AsItem)
         {
             if (++steps == transaction.Doc.LiteralWalkStepsForTests)
             {
@@ -570,7 +570,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         }
 
         // Delete all items until done.
-        while (length > 0 && n != null)
+        while (length > 0 && !n.IsNull)
         {
             if (!n.Deleted)
             {
@@ -583,7 +583,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 length -= n.Length;
             }
 
-            n = n.Right as Item;
+            n = n.Right.AsItem;
         }
 
         if (length > 0)
@@ -618,7 +618,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         var cs = new List<object>();
         var n = _start;
 
-        while (n != null && length > 0)
+        while (!n.IsNull && length > 0)
         {
             if (n.Countable && !n.Deleted)
             {
@@ -639,7 +639,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 }
             }
 
-            n = n.Right as Item;
+            n = n.Right.AsItem;
         }
 
         return cs.AsReadOnly();
@@ -650,7 +650,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         int index = 0;
         var n = _start;
 
-        while (n != null)
+        while (!n.IsNull)
         {
             if (n.Countable && !n.Deleted)
             {
@@ -661,7 +661,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 }
             }
 
-            n = n.Right as Item;
+            n = n.Right.AsItem;
         }
     }
 
@@ -672,9 +672,9 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         int index = 0;
         var n = _start;
 
-        while (n != null)
+        while (!n.IsNull)
         {
-            if (n.Countable && ItemRef.Of(n).IsVisible(snapshot))
+            if (n.Countable && n.IsVisible(snapshot))
             {
                 var c = n.Content.GetContent();
                 foreach (var value in c)
@@ -683,22 +683,24 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 }
             }
 
-            n = n.Right as Item;
+            n = n.Right.AsItem;
         }
     }
 
     protected IEnumerable<object> EnumerateContent()
     {
+        // ItemRef lifetime (docs/design-item-layout.md, 3.1): n is held across the caller's code between two values,
+        // which can end transactions that merge it away or collect the type; to become an id with a hint.
         var n = _start;
-        while (n != null)
+        while (!n.IsNull)
         {
-            while (n != null && n.Deleted)
+            while (!n.IsNull && n.Deleted)
             {
-                n = n.Right as Item;
+                n = n.Right.AsItem;
             }
 
             // Check if we reached the end, no need to check currentContent, because it does not exist.
-            if (n == null)
+            if (n.IsNull)
             {
                 yield break;
             }
@@ -710,7 +712,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
             }
 
             // We used content of n, now iterate to next.
-            n = n.Right as Item;
+            n = n.Right.AsItem;
         }
     }
 
@@ -725,7 +727,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// </summary>
     private protected ArraySearchMarker FindMarker(int index)
     {
-        if (_start == null || index == 0 || _searchMarkers == null || Doc.SearchMarkersDisabledForTests)
+        if (_start.IsNull || index == 0 || _searchMarkers == null || Doc.SearchMarkersDisabledForTests)
         {
             return null;
         }
@@ -746,7 +748,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
         if (marker != null)
         {
-            p = marker.P.ToItem();
+            p = marker.P;
             pIndex = marker.Index;
 
             // We used it, we might need to use it again.
@@ -780,19 +782,19 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// through the run-head index (<see cref="ClientStructs.SeekRight"/>, <see cref="ClientStructs.SeekLeft"/>,
     /// <see cref="ClientStructs.RunHead"/>), over what the loop would pass; without, item by item (the reference).
     /// </summary>
-    private static (Item P, int Index) Walk(Item p, int pIndex, int index, StructStore store, int literalSteps)
+    private static (ItemRef P, int Index) Walk(ItemRef p, int pIndex, int index, StructStore store, int literalSteps)
     {
         // Iterate to right if possible. Within a run the index jumps over what the loop passes (ClientStructs.SeekRight),
         // and the loop takes the last steps: when the visible length reaches index exactly at an item's end, it steps
         // on to that item's right neighbour, whichever it is.
         var steps = 0;
-        while (p.Right != null && pIndex < index)
+        while (!p.Right.IsNull && pIndex < index)
         {
             if (store != null && ++steps == literalSteps)
             {
                 steps = 0;
                 var remaining = index - pIndex;
-                var reached = store.SeekRight(p, ref remaining, stopAtFormats: false).ToItem();
+                var reached = store.SeekRight(p, ref remaining, stopAtFormats: false);
                 if (reached != p)
                 {
                     (p, pIndex) = (reached, index - remaining);
@@ -810,12 +812,12 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 pIndex += p.Length;
             }
 
-            p = p.Right as Item;
+            p = p.Right.AsItem;
         }
 
         // Iterate to left if necessary (might be that pIndex > index); within a run the index jumps (ClientStructs.SeekLeft).
         steps = 0;
-        while (p.Left != null && pIndex > index)
+        while (!p.Left.IsNull && pIndex > index)
         {
             if (store != null && ++steps == literalSteps && store.TryFindPosition(p, out var run, out var at))
             {
@@ -823,13 +825,13 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 var reached = run.SeekLeft(at, pIndex - index, out var passed);
                 if (reached != at)
                 {
-                    (p, pIndex) = ((Item)run[reached], pIndex - checked((int)passed));
+                    (p, pIndex) = (run[reached], pIndex - checked((int)passed));
                     continue;
                 }
             }
 
-            p = p.Left as Item;
-            if (p == null)
+            p = p.Left.AsItem;
+            if (p.IsNull)
             {
                 break;
             }
@@ -845,18 +847,18 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         // walk ends at the same item whether a run extended in place (Item.ExtendRun) is one item or Yjs' several:
         // their boundaries continue each other by clock.
         steps = 0;
-        while (p.Left != null && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
+        while (!p.Left.IsNull && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
         {
             if (store != null && ++steps == literalSteps && store.TryFindPosition(p, out var structs, out var position))
             {
                 // The rest of the walk: to the run's head, subtracting what it steps onto.
-                p = (Item)structs[structs.RunHead(position, out var passed)];
+                p = structs[structs.RunHead(position, out var passed)];
                 pIndex -= checked((int)passed);
                 break;
             }
 
-            p = p.Left as Item;
-            if (p == null)
+            p = p.Left.AsItem;
+            if (p.IsNull)
             {
                 break;
             }

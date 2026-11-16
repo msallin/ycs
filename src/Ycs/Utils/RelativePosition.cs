@@ -97,7 +97,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         }
 
         var t = type._start;
-        while (t != null)
+        while (!t.IsNull)
         {
             if (!t.Deleted && t.Countable)
             {
@@ -110,13 +110,13 @@ public partial class RelativePosition : IEquatable<RelativePosition>
                 index -= t.Length;
             }
 
-            if (t.Right == null && assoc < 0)
+            if (t.Right.IsNull && assoc < 0)
             {
                 // Left-associated position, return last available id.
                 return new RelativePosition(type, t.LastId, assoc);
             }
 
-            t = t.Right as Item;
+            t = t.Right.AsItem;
         }
 
         return new RelativePosition(type, null, assoc);

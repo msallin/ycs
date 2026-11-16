@@ -126,7 +126,7 @@ internal static class Consistency
 
             foreach (var (key, value) in type._map)
             {
-                for (var item = value; item != null; item = item.Left as Item)
+                for (var item = value.ToItem(); item != null; item = item.Left as Item)
                 {
                     if (item.Content is ContentType nested)
                     {

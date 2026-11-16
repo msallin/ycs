@@ -148,7 +148,7 @@ internal static class Ops
     {
         var store = Builder.Build(doc);
         var items = new List<Item>();
-        for (var it = doc.GetArray("array")._start; it != null; it = it.Right as Item)
+        for (var it = doc.GetArray("array")._start.ToItem(); it != null; it = it.Right as Item)
         {
             items.Add(it);
         }

@@ -20,31 +20,31 @@ namespace Ycs;
 /// </summary>
 internal static class YXmlNodeHelpers
 {
-    internal static Item NextVisible(Item item)
+    internal static ItemRef NextVisible(ItemRef item)
     {
-        var n = item?.Right as Item;
-        while (n != null && n.Deleted)
+        var n = item.IsNull ? default : item.Right.AsItem;
+        while (!n.IsNull && n.Deleted)
         {
-            n = n.Right as Item;
+            n = n.Right.AsItem;
         }
 
         return n;
     }
 
-    internal static Item PrevVisible(Item item)
+    internal static ItemRef PrevVisible(ItemRef item)
     {
-        var n = item?.Left as Item;
-        while (n != null && n.Deleted)
+        var n = item.IsNull ? default : item.Left.AsItem;
+        while (!n.IsNull && n.Deleted)
         {
-            n = n.Left as Item;
+            n = n.Left.AsItem;
         }
 
         return n;
     }
 
-    internal static AbstractType ContentTypeOf(Item item)
+    internal static AbstractType ContentTypeOf(ItemRef item)
     {
-        if (item == null)
+        if (item.IsNull)
         {
             return null;
         }
@@ -62,7 +62,9 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
 {
     private readonly Func<AbstractType, bool> _filter;
     private readonly AbstractType _root;
-    private Item _currentNode;
+    // ItemRef lifetime (docs/design-item-layout.md, 3.1): held across the caller's code between two nodes, which can
+    // end transactions that merge it away or collect the type; to become an id with a hint.
+    private ItemRef _currentNode;
     private bool _firstCall;
 
     internal YXmlTreeWalker(AbstractType root, Func<AbstractType, bool> filter = null)
@@ -85,13 +87,13 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
         var n = _currentNode;
         var type = YXmlNodeHelpers.ContentTypeOf(n);
 
-        if (n != null && (!_firstCall || n.Deleted || !_filter(type)))
+        if (!n.IsNull && (!_firstCall || n.Deleted || !_filter(type)))
         {
             do
             {
                 type = YXmlNodeHelpers.ContentTypeOf(n);
 
-                if (!n.Deleted && type is YXmlFragment frag && frag._start != null)
+                if (!n.Deleted && type is YXmlFragment frag && !frag._start.IsNull)
                 {
                     // Walk down into the tree.
                     n = frag._start;
@@ -99,17 +101,17 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
                 else
                 {
                     // Walk right, or up (and then right).
-                    while (n != null)
+                    while (!n.IsNull)
                     {
                         var nxt = YXmlNodeHelpers.NextVisible(n);
-                        if (nxt != null)
+                        if (!nxt.IsNull)
                         {
                             n = nxt;
                             break;
                         }
                         else if (ReferenceEquals(n.Parent, _root))
                         {
-                            n = null;
+                            n = default;
                         }
                         else
                         {
@@ -118,13 +120,13 @@ public sealed class YXmlTreeWalker : IEnumerator<AbstractType>, IEnumerable<Abst
                     }
                 }
             }
-            while (n != null && (n.Deleted || !_filter(YXmlNodeHelpers.ContentTypeOf(n))));
+            while (!n.IsNull && (n.Deleted || !_filter(YXmlNodeHelpers.ContentTypeOf(n))));
         }
 
         _firstCall = false;
         _currentNode = n;
 
-        if (n == null)
+        if (n.IsNull)
         {
             Current = null;
             return false;
@@ -174,11 +176,11 @@ public class YXmlFragment : YArrayBase
         get
         {
             var first = _First();
-            return first != null ? first.Content.GetContent()[0] : null;
+            return !first.IsNull ? first.Content.GetContent()[0] : null;
         }
     }
 
-    internal override void Integrate(YDoc doc, Item item)
+    internal override void Integrate(YDoc doc, ItemRef item)
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -299,7 +301,7 @@ public class YXmlFragment : YArrayBase
     {
         if (Doc != null)
         {
-            Doc.Transact((self: this, item: refItem?._item, content), static (s, tr) => s.self.InsertGenericsAfter(tr, s.item, s.content));
+            Doc.Transact((self: this, item: refItem == null ? default : refItem._item, content), static (s, tr) => s.self.InsertGenericsAfterReturningLast(tr, s.item, s.content));
         }
         else
         {
@@ -354,7 +356,7 @@ public class YXmlFragment : YArrayBase
 
         if (marker != null)
         {
-            n = marker.P.ToItem();
+            n = marker.P;
             index -= marker.Index;
         }
 
@@ -366,7 +368,7 @@ public class YXmlFragment : YArrayBase
         }
 
         var steps = 0;
-        for (; n != null; n = n.Right as Item)
+        for (; !n.IsNull; n = n.Right.AsItem)
         {
             if (++steps == Doc.LiteralWalkStepsForTests)
             {

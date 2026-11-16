@@ -150,7 +150,7 @@ public class YTextEvent : YEvent
                         }
                     }
 
-                    while (item != null)
+                    while (!item.IsNull)
                     {
                         switch (item.Content)
                         {
@@ -321,7 +321,7 @@ public class YTextEvent : YEvent
                                 break;
                         }
 
-                        item = item.Right as Item;
+                        item = item.Right.AsItem;
                     }
 
                     addOp();
@@ -363,12 +363,12 @@ public partial class YText : YArrayBase
     /// </summary>
     private struct ItemTextListPosition
     {
-        public Item Left;
-        public Item Right;
+        public ItemRef Left;
+        public ItemRef Right;
         public int Index;
         public OrderedDictionary<string, object> CurrentAttributes;
 
-        public ItemTextListPosition(Item left, Item right, int index)
+        public ItemTextListPosition(ItemRef left, ItemRef right, int index)
         {
             Left = left;
             Right = right;
@@ -378,7 +378,7 @@ public partial class YText : YArrayBase
 
         public void Forward()
         {
-            if (Right == null)
+            if (Right.IsNull)
             {
                 throw new Exception("Unexpected");
             }
@@ -400,14 +400,14 @@ public partial class YText : YArrayBase
             }
 
             Left = Right;
-            Right = Right.Right as Item;
+            Right = Right.Right.AsItem;
         }
 
         public void FindNextPosition(Transaction transaction, int count)
         {
             var doc = transaction.Doc;
             var steps = 0;
-            while (Right != null && count > 0)
+            while (!Right.IsNull && count > 0)
             {
                 // Within a run, the index jumps over what this loop passes and only counts (no live format: the loop
                 // reads those).
@@ -415,12 +415,12 @@ public partial class YText : YArrayBase
                 {
                     steps = 0;
                     var before = count;
-                    var reached = doc.Store.SeekRight(Right, ref count, stopAtFormats: true).ToItem();
+                    var reached = doc.Store.SeekRight(Right, ref count, stopAtFormats: true);
                     if (reached != Right)
                     {
                         Index += before - count;
                         Right = reached;
-                        Left = reached.Left as Item;
+                        Left = reached.Left.AsItem;
                         continue;
                     }
                 }
@@ -449,7 +449,7 @@ public partial class YText : YArrayBase
                 }
 
                 Left = Right;
-                Right = Right.Right as Item;
+                Right = Right.Right.AsItem;
                 // We don't forward() because that would halve the performance because we already do the checks above.
             }
         }
@@ -461,7 +461,7 @@ public partial class YText : YArrayBase
         {
             // Check if we really need to remove attributes.
             while (
-                Right != null && (
+                !Right.IsNull && (
                     Right.Deleted || (
                         Right.Content is ContentFormat cf &&
                         negatedAttributes != null &&
@@ -491,7 +491,7 @@ public partial class YText : YArrayBase
             {
                 var left = Left;
                 var right = Right;
-                var nextFormat = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), left, left?.LastId, right, right?.Id, parent, null, new ContentFormat(kvp.Key, kvp.Value));
+                var nextFormat = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), left, right, parent, null, new ContentFormat(kvp.Key, kvp.Value));
                 nextFormat.Integrate(transaction, 0);
                 Right = nextFormat;
                 Forward();
@@ -501,7 +501,7 @@ public partial class YText : YArrayBase
         public void MinimizeAttributeChanges(IDictionary<string, object> attributes)
         {
             // Go right while attributes[right.Key] == right.Value (or right is deleted).
-            while (Right != null)
+            while (!Right.IsNull)
             {
                 if (Right.Deleted || (Right.Content is ContentFormat cf && EqualAttrs(attributes != null && attributes.TryGetValue(cf.Key, out var val) ? val : null, cf.Value)))
                 {
@@ -586,7 +586,7 @@ public partial class YText : YArrayBase
         {
             Doc.Transact(tr =>
             {
-                var curPos = new ItemTextListPosition(null, _start, 0);
+                var curPos = new ItemTextListPosition(default, _start, 0);
                 for (int i = 0; i < delta.Count; i++)
                 {
                     var op = delta[i];
@@ -599,7 +599,7 @@ public partial class YText : YArrayBase
                         // If we omit this step, clients will see a different number of paragraphs,
                         // but nothing bad will happen.
                         var insertStr = op.Insert as string;
-                        var ins = (!sanitize && insertStr != null && i == delta.Count - 1 && curPos.Right == null && insertStr.EndsWith("\n")) ? insertStr.Substring(0, insertStr.Length - 1)
+                        var ins = (!sanitize && insertStr != null && i == delta.Count - 1 && curPos.Right.IsNull && insertStr.EndsWith("\n")) ? insertStr.Substring(0, insertStr.Length - 1)
                             : op.Insert == Delta.NullEmbed ? null
                             : op.Insert;
                         if (!(ins is string) || ((string)ins).Length > 0)
@@ -663,9 +663,9 @@ public partial class YText : YArrayBase
 
         void computeDelta()
         {
-            while (n != null)
+            while (!n.IsNull)
             {
-                if (ItemRef.Of(n).IsVisible(snapshot) || (prevSnapshot != null && ItemRef.Of(n).IsVisible(prevSnapshot)))
+                if (n.IsVisible(snapshot) || (prevSnapshot != null && n.IsVisible(prevSnapshot)))
                 {
                     switch (n.Content)
                     {
@@ -677,7 +677,7 @@ public partial class YText : YArrayBase
 
                             var cur = val as YTextChangeAttributes;
 
-                            if (snapshot != null && !ItemRef.Of(n).IsVisible(snapshot))
+                            if (snapshot != null && !n.IsVisible(snapshot))
                             {
                                 if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Removed)
                                 {
@@ -685,7 +685,7 @@ public partial class YText : YArrayBase
                                     currentAttributes[ChangeKey] = computeYChange != null ? computeYChange(YTextChangeType.Removed, n.Id) : new YTextChangeAttributes { Type = YTextChangeType.Removed };
                                 }
                             }
-                            else if (prevSnapshot != null && !ItemRef.Of(n).IsVisible(prevSnapshot))
+                            else if (prevSnapshot != null && !n.IsVisible(prevSnapshot))
                             {
                                 if (cur == null || cur.User != n.Id.Client || cur.Type != YTextChangeType.Added)
                                 {
@@ -717,7 +717,7 @@ public partial class YText : YArrayBase
                             ops.Add(op);
                             break;
                         case ContentFormat cf:
-                            if (ItemRef.Of(n).IsVisible(snapshot))
+                            if (n.IsVisible(snapshot))
                             {
                                 packStr();
                                 UpdateCurrentAttributes(currentAttributes, cf);
@@ -726,7 +726,7 @@ public partial class YText : YArrayBase
                     }
                 }
 
-                n = n.Right as Item;
+                n = n.Right.AsItem;
             }
 
             packStr();
@@ -852,7 +852,7 @@ public partial class YText : YArrayBase
             Doc.Transact((self: this, index, length, attributes), static (s, tr) =>
             {
                 var pos = s.self.FindPosition(tr, s.index, useSearchMarker: false);
-                if (pos.Right == null)
+                if (pos.Right.IsNull)
                 {
                     return;
                 }
@@ -882,12 +882,12 @@ public partial class YText : YArrayBase
             throw new InvalidOperationException("The text is not in a document yet; add it to one first. Nothing was changed.");
         }
 
-        List<Item> remove = null;
-        for (var n = _start; n != null; n = n.Right as Item)
+        List<ItemRef> remove = null;
+        for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
             if (!n.Deleted && (n.Content is ContentFormat || (n.Countable && n.Content is not ContentString)))
             {
-                (remove ??= new List<Item>()).Add(n);
+                (remove ??= new List<ItemRef>()).Add(n);
             }
         }
 
@@ -956,7 +956,7 @@ public partial class YText : YArrayBase
     public int CopyTo(Span<char> destination)
     {
         var written = 0;
-        for (var n = _start; n != null; n = n.Right as Item)
+        for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
             if (!n.Deleted && n.Countable && n.Content is ContentString cs)
             {
@@ -980,7 +980,7 @@ public partial class YText : YArrayBase
     public void WriteTo(IBufferWriter<char> writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
-        for (var n = _start; n != null; n = n.Right as Item)
+        for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
             if (!n.Deleted && n.Countable && n.Content is ContentString cs)
             {
@@ -1026,7 +1026,7 @@ public partial class YText : YArrayBase
 
     public IEnumerable<KeyValuePair<string, object>> GetAttributes() => TypeMapEnumerateValues();
 
-    internal override void Integrate(YDoc doc, Item item)
+    internal override void Integrate(YDoc doc, ItemRef item)
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -1116,13 +1116,13 @@ public partial class YText : YArrayBase
 
         if (marker != null)
         {
-            var pos = new ItemTextListPosition(marker.P.Left.ToStruct() as Item, marker.P.ToItem(), marker.Index);
+            var pos = new ItemTextListPosition(marker.P.Left.AsItem, marker.P, marker.Index);
             pos.FindNextPosition(transaction, index - marker.Index);
             return pos;
         }
         else
         {
-            var pos = new ItemTextListPosition(null, _start, 0);
+            var pos = new ItemTextListPosition(default, _start, 0);
             pos.FindNextPosition(transaction, index);
             return pos;
         }
@@ -1153,7 +1153,7 @@ public partial class YText : YArrayBase
                 (negatedAttributes ??= new OrderedDictionary<string, object>())[key] = currentVal;
 
                 AnyEncoding.Validate(value, doc.Limits.MaxDepth);
-                currPos.Right = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Left?.LastId, currPos.Right, currPos.Right?.Id, this, null, new ContentFormat(key, value));
+                currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, new ContentFormat(key, value));
                 currPos.Right.Integrate(transaction, 0);
                 currPos.Forward();
             }
@@ -1200,19 +1200,20 @@ public partial class YText : YArrayBase
             currPos.Left = LeftOf(currPos.Left, currPos.Right);
         }
 
-        if (content == null && length > 0 && negatedAttributes == null && currPos.Left is { } left
-            && ItemRef.Of(left).CanExtendRun(transaction, this, currPos.Right, typeof(ContentString), ownClientId))
+        if (content == null && length > 0 && negatedAttributes == null && !currPos.Left.IsNull
+            && currPos.Left.CanExtendRun(transaction, this, currPos.Right, typeof(ContentString), ownClientId))
         {
             // Typing on at the end of this client's run: the run takes the text in place of a new item.
+            var left = currPos.Left;
             ((ContentString)left.Content).Append((string)text);
-            ItemRef.Of(left).ExtendRun(transaction, length);
+            left.ExtendRun(transaction, length);
             currPos.Index += length;
             currPos.InsertNegatedAttributes(transaction, this, null);
             return;
         }
 
         content ??= new ContentString((string)text);
-        currPos.Right = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Left?.LastId, currPos.Right, currPos.Right?.Id, this, null, content);
+        currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, content);
         currPos.Right.Integrate(transaction, 0);
         currPos.Forward();
 
@@ -1230,7 +1231,7 @@ public partial class YText : YArrayBase
         // Iterate until the first non-format or null is found, and delete all formats with
         // attributes[format.Key] != null. Also check the formats after the formatted range, so that
         // no redundant negated attributes are inserted there.
-        while (curPos.Right != null &&
+        while (!curPos.Right.IsNull &&
             (length > 0 || (negatedAttributes.Count > 0 && (curPos.Right.Deleted || curPos.Right.Content is ContentFormat))))
         {
             if (!curPos.Right.Deleted)
@@ -1282,7 +1283,7 @@ public partial class YText : YArrayBase
         // inserted - i.e. when length is bigger than type.length.
         if (length > 0)
         {
-            curPos.Right = new Item(new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Left?.LastId, curPos.Right, curPos.Right?.Id, this, null, new ContentString(new string('\n', length)));
+            curPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Right, this, null, new ContentString(new string('\n', length)));
             curPos.Right.Integrate(transaction, 0);
             curPos.Forward();
         }
@@ -1301,18 +1302,18 @@ public partial class YText : YArrayBase
     /// <param name="startAttributes">The attributes at <paramref name="start"/>; null for none.</param>
     /// <param name="currAttributes">The attributes at <paramref name="curr"/>; null for none.</param>
     /// <returns>The number of formatting items deleted.</returns>
-    private static int CleanupFormattingGap(Transaction transaction, Item start, Item curr, OrderedDictionary<string, object> startAttributes, ref OrderedDictionary<string, object> currAttributes)
+    private static int CleanupFormattingGap(Transaction transaction, ItemRef start, ItemRef curr, OrderedDictionary<string, object> startAttributes, ref OrderedDictionary<string, object> currAttributes)
     {
         var end = start;
         Dictionary<string, ContentFormat> endFormats = null;
-        while (end != null && (!end.Countable || end.Deleted))
+        while (!end.IsNull && (!end.Countable || end.Deleted))
         {
             if (!end.Deleted && end.Content is ContentFormat format)
             {
                 (endFormats ??= new Dictionary<string, ContentFormat>())[format.Key] = format;
             }
 
-            end = end.Right as Item;
+            end = end.Right.AsItem;
         }
 
         var cleanups = 0;
@@ -1353,7 +1354,7 @@ public partial class YText : YArrayBase
                 }
             }
 
-            start = start.Right as Item;
+            start = start.Right.AsItem;
         }
 
         return cleanups;
@@ -1363,25 +1364,25 @@ public partial class YText : YArrayBase
     /// Yjs 13.6's <c>cleanupContextlessFormattingGap</c>: in the run of deleted and uncountable items
     /// around <paramref name="item"/>, deletes every format whose key a later format of the run sets.
     /// </summary>
-    private static void CleanupContextlessFormattingGap(Transaction transaction, Item item)
+    private static void CleanupContextlessFormattingGap(Transaction transaction, ItemRef item)
     {
         // Iterate until item.Right is null or content.
-        while (item?.Right is Item right && (right.Deleted || !right.Countable))
+        while (!item.IsNull && item.Right.IsItem && (item.Right.Deleted || !item.Right.Countable))
         {
-            item = right;
+            item = item.Right;
         }
 
         HashSet<string> attrs = null;
 
         // Iterate back until a content item is found.
-        while (item != null && (item.Deleted || !item.Countable))
+        while (!item.IsNull && (item.Deleted || !item.Countable))
         {
             if (!item.Deleted && item.Content is ContentFormat cf && !(attrs ??= new HashSet<string>()).Add(cf.Key))
             {
                 item.Delete(transaction);
             }
 
-            item = item.Left as Item;
+            item = item.Left.AsItem;
         }
     }
 
@@ -1406,7 +1407,7 @@ public partial class YText : YArrayBase
             OrderedDictionary<string, object> startAttributes = null;
             OrderedDictionary<string, object> currentAttributes = null;
 
-            while (end != null)
+            while (!end.IsNull)
             {
                 if (!end.Deleted)
                 {
@@ -1423,7 +1424,7 @@ public partial class YText : YArrayBase
                     }
                 }
 
-                end = end.Right as Item;
+                end = end.Right.AsItem;
             }
         });
 
@@ -1456,7 +1457,7 @@ public partial class YText : YArrayBase
             // As Yjs, with the end clock as the length: to the end of the client's structs.
             store.IterateStructs(transaction, store.Clients[client], clock, afterClock, str =>
             {
-                if (str.ToStruct() is Item { Deleted: false, Content: ContentFormat, Parent: YText text })
+                if (str.IsItem && !str.Deleted && str.Content is ContentFormat && str.Parent is YText text)
                 {
                     AddOnce(ref needFullCleanup, text);
                 }
@@ -1470,10 +1471,12 @@ public partial class YText : YArrayBase
         {
             transaction.DeleteSet.IterateDeletedStructs(transaction, str =>
             {
-                if (str.ToStruct() is not Item item || item.Parent is not YText { HasFormatting: true } parent || (needFullCleanup?.Contains(parent) ?? false))
+                if (!str.IsItem || str.Parent is not YText { HasFormatting: true } parent || (needFullCleanup?.Contains(parent) ?? false))
                 {
                     return true;
                 }
+
+                var item = str;
 
                 if (item.Content is ContentFormat)
                 {
@@ -1510,7 +1513,7 @@ public partial class YText : YArrayBase
         var startAttrs = Copy(curPos.CurrentAttributes);
         var start = curPos.Right;
 
-        while (length > 0 && curPos.Right != null)
+        while (length > 0 && !curPos.Right.IsNull)
         {
             if (!curPos.Right.Deleted)
             {
@@ -1532,13 +1535,13 @@ public partial class YText : YArrayBase
             curPos.Forward();
         }
 
-        if (start != null)
+        if (!start.IsNull)
         {
             CleanupFormattingGap(transaction, start, curPos.Right, startAttrs, ref curPos.CurrentAttributes);
         }
 
         // Yjs reads the parent from the position's items and fails with a TypeError when the text has none.
-        var parent = (curPos.Left ?? curPos.Right ?? throw new InvalidOperationException("The text has no content to delete. Nothing was changed.")).Parent as YText;
+        var parent = (!curPos.Left.IsNull ? curPos.Left : !curPos.Right.IsNull ? curPos.Right : throw new InvalidOperationException("The text has no content to delete. Nothing was changed.")).Parent as YText;
         if (parent?._searchMarkers?.Count > 0)
         {
             parent._searchMarkers.UpdateMarkerChanges(transaction, curPos.Index, -startLength + length);

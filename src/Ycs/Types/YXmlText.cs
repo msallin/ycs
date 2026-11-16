@@ -44,7 +44,7 @@ public class YXmlText : YText
         get
         {
             var n = YXmlNodeHelpers.NextVisible(_item);
-            return n != null ? YXmlNodeHelpers.ContentTypeOf(n) : null;
+            return !n.IsNull ? YXmlNodeHelpers.ContentTypeOf(n) : null;
         }
     }
 
@@ -56,7 +56,7 @@ public class YXmlText : YText
         get
         {
             var n = YXmlNodeHelpers.PrevVisible(_item);
-            return n != null ? YXmlNodeHelpers.ContentTypeOf(n) : null;
+            return !n.IsNull ? YXmlNodeHelpers.ContentTypeOf(n) : null;
         }
     }
 

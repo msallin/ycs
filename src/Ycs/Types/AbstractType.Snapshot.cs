@@ -33,12 +33,12 @@ public partial class AbstractType
         {
             var v = kvp.Value;
 
-            while (v != null && (!snapshot.StateVector.TryGetValue(v.Id.Client, out var svClock) || v.Id.Clock >= svClock))
+            while (!v.IsNull && (!snapshot.StateVector.TryGetValue(v.Id.Client, out var svClock) || v.Id.Clock >= svClock))
             {
-                v = v.Left as Item;
+                v = v.Left.AsItem;
             }
 
-            if (v != null && ItemRef.Of(v).IsVisible(snapshot))
+            if (!v.IsNull && v.IsVisible(snapshot))
             {
                 res[kvp.Key] = ValueAt(v.Content, v.Length - 1);
             }

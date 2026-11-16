@@ -202,7 +202,9 @@ public partial class YEvent
     /// In contrast to <c>change.deleted</c>, this method also returns true if the struct was
     /// added and then deleted.
     /// </summary>
-    public bool Deletes(AbstractStruct str)
+    public bool Deletes(AbstractStruct str) => Deletes(ItemRef.Of(str));
+
+    internal bool Deletes(ItemRef str)
     {
         return Transaction.DeleteSet.IsDeleted(str.Id);
     }
@@ -213,7 +215,9 @@ public partial class YEvent
     /// In contrast to <c>change.added</c>, this method also returns true if the struct was
     /// added and then deleted.
     /// </summary>
-    public bool Adds(AbstractStruct str)
+    public bool Adds(AbstractStruct str) => Adds(ItemRef.Of(str));
+
+    internal bool Adds(ItemRef str)
     {
         return !Transaction.BeforeState.TryGetValue(str.Id.Client, out var clock) || str.Id.Clock >= clock;
     }
@@ -242,17 +246,17 @@ public partial class YEvent
                     if (Adds(item))
                     {
                         var prev = item.Left;
-                        while (prev != null && Adds(prev))
+                        while (!prev.IsNull && Adds(prev))
                         {
-                            prev = (prev as Item).Left;
+                            prev = prev.Left;
                         }
 
                         if (Deletes(item))
                         {
-                            if (prev != null && Deletes(prev))
+                            if (!prev.IsNull && Deletes(prev))
                             {
                                 action = ChangeAction.Delete;
-                                oldValue = LastValue((Item)prev);
+                                oldValue = LastValue(prev);
                             }
                             else
                             {
@@ -262,10 +266,10 @@ public partial class YEvent
                         }
                         else
                         {
-                            if (prev != null && Deletes(prev))
+                            if (!prev.IsNull && Deletes(prev))
                             {
                                 action = ChangeAction.Update;
-                                oldValue = LastValue((Item)prev);
+                                oldValue = LastValue(prev);
                             }
                             else
                             {
@@ -298,7 +302,7 @@ public partial class YEvent
         return _keys;
     }
 
-    private static object LastValue(Item item) => AbstractType.ValueAt(item.Content, item.Length - 1);
+    private static object LastValue(ItemRef item) => AbstractType.ValueAt(item.Content, item.Length - 1);
 
     private ChangesCollection CollectChanges()
     {
@@ -334,7 +338,7 @@ public partial class YEvent
                     }
                 }
 
-                for (var item = Target._start; item != null; item = item.Right as Item)
+                for (var item = Target._start; !item.IsNull; item = item.Right.AsItem)
                 {
                     if (item.Deleted)
                     {
@@ -347,7 +351,7 @@ public partial class YEvent
                             }
 
                             lastOp.Delete += item.Length;
-                            deleted.Add(item);
+                            deleted.Add(item.ToItem());
                         }
                         else
                         {
@@ -365,7 +369,7 @@ public partial class YEvent
                             }
 
                             (lastOp.Insert as List<object>).AddRange(item.Content.GetContent());
-                            added.Add(item);
+                            added.Add(item.ToItem());
                         }
                         else
                         {
@@ -401,7 +405,7 @@ public partial class YEvent
         get
         {
             var length = 0;
-            for (var child = Target; child._item != null && child != CurrentTarget; child = child._item.Parent as AbstractType)
+            for (var child = Target; !child._item.IsNull && child != CurrentTarget; child = child._item.Parent as AbstractType)
             {
                 length++;
             }
@@ -414,7 +418,7 @@ public partial class YEvent
     {
         var path = new Stack<object>();
 
-        while (child._item != null && child != parent)
+        while (!child._item.IsNull && child != parent)
         {
             if (child._item.ParentSub != null)
             {
@@ -425,16 +429,16 @@ public partial class YEvent
             {
                 // Parent is array-ish.
                 int i = 0;
-                AbstractStruct c = (child._item.Parent as AbstractType)._start;
-                while (c != child._item && c != null)
+                var c = (child._item.Parent as AbstractType)._start;
+                while (c != child._item && !c.IsNull)
                 {
-                    var cItem = c as Item;
-                    if (cItem != null && !cItem.Deleted && cItem.Countable)
+                    var cItem = c.AsItem;
+                    if (!cItem.IsNull && !cItem.Deleted && cItem.Countable)
                     {
                         i += cItem.Length;
                     }
 
-                    c = cItem?.Right;
+                    c = cItem.IsNull ? default : cItem.Right;
                 }
 
                 path.Push(i);

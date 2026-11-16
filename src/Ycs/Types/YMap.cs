@@ -188,7 +188,7 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
         return map;
     }
 
-    internal override void Integrate(YDoc doc, Item item)
+    internal override void Integrate(YDoc doc, ItemRef item)
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();

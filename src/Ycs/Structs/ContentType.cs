@@ -36,7 +36,7 @@ public class ContentType : IContentEx
 
     void IContentEx.Integrate(Transaction transaction, ItemRef item)
     {
-        Type.Integrate(transaction.Doc, item.ToItem());
+        Type.Integrate(transaction.Doc, item);
     }
 
     // Deleting and collecting a type walk the types nested in it, as deep as an update may nest them
@@ -49,7 +49,7 @@ public class ContentType : IContentEx
         public readonly ItemRef Owner = owner;
         public ItemRef Next = type._start;
         public bool InMap;
-        public Dictionary<string, Item>.Enumerator Keys;
+        public Dictionary<string, ItemRef>.Enumerator Keys;
         public ItemRef Value;
 
         /// <summary>Starts on the keys' values, once the list is done.</summary>

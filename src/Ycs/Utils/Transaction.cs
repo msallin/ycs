@@ -396,7 +396,7 @@ public partial class Transaction
                 continue;
             }
 
-            for (var type = kvp.Key; type != null; type = type._item?.Parent as AbstractType)
+            for (var type = kvp.Key; type != null; type = type._item.IsNull ? null : type._item.Parent as AbstractType)
             {
                 if (seen.Add(type) && changedParentTypes.TryGetValue(type, out var events))
                 {
@@ -586,7 +586,7 @@ public partial class Transaction
                         var delivered = events;
                         for (var i = 0; i < events.Count; i++)
                         {
-                            if (events[i].Target._item?.Deleted == true)
+                            if (!events[i].Target._item.IsNull && events[i].Target._item.Deleted)
                             {
                                 delivered = events.Where(static e => e.Target._item == null || !e.Target._item.Deleted).ToList();
                                 break;

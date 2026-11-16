@@ -95,7 +95,7 @@ internal readonly partial struct ItemRef
 
     // The run-head index holds whether an item is deleted: for an item the store holds, the caller then calls
     // StructStore.Refresh (MarkDeleted(Transaction), ContentDeleted.Integrate); a split's right part is not in it yet.
-    public void MarkDeleted() => AsItem.MarkDeleted();
+    public void MarkDeleted() => ItemObject.MarkDeleted();
 
     /// <summary>
     /// Whether <paramref name="right"/> merges into this item (Yjs' <c>Item#mergeWith</c> conditions; a content of a
@@ -179,7 +179,7 @@ internal readonly partial struct ItemRef
             && !Deleted
             && !Keep
             && Redone == null
-            && (parent._item == null || !parent._item.Deleted)
+            && (parent._item.IsNull || !parent._item.Deleted)
             && !(Content is ContentString str && str.EndsWithHighSurrogate);
     }
 
@@ -282,7 +282,7 @@ internal readonly partial struct ItemRef
                 {
                     Debug.Assert(Parent is AbstractType);
 
-                    Item item = null;
+                    ItemRef item = default;
                     (Parent as AbstractType)?._map?.TryGetValue(ParentSub, out item);
                     o = item;
 
@@ -294,7 +294,7 @@ internal readonly partial struct ItemRef
                 else
                 {
                     Debug.Assert(Parent is AbstractType);
-                    o = (Parent as AbstractType)?._start;
+                    o = Parent is AbstractType start ? start._start : default;
                 }
 
                 Left = transaction.Doc.Store.ResolveConflict(this, left, o);
@@ -321,7 +321,7 @@ internal readonly partial struct ItemRef
 
                 if (ParentSub != null)
                 {
-                    Item item = null;
+                    ItemRef item = default;
                     (Parent as AbstractType)?._map?.TryGetValue(ParentSub, out item);
                     r = item;
 
@@ -335,7 +335,7 @@ internal readonly partial struct ItemRef
                     if (Parent is AbstractType abstractTypeParent)
                     {
                         r = abstractTypeParent._start;
-                        abstractTypeParent._start = ToItem();
+                        abstractTypeParent._start = this;
                     }
                     else
                     {
@@ -367,7 +367,7 @@ internal readonly partial struct ItemRef
                 // Set as current parent value if right == null and this is parentSub.
                 mapParent = (AbstractType)Parent;
                 previousCounted = mapParent._map.TryGetValue(ParentSub, out var previous) && !previous.Deleted;
-                mapParent._map[ParentSub] = ToItem();
+                mapParent._map[ParentSub] = this;
 
                 // This is the current attribute value of parent. Delete right.
                 if (!Left.IsNull)
@@ -395,7 +395,7 @@ internal readonly partial struct ItemRef
             // Add parent to transaction.changed.
             transaction.AddChangedTypeToTransaction(Parent as AbstractType, ParentSub);
 
-            if (((Parent as AbstractType)?._item != null && (Parent as AbstractType)._item.Deleted) || (ParentSub != null && !Right.IsNull))
+            if ((Parent is AbstractType { _item.IsNull: false } && (Parent as AbstractType)._item.Deleted) || (ParentSub != null && !Right.IsNull))
             {
                 // Delete if parent is deleted or if this is not the current attribute value of parent.
                 Delete(transaction);
@@ -439,7 +439,7 @@ internal readonly partial struct ItemRef
         while (!item.IsNull && item.Keep != value)
         {
             item.Keep = value;
-            item = (item.Parent as AbstractType)?._item;
+            item = item.Parent is AbstractType parent ? parent._item : default;
         }
     }
 
@@ -485,7 +485,7 @@ internal readonly partial struct ItemRef
                     encoder.WriteParentInfo(false);
                     encoder.WriteLeftId(parentId);
                     break;
-                case AbstractType { _item: null } root:
+                case AbstractType { _item.IsNull: true } root:
                     encoder.WriteParentInfo(true);
                     encoder.WriteString(root.FindRootTypeKey());
                     break;
@@ -555,7 +555,7 @@ internal readonly partial struct ItemRef
         // Update parent._map.
         if (rightItem.ParentSub != null && rightItem.Right.IsNull)
         {
-            (rightItem.Parent as AbstractType)._map[rightItem.ParentSub] = rightItem.ToItem();
+            (rightItem.Parent as AbstractType)._map[rightItem.ParentSub] = rightItem;
         }
 
         Length = diff;
