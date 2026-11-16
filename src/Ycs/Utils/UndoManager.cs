@@ -649,7 +649,7 @@ public class UndoManager
             while (!left.IsNull)
             {
                 var leftTrace = left;
-                while (!leftTrace.IsNull && ((AbstractType)leftTrace.Parent)._item != parentItem)
+                while (!leftTrace.IsNull && leftTrace.Parent != parentType)
                 {
                     leftTrace = leftTrace.Redone == null ? default : store.GetItemCleanStart(transaction, leftTrace.Redone.Value);
                 }
@@ -666,7 +666,7 @@ public class UndoManager
             while (!right.IsNull)
             {
                 var rightTrace = right;
-                while (!rightTrace.IsNull && ((AbstractType)rightTrace.Parent)._item != parentItem)
+                while (!rightTrace.IsNull && rightTrace.Parent != parentType)
                 {
                     rightTrace = rightTrace.Redone == null ? default : store.GetItemCleanStart(transaction, rightTrace.Redone.Value);
                 }
@@ -709,7 +709,7 @@ public class UndoManager
             }
 
             // A left neighbour in another parent would give the copy an origin that misleads remote peers.
-            if (!left.IsNull && ((AbstractType)left.Parent)._item != parentItem)
+            if (!left.IsNull && left.Parent != parentType)
             {
                 left = parentType._map.GetValueOrDefault(item.ParentSub);
             }
@@ -725,14 +725,12 @@ public class UndoManager
 
     private static bool IsParentOf(AbstractType parent, ItemRef child)
     {
-        while (!child.IsNull)
+        for (var type = child.IsNull ? null : child.Parent as AbstractType; type != null; type = type.ParentType)
         {
-            if (child.Parent == parent)
+            if (type == parent)
             {
                 return true;
             }
-
-            child = ((AbstractType)child.Parent)._item;
         }
 
         return false;

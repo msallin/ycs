@@ -194,7 +194,7 @@ internal readonly partial struct ItemRef
             && !Deleted
             && !Keep
             && Redone == null
-            && (parent._item.IsNull || !parent._item.Deleted)
+            && !parent.ItemDeleted
             && !(Content is ContentString str && str.EndsWithHighSurrogate);
     }
 
@@ -410,7 +410,7 @@ internal readonly partial struct ItemRef
             // Add parent to transaction.changed.
             transaction.AddChangedTypeToTransaction(Parent as AbstractType, ParentSub);
 
-            if ((Parent is AbstractType { _item.IsNull: false } && (Parent as AbstractType)._item.Deleted) || (ParentSub != null && !Right.IsNull))
+            if ((Parent is AbstractType { ItemDeleted: true }) || (ParentSub != null && !Right.IsNull))
             {
                 // Delete if parent is deleted or if this is not the current attribute value of parent.
                 Delete(transaction);
@@ -449,12 +449,10 @@ internal readonly partial struct ItemRef
     /// </summary>
     public void KeepItemAndParents(bool value)
     {
-        var item = this;
-
-        while (!item.IsNull && item.Keep != value)
+        if (!IsNull && Keep != value)
         {
-            item.Keep = value;
-            item = item.Parent is AbstractType parent ? parent._item : default;
+            Keep = value;
+            (Parent as AbstractType)?.KeepItemAndParents(value);
         }
     }
 
@@ -473,11 +471,11 @@ internal readonly partial struct ItemRef
         {
             switch (Parent)
             {
-                case AbstractType { _item.IsNull: true } rootType:
+                case AbstractType { IsRoot: true } rootType:
                     root = rootType.FindRootTypeKey();
                     break;
                 case AbstractType type:
-                    parentId = type._item.Id;
+                    parentId = type.ItemId;
                     break;
                 default:
                     throw new InvalidOperationException("An item without origins has no parent.");

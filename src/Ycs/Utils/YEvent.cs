@@ -421,7 +421,7 @@ public partial class YEvent
         get
         {
             var length = 0;
-            for (var child = Target; !child._item.IsNull && child != CurrentTarget; child = child._item.Parent as AbstractType)
+            for (var child = Target; !child.IsRoot && child != CurrentTarget; child = child.ParentType)
             {
                 length++;
             }
@@ -434,19 +434,20 @@ public partial class YEvent
     {
         var path = new Stack<object>();
 
-        while (!child._item.IsNull && child != parent)
+        while (!child.IsRoot && child != parent)
         {
-            if (child._item.ParentSub != null)
+            if (child.ItemParentSub != null)
             {
                 // Parent is map-ish.
-                path.Push(child._item.ParentSub);
+                path.Push(child.ItemParentSub);
             }
             else
             {
                 // Parent is array-ish.
                 int i = 0;
-                var c = (child._item.Parent as AbstractType)._start;
-                while (c != child._item && !c.IsNull)
+                var id = child.ItemId;
+                var c = child.ParentType._start;
+                while (!c.IsNull && !c.Id.Equals(id))
                 {
                     var cItem = c.AsItem;
                     if (!cItem.IsNull && !cItem.Deleted && cItem.Countable)
@@ -460,7 +461,7 @@ public partial class YEvent
                 path.Push(i);
             }
 
-            child = child._item.Parent as AbstractType;
+            child = child.ParentType;
         }
 
         return path;

@@ -67,9 +67,10 @@ internal sealed partial class StructStore
     }
 
     /// <summary>
-    /// What is wrong with the types seen earlier that have been collected since (their item is a GC struct now), or
-    /// null: a collected type holds no list, no map value, no push hint and no search marker. A type is seen when an
-    /// item reaches it; the check runs every count/256th time over more than 1,024 types.
+    /// What is wrong with the types seen earlier that have been collected since, or null: no item reaches a collected
+    /// type, so its list start, map values, push hint and search markers are checked from the type (an insert into it
+    /// after the collection links deleted items into its list, as in Yjs). A type is seen when an item reaches it; the
+    /// check runs every count/256th time over more than 1,024 types.
     /// </summary>
     private string CollectedTypeViolation()
     {
@@ -80,19 +81,14 @@ internal sealed partial class StructStore
 
         foreach (var type in _typeList)
         {
-            if (type._item.IsNull || IsAttached(type._item) || !Find(type._item.Id).IsGC)
+            if (!type.IsCollected)
             {
                 continue;
             }
 
-            if (!type._start.IsNull || type._map.Count != 0 || type._mapCount != 0)
+            if (TypeViolation(type) is { } violation)
             {
-                return "a collected type still holds its list or its map";
-            }
-
-            if (type is YArrayBase list && (!list.PushHintForTests.IsNull || list.MarkerItemsForTests.Any()))
-            {
-                return "a collected type still holds its push hint or its search markers";
+                return $"a collected type: {violation}";
             }
         }
 
@@ -101,7 +97,7 @@ internal sealed partial class StructStore
 
     private string TypeViolation(AbstractType type)
     {
-        if (!type._item.IsNull && !IsAttached(type._item) && !Find(type._item.Id).IsGC)
+        if (!type.IsCollected && !type._item.IsNull && !IsAttached(type._item))
         {
             return "the item of a live type is detached";
         }

@@ -375,6 +375,22 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
 * **Type table**: an entry is never reused; a collected type's `AbstractType` gets index -1, and its search markers
   are cleared at collection (`_start` and the markers are, since step 5: `ContentType.cs`), so a user-held collected `YArray` writes no
   marker flag through a handle that now names another type's item (H5).
+* **A collected type keeps its item's facts** (7.0e). The struct that held a collected type can merge away and its slot
+  be reused while user code holds the type (or, for a subdocument, the `YDoc`); a handle read after that names another
+  struct. So the facts that survive are copied at collection, before the struct is replaced, and read from the copy:
+
+  | holder | read after collection | kept as |
+  | --- | --- | --- |
+  | `AbstractType._item` | `Parent`, `IsRoot`; the item's id (relative positions, `WriteItem`'s parent id, `YEvent.Path`); whether it is deleted (`Transaction`, `CanExtendRun`, `Integrate`); its key (`YEvent.Path`); its keep (`KeepItemAndParents`, which continues at `ParentType`); the scope walk of `UndoManager` (`ParentType`) | `_collectedParent`, `_collectedId`, `_collectedParentSub`, `_collectedKeep`; deleted is always true |
+  | `YDoc._item` (a subdocument) | the parent document (`Load`, `Destroy`) | `_collectedParentDoc` |
+
+  Whatever sets `_item` again (`AbstractType.Integrate`, `YDoc.SetItem` from `ContentDoc.Integrate`) clears the facts: a
+  document inserted again belongs to the item integrated last. The rule: code that may meet a collected type asks
+  `IsRoot`, `ParentType`, `ItemId`, `ItemParentSub`, `ItemDeleted` or `ItemKeep`, never `_item`. A test switch
+  (`AbstractType.PoisonCollectedHandleForTests`, `YCS_POISON=1` for `Ycs.Tests`) replaces the handle after collection
+  with an unrelated live item, as a reused slot would; the suite passes with it on. What still reads a collected type's
+  `_item`, and is owed before 7.6 (the plan): the XML siblings (`NextSibling`, `PrevSibling`, `InsertAfter`) and
+  `StructStore.IntegrationPlan`'s keys (7.0c).
 
 ### 2.5 Decoding, and the operations without a document
 

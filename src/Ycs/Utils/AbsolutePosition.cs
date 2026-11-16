@@ -80,7 +80,7 @@ public class AbsolutePosition
             type = right.Parent as AbstractType;
             Debug.Assert(type != null);
 
-            if (type._item.IsNull || !type._item.Deleted)
+            if (!type.ItemDeleted)
             {
                 // Adjust position based on the left assotiation, if necessary.
                 index = (right.Deleted || !right.Countable) ? 0 : (res.diff + (assoc >= 0 ? 0 : 1));

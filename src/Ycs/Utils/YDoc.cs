@@ -117,6 +117,33 @@ public partial class YDoc
     // If this document is a subdocument - a document integrated into another document - them _item is defined.
     internal ItemRef _item;
 
+    // A collected subdocument's item is deleted and its struct can merge away, its slot be reused, while user code holds
+    // the document: ContentDoc.Gc (CollectItem) keeps the parent document, and nothing reads _item afterwards.
+    private bool _itemCollected;
+    private YDoc _collectedParentDoc;
+
+    internal void SetItem(ItemRef item)
+    {
+        _item = item;
+        _itemCollected = false;
+        _collectedParentDoc = null;
+    }
+
+    internal void CollectItem()
+    {
+        if (_itemCollected || _item.IsNull)
+        {
+            return;
+        }
+
+        _collectedParentDoc = (_item.Parent as AbstractType).Doc;
+        _itemCollected = true;
+        if (AbstractType.PoisonCollectedHandleForTests)
+        {
+            _item = AbstractType.PoisonItem();
+        }
+    }
+
     private readonly Dictionary<string, AbstractType> _share;
 
     /// <summary>
@@ -153,11 +180,10 @@ public partial class YDoc
     /// </summary>
     public void Load()
     {
-        var item = _item;
-        if (!item.IsNull && !ShouldLoad)
+        if (!ShouldLoad)
         {
-            Debug.Assert(item.Parent is AbstractType);
-            (item.Parent as AbstractType).Doc.Transact(this, static (doc, tr) => tr.SubdocsLoaded.Add(doc));
+            var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : (_item.Parent as AbstractType).Doc;
+            parentDoc?.Transact(this, static (doc, tr) => tr.SubdocsLoaded.Add(doc));
         }
         ShouldLoad = true;
     }
@@ -178,7 +204,13 @@ public partial class YDoc
         }
 
         var item = _item;
-        if (!item.IsNull)
+        if (_itemCollected)
+        {
+            _itemCollected = false;
+            _item = default;
+            _collectedParentDoc.Transact(this, static (doc, tr) => tr.SubdocsRemoved.Add(doc));
+        }
+        else if (!item.IsNull)
         {
             _item = default;
             // A collected item holds ContentDeleted already (Yjs sets a property nothing reads).
