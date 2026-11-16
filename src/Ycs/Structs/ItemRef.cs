@@ -63,6 +63,16 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal Item ToItem() => (Item)_struct;
 
+    /// <summary>The handle of the struct's live slot, -1 when it has none (<c>default</c>, a decoded struct, one that left the store).</summary>
+    internal int Handle => _struct is null ? -1 : _struct.Handle;
+
+    /// <summary>The store whose slab holds the struct's slot, or null.</summary>
+    internal StructStore SlotStore => _struct?.SlotStore;
+
+    internal void AttachSlot(StructStore store) => _struct.AttachSlot(store);
+
+    internal void TakeSlotFrom(ItemRef old) => _struct.TakeSlotFrom(old._struct);
+
     public bool IsNull
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

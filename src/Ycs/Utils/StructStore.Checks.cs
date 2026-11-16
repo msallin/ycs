@@ -138,6 +138,71 @@ internal sealed partial class StructStore
         return null;
     }
 
+    /// <summary>
+    /// What is wrong with the slots of the structs of one client, or null: a struct whose handle is not a live slot of
+    /// this store's slab (or that shares it with another: <paramref name="handles"/> holds the ones seen), or whose slot
+    /// differs from the object in clock, client, length, origins or info (the flags and the content's kind).
+    /// </summary>
+    private string SlotViolation(ClientStructs structs, HashSet<int> handles)
+    {
+        foreach (var s in structs)
+        {
+            if (s.SlotStore != this || s.Handle < 0 || !handles.Add(s.Handle))
+            {
+                return $"{s.Id.Client}:{s.Id.Clock} has no slot of its own in this store (handle {s.Handle})";
+            }
+
+            var slot = Slab.At(s.Handle);
+            if (slot.IsFree)
+            {
+                return $"{s.Id.Client}:{s.Id.Clock} names a free slot";
+            }
+
+            var left = s.IsItem ? s.LeftOrigin : null;
+            var right = s.IsItem ? s.RightOrigin : null;
+            var info = (s.IsItem ? (s.Keep ? 1 : 0) | (s.Countable ? 2 : 0) | (s.Marker ? 8 : 0) | (s.Redone != null ? 64 : 0) | s.Content.Ref << 8 : 0) | (s.Deleted ? 4 : 0);
+            if (slot.Clock != s.Id.Clock || !ClientTable.TryGetIndex(s.Id.Client, out var client) || slot.Client != client || slot.Length != s.Length)
+            {
+                return $"the slot of {s.Id.Client}:{s.Id.Clock} differs in id or length";
+            }
+
+            if (!SlotOrigin(left, slot.OriginClient, slot.OriginClock) || !SlotOrigin(right, slot.ROriginClient, slot.ROriginClock))
+            {
+                return $"the slot of {s.Id.Client}:{s.Id.Clock} differs in an origin";
+            }
+
+            if (slot.Info != info)
+            {
+                return $"the slot of {s.Id.Client}:{s.Id.Clock} holds info {slot.Info}, the struct {info}";
+            }
+        }
+
+        return null;
+    }
+
+    private bool SlotOrigin(ID? origin, int client, long clock) =>
+        origin is ID id ? ClientTable.TryGetIndex(id.Client, out var index) && index == client && id.Clock == clock : client == -1 && clock == 0;
+
+    /// <summary>
+    /// What is wrong with the slab as a whole, or null: its pages and free lists recount (<see cref="Slab.Violations"/>),
+    /// and it holds as many live slots as the store holds structs, so that no slot lives without one.
+    /// </summary>
+    private string SlabViolation()
+    {
+        var structs = 0L;
+        foreach (var list in Clients.Values)
+        {
+            structs += list.Count;
+        }
+
+        if (structs != Slab.LiveCount)
+        {
+            return $"the slab holds {Slab.LiveCount} live slots, the store {structs} structs";
+        }
+
+        return Slab.LiveCount <= 4096 || _checks % (Slab.LiveCount / 32) == 0 ? Slab.Violations().FirstOrDefault() : null;
+    }
+
     // A document inserted twice belongs to the item integrated last, possibly in another document.
     private static bool IsAttachedInOwner(ItemRef item) =>
         !item.IsNull && item.Parent is AbstractType { Doc: { } owner } && owner.Store.IsAttached(item);

@@ -18,8 +18,34 @@ internal abstract partial class AbstractStruct
         Length = length;
     }
 
-    public ID Id { get; protected set; }
-    public int Length { get; protected set; }
+    private ID _id;
+    private int _length;
+
+    public ID Id
+    {
+        get => _id;
+        protected set
+        {
+            _id = value;
+            if (Handle >= 0)
+            {
+                WriteId();
+            }
+        }
+    }
+
+    public int Length
+    {
+        get => _length;
+        protected set
+        {
+            _length = value;
+            if (Handle >= 0)
+            {
+                SlotStore.Slab.At(Handle).Length = value;
+            }
+        }
+    }
 
     public abstract bool Deleted { get; }
 

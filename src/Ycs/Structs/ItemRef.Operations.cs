@@ -76,7 +76,8 @@ internal readonly partial struct ItemRef
     /// a GC struct). Then, when <paramref name="integrate"/> is set, the struct is integrated from
     /// <paramref name="offset"/>, which is the part of its range the store holds already (an item that is integrated
     /// whole in the store is the same object; a GC struct is trimmed in place), and the reference to the store's
-    /// struct is returned. Without <paramref name="integrate"/> the struct stays outside the store (<c>default</c>).
+    /// struct is returned (the new GC struct when the parent is gone). Without <paramref name="integrate"/> the struct
+    /// stays outside the store (<c>default</c>).
     /// A <see cref="Skip"/> struct is never adopted.
     /// </summary>
     public static ItemRef Adopt(AbstractStruct decoded, Transaction transaction, int offset, bool integrate)
@@ -94,7 +95,7 @@ internal readonly partial struct ItemRef
 
         if (adopted.IsItem)
         {
-            adopted.IntegrateItem(transaction, offset);
+            return adopted.IntegrateItem(transaction, offset);
         }
         else
         {
@@ -230,7 +231,7 @@ internal readonly partial struct ItemRef
         return true;
     }
 
-    /// <summary>Marks the struct as out of every list (merged away, or replaced by a GC struct).</summary>
+    /// <summary>Marks the struct as out of every list (merged away, or replaced by a GC struct, which has taken its slot over).</summary>
     public void MarkDetached()
     {
         if (_struct is Item item)
@@ -335,7 +336,7 @@ internal readonly partial struct ItemRef
         return true;
     }
 
-    private void IntegrateItem(Transaction transaction, int offset)
+    private ItemRef IntegrateItem(Transaction transaction, int offset)
     {
         if (offset > 0)
         {
@@ -499,8 +500,12 @@ internal readonly partial struct ItemRef
         else
         {
             // Parent is not defined. Integrate GC struct instead.
-            transaction.Doc.Store.AddStruct(NewGC(Id, Length));
+            var gc = NewGC(Id, Length);
+            transaction.Doc.Store.AddStruct(gc);
+            return gc;
         }
+
+        return this;
     }
 
     public void Gc(StructStore store, bool parentGCd)
@@ -597,6 +602,8 @@ internal readonly partial struct ItemRef
         {
             rightItem.Redone = new ID(Redone.Value.Client, Redone.Value.Clock + diff);
         }
+
+        rightItem.AttachSlot(transaction.Doc.Store);
 
         // Update left (do not set leftItem.RightOrigin as it will lead to problems when syncing).
         Right = rightItem;

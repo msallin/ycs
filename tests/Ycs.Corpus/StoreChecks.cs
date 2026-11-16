@@ -15,5 +15,10 @@ public static class StoreChecks
 
         // Leaves of 2 positions, so that short lists split and merge leaves.
         ClientStructs.LeafCapacityForTests = 2;
+
+        if (Environment.GetEnvironmentVariable("YCS_SLAB_FIRST") is { Length: > 0 } first)
+        {
+            Slab.FirstPageSlotsForTests = int.Parse(first, System.Globalization.CultureInfo.InvariantCulture);
+        }
     }
 }
