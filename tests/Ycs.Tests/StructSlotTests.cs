@@ -73,4 +73,59 @@ public class StructSlotTests
         var stored = first.Store.Find(new ItemId(2, 0));
         Assert.AreEqual((true, true, Structs(first)), (stored.IsGC, stored.Handle >= 0, first.Store.Slab.LiveCount));
     }
+
+    [TestMethod]
+    public void Cleanup_MergingAdjacentItems_ResetsTheHandleOfTheMergedAwayStruct()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 }) { RunExtensionsDisabledForTests = true };
+        var text = doc.GetText("t");
+        text.Insert(0, "ab");
+        ItemRef right = default;
+        var held = -2;
+
+        doc.Transact(_ =>
+        {
+            text.Insert(2, "cd");
+            right = doc.Store.Find(new ItemId(1, 2));
+            held = right.Handle;
+        });
+
+        Assert.AreEqual((true, -1), (held >= 0, right.Handle));
+    }
+
+    [TestMethod]
+    public void Collect_ReplacingAnItemByGc_ResetsTheHandleOfTheReplacedItem()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        var array = doc.GetArray("a");
+        var outer = new YMap();
+        array.Add(outer);
+        outer["k"] = 1;
+        var item = doc.Store.Find(new ItemId(1, 1));
+        Assert.AreNotEqual(-1, item.Handle);
+
+        array.RemoveAt(0);
+
+        Assert.AreEqual(-1, item.Handle);
+    }
+
+    [TestMethod]
+    public void Cleanup_ManyMergeCycles_ReusesTheFreedSlots()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 }) { RunExtensionsDisabledForTests = true };
+        var text = doc.GetText("t");
+        text.Insert(0, "a");
+        for (var i = 0; i < 10; i++)
+        {
+            text.Insert(text.Length, "a");
+        }
+
+        var warm = doc.Store.Slab.FirstPageCapacity;
+        for (var i = 0; i < 3000; i++)
+        {
+            text.Insert(text.Length, "a");
+        }
+
+        Assert.AreEqual((warm, 1, 1), (doc.Store.Slab.FirstPageCapacity, doc.Store.Slab.PageCount, doc.Store.Slab.LiveCount));
+    }
 }

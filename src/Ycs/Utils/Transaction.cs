@@ -428,6 +428,9 @@ public sealed partial class Transaction
 
             transactionCleanups.Clear();
             doc._spareTransactionCleanups = transactionCleanups;
+
+            // Nothing that reads a struct freed in this batch is pending now.
+            doc.Store.Slab.AllowReuse();
         }
 
         error?.Throw();

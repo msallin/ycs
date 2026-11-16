@@ -41,12 +41,13 @@ public class ItemRefAdoptionTests
 
     private static List<(string Outer, string Type, string Method, string Target)> Callers(string[] names)
     {
-        var (_, ops, md) = IlScan.Read();
+        using var scan = IlScan.Read();
+        var (_, ops, md) = scan;
         var itemRef = md.TypeDefinitions.Single(h => md.GetString(md.GetTypeDefinition(h).Name) == nameof(ItemRef));
         var callers = new List<(string, string, string, string)>();
         foreach (var (type, method, outer, _, op) in ops)
         {
-            if (op.Op != OpCodes.Call && op.Op != OpCodes.Callvirt && op.Op != OpCodes.Ldftn && op.Op != OpCodes.Newobj)
+            if (op.Op != OpCodes.Call && op.Op != OpCodes.Callvirt && op.Op != OpCodes.Ldftn && op.Op != OpCodes.Ldvirtftn && op.Op != OpCodes.Ldtoken && op.Op != OpCodes.Newobj)
             {
                 continue;
             }
