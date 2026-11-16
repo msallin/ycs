@@ -17,6 +17,9 @@ internal sealed partial class StructStore
 
     internal readonly ClientTable ClientTable = new();
 
+    /// <summary>The types that items of this store name as their parent, by the index a slot holds.</summary>
+    internal readonly TypeTable Types = new();
+
     // TODO: [alekseyk] To private?
     public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
 
@@ -129,21 +132,21 @@ internal sealed partial class StructStore
 
     public void AddStruct(ItemRef str)
     {
-        if (!Clients.TryGetValue(str.Id.Client, out var structs))
+        var known = Clients.TryGetValue(str.Id.Client, out var structs);
+        if (known && structs.End != str.Id.Clock)
+        {
+            throw new Exception("Unexpected");
+        }
+
+        // The slot first: when it cannot be attached the store is unchanged, and a list never holds a struct without one.
+        str.AttachSlot(this);
+        if (!known)
         {
             structs = _capacityHints != null && _capacityHints.Remove(str.Id.Client, out var capacity) ? new ClientStructs(capacity) : new ClientStructs();
             Clients[str.Id.Client] = structs;
         }
-        else
-        {
-            if (structs.End != str.Id.Clock)
-            {
-                throw new Exception("Unexpected");
-            }
-        }
 
         structs.Add(str);
-        str.AttachSlot(this);
         Version++;
     }
 
@@ -223,7 +226,9 @@ internal sealed partial class StructStore
     {
         Version++;
         MaySplitMapValues |= item.ParentSub != null && !item.Deleted;
-        return item.SplitItem(transaction, diff);
+        var right = item.SplitItem(transaction, diff);
+        right.AttachSlot(this);
+        return right;
     }
 
     /// <inheritdoc cref="ClientStructs.FindIndex(long)"/>

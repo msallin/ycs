@@ -15,10 +15,10 @@ internal sealed partial class StructStore
     /// <summary>
     /// What <see cref="CheckAfterTransactionsForTests"/> checks: every list (<see cref="ClientStructs.Violations"/>), the
     /// links and holders around its structs (<c>ConsistencyViolation</c>), the slot of every struct (<c>SlotViolation</c>)
-    /// and the slab; a list of more than 1,024 structs only every count/256th time, so that a test stays linear in its
+    /// and the slab; the structs a transaction touched always, a list of more than 1,024 structs only every count/256th time, so that a test stays linear in its
     /// edits.
     /// </summary>
-    internal void CheckForTests()
+    internal void CheckForTests(Transaction transaction = null)
     {
         _checks++;
         HashSet<AbstractType> visited = null;
@@ -49,6 +49,11 @@ internal sealed partial class StructStore
                     throw new InvalidOperationException($"The slots of client {client} differ from its structs: {slotViolation}.");
                 }
             }
+        }
+
+        if (transaction != null && TouchedSlotViolation(transaction) is { } touched)
+        {
+            throw new InvalidOperationException($"The slots of the structs of the transaction differ from the structs: {touched}.");
         }
 
         if (SlabViolation() is { } slab)

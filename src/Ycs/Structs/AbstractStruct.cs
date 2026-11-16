@@ -49,6 +49,9 @@ internal abstract partial class AbstractStruct
 
     public abstract bool Deleted { get; }
 
+    /// <summary>The last content address of this struct.</summary>
+    public ID LastId => Length == 1 ? Id : new ID(Id.Client, Id.Clock + Length - 1);
+
     internal abstract bool MergeWith(AbstractStruct right);
 
     /// <summary>Whether <see cref="MergeWith"/> would merge <paramref name="right"/>, without changing either.</summary>

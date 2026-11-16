@@ -673,7 +673,7 @@ public sealed partial class Transaction
 
         if (StructStore.CheckAfterTransactionsForTests)
         {
-            store.CheckForTests();
+            store.CheckForTests(transaction);
         }
 
         if (!transaction._local)

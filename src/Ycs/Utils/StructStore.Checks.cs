@@ -141,39 +141,125 @@ internal sealed partial class StructStore
     /// <summary>
     /// What is wrong with the slots of the structs of one client, or null: a struct whose handle is not a live slot of
     /// this store's slab (or that shares it with another: <paramref name="handles"/> holds the ones seen), or whose slot
-    /// differs from the object in clock, client, length, origins or info (the flags and the content's kind).
+    /// differs from the object (<see cref="SlotViolation(ItemRef)"/>).
     /// </summary>
     private string SlotViolation(ClientStructs structs, HashSet<int> handles)
     {
         foreach (var s in structs)
         {
-            if (s.SlotStore != this || s.Handle < 0 || !handles.Add(s.Handle))
+            if (SlotViolation(s) is { } violation)
             {
-                return $"{s.Id.Client}:{s.Id.Clock} has no slot of its own in this store (handle {s.Handle})";
+                return violation;
             }
 
-            var slot = Slab.At(s.Handle);
-            if (slot.IsFree)
+            if (!handles.Add(s.Handle))
             {
-                return $"{s.Id.Client}:{s.Id.Clock} names a free slot";
+                return $"{s.Id.Client}:{s.Id.Clock} shares its slot with another struct (handle {s.Handle})";
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// What is wrong with the slot of one struct, or null: its handle is not a live slot of this store's slab, or the slot
+    /// differs from the object in clock, client, length, origins, info (the flags and the content's kind), the handles
+    /// of its left and right neighbours, or its parent (the index of the parent type in the type table, whose entry is
+    /// that type until it is collected).
+    /// </summary>
+    private string SlotViolation(ItemRef s)
+    {
+        if (s.SlotStore != this || s.Handle < 0)
+        {
+            return $"{s.Id.Client}:{s.Id.Clock} has no slot in this store (handle {s.Handle})";
+        }
+
+        var slot = Slab.At(s.Handle);
+        if (slot.IsFree)
+        {
+            return $"{s.Id.Client}:{s.Id.Clock} names a free slot";
+        }
+
+        var left = s.IsItem ? s.LeftOrigin : null;
+        var right = s.IsItem ? s.RightOrigin : null;
+        var info = (s.IsItem ? (s.Keep ? 1 : 0) | (s.Countable ? 2 : 0) | (s.Marker ? 8 : 0) | (s.Redone != null ? 64 : 0) | s.Content.Ref << 8 : 0) | (s.Deleted ? 4 : 0);
+        if (slot.Clock != s.Id.Clock || !ClientTable.TryGetIndex(s.Id.Client, out var client) || slot.Client != client || slot.Length != s.Length)
+        {
+            return $"the slot of {s.Id.Client}:{s.Id.Clock} differs in id or length";
+        }
+
+        if (!SlotOrigin(left, slot.OriginClient, slot.OriginClock) || !SlotOrigin(right, slot.ROriginClient, slot.ROriginClock))
+        {
+            return $"the slot of {s.Id.Client}:{s.Id.Clock} differs in an origin";
+        }
+
+        if (slot.Info != info)
+        {
+            return $"the slot of {s.Id.Client}:{s.Id.Clock} holds info {slot.Info}, the struct {info}";
+        }
+
+        var leftHandle = s.IsItem ? s.Left.Handle : -1;
+        var rightHandle = s.IsItem ? s.Right.Handle : -1;
+        if (slot.Left != leftHandle || slot.Right != rightHandle)
+        {
+            return $"the slot of {s.Id.Client}:{s.Id.Clock} links {slot.Left} and {slot.Right}, the struct {leftHandle} and {rightHandle}";
+        }
+
+        return ParentViolation(s.Id, slot.Parent, s.IsItem ? s.Parent as AbstractType : null);
+    }
+
+    private string ParentViolation(ID id, int parent, AbstractType type)
+    {
+        if (type == null)
+        {
+            return parent == -1 ? null : $"the slot of {id.Client}:{id.Clock} names parent {parent}, the struct has none";
+        }
+
+        var index = type.TableIndexForTests;
+        if (index < 0 || parent != index || index >= Types.Count || !ReferenceEquals(Types[index], type.IsCollected ? null : type))
+        {
+            return $"the slot of {id.Client}:{id.Clock} names parent {parent}, the struct's type has index {index} ({(index >= 0 && index < Types.Count && Types[index] != null ? "a live entry" : "no live entry")})";
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// What is wrong with the slots of the structs <paramref name="transaction"/> touched, which every transaction
+    /// compares whatever the length of their lists: the structs added, those of its merge list, and their neighbours in
+    /// the list (a merge changes the left one's links).
+    /// </summary>
+    private string TouchedSlotViolation(Transaction transaction)
+    {
+        foreach (var (client, structs) in Clients)
+        {
+            var from = transaction.BeforeState.TryGetValue(client, out var before) ? before : 0;
+            if (from < structs.End)
+            {
+                for (var i = structs.FindIndex(from); i < structs.Count; i++)
+                {
+                    if (SlotViolation(structs[i]) is { } violation)
+                    {
+                        return violation;
+                    }
+                }
+            }
+        }
+
+        foreach (var id in transaction._mergeStructs)
+        {
+            if (!Clients.TryGetValue(id.Client, out var structs) || id.Clock >= structs.End)
+            {
+                continue;
             }
 
-            var left = s.IsItem ? s.LeftOrigin : null;
-            var right = s.IsItem ? s.RightOrigin : null;
-            var info = (s.IsItem ? (s.Keep ? 1 : 0) | (s.Countable ? 2 : 0) | (s.Marker ? 8 : 0) | (s.Redone != null ? 64 : 0) | s.Content.Ref << 8 : 0) | (s.Deleted ? 4 : 0);
-            if (slot.Clock != s.Id.Clock || !ClientTable.TryGetIndex(s.Id.Client, out var client) || slot.Client != client || slot.Length != s.Length)
+            var index = structs.FindIndex(id.Clock);
+            for (var i = Math.Max(0, index - 1); i <= Math.Min(structs.Count - 1, index + 1); i++)
             {
-                return $"the slot of {s.Id.Client}:{s.Id.Clock} differs in id or length";
-            }
-
-            if (!SlotOrigin(left, slot.OriginClient, slot.OriginClock) || !SlotOrigin(right, slot.ROriginClient, slot.ROriginClock))
-            {
-                return $"the slot of {s.Id.Client}:{s.Id.Clock} differs in an origin";
-            }
-
-            if (slot.Info != info)
-            {
-                return $"the slot of {s.Id.Client}:{s.Id.Clock} holds info {slot.Info}, the struct {info}";
+                if (SlotViolation(structs[i]) is { } violation)
+                {
+                    return violation;
+                }
             }
         }
 

@@ -1,7 +1,5 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
-using System.Diagnostics;
-
 namespace Ycs;
 
 // The shadow of the slab: a struct of a store has one live slot, written whenever one of its scalars changes. Reads
@@ -35,7 +33,11 @@ internal abstract partial class AbstractStruct
     /// <summary><paramref name="old"/>, which this struct replaces in its list, hands over its slot: the handle stays the struct's.</summary>
     internal void TakeSlotFrom(AbstractStruct old)
     {
-        Debug.Assert(old.Handle >= 0 && Handle < 0);
+        if (old.Handle < 0 || Handle >= 0)
+        {
+            throw new InvalidOperationException("A struct takes the slot of a struct that has one, and has none itself; the store's lists are unchanged.");
+        }
+
         SlotStore = old.SlotStore;
         Handle = old.Handle;
         old.SlotStore = null;
@@ -75,10 +77,15 @@ internal abstract partial class AbstractStruct
     {
     }
 
+    private protected virtual void WriteLinks()
+    {
+    }
+
     private void WriteSlot()
     {
         WriteId();
         WriteOrigins();
+        WriteLinks();
         ref var slot = ref SlotStore.Slab.At(Handle);
         slot.Length = Length;
         slot.Info = SlotInfo;

@@ -31,6 +31,26 @@ public abstract partial class YType
     private string _collectedParentSub;
     private bool _collectedKeep;
 
+    // The index in the type table of the store the type's items are in: assigned when a slot first names the type, kept
+    // after the collection (the table's entry is cleared, the index is not reused).
+    private int _tableIndex = -1;
+
+    internal int TableIndex(TypeTable table)
+    {
+        if (_tableIndex < 0)
+        {
+            _tableIndex = table.Add(this);
+            if (_collected)
+            {
+                table.Collect(_tableIndex);
+            }
+        }
+
+        return _tableIndex;
+    }
+
+    internal int TableIndexForTests => _tableIndex;
+
     internal bool IsRoot => !_collected && _item.IsNull;
 
     /// <summary>Whether the type was collected: its facts are kept, its item may be gone.</summary>
@@ -85,6 +105,11 @@ public abstract partial class YType
         _collectedParentSub = _item.ParentSub;
         _collectedKeep = _item.Keep;
         _collected = true;
+        if (_tableIndex >= 0)
+        {
+            Doc.Store.Types.Collect(_tableIndex);
+        }
+
         if (PoisonCollectedHandleForTests)
         {
             _item = PoisonItem();
