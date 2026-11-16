@@ -8,7 +8,7 @@
 
 namespace Ycs;
 
-public class ContentType : IContentEx
+internal class ContentType : IContentEx
 {
     internal const int _ref = 7;
 

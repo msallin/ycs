@@ -671,7 +671,7 @@ public partial class Transaction
         // This is where content is actually removed from the Yjs Doc.
         if (doc.Gc)
         {
-            ds.TryGcDeleteSet(store, doc.GcFilter);
+            ds.TryGcDeleteSet(store, doc);
         }
 
         ds.TryMergeDeleteSet(store);

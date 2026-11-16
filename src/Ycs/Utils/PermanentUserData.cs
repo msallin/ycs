@@ -72,7 +72,7 @@ public sealed class PermanentUserData
         {
             foreach (var item in e.Event.Changes.Added)
             {
-                foreach (var content in item.Content.GetContent())
+                foreach (var content in item.Content)
                 {
                     if (content is byte[] encodedDs && TryDecodeDeleteSet(encodedDs) is DeleteSet decoded)
                     {
@@ -89,7 +89,7 @@ public sealed class PermanentUserData
         {
             foreach (var item in e.Event.Changes.Added)
             {
-                foreach (var content in item.Content.GetContent())
+                foreach (var content in item.Content)
                 {
                     AddClientId(content, userDescription);
                 }

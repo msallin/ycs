@@ -1,9 +1,7 @@
 name: pages
 
+# Manual only: the site is not published until the operator decides to.
 on:
-  push:
-    branches: [modernize]
-    paths: [docs/**, .github/workflows/pages.yml]
   workflow_dispatch:
 
 permissions:

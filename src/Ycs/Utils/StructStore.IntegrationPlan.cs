@@ -449,7 +449,7 @@ internal sealed partial class StructStore
             {
                 foreach (var type in deleted.Keys)
                 {
-                    if (type is { Parent: AbstractType, Content: ContentType content } && HasLiveNonValue(content.Type, doc.GcFilter, !type.Keep && doc.GcFilter(type), ranges))
+                    if (type is { Parent: AbstractType, Content: ContentType content } && HasLiveNonValue(content.Type, doc, !type.Keep && doc.GcFilter(ItemView.Detached(doc, type)), ranges))
                     {
                         throw MapValueSplit();
                     }
@@ -462,7 +462,7 @@ internal sealed partial class StructStore
                 var collected = false;
                 for (var ancestor = ParentTypeItem(part); ancestor != null; ancestor = ParentTypeItem(ancestor))
                 {
-                    collected |= !ancestor.Keep && doc.GcFilter(ancestor);
+                    collected |= !ancestor.Keep && doc.GcFilter(ItemView.Detached(doc, ancestor));
                     if (collected && deleted.ContainsKey(ancestor))
                     {
                         throw MapValueSplit();
@@ -773,7 +773,7 @@ internal sealed partial class StructStore
         /// Whether a type below a collected one holds an undeleted item that is not the value of its key and that
         /// <paramref name="ranges"/> do not delete (the collection walks every key's items, the value and those left of it).
         /// </summary>
-        private static bool HasLiveNonValue(AbstractType type, Predicate<Item> gcFilter, bool collected, List<(long Client, long Clock, long End)> ranges)
+        private static bool HasLiveNonValue(AbstractType type, YDoc doc, bool collected, List<(long Client, long Clock, long End)> ranges)
         {
             var stack = new List<(AbstractType Type, bool Collected)> { (type, collected) };
             while (stack.Count > 0)
@@ -802,7 +802,7 @@ internal sealed partial class StructStore
                 {
                     if (item.Content is ContentType child)
                     {
-                        stack.Add((child.Type, c || (!item.Keep && gcFilter(item.ToItem()))));
+                        stack.Add((child.Type, c || (!item.Keep && doc.GcFilter(ItemView.Detached(doc, item.ToItem())))));
                     }
                 }
             }

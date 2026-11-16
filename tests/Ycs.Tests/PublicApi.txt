@@ -6,11 +6,6 @@ class Ycs.AbsolutePosition
     static AbsolutePosition CreateAbsolutePosition(AbstractType type, int index, int assoc = 0)
     static AbsolutePosition CreateAbsolutePositionFromRelativePosition(RelativePosition rpos, YDoc doc, bool followUndoneDeletions = true)
     static AbsolutePosition TryCreateFromRelativePosition(RelativePosition rpos, YDoc doc, bool followUndoneDeletions = true)
-abstract class Ycs.AbstractStruct
-    ID Id { get; protected set; }
-    abstract bool Deleted { get; }
-    int Length { get; protected set; }
-    protected AbstractStruct(ID id, int length)
 class Ycs.AbstractType
     AbstractType Parent { get; }
     AbstractType()
@@ -21,7 +16,6 @@ class Ycs.AbstractType
     event System.EventHandler<YDeepEventArgs> DeepEventHandler
     event System.EventHandler<YEventArgs> EventHandler
     object GetSnapshot(string key, Snapshot snapshot)
-    protected System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, Item>> TypeMapEnumerate()
     protected System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> TypeMapEnumerateValues()
     protected bool TryTypeMapGet(string key, out object value)
     protected object TypeMapGetSnapshot(string key, Snapshot snapshot)
@@ -43,65 +37,36 @@ class Ycs.ChangesCollection
     ChangesCollection()
     System.Collections.Generic.IDictionary<string, ChangeKey> Keys
     System.Collections.Generic.IList<Delta> Delta
-    System.Collections.Generic.ISet<Item> Added
-    System.Collections.Generic.ISet<Item> Deleted
-class Ycs.ContentAny : IContent
-    IContent Copy()
-    IContent Splice(int offset)
-    System.Collections.Generic.IReadOnlyList<object> GetContent()
-    bool Countable { get; }
-    bool MergeWith(IContent right)
-    int Length { get; }
-class Ycs.ContentBinary : IContent
-    IContent Copy()
-    IContent Splice(int offset)
-    System.Collections.Generic.IReadOnlyList<object> GetContent()
-    bool Countable { get; }
-    bool MergeWith(IContent right)
-    int Length { get; }
-class Ycs.ContentEmbed : IContent
-    IContent Copy()
-    IContent Splice(int offset)
-    System.Collections.Generic.IReadOnlyList<object> GetContent()
-    bool Countable { get; }
-    bool MergeWith(IContent right)
-    int Length { get; }
-    readonly object Embed
-class Ycs.ContentFormat : IContent
-    IContent Copy()
-    IContent Splice(int offset)
-    System.Collections.Generic.IReadOnlyList<object> GetContent()
-    bool Countable { get; }
-    bool MergeWith(IContent right)
-    int Length { get; }
-    readonly object Value
-    readonly string Key
-class Ycs.ContentJson : IContent
-    IContent Copy()
-    IContent Splice(int offset)
-    System.Collections.Generic.IReadOnlyList<object> GetContent()
-    bool Countable { get; }
-    bool MergeWith(IContent right)
-    int Length { get; }
-class Ycs.ContentString : IContent
-    IContent Copy()
-    IContent Splice(int offset)
-    System.Collections.Generic.IReadOnlyList<object> GetContent()
-    bool Countable { get; }
-    bool MergeWith(IContent right)
-    int Length { get; }
-    string GetString()
-class Ycs.ContentType : IContent
-    AbstractType Type { get; }
-    IContent Copy()
-    IContent Splice(int offset)
-    System.Collections.Generic.IReadOnlyList<object> GetContent()
-    bool Countable { get; }
-    bool MergeWith(IContent right)
-    int Length { get; }
+    System.Collections.Generic.ISet<ItemView> Added
+    System.Collections.Generic.ISet<ItemView> Deleted
+sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
+    DecodedStruct <Clone>$()
+    DecodedStruct(ID Id, int Length, ItemKind Kind, ID? LeftOrigin, ID? RightOrigin, string? ParentName, ID? ParentId, string? ParentSub, System.Collections.Generic.IReadOnlyList<object?> Content, string? Text, string? FormatKey, object? FormatValue, int TypeRef, string? TypeName, string? DocGuid)
+    ID Id { get; init; }
+    ID? LeftOrigin { get; init; }
+    ID? ParentId { get; init; }
+    ID? RightOrigin { get; init; }
+    ItemKind Kind { get; init; }
+    System.Collections.Generic.IReadOnlyList<object?> Content { get; init; }
+    bool Equals(DecodedStruct? other)
+    int Length { get; init; }
+    int TypeRef { get; init; }
+    object? FormatValue { get; init; }
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(DecodedStruct? left, DecodedStruct? right)
+    static bool op_Inequality(DecodedStruct? left, DecodedStruct? right)
+    string? DocGuid { get; init; }
+    string? FormatKey { get; init; }
+    string? ParentName { get; init; }
+    string? ParentSub { get; init; }
+    string? Text { get; init; }
+    string? TypeName { get; init; }
+    void Deconstruct(out ID Id, out int Length, out ItemKind Kind, out ID? LeftOrigin, out ID? RightOrigin, out string? ParentName, out ID? ParentId, out string? ParentSub, out System.Collections.Generic.IReadOnlyList<object?> Content, out string? Text, out string? FormatKey, out object? FormatValue, out int TypeRef, out string? TypeName, out string? DocGuid)
 sealed class Ycs.DecodedUpdate
     System.Collections.Generic.IReadOnlyDictionary<long, System.Collections.Generic.IReadOnlyList<DeletedRange>> DeleteSet { get; }
-    System.Collections.Generic.IReadOnlyList<AbstractStruct> Structs { get; }
+    System.Collections.Generic.IReadOnlyList<DecodedStruct> Structs { get; }
 readonly struct Ycs.DeletedRange
     DeletedRange(long clock, long length)
     long Clock { get; }
@@ -113,36 +78,47 @@ class Ycs.Delta
     int? Retain
     object Insert
     static readonly object NullEmbed
-class Ycs.GC : AbstractStruct
-    override bool Deleted { get; }
-interface Ycs.IContent
-    IContent Copy()
-    IContent Splice(int offset)
-    System.Collections.Generic.IReadOnlyList<object> GetContent()
-    bool Countable { get; }
-    bool MergeWith(IContent right)
-    int Length { get; }
 struct Ycs.ID : System.IEquatable<ID>
     ID(long client, long clock)
     bool Equals(ID other)
     long Client
     long Clock
     static bool Equals(ID? a, ID? b)
-class Ycs.Item : AbstractStruct
-    AbstractStruct Left { get; }
-    AbstractStruct Next { get; }
-    AbstractStruct Prev { get; }
-    AbstractStruct Right { get; }
+enum Ycs.ItemKind : int
+    Any = 8
+    Binary = 3
+    Deleted = 1
+    Doc = 9
+    Embed = 5
+    Format = 6
+    GC = 0
+    Json = 2
+    Skip = 10
+    String = 4
+    Type = 7
+readonly struct Ycs.ItemView : System.IEquatable<ItemView>
+    AbstractType Parent { get; }
+    ID Id { get; }
     ID LastId { get; }
     ID? LeftOrigin { get; }
     ID? Redone { get; }
     ID? RightOrigin { get; }
-    Item SplitItem(Transaction transaction, int diff)
+    ItemKind Kind { get; }
+    ItemView? Left { get; }
+    ItemView? Right { get; }
+    System.Collections.Generic.IReadOnlyList<object> Content { get; }
+    YDoc Doc { get; }
     bool Countable { get; }
+    bool Deleted { get; }
+    bool Equals(ItemView other)
+    bool IsDefault { get; }
     bool Keep { get; }
-    bool Marker { get; }
-    object Parent { get; }
-    override bool Deleted { get; }
+    int Length { get; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(ItemView left, ItemView right)
+    static bool op_Inequality(ItemView left, ItemView right)
     string ParentSub { get; }
 sealed class Ycs.PermanentUserData
     PermanentUserData(YDoc doc, YMap storeType = null)
@@ -167,8 +143,6 @@ class Ycs.RelativePosition : System.IEquatable<RelativePosition>
     static RelativePosition Read(byte[] encodedPosition)
     static bool CompareRelativePositions(RelativePosition a, RelativePosition b)
     static byte[] EncodeRelativePosition(RelativePosition rpos)
-sealed class Ycs.Skip : AbstractStruct
-    override bool Deleted { get; }
 sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
     YDoc RestoreDocument(YDoc originDoc, YDocOptions opts = null)
     bool Equals(Snapshot other)
@@ -246,7 +220,7 @@ class Ycs.UndoManager.StackEventArgs : System.EventArgs
     object Origin { get; }
 sealed class Ycs.UndoManagerOptions
     System.Collections.Generic.ISet<object> TrackedOrigins { get; set; }
-    System.Func<Item, bool> DeleteFilter { get; set; }
+    System.Func<ItemView, bool> DeleteFilter { get; set; }
     System.Func<Transaction, bool> CaptureTransaction { get; set; }
     UndoManagerOptions()
     YDoc Doc { get; set; }
@@ -311,7 +285,6 @@ abstract class Ycs.YArrayBase : AbstractType, System.Collections.Generic.IEnumer
     protected void ForEach(System.Action<object, int, YArrayBase> fun)
     protected void ForEachSnapshot(System.Action<object, int, YArrayBase> fun, Snapshot snapshot)
     protected void InsertGenerics(Transaction transaction, int index, System.Collections.Generic.ICollection<object> content)
-    protected void InsertGenericsAfter(Transaction transaction, Item referenceItem, System.Collections.Generic.ICollection<object> content)
 class Ycs.YArrayEvent : YEvent
 class Ycs.YDeepEventArgs
     System.Collections.Generic.IList<YEvent> Events { get; }
@@ -319,7 +292,7 @@ class Ycs.YDeepEventArgs
 class Ycs.YDoc
     Snapshot CreateSnapshot()
     System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
-    System.Predicate<Item> GcFilter { get; }
+    System.Predicate<ItemView> GcFilter { get; }
     T Get<T>(string name) where T : AbstractType, new()
     UpdateLimits Limits { get; }
     YArray GetArray(string name = "")
@@ -371,7 +344,7 @@ class Ycs.YDoc
     void Transact(System.Action<Transaction> fun, object origin = null, bool local = true)
     void Transact<TState>(TState state, System.Action<TState, Transaction> action, object origin = null, bool local = true)
 class Ycs.YDocOptions
-    System.Predicate<Item> GcFilter { get; set; }
+    System.Predicate<ItemView> GcFilter { get; set; }
     UpdateLimits Limits { get; set; }
     YDocOptions()
     bool AutoLoad { get; set; }
@@ -387,8 +360,8 @@ class Ycs.YEvent
     System.Collections.Generic.IDictionary<string, ChangeKey> Keys { get; }
     System.Collections.Generic.IReadOnlyCollection<object> Path { get; }
     Transaction Transaction { get; set; }
-    bool Adds(AbstractStruct str)
-    bool Deletes(AbstractStruct str)
+    bool Adds(ItemView view)
+    bool Deletes(ItemView view)
     virtual ChangesCollection Changes { get; }
     virtual System.Collections.Generic.IList<Delta> Delta { get; }
 class Ycs.YEventArgs

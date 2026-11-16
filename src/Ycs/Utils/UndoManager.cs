@@ -41,7 +41,7 @@ public sealed class UndoManagerOptions
     public Func<Transaction, bool> CaptureTransaction { get; set; }
 
     /// <summary>An item for which this returns false is not deleted by an undo or redo. Default: every item.</summary>
-    public Func<Item, bool> DeleteFilter { get; set; }
+    public Func<ItemView, bool> DeleteFilter { get; set; }
 
     /// <summary>
     /// The origins (or origin types, compared exactly) whose transactions are captured. Default: <c>{ null }</c>.
@@ -106,7 +106,7 @@ public class UndoManager
 
     // Each entry is an AbstractType (its subtree is tracked) or a YDoc (the whole document is).
     private readonly List<object> _scope = new List<object>();
-    private readonly Func<Item, bool> _deleteFilter;
+    private readonly Func<ItemView, bool> _deleteFilter;
     private readonly Func<Transaction, bool> _captureTransaction;
     private readonly ISet<object> _trackedOrigins;
     private readonly YDoc _doc;
@@ -542,7 +542,7 @@ public class UndoManager
                     for (int i = itemsToDelete.Count - 1; i >= 0; i--)
                     {
                         var item = itemsToDelete[i];
-                        if (_deleteFilter(item.ToItem()))
+                        if (_deleteFilter(ItemView.Of(transaction.Doc, item.ToItem())))
                         {
                             item.Delete(transaction);
                             performedChange = true;

@@ -82,7 +82,7 @@ public class RunExtensionFuzzTests
     {
         var rng = new Rng(seed);
         var gc = rng.Chance(0.6);
-        Predicate<Item> filter = null;
+        Predicate<ItemView> filter = null;
         if (gc && rng.Chance(0.25))
         {
             var k = 2 + rng.Int(3);

@@ -2,7 +2,7 @@
 
 namespace Ycs;
 
-internal readonly partial struct ItemView
+public readonly partial struct ItemView
 {
     private const int MaxListed = 4;
 
@@ -16,9 +16,13 @@ internal readonly partial struct ItemView
         var doc = e.Target.Doc;
         if (changes != null)
         {
-            foreach (var item in changes.Added.Concat(changes.Deleted))
+            foreach (var view in changes.Added.Concat(changes.Deleted))
             {
-                Check(doc, item);
+                var str = doc.Store.Find(view.Id).ToStruct();
+                if (str.Id.Equals(view.Id))
+                {
+                    Check(doc, str);
+                }
             }
 
             return;

@@ -35,13 +35,15 @@ public sealed class DecodedUpdate
 {
     internal DecodedUpdate(IReadOnlyList<AbstractStruct> structs, IReadOnlyDictionary<long, IReadOnlyList<DeletedRange>> deleteSet)
     {
-        Structs = structs;
+        Raw = structs;
         DeleteSet = deleteSet;
     }
 
-    public IReadOnlyList<AbstractStruct> Structs { get; }
+    /// <summary>The structs as the store integrates them.</summary>
+    internal IReadOnlyList<AbstractStruct> Raw { get; }
 
-    internal IReadOnlyList<DecodedStruct> DecodedStructs => _decodedStructs ??= UpdateOperations.Detach(Structs);
+    /// <summary>One <see cref="DecodedStruct"/> per struct, in the order of the update, Skip and GC included.</summary>
+    public IReadOnlyList<DecodedStruct> Structs => _decodedStructs ??= UpdateOperations.Detach(Raw);
 
     private IReadOnlyList<DecodedStruct> _decodedStructs;
 
@@ -936,8 +938,8 @@ public static class UpdateOperations
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine($"Structs ({decoded.Structs.Count}):");
-        foreach (var str in decoded.Structs)
+        sb.AppendLine($"Structs ({decoded.Raw.Count}):");
+        foreach (var str in decoded.Raw)
         {
             sb.Append("  ").AppendLine(DescribeStruct(str));
         }

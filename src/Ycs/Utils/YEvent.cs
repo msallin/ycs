@@ -10,8 +10,8 @@ namespace Ycs;
 
 public class ChangesCollection
 {
-    public ISet<Item> Added;
-    public ISet<Item> Deleted;
+    public ISet<ItemView> Added;
+    public ISet<ItemView> Deleted;
     public IList<Delta> Delta;
     public IDictionary<string, ChangeKey> Keys;
 }
@@ -213,7 +213,7 @@ public partial class YEvent
     /// In contrast to <c>change.deleted</c>, this method also returns true if the struct was
     /// added and then deleted.
     /// </summary>
-    public bool Deletes(AbstractStruct str) => Deletes(ItemRef.Of(str));
+    public bool Deletes(ItemView view) => Transaction.DeleteSet.IsDeleted(view.Id);
 
     internal bool Deletes(ItemRef str)
     {
@@ -226,7 +226,7 @@ public partial class YEvent
     /// In contrast to <c>change.added</c>, this method also returns true if the struct was
     /// added and then deleted.
     /// </summary>
-    public bool Adds(AbstractStruct str) => Adds(ItemRef.Of(str));
+    public bool Adds(ItemView view) => !Transaction.BeforeState.TryGetValue(view.Id.Client, out var clock) || view.Id.Clock >= clock;
 
     internal bool Adds(ItemRef str)
     {
@@ -320,8 +320,8 @@ public partial class YEvent
         if (_changes == null)
         {
             var target = Target;
-            var added = new HashSet<Item>();
-            var deleted = new HashSet<Item>();
+            var added = new HashSet<ItemView>();
+            var deleted = new HashSet<ItemView>();
             var delta = new List<Delta>();
 
             var changes = new ChangesCollection
@@ -362,7 +362,7 @@ public partial class YEvent
                             }
 
                             lastOp.Delete += item.Length;
-                            deleted.Add(item.ToItem());
+                            deleted.Add(ItemView.Of(Target.Doc, item.ToItem()));
                         }
                         else
                         {
@@ -380,7 +380,7 @@ public partial class YEvent
                             }
 
                             (lastOp.Insert as List<object>).AddRange(item.Content.GetContent());
-                            added.Add(item.ToItem());
+                            added.Add(ItemView.Of(Target.Doc, item.ToItem()));
                         }
                         else
                         {

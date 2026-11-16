@@ -6,7 +6,7 @@
 
 namespace Ycs;
 
-public class ContentEmbed : IContentEx
+internal class ContentEmbed : IContentEx
 {
     internal const int _ref = 5;
 
