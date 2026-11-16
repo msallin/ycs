@@ -87,10 +87,11 @@ break counts per leaf, and the scans of block sums became a tree.
 ### 1.3 Step 3: the leaf order
 
 `ClientStructs.Leaves.cs`. A client's structs, starts and flags in leaves of at most 128 positions
-(`ClientStructs.LeafCapacityForTests`), each with its visible sum, break count and live-format count; from two leaves
-on a directory: the leaves, their first starts (the search by clock: the last leaf, the leaf of the last lookup, then a
-binary search), their first positions (the search by position, the same way), a has-break and a has-live-format bit
-per leaf in 64-bit words, and a Fenwick tree of the leaves' sums. Positions stay global ints; no caller changed.
+(`ClientStructs.LeafCapacity`; `LeafCapacityForTests` sets another in the tests), each with its visible sum, break
+count and live-format count; from two leaves on a directory: the leaves, their first starts (the search by clock: the
+last leaf, the leaf of the last lookup, then a binary search), their first positions (the search by position, the same
+way), a has-break and a has-live-format bit per leaf in 64-bit words, and a Fenwick tree of the leaves' sums.
+Positions stay global ints; no caller changed.
 
 * **Invariant**: the leaves in order hold the structs contiguous by clock; every leaf holds 1 to 128 structs (one leaf
   without a directory, 0 before the first `Add`); each directory entry's first start and first position, each leaf's

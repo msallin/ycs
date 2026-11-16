@@ -13,7 +13,7 @@ namespace Ycs;
 
 /// <summary>
 /// The leaf order of a client's structs (docs/design-item-layout.md, section 1.3): the structs in leaves of at most
-/// <see cref="LeafCapacityForTests"/> positions, and from two leaves on a directory of them.
+/// <see cref="LeafCapacity"/> positions, and from two leaves on a directory of them.
 /// </summary>
 /// <remarks>
 /// Positions are global (0 to <see cref="Count"/> - 1); leaf k holds the positions from its first position on. The
@@ -25,16 +25,20 @@ namespace Ycs;
 internal sealed partial class ClientStructs
 {
     /// <summary>
-    /// The leaf capacity of the lists made from now on: 128 positions (bench/Ycs.Compare/README.md, "The leaf order",
-    /// measured 64, 128 and 256). The property and corpus suites make leaves of 2 to 4, so that their short lists
-    /// split and merge leaves.
+    /// The capacity of a leaf: 128 positions (bench/Ycs.Compare/README.md, "The leaf order", measured 64, 128 and 256).
     /// </summary>
-    internal static int LeafCapacityForTests = 128;
+    internal const int LeafCapacity = 128;
+
+    /// <summary>
+    /// When not 0, the leaf capacity of the lists made from now on instead of <see cref="LeafCapacity"/> (at least 2).
+    /// The property and corpus suites make leaves of 2 to 4, so that their short lists split and merge leaves.
+    /// </summary>
+    internal static int LeafCapacityForTests;
 
     // Per list, so that lists of different leaf capacities live side by side (the differential tests compare them in
     // one process) and a change of LeafCapacityForTests leaves the lists already made intact. At least 2: a full leaf
     // splits into two that are not empty.
-    private readonly int _leafCapacity = Math.Max(2, LeafCapacityForTests);
+    private readonly int _leafCapacity = LeafCapacityForTests == 0 ? LeafCapacity : Math.Max(2, LeafCapacityForTests);
 
     // The one leaf while there is no directory; null while there is one (the directory's leaf 0 then).
     private Leaf _single;
@@ -161,22 +165,13 @@ internal sealed partial class ClientStructs
             }
         }
 
-        // The leaves before the last, from a pivot as Yjs' (the clocks are spread about evenly over the leaves).
+        // The leaves before the last: the last one that starts at or before clock (leaf 0 for a clock below the list's
+        // first start, whose own search then throws as a list without a directory does).
         var low = 0;
         var high = last - 1;
-        var mid = (int)Math.Min((clock - starts[0]) * last / (_end - starts[0]), high);
-        if (starts[mid] <= clock)
-        {
-            low = mid;
-        }
-        else
-        {
-            high = mid - 1;
-        }
-
         while (low < high)
         {
-            mid = (low + high + 1) >> 1;
+            var mid = (low + high + 1) >> 1;
             if (starts[mid] <= clock)
             {
                 low = mid;

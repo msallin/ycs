@@ -138,6 +138,29 @@ public class ClientStructsTests
             outcome);
     }
 
+    /// <summary>A list that does not start at clock 0 (as a plan's rest), with a directory: a clock below its first start is not in it.</summary>
+    [TestMethod]
+    [DataRow(2)]
+    [DataRow(3)]
+    public void FindIndex_ClockBelowTheFirstStartWithLeaves_ThrowsAsWithoutLeaves(int leaves) => WithLeafCapacity(2, () =>
+    {
+        var doc = new YDoc(new YDocOptions { Gc = false });
+        var text = doc.GetText("t");
+        for (var i = 0; i < 10 + (2 * leaves); i++)
+        {
+            text.Insert(0, "x");
+        }
+
+        // From clock 10: clocks far below the first start, as well as just below it.
+        var rest = new ClientStructs(doc.Store.Clients[doc.ClientId].ToList(), 10, 2 * leaves);
+        var hint = 1;
+
+        var outcome = (Message(() => rest.FindIndex(9)), Message(() => rest.FindIndex(0)), Message(() => rest.FindIndex(0, ref hint)));
+
+        Assert.AreEqual(("Clock 9 is not in the store.", "Clock 0 is not in the store.", "Clock 0 is not in the store."), outcome);
+        return 0;
+    });
+
     private static string Message(Func<int> find)
     {
         try

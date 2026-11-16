@@ -527,6 +527,11 @@ ycs child of c9f673a (`modernize`) and of the branch (42f0687), interleaved with
     no pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined):
     none beyond 2 %. Recorded as open question 6 of the design. It is the price of the leaf object and the two-level
     lookup, against -26 % and -29 % on the workloads that split.
+* **The pivot among the leaves** (42f0687, a first guess from the clocks as Yjs' `findIndexSS` makes) bought nothing:
+  without it `concurrent-20` 71.4 / 69.8 ms, `apply-state-v1` 53.2 / 53.1, `apply-state-v2` 58.8 / 58.7,
+  `apply-updates` 225.8 / 219.6, `trace-replay` 199.0 / 198.2 (`results/2026-11-16-no-leaf-pivot/`, `ab.py 4 6`); the
+  cursor is what counts. The leaves are searched by a plain binary search now; the search within a leaf keeps Yjs'
+  pivot (without it 10 points worse, review of step 3).
 * **Capacity** (`capacity-128-vs-64.txt`, `capacity-128-vs-256.txt`; 3 x 6 for the first two rows, 2 x 3 for the
   others): 128 is best or within noise on the split-heavy workloads and clearly best on `array-delete-random`; 64 is
   faster on the observed typing, 256 slower.
