@@ -49,7 +49,7 @@ public class RunExtensionYjsTests
 
         Sync(peer, doc);
 
-        Assert.AreEqual(("cef", "020202002801016d016b017d0184010301650401000101017402840101016381010201840201016601010200020301"), (t.ToString(), Hex(doc.EncodeStateAsUpdateV1())));
+        Assert.AreEqual(("cef", "020202002801016d016b017d0184010301650401000101017402840101016381010201840201016601010200020301"), (t.ToString(), Hex(doc.EncodeStateAsUpdate())));
     }
 
     [TestMethod]
@@ -74,7 +74,7 @@ public class RunExtensionYjsTests
             a.Insert(1, new object[] { 4 });
         });
 
-        Assert.AreEqual(("4,2,3", "01040300010101740141030001c803010300027d027d03480301017d040103010002"), (string.Join(",", a.ToArray()), Hex(doc.EncodeStateAsUpdateV1())));
+        Assert.AreEqual(("4,2,3", "01040300010101740141030001c803010300027d027d03480301017d040103010002"), (string.Join(",", a.ToArray()), Hex(doc.EncodeStateAsUpdate())));
     }
 
     [TestMethod]
@@ -210,7 +210,7 @@ public class RunExtensionYjsTests
             y.Insert(0, "b");
         });
 
-        Assert.AreEqual(("bc | ", "010201000401017801780401017902626300"), (string.Join(" | ", deltas), Hex(doc.EncodeStateAsUpdateV1())));
+        Assert.AreEqual(("bc | ", "010201000401017801780401017902626300"), (string.Join(" | ", deltas), Hex(doc.EncodeStateAsUpdate())));
     }
 
     [TestMethod]
@@ -294,7 +294,7 @@ public class RunExtensionYjsTests
             t.Insert(2, "d");
         });
 
-        return (t.ToString(), Hex(doc.EncodeStateAsUpdateV1()));
+        return (t.ToString(), Hex(doc.EncodeStateAsUpdate()));
     }
 
     [TestMethod]
@@ -384,7 +384,7 @@ public class RunExtensionYjsTests
 
         Sync(peer, doc);
 
-        return (result, Hex(doc.EncodeStateAsUpdateV1()));
+        return (result, Hex(doc.EncodeStateAsUpdate()));
     }
 
     private static (string Calls, string Updates, string V1) Filtered(Func<ItemView, bool> keep, Action<YDoc> body)
@@ -404,12 +404,12 @@ public class RunExtensionYjsTests
 
         body(doc);
 
-        return (string.Join(",", calls), string.Join(",", updates), Hex(doc.EncodeStateAsUpdateV1()));
+        return (string.Join(",", calls), string.Join(",", updates), Hex(doc.EncodeStateAsUpdate()));
     }
 
     private static YDoc Doc(long client) => new(new YDocOptions { ClientId = client });
 
-    private static void Sync(YDoc from, YDoc to) => to.ApplyUpdateV1(from.EncodeStateAsUpdateV1(to.EncodeStateVectorV1()));
+    private static void Sync(YDoc from, YDoc to) => to.ApplyUpdate(from.EncodeStateAsUpdate(to.EncodeStateVector()));
 
     private static string Hex(byte[] bytes) => Convert.ToHexStringLower(bytes);
 

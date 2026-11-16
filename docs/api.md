@@ -12,7 +12,7 @@ names; everything is in the namespace `Ycs`.
 | Transactions | implicit; `doc.transact(fn, origin)` groups changes | explicit: every call takes a `Transaction` from `doc.WriteTransaction()`, which must be committed or disposed | implicit, as in Yjs: `doc.Transact(tr => ..., origin)` groups changes |
 | Indexes | `number` (UTF-16 code units for text) | `uint` | `int` (UTF-16 code units, as in Yjs) |
 | Values | any JSON-like value, `Uint8Array`, `bigint`, shared types | tagged `Input` / `Output` classes (`Input.Long(5)`, `output.Long`) | plain CLR values from a closed set: `null`, `bool`, `int`/`long`, `double`, `BigInteger`, `string`, `byte[]`, lists, string-keyed dictionaries, shared types |
-| Update format | v1 (`applyUpdate`) by default, v2 (`applyUpdateV2`) | `ApplyV1`/`ApplyV2`, `StateDiffV1`/`StateDiffV2` | v1 by default (`ApplyUpdate`), `…V1`/`…V2` explicitly |
+| Update format | v1 (`applyUpdate`) by default, v2 (`applyUpdateV2`) | `ApplyV1`/`ApplyV2`, `StateDiffV1`/`StateDiffV2` | v1 by default, `UpdateFormat.V2` as a `format` argument (`ApplyUpdate`, `EncodeStateAsUpdate`, `YUpdate`, `Snapshot`, `SyncProtocol`) |
 | Subscriptions | `observe(f)` / `unobserve(f)`, `doc.on('update', f)` | `IDisposable Observe(Action<T>)` | typed `Observe(Action<TEvent>)` and `ObserveDeep` returning `IDisposable`; .NET events on `YDoc` (`Updated`, `UpdatedV2`, `SubdocsChanged`, the transaction events) |
 | Positions that survive edits | `RelativePosition` | `StickyIndex` | `RelativePosition` / `AbsolutePosition` |
 | Undo | `UndoManager(scope, { trackedOrigins, captureTimeout })` | `UndoManager(doc, branch, options)` | `UndoManager(scope, new UndoManagerOptions { TrackedOrigins, CaptureTimeout })` |
@@ -65,7 +65,7 @@ empty, null or -1.
 | `YEvent.Adds(view)`, `Deletes(view)` | whether the event added or deleted it, also when both |
 | `YDocOptions.GcFilter` | `Predicate<ItemView>`: true lets a deleted item be collected |
 | `UndoManagerOptions.DeleteFilter` | `Func<ItemView, bool>`: false keeps an undo or redo from deleting the item |
-| `UpdateOperations.DecodeUpdate…` | `DecodedUpdate.Structs`: `IReadOnlyList<DecodedStruct>` |
+| `YUpdate.Decode` | `DecodedUpdate.Structs`: `IReadOnlyList<DecodedStruct>` |
 
 ```csharp
 using Ycs;
@@ -89,7 +89,7 @@ list.Observe(e =>
 list.Add(["a", "b"]);
 // added Any, 2 at 1:0
 
-foreach (DecodedStruct s in UpdateOperations.DecodeUpdate(doc.EncodeStateAsUpdate()).Structs)
+foreach (DecodedStruct s in YUpdate.Decode(doc.EncodeStateAsUpdate(), format: UpdateFormat.V1).Structs)
 {
     Console.WriteLine($"{s.Kind} {s.Id.Client}:{s.Id.Clock} in {s.ParentName}: {string.Join(",", s.Content)}");
 }
@@ -124,13 +124,29 @@ set). `TryResolve(doc, out position, followUndoneDeletions: false)` gives the sa
 default follows undone deletions, which suits the user who undid. `default(RelativePosition)` names nothing: it does
 not resolve and does not encode.
 
+## Encoding
+
+`enum UpdateFormat { V1, V2 }` picks the encoding wherever bytes go in or out; v1 is the default (what every y-protocols
+provider sends), v2 is denser. Inputs are spans, and a method that decodes an input needs an array internally, so it
+copies the span into a buffer of the shared array pool for the call: no allocation beyond the pool's. A byte array
+converts to a span implicitly.
+
+| On | Members |
+| --- | --- |
+| `YDoc` | `ApplyUpdate(update, origin = null, format = V1, limits = null)` and `TryApplyUpdate` (the same, returning false for a malformed update); `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
+| `YUpdate` | `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta` record: `From` and `To` clocks of every client), `Decode` (a `DecodedUpdate`: the structs and the delete set as `DeletedRange(Clock, Length)`), `Describe` (text, for debugging). No document is needed. |
+| `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`; equality is `Equals`, and `Snapshot.Equals(a, b)` for null-safe |
+| `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree) |
+
+`Merge` of a single update returns a copy of it, unchecked, as Yjs returns it.
+
 ## Untrusted input
 
 [Untrusted input and threads](untrusted-input.md) is the short form, with the defaults of the limits. This section is
-the contract. Every API that decodes bytes — `ApplyUpdate…`, `TryApplyUpdate…`,
-`EncodeStateAsUpdate…(stateVector)`, everything in `UpdateOperations`, `Snapshot.DecodeSnapshot…`,
-`CreateDocFromSnapshot` and `Snapshot.RestoreDocument` (a snapshot that holds more than the document),
-`SnapshotContainsUpdate…`, `RelativePosition.Decode`, `RelativePosition.FromJson`, `SyncProtocol.Read…` — throws only
+the contract. Every API that decodes bytes — `ApplyUpdate`, `TryApplyUpdate`,
+`EncodeStateAsUpdate(stateVector)`, everything in `YUpdate`, `Snapshot.Decode`,
+`CreateDocFromSnapshot` (a snapshot that holds more than the document),
+`Snapshot.ContainsUpdate`, `RelativePosition.Decode`, `RelativePosition.FromJson`, `SyncProtocol.Read…` — throws only
 `YUpdateException` for malformed input, with a message that says what was wrong (never the
 input's content). The snapshot reads (`ToArraySnapshot`, `GetSnapshot`, `GetAllSnapshot`,
 `ToDelta(snapshot)`) ignore deletions of clients or clocks the document does not have, as Yjs does.
@@ -182,8 +198,8 @@ before anything changes:
   format run-length encodes its columns (Yjs writes 20,000 deleted items in 42 bytes; 131,072 deleted
   items are 42 bytes too), and a v1 struct can be as small as 4 bytes. The limit is six times Yjs'
   example and can be set to anything above zero. The same limit, as their `limits` argument, bounds
-  each input of the `UpdateOperations` functions; `ConvertUpdateFormatV2ToV1`, `DecodeUpdateV2` and
-  `DescribeUpdateV2` expand a v2 update to the size of its structs (131,072 structs are about 0.8 MiB
+  each input of the `YUpdate` functions; `Convert` from v2 to v1, `Decode` and
+  `Describe` of a v2 update expand a v2 update to the size of its structs (131,072 structs are about 0.8 MiB
   of v1, 30 MiB decoded, and a description of 11 million characters);
 * garbage collection: in a document that collects garbage, an update whose cleanup would collect a deleted type
   in which a key holds two live items is rejected (Yjs integrates it and then throws "Unexpected case" from

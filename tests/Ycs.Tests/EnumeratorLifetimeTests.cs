@@ -38,7 +38,7 @@ public class EnumeratorLifetimeTests
         var b = new YDoc(new YDocOptions { ClientId = 2 });
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         b.GetArray("a").Insert(3, new object[] { "y" });
-        return b.EncodeStateAsUpdate(a.EncodeStateVectorV1());
+        return b.EncodeStateAsUpdate(a.EncodeStateVector());
     }
 
     [TestMethod]

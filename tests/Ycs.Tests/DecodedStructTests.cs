@@ -71,16 +71,16 @@ public class DecodedStructTests
             doc.GetArray("a").Insert(0, new List<object> { i });
         }
 
-        var gapped = UpdateOperations.MergeUpdatesV2(new[] { updates[0], updates[2] });
+        var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);
 
-        var structs = UpdateOperations.DecodeUpdateV2(gapped).Structs;
+        var structs = YUpdate.Decode(gapped, format: UpdateFormat.V2).Structs;
 
         Assert.AreEqual((ItemKind.Skip, 1), structs.Where(s => s.Kind == ItemKind.Skip).Select(s => (s.Kind, s.Length)).Single());
     }
 
     private static IEnumerable<DecodedStruct> Decodable(byte[] update)
     {
-        foreach (var decode in new Func<byte[], DecodedUpdate>[] { u => UpdateOperations.DecodeUpdate(u), u => UpdateOperations.DecodeUpdateV2(u) })
+        foreach (var decode in new Func<byte[], DecodedUpdate>[] { u => YUpdate.Decode(u, format: UpdateFormat.V1), u => YUpdate.Decode(u, format: UpdateFormat.V2) })
         {
             DecodedUpdate decoded = null;
             try
@@ -110,7 +110,7 @@ public class DecodedStructTests
                 DecodedUpdate decoded;
                 try
                 {
-                    decoded = v2 ? UpdateOperations.DecodeUpdateV2(input) : UpdateOperations.DecodeUpdate(input);
+                    decoded = v2 ? YUpdate.Decode(input, format: UpdateFormat.V2) : YUpdate.Decode(input, format: UpdateFormat.V1);
                 }
                 catch (YUpdateException e)
                 {
@@ -270,7 +270,7 @@ public class DecodedStructTests
             peer.GetText("t").Insert(1, "peer");
             doc.ApplyUpdate(peer.EncodeStateAsUpdate());
             result.Add(doc.EncodeStateAsUpdate());
-            result.Add(doc.EncodeStateAsUpdateV2());
+            result.Add(doc.EncodeStateAsUpdate(format: UpdateFormat.V2));
         }
 
         var gapped = new YDoc(new YDocOptions { ClientId = 1 });
@@ -281,7 +281,7 @@ public class DecodedStructTests
             gapped.GetArray("a").Insert(0, new List<object> { i });
         }
 
-        result.Add(UpdateOperations.MergeUpdatesV2(new[] { updates[0], updates[2] }));
+        result.Add(YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2));
         return result;
     }
 

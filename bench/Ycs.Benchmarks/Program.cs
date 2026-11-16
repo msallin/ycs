@@ -103,8 +103,8 @@ internal static class Program
 
             Check(text.ToString(), endContent);
             updates = collected;
-            fullV1 = doc.EncodeStateAsUpdateV1();
-            fullV2 = doc.EncodeStateAsUpdateV2();
+            fullV1 = doc.EncodeStateAsUpdate();
+            fullV2 = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
         });
 
         Console.WriteLine($"  {updates.Count} updates, {updates.Sum(u => (long)u.Length)} bytes; doc v1 {fullV1.Length} bytes, v2 {fullV2.Length} bytes");
@@ -112,26 +112,26 @@ internal static class Program
         Measure("apply-incr", runs, () =>
         {
             var doc = new YDoc();
-            foreach (var u in updates) doc.ApplyUpdateV1(u);
+            foreach (var u in updates) doc.ApplyUpdate(u);
             Check(doc.GetText("text").ToString(), endContent);
         });
 
         Func<YDoc> loaded = () =>
         {
             var doc = new YDoc();
-            doc.ApplyUpdateV1(fullV1);
+            doc.ApplyUpdate(fullV1);
             return doc;
         };
 
-        Measure("encode-v1", runs, null, loaded, d => { for (int i = 0; i < 10; i++) _ = d.EncodeStateAsUpdateV1(); });
-        Measure("encode-v2", runs, null, loaded, d => { for (int i = 0; i < 10; i++) _ = d.EncodeStateAsUpdateV2(); });
+        Measure("encode-v1", runs, null, loaded, d => { for (int i = 0; i < 10; i++) _ = d.EncodeStateAsUpdate(); });
+        Measure("encode-v2", runs, null, loaded, d => { for (int i = 0; i < 10; i++) _ = d.EncodeStateAsUpdate(format: UpdateFormat.V2); });
 
         Measure("decode-v1", runs, () =>
         {
             for (int i = 0; i < 10; i++)
             {
                 var doc = new YDoc();
-                doc.ApplyUpdateV1(fullV1);
+                doc.ApplyUpdate(fullV1);
             }
         });
 
@@ -140,7 +140,7 @@ internal static class Program
             for (int i = 0; i < 10; i++)
             {
                 var doc = new YDoc();
-                doc.ApplyUpdateV2(fullV2);
+                doc.ApplyUpdate(fullV2, format: UpdateFormat.V2);
             }
         });
 
@@ -157,7 +157,7 @@ internal static class Program
         {
             if (t == (txnStarts.Count - 1) / 2)
             {
-                halfVector = doc.EncodeStateVectorV1();
+                halfVector = doc.EncodeStateVector();
             }
 
             doc.Transact(tr =>
@@ -172,17 +172,17 @@ internal static class Program
         }
 
         Check(text.ToString(), endContent);
-        var v1 = doc.EncodeStateAsUpdateV1();
-        var v2 = doc.EncodeStateAsUpdateV2();
+        var v1 = doc.EncodeStateAsUpdate();
+        var v2 = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
         var loaded = new YDoc();
-        loaded.ApplyUpdateV1(v1);
+        loaded.ApplyUpdate(v1);
         Action op = phase switch
         {
-            "encode-v1" => () => loaded.EncodeStateAsUpdateV1(),
-            "encode-v2" => () => loaded.EncodeStateAsUpdateV2(),
-            "encode-diff" => () => loaded.EncodeStateAsUpdateV1(halfVector),
-            "decode-v1" => () => new YDoc().ApplyUpdateV1(v1),
-            "decode-v2" => () => new YDoc().ApplyUpdateV2(v2),
+            "encode-v1" => () => loaded.EncodeStateAsUpdate(),
+            "encode-v2" => () => loaded.EncodeStateAsUpdate(format: UpdateFormat.V2),
+            "encode-diff" => () => loaded.EncodeStateAsUpdate(halfVector),
+            "decode-v1" => () => new YDoc().ApplyUpdate(v1),
+            "decode-v2" => () => new YDoc().ApplyUpdate(v2, format: UpdateFormat.V2),
             _ => throw new ArgumentException("unknown phase " + phase),
         };
 

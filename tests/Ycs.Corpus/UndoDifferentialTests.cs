@@ -172,7 +172,7 @@ internal static class UndoReplay
     {
         // A file written with FULL=1 holds whole states instead of their hashes.
         var expectedState = step.GetProperty("state").GetString();
-        var state = Convert.ToHexStringLower(doc.EncodeStateAsUpdateV1());
+        var state = Convert.ToHexStringLower(doc.EncodeStateAsUpdate());
         if ((expectedState.Length == 16 ? Convert.ToHexStringLower(SHA256.HashData(Convert.FromHexString(state)))[..16] : state) != expectedState)
         {
             return expectedState.Length == 16 ? "state: the document differs" : $"state: the document differs: Yjs {expectedState}, Ycs {state}";

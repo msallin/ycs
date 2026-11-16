@@ -38,12 +38,12 @@ public class DeepNestingTests
         var fromV1 = new YDoc(new YDocOptions { ClientId = 9 });
         var fromV2 = new YDoc(new YDocOptions { ClientId = 9 });
 
-        fromV1.ApplyUpdateV1(v1);
-        fromV2.ApplyUpdateV2(v2);
+        fromV1.ApplyUpdate(v1);
+        fromV2.ApplyUpdate(v2, format: UpdateFormat.V2);
 
-        Assert.AreEqual(Convert.ToBase64String(v1), Convert.ToBase64String(fromV1.EncodeStateAsUpdateV1()));
-        Assert.AreEqual(Convert.ToBase64String(v2), Convert.ToBase64String(fromV2.EncodeStateAsUpdateV2()));
-        Assert.AreEqual(Convert.ToBase64String(v1), Convert.ToBase64String(fromV2.EncodeStateAsUpdateV1()));
+        Assert.AreEqual(Convert.ToBase64String(v1), Convert.ToBase64String(fromV1.EncodeStateAsUpdate()));
+        Assert.AreEqual(Convert.ToBase64String(v2), Convert.ToBase64String(fromV2.EncodeStateAsUpdate(format: UpdateFormat.V2)));
+        Assert.AreEqual(Convert.ToBase64String(v1), Convert.ToBase64String(fromV2.EncodeStateAsUpdate()));
     }
 
     [TestMethod]
@@ -55,7 +55,7 @@ public class DeepNestingTests
         var error = OnSmallStack(() =>
         {
             var doc = new YDoc(new YDocOptions { ClientId = 9 });
-            doc.ApplyUpdateV1(v1);
+            doc.ApplyUpdate(v1);
             _ = doc.GetMap("m").ToJson();
             _ = doc.GetArray("a").ToJson();
             _ = doc.GetText("t").ToDelta();
@@ -63,7 +63,7 @@ public class DeepNestingTests
             doc.GetArray("a").Delete(0, doc.GetArray("a").Length);
             doc.GetText("t").Delete(0, doc.GetText("t").Length);
             doc.GetXmlFragment("x").Delete(0, doc.GetXmlFragment("x").Length);
-            _ = doc.EncodeStateAsUpdateV2();
+            _ = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
         });
 
         Assert.IsNull(error, error?.ToString());
@@ -75,7 +75,7 @@ public class DeepNestingTests
         var update = Encoded(doc => doc.GetMap("m").Set("v", NestedValue(UpdateLimits.Default.MaxDepth + 1)));
         var doc = new YDoc();
 
-        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(update));
+        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(update));
 
         StringAssert.Contains(e.Message, "UpdateLimits.MaxDepth");
         Assert.AreEqual(0, doc.GetMap("m").Count);
@@ -87,7 +87,7 @@ public class DeepNestingTests
         var update = Encoded(doc => NestMaps(doc.GetMap("m"), UpdateLimits.Default.MaxDepth + 1));
         var doc = new YDoc();
 
-        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV2(UpdateOperations.ConvertUpdateFormatV1ToV2(update, UpdateLimits.Unlimited)));
+        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(YUpdate.Convert(update, UpdateFormat.V1, UpdateFormat.V2, limits: UpdateLimits.Unlimited), format: UpdateFormat.V2));
 
         StringAssert.Contains(e.Message, "UpdateLimits.MaxDepth");
         Assert.AreEqual(0, doc.GetMap("m").Count);
@@ -132,7 +132,7 @@ public class DeepNestingTests
                 thrown = e;
             }
 
-            Assert.AreEqual(Convert.ToBase64String(new YDoc().EncodeStateAsUpdateV1()), Convert.ToBase64String(doc.EncodeStateAsUpdateV1()));
+            Assert.AreEqual(Convert.ToBase64String(new YDoc().EncodeStateAsUpdate()), Convert.ToBase64String(doc.EncodeStateAsUpdate()));
         });
 
         Assert.IsNull(error, error?.ToString());
@@ -152,7 +152,7 @@ public class DeepNestingTests
             Apply(doc, update, v2, UpdateLimits.Unlimited);
             _ = doc.GetMap("m").ToJson();
             _ = doc.GetText("t").ToDelta();
-            encoded = v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1();
+            encoded = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
             doc.GetMap("m").Clear();
             doc.GetText("t").Delete(0, doc.GetText("t").Length);
         });
@@ -197,11 +197,11 @@ public class DeepNestingTests
     {
         if (v2)
         {
-            doc.ApplyUpdateV2(update, limits: limits);
+            doc.ApplyUpdate(update, format: UpdateFormat.V2, limits: limits);
         }
         else
         {
-            doc.ApplyUpdateV1(update, limits: limits);
+            doc.ApplyUpdate(update, limits: limits);
         }
     }
 
@@ -217,7 +217,7 @@ public class DeepNestingTests
         // One transaction: a transaction per level would walk the parents of the changed type each time (as Yjs'
         // callTypeObservers does), quadratic in the depth.
         doc.Transact(_ => build(doc));
-        return v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1();
+        return v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
     }
 
     // Lists and dictionaries in turn, `depth` levels below the top.

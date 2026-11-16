@@ -4,7 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+#nullable enable
 
 namespace Ycs;
 
@@ -22,7 +22,7 @@ public partial class YDoc
     ///   var restored = doc.CreateDocFromSnapshot(snapshot);
     ///   // restored.GetText().ToString() == "world!"
     /// </example>
-    public YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc newDoc = null)
+    public YDoc CreateDocFromSnapshot(Snapshot snapshot, YDoc? newDoc = null)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
@@ -35,7 +35,7 @@ public partial class YDoc
 
         var update = Snapshot.EncodeRestoreUpdateV2(this, snapshot.DeleteSet, snapshot.StateVector);
         var target = newDoc ?? new YDoc();
-        target.ApplyUpdateV2(update, transactionOrigin: "snapshot");
+        target.ApplyUpdate(update, "snapshot", UpdateFormat.V2);
         return target;
     }
 }

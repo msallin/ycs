@@ -42,7 +42,7 @@ public class SubdocumentParityTests
 
         Assert.AreEqual(
             ("AQEBACkBAW0BcwJnMXYAAA==", "AAABAQAAASkIBG1zZzFBAAIBAQAAAQEAdgAA"),
-            (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())));
+            (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))));
     }
 
     [TestMethod]

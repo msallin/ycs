@@ -23,7 +23,7 @@ internal static class GcSurvive
             text.Insert(0, "x");
         }
 
-        var state = source.EncodeStateAsUpdateV1();
+        var state = source.EncodeStateAsUpdate();
         for (var warm = 0; warm < 3; warm++)
         {
             Load(state);
@@ -45,7 +45,7 @@ internal static class GcSurvive
     private static WeakReference Load(byte[] state)
     {
         var doc = new YDoc();
-        doc.ApplyUpdateV1(state, null, UpdateLimits.Unlimited);
+        doc.ApplyUpdate(state, null, limits: UpdateLimits.Unlimited);
         return new WeakReference(doc);
     }
 }

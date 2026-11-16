@@ -3,7 +3,7 @@ using Ycs;
 var a = new YDoc(new YDocOptions { ClientId = 1 });
 a.GetText("text").Insert(0, "Hello, world");
 a.GetMap("map").Set("n", 42L);
-var update = a.EncodeStateAsUpdateV1();
+var update = a.EncodeStateAsUpdate();
 
 var b = new YDoc(new YDocOptions { ClientId = 2 });
 var events = 0;

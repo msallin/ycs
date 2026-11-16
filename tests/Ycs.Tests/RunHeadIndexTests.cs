@@ -45,11 +45,11 @@ public class RunHeadIndexTests
         Insert(tb, 5, "D");
         Sync(b, a);
         Delete(tb, 0, 2);
-        var diff = b.EncodeStateAsUpdateV1(a.EncodeStateVectorV1());
+        var diff = b.EncodeStateAsUpdate(a.EncodeStateVector());
         a.Transact(_ =>
         {
             Insert(ta, 5, "p");
-            a.ApplyUpdateV1(diff);
+            a.ApplyUpdate(diff);
             Insert(ta, 5, "q");
         });
 
@@ -222,7 +222,7 @@ public class RunHeadIndexTests
         }
 
         // b integrates the formats before it asks for the text.
-        b.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
         var tb = b.GetText("t");
         for (var k = 0; k < 60; k++)
         {
@@ -246,7 +246,7 @@ public class RunHeadIndexTests
             log.Append(" # ").Append(lookups).Append(" # ").Append(markers).Append('\n');
         }
 
-        log.Append(Convert.ToHexString(b.EncodeStateAsUpdateV1()));
+        log.Append(Convert.ToHexString(b.EncodeStateAsUpdate()));
         return log.ToString();
     }
 
@@ -339,11 +339,11 @@ public class RunHeadIndexTests
                     // The first window: the other client's update applied inside a local transaction.
                     Sync(_a, _b);
                     Insert(_tb, _random.Next(Length(_tb) + 1), "S");
-                    var diff = _b.EncodeStateAsUpdateV1(_a.EncodeStateVectorV1());
+                    var diff = _b.EncodeStateAsUpdate(_a.EncodeStateVector());
                     _a.Transact(_ =>
                     {
                         LocalEdit();
-                        _a.ApplyUpdateV1(diff);
+                        _a.ApplyUpdate(diff);
                         LocalEdit();
                     });
                     break;
@@ -453,7 +453,7 @@ public class RunHeadIndexTests
 
     private static string Content(YType type) => type is YText text ? text.ToString() : string.Join(",", ((YArray)type).ToArray());
 
-    private static void Sync(YDoc from, YDoc to) => to.ApplyUpdateV1(from.EncodeStateAsUpdateV1(to.EncodeStateVectorV1()));
+    private static void Sync(YDoc from, YDoc to) => to.ApplyUpdate(from.EncodeStateAsUpdate(to.EncodeStateVector()));
 
     private static string Lookups(YDoc doc)
     {

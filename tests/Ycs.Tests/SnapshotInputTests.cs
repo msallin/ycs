@@ -19,7 +19,7 @@ public class SnapshotInputTests
     {
         var other = Doc(2, "xy");
         other.GetText("t").Delete(0, 1);
-        return Snapshot.DecodeSnapshot(other.CreateSnapshot().EncodeSnapshot());
+        return Snapshot.Decode(other.CreateSnapshot().Encode());
     }
 
     [TestMethod]
@@ -31,12 +31,12 @@ public class SnapshotInputTests
     }
 
     [TestMethod]
-    public void RestoreDocument_ClockBeyondTheDocument_ThrowsYUpdateException()
+    public void CreateDocFromSnapshot_ClockBeyondTheDocument_ThrowsYUpdateException()
     {
         var later = Doc(1, "abc");
         var earlier = Doc(1, "ab");
 
-        Assert.ThrowsExactly<YUpdateException>(() => Snapshot.DecodeSnapshot(later.CreateSnapshot().EncodeSnapshot()).RestoreDocument(earlier));
+        Assert.ThrowsExactly<YUpdateException>(() => earlier.CreateDocFromSnapshot(Snapshot.Decode(later.CreateSnapshot().Encode())));
     }
 
     [TestMethod]

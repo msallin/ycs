@@ -35,9 +35,9 @@ public class UpdateOperationsStagedTests
         // of client 1's string: a replacement written there would not join.
         var input = Update(true, (2, 0, [Text("q\uD83D")]), (3, 0, [Text("\uDE00y")]), (1, 0, [Text("ab😀")]));
 
-        var diff = UpdateOperations.DiffUpdateV2(input, StateVector((3, 100), (1, 3)));
+        var diff = YUpdate.Diff(input, StateVector((3, 100), (1, 3)), format: UpdateFormat.V2);
 
-        var texts = UpdateOperations.DecodeUpdateV2(diff).Structs.Select(s => (s.Id, s.Text, s.LeftOrigin)).ToList();
+        var texts = YUpdate.Decode(diff, format: UpdateFormat.V2).Structs.Select(s => (s.Id, s.Text, s.LeftOrigin)).ToList();
         CollectionAssert.AreEqual(
             new[] { (new ItemId(2, 0), "q\uD83D", (ItemId?)new ItemId(9, 0)), (new ItemId(1, 3), "\uDE00", (ItemId?)new ItemId(1, 2)) },
             texts);
@@ -86,7 +86,7 @@ public class UpdateOperationsStagedTests
     public void DecodedStruct_AnyContent_IsAReadOnlyViewAndByteArraysAreCopiedOnRead()
     {
         var values = DecodedStructTests.RichUpdates()
-            .SelectMany(u => UpdateOperations.DecodeUpdate(u).Structs)
+            .SelectMany(u => YUpdate.Decode(u, format: UpdateFormat.V1).Structs)
             .Where(s => s.Kind == ItemKind.Any)
             .Select(s => s.Content)
             .ToList();
@@ -127,10 +127,10 @@ public class UpdateOperationsStagedTests
     }
 
     private static byte[] Merge(bool v2, params byte[][] updates) =>
-        v2 ? UpdateOperations.MergeUpdatesV2(updates) : UpdateOperations.MergeUpdates(updates);
+        v2 ? YUpdate.Merge([.. updates], format: UpdateFormat.V2) : YUpdate.Merge([.. updates], format: UpdateFormat.V1);
 
     private static IReadOnlyList<DecodedStruct> Decode(bool v2, byte[] update) =>
-        (v2 ? UpdateOperations.DecodeUpdateV2(update) : UpdateOperations.DecodeUpdate(update)).Structs;
+        (v2 ? YUpdate.Decode(update, format: UpdateFormat.V2) : YUpdate.Decode(update, format: UpdateFormat.V1)).Structs;
 
     private static byte[] StateVector(params (long Client, long Clock)[] entries)
     {

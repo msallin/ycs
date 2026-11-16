@@ -104,7 +104,7 @@ public class StructStagingTests
             doc.GetArray("a").Insert(0, new List<object> { i });
         }
 
-        var gapped = UpdateOperations.MergeUpdatesV2(new[] { updates[0], updates[2] });
+        var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);
         var table = new StagingTable();
         var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited), staging: table);
         while (cursor.NextStaged() >= 0)

@@ -23,7 +23,7 @@ public class CoreParityTests
     [TestMethod]
     public void MergeUpdates_GcFollowedByItem_KeepsTheItem()
     {
-        var merged = UpdateOperations.MergeUpdates([B(GcThenItemFirst), B(GcThenItemSecond)]);
+        var merged = YUpdate.Merge([B(GcThenItemFirst), B(GcThenItemSecond)], format: UpdateFormat.V1);
 
         Assert.AreEqual("AQMHACEBAW0BYQEAAwQBAXQFaGVsbG8BBwEABA==", S(merged));
     }
@@ -31,14 +31,14 @@ public class CoreParityTests
     [TestMethod]
     public void MergeUpdatesV2_GcFollowedByItem_KeepsTheItem()
     {
-        var merged = UpdateOperations.MergeUpdatesV2([
-            UpdateOperations.ConvertUpdateFormatV1ToV2(B(GcThenItemFirst)),
-            UpdateOperations.ConvertUpdateFormatV1ToV2(B(GcThenItemSecond)),
-        ]);
+        var merged = YUpdate.Merge([
+            YUpdate.Convert(B(GcThenItemFirst), UpdateFormat.V1, UpdateFormat.V2),
+            YUpdate.Convert(B(GcThenItemSecond), UpdateFormat.V1, UpdateFormat.V2),
+        ], format: UpdateFormat.V2);
 
         Assert.AreEqual(
             "AQMHACEBAW0BYQEAAwQBAXQFaGVsbG8BBwEABA==",
-            S(UpdateOperations.ConvertUpdateFormatV2ToV1(merged)));
+            S(YUpdate.Convert(merged, UpdateFormat.V2, UpdateFormat.V1)));
     }
 
     [TestMethod]
@@ -128,7 +128,7 @@ public class CoreParityTests
 
         Assert.AreEqual(
             ("AgEVAAQBAXQBQgEUA4QUAgQgdHdvARQBAAE=", "AAADFVQAAQQAAwQAhAoGdEIgdHdvQQAEAQEAAAIBAAEDARQBAAA="),
-            (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())));
+            (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))));
     }
 
     [TestMethod]
@@ -149,10 +149,10 @@ public class CoreParityTests
         var v2 = new System.Buffers.ArrayBufferWriter<byte>();
 
         doc.EncodeStateAsUpdate(v1);
-        doc.EncodeStateAsUpdateV2(v2);
+        doc.EncodeStateAsUpdate(v2, format: UpdateFormat.V2);
 
         Assert.AreEqual(
-            (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())),
+            (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))),
             (S(v1.WrittenSpan.ToArray()), S(v2.WrittenSpan.ToArray())));
     }
 
@@ -202,9 +202,9 @@ public class CoreParityTests
     {
         var doc = new YDoc();
 
-        doc.ApplyUpdateV2(B(update));
+        doc.ApplyUpdate(B(update), format: UpdateFormat.V2);
 
-        Assert.AreEqual((stateVector, update), (S(doc.EncodeStateVector()), S(doc.EncodeStateAsUpdateV2())));
+        Assert.AreEqual((stateVector, update), (S(doc.EncodeStateVector()), S(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))));
     }
 
     [TestMethod]
@@ -212,9 +212,9 @@ public class CoreParityTests
     {
         var update = B("AAAESZ6cAQAFAAOcnAEDAQBBAwFhAQEBAARBnpwBAaCcAQABCQEAn5wB");
 
-        var v1 = UpdateOperations.ConvertUpdateFormatV2ToV1(update);
+        var v1 = YUpdate.Convert(update, UpdateFormat.V2, UpdateFormat.V1);
 
-        Assert.AreEqual(S(update), S(UpdateOperations.ConvertUpdateFormatV1ToV2(v1)));
+        Assert.AreEqual(S(update), S(YUpdate.Convert(v1, UpdateFormat.V1, UpdateFormat.V2)));
     }
 
     // Client 2^53 - 1: t.insert(0, 'max'), t.delete(0, 1), m.set('a', 1), m.set('a', 2).
@@ -230,7 +230,7 @@ public class CoreParityTests
 
         if (v2)
         {
-            doc.ApplyUpdateV2(B(MaxClientV2));
+            doc.ApplyUpdate(B(MaxClientV2), format: UpdateFormat.V2);
         }
         else
         {
@@ -239,7 +239,7 @@ public class CoreParityTests
 
         Assert.AreEqual(
             ("ax", "Af////////8PBQ==", MaxClientV1, MaxClientV2),
-            (doc.GetText("t").ToString(), S(doc.EncodeStateVector()), S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())));
+            (doc.GetText("t").ToString(), S(doc.EncodeStateVector()), S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))));
     }
 
     [TestMethod]
@@ -252,7 +252,7 @@ public class CoreParityTests
         doc.GetMap("m").Set("a", 1);
         doc.GetMap("m").Set("a", 2);
 
-        Assert.AreEqual((MaxClientV1, MaxClientV2), (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdateV2())));
+        Assert.AreEqual((MaxClientV1, MaxClientV2), (S(doc.EncodeStateAsUpdate()), S(doc.EncodeStateAsUpdate(format: UpdateFormat.V2))));
     }
 
     [TestMethod]
@@ -260,11 +260,11 @@ public class CoreParityTests
     {
         var update = B("AQGFgICAgCAABAEBdANiaWcA");
 
-        var v2 = UpdateOperations.ConvertUpdateFormatV1ToV2(update);
+        var v2 = YUpdate.Convert(update, UpdateFormat.V1, UpdateFormat.V2);
 
         Assert.AreEqual(
             (S(update), "AYWAgICAIAM="),
-            (S(UpdateOperations.MergeUpdates([update, UpdateOperations.ConvertUpdateFormatV2ToV1(v2)])), S(UpdateOperations.EncodeStateVectorFromUpdateV2(v2))));
+            (S(YUpdate.Merge([update, YUpdate.Convert(v2, UpdateFormat.V2, UpdateFormat.V1)], format: UpdateFormat.V1)), S(YUpdate.EncodeStateVector(v2, format: UpdateFormat.V2))));
     }
 
     [TestMethod]
@@ -282,7 +282,7 @@ public class CoreParityTests
         // The snapshot deletes "hello" and clocks of a client 6 this document has never seen.
         var doc = new YDoc(new YDocOptions { Gc = false });
         doc.ApplyUpdate(B("AQEFAAQBAXQLaGVsbG8gd29ybGQA"));
-        var snapshot = Snapshot.DecodeSnapshot(B("AgYBAAEFAQAFAgYDBQs="));
+        var snapshot = Snapshot.Decode(B("AgYBAAEFAQAFAgYDBQs="));
 
         var delta = doc.GetText("t").ToDelta(snapshot);
 
@@ -352,7 +352,7 @@ public class CoreParityTests
     [TestMethod]
     public void MergeUpdates_MoreThan16UpdatesWithTies_PicksTheDecodersAsYjs()
     {
-        var merged = UpdateOperations.MergeUpdates(GrowingTextStates.Select(B).ToList());
+        var merged = YUpdate.Merge([.. GrowingTextStates.Select(B).ToList()], format: UpdateFormat.V1);
 
         Assert.AreEqual("AQYeAAQBAXQBYYQeAAdiY2RlZmdohB4HB2lqa2xtbm+EHg4HcHFyc3R1doQeFQF3hB4WAXgA", S(merged));
     }
@@ -360,7 +360,7 @@ public class CoreParityTests
     [TestMethod]
     public void MergeUpdatesV2_MoreThan16UpdatesWithTies_PicksTheDecodersAsYjs()
     {
-        var merged = UpdateOperations.MergeUpdatesV2(GrowingTextStates.Select(u => UpdateOperations.ConvertUpdateFormatV1ToV2(B(u))).ToList());
+        var merged = YUpdate.Merge([.. GrowingTextStates.Select(u => YUpdate.Convert(B(u), UpdateFormat.V1, UpdateFormat.V2)).ToList()], format: UpdateFormat.V2);
 
         Assert.AreEqual("AAACXgQEAA8BAgADBACEIBl0YWJjZGVmZ2hpamtsbW5vcHFyc3R1dnd4QQBHAUEAAQEAAAEGAAA=", S(merged));
     }

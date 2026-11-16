@@ -140,11 +140,11 @@ internal sealed class Harness : IDisposable
         {
             if (input.V2)
             {
-                doc.ApplyUpdateV2(input.Update);
+                doc.ApplyUpdate(input.Update, format: UpdateFormat.V2);
             }
             else
             {
-                doc.ApplyUpdateV1(input.Update);
+                doc.ApplyUpdate(input.Update);
             }
         }
         catch (Exception e)
@@ -199,7 +199,7 @@ internal sealed class Harness : IDisposable
         var doc = new YDoc(new YDocOptions { Gc = input.Gc, ClientId = 1, Limits = Limits });
         if (input.BaseState.Length > 0)
         {
-            doc.ApplyUpdateV1(input.BaseState, null, UpdateLimits.Unlimited);
+            doc.ApplyUpdate(input.BaseState, null, limits: UpdateLimits.Unlimited);
         }
 
         if (input.Observed)
@@ -266,7 +266,7 @@ internal sealed class Harness : IDisposable
         public static Snapshot Of(YDoc doc, IReadOnlyList<string> textRoots) => new(
             textRoots.Select(name => doc.GetText(name).ToString()).ToList(),
             doc.EncodeStateVector(),
-            doc.EncodeStateAsUpdateV1());
+            doc.EncodeStateAsUpdate());
 
         /// <summary>Why the document can no longer be read, or null.</summary>
         public static string? ReadFailure(YDoc doc, IReadOnlyList<string> textRoots)

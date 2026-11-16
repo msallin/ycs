@@ -55,16 +55,16 @@ internal sealed class CorpusDoc
             }
         };
 
-    public void ApplyV1(byte[] update) => _doc.ApplyUpdateV1(update, Remote);
+    public void ApplyV1(byte[] update) => _doc.ApplyUpdate(update, Remote);
 
-    public void ApplyV2(byte[] update) => _doc.ApplyUpdateV2(update, Remote);
+    public void ApplyV2(byte[] update) => _doc.ApplyUpdate(update, Remote, UpdateFormat.V2);
 
-    public byte[] EncodeStateV1(byte[] stateVector = null) => _doc.EncodeStateAsUpdateV1(stateVector);
+    public byte[] EncodeStateV1(byte[] stateVector = null) => _doc.EncodeStateAsUpdate(stateVector);
 
-    public byte[] EncodeStateV2(byte[] stateVector = null) => _doc.EncodeStateAsUpdateV2(stateVector);
+    public byte[] EncodeStateV2(byte[] stateVector = null) => _doc.EncodeStateAsUpdate(stateVector, format: UpdateFormat.V2);
 
     /// <summary>The state vector in the (format-independent) lib0 encoding Yjs' encodeStateVector uses.</summary>
-    public byte[] EncodeStateVector() => _doc.EncodeStateVectorV1();
+    public byte[] EncodeStateVector() => _doc.EncodeStateVector();
 
     public string Text(string root) => _doc.GetText(root).ToString();
 
@@ -232,22 +232,22 @@ internal sealed class CorpusDoc
 internal static class CorpusUpdates
 {
     public static byte[] Merge(IList<byte[]> updates, bool v2) =>
-        v2 ? UpdateOperations.MergeUpdatesV2(updates) : UpdateOperations.MergeUpdates(updates);
+        v2 ? YUpdate.Merge([.. updates], format: UpdateFormat.V2) : YUpdate.Merge([.. updates], format: UpdateFormat.V1);
 
     public static byte[] Diff(byte[] update, byte[] stateVector, bool v2) =>
-        v2 ? UpdateOperations.DiffUpdateV2(update, stateVector) : UpdateOperations.DiffUpdate(update, stateVector);
+        v2 ? YUpdate.Diff(update, stateVector, format: UpdateFormat.V2) : YUpdate.Diff(update, stateVector, format: UpdateFormat.V1);
 
     /// <summary>Per client, the first clock and the clock after the last struct in the update.</summary>
     public static (IReadOnlyDictionary<long, long> From, IReadOnlyDictionary<long, long> To) Meta(byte[] update, bool v2)
     {
-        var meta = v2 ? UpdateOperations.ParseUpdateMetaV2(update) : UpdateOperations.ParseUpdateMeta(update);
+        var meta = v2 ? YUpdate.ParseMeta(update, format: UpdateFormat.V2) : YUpdate.ParseMeta(update, format: UpdateFormat.V1);
         return (meta.From, meta.To);
     }
 
     /// <summary>The delete set carried by an update, as (clock, length) ranges per client.</summary>
     public static IReadOnlyDictionary<long, IReadOnlyList<(long Clock, long Length)>> DeleteSet(byte[] update, bool v2)
     {
-        var decoded = v2 ? UpdateOperations.DecodeUpdateV2(update) : UpdateOperations.DecodeUpdate(update);
+        var decoded = v2 ? YUpdate.Decode(update, format: UpdateFormat.V2) : YUpdate.Decode(update, format: UpdateFormat.V1);
         return decoded.DeleteSet.ToDictionary(
             kvp => kvp.Key,
             kvp => (IReadOnlyList<(long, long)>)kvp.Value.Select(r => (r.Clock, r.Length)).ToList());

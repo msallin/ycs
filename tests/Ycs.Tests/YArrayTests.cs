@@ -22,8 +22,8 @@ public class YArrayTests : YTestBase
         var doc2 = new YDoc();
         var content = new List<object> { "hi" };
         doc1.GetArray("array").Insert(0, content);
-        var update = doc1.EncodeStateAsUpdateV2();
-        doc2.ApplyUpdateV2(update);
+        var update = doc1.EncodeStateAsUpdate(format: UpdateFormat.V2);
+        doc2.ApplyUpdate(update, format: UpdateFormat.V2);
 
         CollectionAssert.AreEqual(content, (ICollection)doc2.GetArray("array").ToArray());
     }

@@ -47,7 +47,7 @@ internal static class Hostile
                 array.Delete(0, array.Length);
             }
         });
-        return doc.EncodeStateAsUpdateV2();
+        return doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
     }
 
     /// <summary>A v1 update of <paramref name="count"/> deleted items of <paramref name="client"/> in the root text "t", without origins.</summary>

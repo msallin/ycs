@@ -130,7 +130,7 @@ public class RunExtensionFuzzTests
 
         var throwInHandler = false;
 
-        void SyncToPeer() => peer.ApplyUpdateV1(doc.EncodeStateAsUpdateV1(peer.EncodeStateVectorV1()));
+        void SyncToPeer() => peer.ApplyUpdate(doc.EncodeStateAsUpdate(peer.EncodeStateVector()));
 
         void PeerEdit()
         {
@@ -164,7 +164,7 @@ public class RunExtensionFuzzTests
             }
         }
 
-        byte[] RemoteDiff(bool v2) => v2 ? peer.EncodeStateAsUpdateV2(doc.EncodeStateVectorV1()) : peer.EncodeStateAsUpdateV1(doc.EncodeStateVectorV1());
+        byte[] RemoteDiff(bool v2) => v2 ? peer.EncodeStateAsUpdate(doc.EncodeStateVector(), format: UpdateFormat.V2) : peer.EncodeStateAsUpdate(doc.EncodeStateVector());
 
         void ReadSnapshot()
         {
@@ -482,7 +482,7 @@ public class RunExtensionFuzzTests
             }
             else if (r < 91)
             {
-                c.L("diff " + ReferenceRun.Hex(doc.EncodeStateAsUpdateV1(peer.EncodeStateVectorV1())) + " " + ReferenceRun.Hex(doc.EncodeStateAsUpdateV2(peer.EncodeStateVectorV1())));
+                c.L("diff " + ReferenceRun.Hex(doc.EncodeStateAsUpdate(peer.EncodeStateVector())) + " " + ReferenceRun.Hex(doc.EncodeStateAsUpdate(peer.EncodeStateVector(), format: UpdateFormat.V2)));
             }
             else if (r < 93)
             {
@@ -532,7 +532,7 @@ public class RunExtensionFuzzTests
             else if (r < 99 && !gc)
             {
                 snapshots.Add(doc.CreateSnapshot());
-                c.L("snap " + ReferenceRun.Hex(snapshots[^1].EncodeSnapshot()));
+                c.L("snap " + ReferenceRun.Hex(snapshots[^1].Encode()));
             }
             else if (!gc)
             {
@@ -590,7 +590,7 @@ public class RunExtensionFuzzTests
                         armed = 1 + rng.Int(4);
                     }
 
-                    doc.ApplyUpdateV1(RemoteDiff(false));
+                    doc.ApplyUpdate(RemoteDiff(false));
                     SyncToPeer();
                 }
                 else
@@ -628,7 +628,7 @@ public class RunExtensionFuzzTests
 
         armed = 0;
         SyncToPeer();
-        doc.ApplyUpdateV1(RemoteDiff(false));
+        doc.ApplyUpdate(RemoteDiff(false));
         c.State(doc, "final");
         c.State(peer, "peer");
         c.L(pt.ToString() == t.ToString() ? "converged" : "diverged");

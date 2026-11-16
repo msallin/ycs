@@ -53,11 +53,11 @@ public class SyncServerFindingsTests
         var c = Waiting(8, 150);
         var e = Waiting(9, 290);
         var room = new YDoc(new YDocOptions { Limits = Small });
-        room.ApplyUpdateV1(b.Waiting);
-        room.ApplyUpdateV1(c.Waiting);
-        room.ApplyUpdateV1(UpdateOperations.MergeUpdates([b.Missing, e.Waiting]));
+        room.ApplyUpdate(b.Waiting);
+        room.ApplyUpdate(c.Waiting);
+        room.ApplyUpdate(YUpdate.Merge([b.Missing, e.Waiting], format: UpdateFormat.V1));
         client = new YDoc(new YDocOptions { ClientId = 20 });
-        client.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
+        client.ApplyUpdate(room.EncodeStateAsUpdate());
         return room;
     }
 
@@ -67,7 +67,7 @@ public class SyncServerFindingsTests
         var room = RoomWithTooMuchWaiting(out var client);
         client.GetText("other").Insert(0, "offline");
 
-        var accepted = room.TryApplyUpdate(client.EncodeStateAsUpdateV1(room.EncodeStateVectorV1()));
+        var accepted = room.TryApplyUpdate(client.EncodeStateAsUpdate(room.EncodeStateVector()));
 
         Assert.AreEqual((true, "offline"), (accepted, room.GetText("other").ToString()));
     }
@@ -78,8 +78,8 @@ public class SyncServerFindingsTests
         var room = RoomWithTooMuchWaiting(out var client);
         var before = room.Store.PendingStructCount;
 
-        room.ApplyUpdateV1(client.EncodeStateAsUpdateV1(room.EncodeStateVectorV1()));
-        room.ApplyUpdateV1(client.EncodeStateAsUpdateV1());
+        room.ApplyUpdate(client.EncodeStateAsUpdate(room.EncodeStateVector()));
+        room.ApplyUpdate(client.EncodeStateAsUpdate());
 
         Assert.AreEqual(before, room.Store.PendingStructCount);
     }
@@ -100,11 +100,11 @@ public class SyncServerFindingsTests
     {
         var room = RoomWithTooMuchWaiting(out var client);
         var more = Waiting(11, 2);
-        var before = Convert.ToHexString(room.EncodeStateAsUpdateV1());
+        var before = Convert.ToHexString(room.EncodeStateAsUpdate());
 
-        var accepted = room.TryApplyUpdate(UpdateOperations.MergeUpdates([client.EncodeStateAsUpdateV1(), more.Waiting]));
+        var accepted = room.TryApplyUpdate(YUpdate.Merge([client.EncodeStateAsUpdate(), more.Waiting], format: UpdateFormat.V1));
 
-        Assert.AreEqual((false, before), (accepted, Convert.ToHexString(room.EncodeStateAsUpdateV1())));
+        Assert.AreEqual((false, before), (accepted, Convert.ToHexString(room.EncodeStateAsUpdate())));
     }
 
     // Nested types deeper than MaxDepth, waiting for a struct of their client: when it arrives, the types are dropped
@@ -126,12 +126,12 @@ public class SyncServerFindingsTests
             }
         });
         var room = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 32 } });
-        room.ApplyUpdateV1(deep);
+        room.ApplyUpdate(deep);
 
         var dropped = new List<PendingDrop>();
         room.PendingDropped += (_, drop) => dropped.Add(drop);
 
-        room.ApplyUpdateV1(missing);
+        room.ApplyUpdate(missing);
 
         Assert.AreEqual((1, 7L, false, 1L), (dropped.Count, dropped[0].Clients[0], room.HasPending, room.Store.GetState(7)));
     }
@@ -148,7 +148,7 @@ public class SyncServerFindingsTests
         text.Insert(1, "m");
         var joiner = new YDoc();
 
-        joiner.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        joiner.ApplyUpdate(a.EncodeStateAsUpdate());
 
         Assert.AreEqual("amb", joiner.GetText("text").ToString());
     }
@@ -161,26 +161,26 @@ public class SyncServerFindingsTests
         var a = new YDoc(new YDocOptions { ClientId = 1L << 40 });
         a.GetText("text").Insert(0, "ab");
         var unknown = new YDoc(new YDocOptions { ClientId = 999 });
-        unknown.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        unknown.ApplyUpdate(a.EncodeStateAsUpdate());
         unknown.GetText("text").Insert(1, "z");
         var waiting = new YDoc(new YDocOptions { ClientId = 7 });
-        waiting.ApplyUpdateV1(unknown.EncodeStateAsUpdateV1());
+        waiting.ApplyUpdate(unknown.EncodeStateAsUpdate());
         var first = Edit(waiting, d => d.GetText("text").Insert(1, "u"));
         var behind = Edit(waiting, d => d.GetMap("map").Set("k", 1));
         var integrating = new YDoc(new YDocOptions { ClientId = 7 });
-        integrating.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        integrating.ApplyUpdate(a.EncodeStateAsUpdate());
         var second = Edit(integrating, d => d.GetText("text").Insert(1, "u"));
         var room = new YDoc();
-        room.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
-        room.ApplyUpdateV1(behind);
-        room.ApplyUpdateV1(first);
+        room.ApplyUpdate(a.EncodeStateAsUpdate());
+        room.ApplyUpdate(behind);
+        room.ApplyUpdate(first);
 
         var dropped = 0;
         room.PendingDropped += (_, _) => dropped++;
 
-        room.ApplyUpdateV1(second);
+        room.ApplyUpdate(second);
         var joiner = new YDoc();
-        joiner.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
+        joiner.ApplyUpdate(room.EncodeStateAsUpdate());
 
         Assert.AreEqual((1, 1L, 1L, false), (dropped, room.Store.GetState(7), joiner.Store.GetState(7), room.HasPending));
     }
@@ -191,21 +191,21 @@ public class SyncServerFindingsTests
         var a = new YDoc(new YDocOptions { ClientId = 1L << 40 });
         a.GetText("text").Insert(0, "ab");
         var unknown = new YDoc(new YDocOptions { ClientId = 999 });
-        unknown.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        unknown.ApplyUpdate(a.EncodeStateAsUpdate());
         unknown.GetText("text").Insert(1, "z");
         var waiting = new YDoc(new YDocOptions { ClientId = 7 });
-        waiting.ApplyUpdateV1(unknown.EncodeStateAsUpdateV1());
+        waiting.ApplyUpdate(unknown.EncodeStateAsUpdate());
         var first = Edit(waiting, d => d.GetText("text").Insert(1, "u"));
         var integrating = new YDoc(new YDocOptions { ClientId = 7 });
-        integrating.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+        integrating.ApplyUpdate(a.EncodeStateAsUpdate());
         var room = new YDoc();
-        room.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
-        room.ApplyUpdateV1(Edit(integrating, d => d.GetText("text").Insert(1, "u")));
-        var before = Convert.ToHexString(room.EncodeStateAsUpdateV1());
+        room.ApplyUpdate(a.EncodeStateAsUpdate());
+        room.ApplyUpdate(Edit(integrating, d => d.GetText("text").Insert(1, "u")));
+        var before = Convert.ToHexString(room.EncodeStateAsUpdate());
 
-        Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(first));
+        Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdate(first));
 
-        Assert.AreEqual((before, false), (Convert.ToHexString(room.EncodeStateAsUpdateV1()), room.HasPending));
+        Assert.AreEqual((before, false), (Convert.ToHexString(room.EncodeStateAsUpdate()), room.HasPending));
     }
 
     // An honest client's step 2 carries back the deletions of unknown structs it was sent along with the waiting structs.
@@ -221,22 +221,22 @@ public class SyncServerFindingsTests
             typist.GetText("t").Insert(0, "x");
         }
 
-        var vector = typist.EncodeStateVectorV1();
+        var vector = typist.EncodeStateVector();
         for (var i = 0; i < 100; i++)
         {
             typist.GetText("t").Delete(i, 1);
         }
 
         var room = new YDoc(new YDocOptions { Limits = Small });
-        room.ApplyUpdateV1(b.Waiting);
-        room.ApplyUpdateV1(c.Waiting);
-        room.ApplyUpdateV1(typist.EncodeStateAsUpdateV1(vector));
-        room.ApplyUpdateV1(UpdateOperations.MergeUpdates([b.Missing, e.Waiting]));
+        room.ApplyUpdate(b.Waiting);
+        room.ApplyUpdate(c.Waiting);
+        room.ApplyUpdate(typist.EncodeStateAsUpdate(vector));
+        room.ApplyUpdate(YUpdate.Merge([b.Missing, e.Waiting], format: UpdateFormat.V1));
         var client = new YDoc(new YDocOptions { ClientId = 20 });
-        client.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
+        client.ApplyUpdate(room.EncodeStateAsUpdate());
         client.GetText("other").Insert(0, "offline");
 
-        var accepted = room.TryApplyUpdate(client.EncodeStateAsUpdateV1(room.EncodeStateVectorV1()));
+        var accepted = room.TryApplyUpdate(client.EncodeStateAsUpdate(room.EncodeStateVector()));
 
         Assert.AreEqual((true, "offline"), (accepted, room.GetText("other").ToString()));
     }
@@ -249,12 +249,12 @@ public class SyncServerFindingsTests
         var honest = new YDoc(new YDocOptions { ClientId = 1 });
         honest.GetText("text").Insert(0, "abc");
         var room = new YDoc();
-        room.ApplyUpdateV1(honest.EncodeStateAsUpdateV1());
-        room.ApplyUpdateV1(Convert.FromHexString("01010105846300015800"));
+        room.ApplyUpdate(honest.EncodeStateAsUpdate());
+        room.ApplyUpdate(Convert.FromHexString("01010105846300015800"));
         var dropped = new List<PendingDrop>();
         room.PendingDropped += (_, drop) => dropped.Add(drop);
 
-        room.ApplyUpdateV1(Edit(honest, d => d.GetText("text").Insert(3, "def")));
+        room.ApplyUpdate(Edit(honest, d => d.GetText("text").Insert(3, "def")));
 
         Assert.AreEqual(("abcdef", false, 1), (room.GetText("text").ToString(), room.HasPending, dropped.Count));
     }

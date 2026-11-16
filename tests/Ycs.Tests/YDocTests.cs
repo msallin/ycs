@@ -32,7 +32,7 @@ public class YDocTests : YTestBase
         Assert.AreEqual(doc1.ClientId, doc2.ClientId);
 
         doc1.GetArray("a").Insert(0, new object[] { 1, 2 });
-        doc2.ApplyUpdateV2(doc1.EncodeStateAsUpdateV2());
+        doc2.ApplyUpdate(doc1.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
         Assert.AreNotEqual(doc1.ClientId, doc2.ClientId);
     }
 
@@ -44,7 +44,7 @@ public class YDocTests : YTestBase
         doc1.GetText().Insert(1, "i");
 
         var doc2 = new YDoc();
-        doc2.ApplyUpdateV2(doc1.EncodeStateAsUpdateV2());
+        doc2.ApplyUpdate(doc1.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
 
         Assert.AreEqual("hi", doc2.GetText().ToString());
         Assert.AreEqual("hi", doc2.GetText(string.Empty).ToString());
@@ -130,7 +130,7 @@ public class YDocTests : YTestBase
                 events.Add(new List<string>(e.Loaded.Select(d => d.Guid)));
             };
 
-            doc2.ApplyUpdateV2(doc.EncodeStateAsUpdateV2());
+            doc2.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
             CollectionAssert.AreEqual(new[] { "a", "a", "c" }, events[0]);
             CollectionAssert.AreEqual(new object[] { }, events[1]);
             CollectionAssert.AreEqual(new object[] { }, events[2]);

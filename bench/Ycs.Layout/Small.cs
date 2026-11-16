@@ -52,14 +52,14 @@ internal static class Small
         {
             var other = new YDoc(new YDocOptions { ClientId = i + 1 });
             other.GetMap("map").Set("k" + i, (long)i);
-            updates[i] = other.EncodeStateAsUpdateV1();
+            updates[i] = other.EncodeStateAsUpdate();
         }
 
         var c = Measure(1, "map", d =>
         {
             foreach (var u in updates)
             {
-                d.ApplyUpdateV1(u);
+                d.ApplyUpdate(u);
             }
         }, check, "many clients", out _);
         var (et, ef, eg) = empty["map"];
