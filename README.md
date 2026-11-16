@@ -183,4 +183,11 @@ Demo
 `samples/Ycs.Server` is a Yjs sync server (y-protocols over WebSocket and SignalR) with one Ycs
 document per room, built as a test bed: [`docs/plan-server.md`](docs/plan-server.md).
 
-![img](https://github.com/yjs/ycs/blob/main/docs/ycs.gif)
+Run it with `dotnet run --project samples/Ycs.Server` and open `http://localhost:5000/` (the port is in the
+server's output): a CodeMirror 6 Markdown editor on a `Y.Text` named `content`, with the other editors' cursors and
+names, a status line, a link to the room (the URL fragment) and a button to go offline and come back. The page is
+`samples/Ycs.Server/wwwroot`; its bundle is committed, and
+[`samples/Ycs.Server/demo`](samples/Ycs.Server/demo/README.md) rebuilds it.
+`interop/demo/check.sh` drives two browsers through it (Playwright).
+
+![Two browsers editing one room](interop/demo/screenshot.png)

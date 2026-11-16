@@ -1,5 +1,51 @@
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><title>Ycs sync server</title></head>
-<body><p>A Yjs sync server on Ycs. WebSocket endpoint: <code>/ws/{room}</code>.</p></body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ycs demo</title>
+<style>
+:root { --bg:#fff; --fg:#1b1f24; --muted:#5b6670; --line:#d0d7de; --accent:#1971c2; --ok:#2f9e44; --warn:#c2255c; }
+@media (prefers-color-scheme: dark) { :root { --bg:#14181d; --fg:#e6e9ec; --muted:#9aa5b0; --line:#2d353e; --accent:#74b0f0; --ok:#69db7c; --warn:#ff8fa8; } }
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { display: flex; flex-direction: column; background: var(--bg); color: var(--fg); font: 16px/1.4 system-ui, sans-serif; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 16px; border-bottom: 1px solid var(--line); }
+h1 { font-size: 1.1rem; margin: 0; }
+header .grow { flex: 1; }
+button, input { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 4px 10px; }
+button { cursor: pointer; }
+button:hover { border-color: var(--accent); }
+input { width: 9rem; }
+#status { font-weight: 600; }
+#status[data-state=synced] { color: var(--ok); }
+#status[data-state=offline] { color: var(--warn); }
+#status[data-state=connecting] { color: var(--muted); }
+.meta { color: var(--muted); font-size: .9rem; }
+main { flex: 1; min-height: 0; padding: 0 16px 16px; }
+#editor { height: 100%; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; margin-top: 12px; }
+#editor .cm-editor { height: 100%; background: var(--bg); color: var(--fg); }
+#editor .cm-scroller { font: 15px/1.5 ui-monospace, monospace; }
+#editor .cm-gutters { background: var(--bg); color: var(--muted); border-right: 1px solid var(--line); }
+#editor .cm-activeLine, #editor .cm-activeLineGutter { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+#editor .cm-cursor { border-left-color: var(--fg); }
+@media (prefers-color-scheme: dark) { #editor .cm-content { caret-color: var(--fg); } }
+.cm-ySelectionInfo { font-family: system-ui, sans-serif; padding: 1px 4px; border-radius: 3px; color: #fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ycs demo</h1>
+  <span class="meta">room <b id="room"></b></span>
+  <span id="status" role="status" data-state="connecting">connecting</span>
+  <span class="meta"><span id="transport"></span> (<a id="switch" href="#"></a>)</span>
+  <span class="meta"><span id="peers">1</span> here</span>
+  <span class="grow"></span>
+  <label class="meta">name <input id="name" maxlength="24" autocomplete="off"></label>
+  <button id="copy" type="button">Copy link</button>
+  <button id="toggle" type="button">Disconnect</button>
+</header>
+<main><div id="editor"></div></main>
+<script src="js/demo.js"></script>
+</body>
 </html>

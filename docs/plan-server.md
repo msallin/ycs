@@ -53,7 +53,7 @@ the same `Session`, so the SignalR path tests nothing but its own plumbing.
 ## Packages
 
 P0 (the coordinator) creates both projects, adds them to `Ycs.sln` and CI, and deletes `samples/YcsSample`. Then P1
-and P2 run in parallel, P3 after both, P4 and P8 after P3, P5 and P6 after P4, P7 last. The coordinator adds the CI
+and P2 run in parallel, P3 after both, P4 and P8 after P3; P5, P6, P7 and P9 in parallel after the server serves static files; the driver runs over SignalR once P4 and P5 are in. The coordinator adds the CI
 steps at each merge. Each leaves every suite green.
 
 | pkg | concern | owns | proof | risk |
@@ -65,6 +65,7 @@ steps at each merge. Each leaves every suite green.
 | P5 | SignalR transport | `Transports/SyncHub.cs`, `interop/server/signalr-provider.mjs` | P4's driver passes over SignalR | low |
 | P6 | Benchmark | `bench/Ycs.Server.Bench/*` | updates/s at 10/100/1,000 clients per room, p50/p99 fan-out latency, memory per room after 1 h, the cost of a reconnect diff on a 1 MB document; Ycs and Node servers on one machine, results in its README | low |
 | P8 | Blazor client | new `samples/Ycs.Client/**` (a library: the y-websocket provider over `ClientWebSocket`, the client side of awareness, the text binding), new `samples/Ycs.Blazor/**` (the page), new `tests/Ycs.Client.Tests/**`, new `interop/blazor/**`, `Ycs.sln` | the provider syncs and keeps presence against the in-process server, reconnects and merges offline edits; in a browser (Playwright), the Blazor page and a `y-websocket` client edit one text and converge | medium |
+| P9 | Hostile clients | new `tests/Ycs.Server.Tests/Hostile*`; fixes in `Rooms/**`, `Awareness/**` | a seeded fuzz at the session level: mutated and expensive messages and awareness garbage from hostile sessions while honest clients edit; only the hostile session closes, honest clients and the room converge, memory stays bounded | medium |
 | P7 | Demo page, docs | `wwwroot/*`, `README.md` ("Demo"), `docs/testing.md` | two browsers edit one room over each transport (Playwright) | low |
 
 A soak (P4's driver for hours, memory sampled) runs by hand like the fuzz soaks; how is in `docs/testing.md`.
