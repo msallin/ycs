@@ -50,7 +50,7 @@ public partial class YDoc
         if (!ShouldLoad)
         {
             var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : (_item.Parent as AbstractType).Doc;
-            parentDoc?.Transact(this, static (doc, tr) => tr.SubdocsLoaded.Add(doc));
+            parentDoc?.Transact(this, static (doc, tr) => tr.LoadedSubdocs.Add(doc));
         }
         ShouldLoad = true;
     }
@@ -75,7 +75,7 @@ public partial class YDoc
         {
             _itemCollected = false;
             _item = default;
-            _collectedParentDoc.Transact(this, static (doc, tr) => tr.SubdocsRemoved.Add(doc));
+            _collectedParentDoc.Transact(this, static (doc, tr) => tr.RemovedSubdocs.Add(doc));
         }
         else if (!item.IsNull)
         {
@@ -92,10 +92,10 @@ public partial class YDoc
             {
                 if (!s.item.Deleted)
                 {
-                    tr.SubdocsAdded.Add(s.content.Doc);
+                    tr.AddedSubdocs.Add(s.content.Doc);
                 }
 
-                tr.SubdocsRemoved.Add(s.doc);
+                tr.RemovedSubdocs.Add(s.doc);
             });
         }
 
@@ -142,31 +142,44 @@ public partial class YDoc
     /// </summary>
     public bool HasPending => Store.HasPending;
 
+#nullable enable
     /// <summary>
     /// Changes that happen inside of a transaction are bundled.
     /// This means that the observer fires _after_ the transaction is finished and that
     /// all changes that happened inside of the transaction are sent as one message to the
-    /// other peers.
+    /// other peers. Transactions are synchronous: <paramref name="action"/> must not <c>await</c>
+    /// (an <c>async</c> lambda does not compile).
     /// </summary>
-    /// <param name="fun">The function that should be executed as a transaction.</param>
+    /// <param name="action">The function that should be executed as a transaction.</param>
     /// <param name="origin">Transaction owner. Will be stored in 'transaction.origin'.</param>
-    /// <param name="local"></param>
-    public void Transact(Action<Transaction> fun, object origin = null, bool local = true)
+    /// <param name="local">Whether the change originates from this document.</param>
+    public void Transact(Action<Transaction> action, object? origin = null, bool local = true)
     {
-        ArgumentNullException.ThrowIfNull(fun);
-        Transact(fun, static (f, tr) => f(tr), origin, local);
+        ArgumentNullException.ThrowIfNull(action);
+        Transact(action, static (f, tr) => f(tr), origin, local);
+    }
+
+    /// <summary>Like <see cref="Transact(Action{Transaction}, object, bool)"/>, and returns what <paramref name="func"/> returns.</summary>
+    public TResult Transact<TResult>(Func<Transaction, TResult> func, object? origin = null, bool local = true)
+    {
+        ArgumentNullException.ThrowIfNull(func);
+        TResult result = default!;
+        Transact(tr => { result = func(tr); }, origin, local);
+        return result;
     }
 
     /// <summary>
     /// Like <see cref="Transact(Action{Transaction}, object, bool)"/>, with the state that
     /// <paramref name="action"/> needs passed in, so that a <c>static</c> lambda captures nothing
     /// and no closure is allocated: <c>doc.Transact((text, index), static (s, tr) => ...)</c>.
+    /// The state may be a <c>ref struct</c> (a <see cref="Span{T}"/> among its fields).
     /// </summary>
     /// <param name="state">Passed to <paramref name="action"/>.</param>
     /// <param name="action">The function that should be executed as a transaction.</param>
     /// <param name="origin">Transaction owner. Will be stored in 'transaction.origin'.</param>
     /// <param name="local">Whether the change originates from this document.</param>
-    public void Transact<TState>(TState state, Action<TState, Transaction> action, object origin = null, bool local = true)
+    public void Transact<TState>(TState state, Action<TState, Transaction> action, object? origin = null, bool local = true)
+        where TState : allows ref struct
     {
         ArgumentNullException.ThrowIfNull(action);
 
@@ -213,6 +226,26 @@ public partial class YDoc
             }
         }
     }
+
+    /// <summary>Transactions are synchronous: an <c>async</c> lambda is a compile error (CS0619), not a transaction that ends at its first <c>await</c>.</summary>
+    [Obsolete("Transactions are synchronous.", error: true)]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public void Transact(Func<Transaction, Task> _, object? origin = null, bool local = true) =>
+        throw new NotSupportedException("Transactions are synchronous.");
+
+    /// <summary>The guard above for an <c>async</c> lambda that returns a value.</summary>
+    [Obsolete("Transactions are synchronous.", error: true)]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public Task<TResult> Transact<TResult>(Func<Transaction, Task<TResult>> _, object? origin = null, bool local = true) =>
+        throw new NotSupportedException("Transactions are synchronous.");
+
+    /// <summary>The <see cref="Transact{TState}(TState, Action{TState, Transaction}, object, bool)"/> form of the guard above.</summary>
+    [Obsolete("Transactions are synchronous.", error: true)]
+    [System.ComponentModel.EditorBrowsable(System.ComponentModel.EditorBrowsableState.Never)]
+    public void Transact<TState>(TState state, Func<TState, Transaction, Task> _, object? origin = null, bool local = true)
+        where TState : allows ref struct =>
+        throw new NotSupportedException("Transactions are synchronous.");
+#nullable disable
 
     public YArray GetArray(string name = "")
     {

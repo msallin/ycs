@@ -336,7 +336,7 @@ public partial class UndoManager
                     CurrentStackItem = performedChange ? stackItem : null;
                 }
 
-                foreach (var (type, subProps) in transaction.Changed)
+                foreach (var (type, subProps) in transaction.LiveChanged)
                 {
                     if (subProps.Contains(null) && type is YArrayBase arr)
                     {

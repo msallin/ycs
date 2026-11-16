@@ -56,6 +56,26 @@ On `YDoc`, `Updated` and `UpdatedV2` raise an `UpdateEventArgs(Update, Origin, T
 `ReadOnlyMemory<byte>` for each event, which a handler may keep. `SubdocsChanged` raises a `SubdocsEventArgs(Loaded,
 Added, Removed)` of read-only sets and `AfterAllTransactions` an `IReadOnlyList<Transaction>`.
 
+## Transactions
+
+`doc.Transact(tr => ..., origin, local)` runs an `Action<Transaction>`; `Transact<TResult>(Func<Transaction, TResult>)`
+returns what the function returns; `Transact<TState>(state, static (s, tr) => ...)` passes its state in, so that a
+`static` lambda allocates no closure (`TState` may be a `ref struct`: a `Span<T>` can be part of the state, in a type of
+your own). Nested calls join the running transaction.
+
+A `Transaction` (sealed) is read-only but for `Meta`: `Doc`, `Origin`, `Local`, `BeforeState` and `AfterState`
+(`IReadOnlyDictionary<long, long>`), `Changed` (`IReadOnlyDictionary<YType, IReadOnlySet<string?>>`: the changed map keys,
+`null` for the children of a list), `ChangedParentTypes` (`IReadOnlyDictionary<YType, IReadOnlyList<YEvent>>`),
+`SubdocsAdded`, `SubdocsRemoved` and `SubdocsLoaded` (`IReadOnlySet<YDoc>`), and `Meta`, a mutable
+`IDictionary<string, object?>` for what observers pass each other (Yjs' `transaction.meta`). The views read the
+transaction's own collections without a copy; they are valid as long as the transaction is (see Events).
+
+Transactions are synchronous. A lambda that awaits is a compile error (CS0619: the overloads that take a `Func<..., Task>`
+are `[Obsolete(error: true)]` guards), where it would otherwise be an `async void` that ends the transaction at its first
+`await`. Two cases the guards cannot tell from an async lambda: a lambda that returns a `Task` (it is no async lambda, but
+it is no transaction either), and a lambda that only throws, with no `return`, which the compiler can also convert to
+`Func<Transaction, Task>`: cast it, `(Action<Transaction>)(tr => throw ...)`.
+
 ## Items in events and filters
 
 Events and filters name a document's content by `ItemView`, and a decoded update by `DecodedStruct`. Neither

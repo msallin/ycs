@@ -25,7 +25,7 @@ namespace Ycs;
 /// event's changes are computed after its handler).
 /// </para>
 /// </summary>
-public partial class Transaction
+public sealed partial class Transaction
 {
     // How many ended transactions a document keeps for reuse: one, plus those that observers start
     // during a cleanup.
@@ -700,8 +700,8 @@ public partial class Transaction
 
         if (transaction._subdocsAdded?.Count > 0 || transaction._subdocsRemoved?.Count > 0 || transaction._subdocsLoaded?.Count > 0)
         {
-            var added = transaction.SubdocsAdded;
-            var removed = transaction.SubdocsRemoved;
+            var added = transaction.AddedSubdocs;
+            var removed = transaction.RemovedSubdocs;
 
             foreach (var subDoc in added)
             {
@@ -715,10 +715,10 @@ public partial class Transaction
                 doc.Subdocs.Remove(subDoc);
             }
 
-            Step(static t => t._doc.InvokeSubdocsChanged((IReadOnlySet<YDoc>)t.SubdocsLoaded, (IReadOnlySet<YDoc>)t.SubdocsAdded, (IReadOnlySet<YDoc>)t.SubdocsRemoved), transaction, ref error);
+            Step(static t => t._doc.InvokeSubdocsChanged(t.LoadedSubdocs, t.AddedSubdocs, t.RemovedSubdocs), transaction, ref error);
             Step(static t =>
             {
-                foreach (var subDoc in t.SubdocsRemoved)
+                foreach (var subDoc in t.RemovedSubdocs)
                 {
                     subDoc.Destroy();
                 }

@@ -10,7 +10,7 @@ namespace Ycs;
 /// (one deleted in the transaction) leaves a hole that enumeration skips, so removing is O(1) and a
 /// type added later does not take its slot.
 /// </summary>
-internal sealed class ChangedTypes : IDictionary<AbstractType, ISet<string>>
+internal sealed partial class ChangedTypes : IDictionary<AbstractType, ISet<string>>
 {
     private readonly Dictionary<AbstractType, int> _index = new();
 
@@ -21,9 +21,11 @@ internal sealed class ChangedTypes : IDictionary<AbstractType, ISet<string>>
 
     public bool IsReadOnly => false;
 
-    public ICollection<AbstractType> Keys => this.Select(static kvp => kvp.Key).ToList();
+    public ICollection<AbstractType> Keys => Pairs().Select(static kvp => kvp.Key).ToList();
 
-    public ICollection<ISet<string>> Values => this.Select(static kvp => kvp.Value).ToList();
+    public ICollection<ISet<string>> Values => Pairs().Select(static kvp => kvp.Value).ToList();
+
+    private IEnumerable<KeyValuePair<AbstractType, ISet<string>>> Pairs() => this;
 
     public ISet<string> this[AbstractType key]
     {

@@ -165,7 +165,7 @@ public abstract partial class YEvent
             // Cached only once complete: a read after the transaction ended throws on every try.
             var keys = new Dictionary<string, KeyChange>();
 
-            if (!Transaction.Changed.TryGetValue(Target, out var changed))
+            if (!Transaction.LiveChanged.TryGetValue(Target, out var changed))
             {
                 changed = ChangedKeys.None;
             }
@@ -274,7 +274,7 @@ public abstract partial class YEvent
 
             var changes = new YChanges(added, deleted, delta, CollectKeys());
 
-            if (!Transaction.Changed.TryGetValue(Target, out var changed))
+            if (!Transaction.LiveChanged.TryGetValue(Target, out var changed))
             {
                 changed = ChangedKeys.None;
             }

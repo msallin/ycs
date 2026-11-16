@@ -168,7 +168,7 @@ public class RunExtensionScenarioTests
             var t = doc.GetText("t");
             c.LogUpdates(doc, "d");
             t.Insert(0, "ab");
-            try { doc.Transact(tr => { t.Insert(2, "c"); t.Insert(3, "d"); throw new InvalidOperationException("boom"); }); } catch (InvalidOperationException) { c.L("caught"); }
+            try { doc.Transact((Action<Transaction>)(tr => { t.Insert(2, "c"); t.Insert(3, "d"); throw new InvalidOperationException("boom"); })); } catch (InvalidOperationException) { c.L("caught"); }
             c.L(ReferenceRun.Dump(doc));
             t.Observe(c.TextObserver("t"));
             doc.Transact(tr => { t.Insert(4, "e"); t.Insert(5, "f"); });
@@ -502,7 +502,7 @@ public class RunExtensionScenarioTests
             var doc = c.NewDoc(1); var m = doc.GetMap("m"); var t = doc.GetText("t");
             doc.AfterTransaction += (_, tr) =>
             {
-                foreach (var (ty, keys) in tr.Changed)
+                foreach (var (ty, keys) in tr._changed)
                 {
                     c.L($"changed {ty.GetType().Name} [{string.Join(",", keys.Select(k => k ?? "null"))}] ro={keys.IsReadOnly} count={keys.Count} contains={keys.Contains("k")}");
                     try { keys.Add("zz"); c.L("add ok"); } catch (Exception e) { c.L("add threw " + e.GetType().Name); }
