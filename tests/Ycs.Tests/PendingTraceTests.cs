@@ -12,7 +12,8 @@ namespace Ycs;
 /// Out-of-order delivery, differential against real Yjs 13.6.32: every transaction's update of three
 /// clients delivered to one receiver in a shuffled order, pinned in Fixtures/pending-traces.json.gz
 /// (written by interop/corpus/pending.mjs). After every delivery the text, the map and the v1 and v2
-/// encodings of the state (which include what is pending) must equal Yjs'.
+/// encodings of the state (which include what is pending) must equal Yjs'. The traces in <see cref="StuckInYjs"/>
+/// are the ones where Yjs 13.6.32 leaves pending structs it never retries (yjs/yjs#824): they only have to end complete.
 /// </summary>
 [TestClass]
 public class PendingTraceTests
@@ -24,7 +25,24 @@ public class PendingTraceTests
         return JsonDocument.Parse(gzip);
     });
 
-    public static IEnumerable<object[]> Traces => Enumerable.Range(0, Fixture.Value.RootElement.GetArrayLength()).Select(i => new object[] { i });
+    private static readonly int[] StuckInYjs = { 144, 192 };
+
+    public static IEnumerable<object[]> Traces => Enumerable.Range(0, Fixture.Value.RootElement.GetArrayLength()).Except(StuckInYjs).Select(i => new object[] { i });
+
+    public static IEnumerable<object[]> StuckTraces => StuckInYjs.Select(i => new object[] { i });
+
+    [TestMethod]
+    [DynamicData(nameof(StuckTraces))]
+    public void Replay_ShuffledDeliveryYjsLeavesPending_EndsComplete(int index)
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 99 });
+        foreach (var s in Fixture.Value.RootElement[index].GetProperty("steps").EnumerateArray())
+        {
+            doc.ApplyUpdate(Convert.FromHexString(s.GetProperty("update").GetString()));
+        }
+
+        Assert.IsFalse(doc.HasPending);
+    }
 
     [TestMethod]
     [DynamicData(nameof(Traces))]

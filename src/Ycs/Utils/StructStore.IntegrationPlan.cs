@@ -221,6 +221,9 @@ internal sealed partial class StructStore
                             }
                             else
                             {
+                                // Recorded now, as the walk may stop further on and then only records what its last struct
+                                // waits for: the retry check would not fire when this client's structs arrive (yjs/yjs#824).
+                                UpdateMissingSv(missing.Value, GetState(missing.Value));
                                 stackHead = structRefs.Refs[structRefs.NextReadOperation++];
                                 continue;
                             }
