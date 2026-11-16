@@ -20,7 +20,6 @@ public class GarbageCollectionCheckOrderTests
     private const string Structs = "0403AC02000001C40B000B01026263880B03027D017B3FF8000000000000000D00050B000401017403E4B8ADC40B000B000161C7F8FAFFFF0700F8FAFFFF07020128000B02016D0375027D017701787E780701017803017004F8FAFFFF0700080101610375027D017701787D0175027D017701782101016D016C0241F8FAFFFF0703010A0200";
 
     [TestMethod]
-    [Ignore("Known bug: CheckGarbageCollection takes a planned value that a later planned item replaces for no value, and misses the split.")]
     public void ApplyUpdate_ValueSplitByItsReplacerInTheSameUpdateAndItsTypeDeleted_RejectsAndLeavesTheDocumentUnchanged()
     {
         var doc = new YDoc();
@@ -32,7 +31,6 @@ public class GarbageCollectionCheckOrderTests
     }
 
     [TestMethod]
-    [Ignore("Known bug: the same cause, with the delete range waiting from an earlier update.")]
     public void ApplyUpdate_WaitingDeleteRangeAppliesToASplitValue_Rejects()
     {
         var doc = new YDoc();
@@ -42,7 +40,6 @@ public class GarbageCollectionCheckOrderTests
     }
 
     [TestMethod]
-    [Ignore("Known bug: AddApplicableRanges lists the waiting clients in insertion order, TakeApplicable applies them from the highest id down.")]
     public void ApplyUpdate_WaitingRangesOfTwoClients_CheckSeesThemInTheOrderTheyAreApplied()
     {
         // The property engine's seed 1302 in reversed order: the update that completes the structs finds the ranges of
@@ -51,8 +48,12 @@ public class GarbageCollectionCheckOrderTests
         doc.ApplyUpdate(Convert.FromHexString("0103F8FAFFFF070601000C00022201016D016D02013103226A2222000C06016B02013103226A22020C010507F8FAFFFF070207020302"));
         doc.ApplyUpdate(Convert.FromHexString("0303F8FAFFFF07002101016D016D0128000C06016B037D477D4775027D017701782201016D016D02013103226A22030A000004C40C070C070364656604000C0003646566020C06070101610104000C050378C3A9010C010602"));
 
+        // The check rejects the structs that waited (their plan, once the ranges are applied in order, splits a value), the update
+        // stands and what waited is dropped: the document stays one another can be synced from.
         doc.ApplyUpdate(Convert.FromHexString("02040C0007010178062101016D016B0204000C000378C3A9870C0006020B0000052801016D016B027B3FF80000000000007B3FF8000000000000020B02050104010C010302"));
 
-        Assert.IsFalse(doc.HasPending);
+        var fresh = new YDoc();
+        fresh.ApplyUpdate(doc.EncodeStateAsUpdate());
+        Assert.IsNull(doc.Store.Pending);
     }
 }
