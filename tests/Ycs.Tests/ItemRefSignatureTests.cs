@@ -37,6 +37,7 @@ public class ItemRefSignatureTests
         "EncodingUtils.ReadClientStructRefsInto",
         "EncodingUtils.ReadStruct",
         "IntegrationPlan.*",
+        "ItemView.*",
         "KeyChains.*",
         "LazyStructReader.*",
         "LazyStructWriter.WriteStruct",

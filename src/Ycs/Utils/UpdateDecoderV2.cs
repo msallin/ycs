@@ -154,6 +154,8 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
 
     public string ReadString() => _stringDecoder.Read();
 
+    public ReadOnlySpan<char> ReadStringSpan() => _stringDecoder.ReadSpan();
+
     public bool ReadParentInfo() => _parentInfoDecoder.Read() == 1;
 
     public uint ReadTypeRef() => (uint)_typeRefDecoder.Read();

@@ -15,6 +15,7 @@ public static class StoreChecks
     public static void RecountAfterEveryTransaction(TestContext context)
     {
         StructStore.CheckAfterTransactionsForTests = true;
+        YEvent.CheckViewsForTests = true;
         if (Environment.GetEnvironmentVariable("YCS_LEAF_CAPACITY") is { Length: > 0 } capacity)
         {
             ClientStructs.LeafCapacityForTests = int.Parse(capacity, CultureInfo.InvariantCulture);

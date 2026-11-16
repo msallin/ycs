@@ -165,11 +165,22 @@ public partial class YEvent
     private ChangesCollection _changes = null;
     private IDictionary<string, ChangeKey> _keys = null;
 
+    /// <summary>
+    /// Every event, when it is made (the observers are called right after), compares the views of the structs of its
+    /// target's lists, and its <see cref="Changes"/>, when collected, those of the added and deleted structs, with the
+    /// structs (<see cref="ItemView.CheckEvent"/>); the tests switch it on.
+    /// </summary>
+    internal static bool CheckViewsForTests;
+
     internal YEvent(AbstractType target, Transaction transaction)
     {
         Target = target;
         CurrentTarget = target;
         Transaction = transaction;
+        if (CheckViewsForTests)
+        {
+            ItemView.CheckEvent(this, null);
+        }
     }
 
     public AbstractType Target { get; set; }
@@ -388,6 +399,11 @@ public partial class YEvent
                 {
                     packOp();
                 }
+            }
+
+            if (CheckViewsForTests)
+            {
+                ItemView.CheckEvent(this, changes);
             }
 
             _changes = changes;
