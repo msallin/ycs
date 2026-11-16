@@ -101,6 +101,13 @@ internal sealed record GenOptions
     /// as in Yjs, so the markers-invisible property does not use it.
     /// </summary>
     public bool Windows { get; init; }
+
+    /// <summary>
+    /// With <see cref="Windows"/>: reacting handlers are five times as frequent, and three of four sit on the document's
+    /// <c>afterTransactionCleanup</c>, <c>update</c> or <c>afterTransaction</c> instead of a type, so that nested
+    /// transactions split and merge structs while the cleanup that called them still has merging to do.
+    /// </summary>
+    public bool Hooks { get; init; }
 }
 
 /// <summary>
@@ -120,6 +127,9 @@ internal sealed class Generator
     // With GenOptions.Windows: the full mix, typing runs eight times as often as another kind, and reacting observers.
     private static readonly string[] WindowKinds =
         [.. OpKinds.Paired, OpKinds.Observe, OpKinds.React, .. Enumerable.Repeat(OpKinds.Typing, 8)];
+
+    private static readonly string[] HookKinds = [.. WindowKinds, .. Enumerable.Repeat(OpKinds.React, 5)];
+    private static readonly string[] HookTriggers = ["cleanup", "update", "after"];
 
     private readonly Rng _rng;
     private readonly GenOptions _options;
@@ -289,7 +299,7 @@ internal sealed class Generator
             return;
         }
 
-        var kinds = _options.Kinds ?? (_options.Windows ? WindowKinds : OpKinds.Paired.Append(OpKinds.Observe).ToArray());
+        var kinds = _options.Kinds ?? (_options.Hooks ? HookKinds : _options.Windows ? WindowKinds : OpKinds.Paired.Append(OpKinds.Observe).ToArray());
         LocalStep(_rng.Int(clients), _rng.Pick(kinds));
     }
 
@@ -724,7 +734,18 @@ internal sealed class Generator
                     }
 
                     var targets = _run.Targets(c).Where(t => t.Kind != "hook").ToList();
-                    return ops.Count == 0 || targets.Count == 0 ? null : Obj(("op", "react"), ("id", "x" + _ids++), ("path", _rng.Pick(targets).Path), ("txn", _rng.Chance(0.5)), ("ops", ops));
+                    if (ops.Count == 0 || targets.Count == 0)
+                    {
+                        return null;
+                    }
+
+                    var react = Obj(("op", "react"), ("id", "x" + _ids++), ("path", _rng.Pick(targets).Path), ("txn", _rng.Chance(0.5)), ("ops", ops));
+                    if (_options.Hooks && _rng.Chance(0.75))
+                    {
+                        react["on"] = _rng.Pick(HookTriggers);
+                    }
+
+                    return react;
                 }
             case OpKinds.Typing:
                 return allowCompound ? Typing(c) : null;
