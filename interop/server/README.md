@@ -14,8 +14,27 @@ the other, an awareness state crosses, and a destroyed or dropped (`ws.terminate
 ## converge
 
 `./converge.sh [seeds] [first seed] [converge.mjs options]` builds the Ycs server, starts it and the reference server,
-and runs `converge.mjs` with the same seeds against each (`TARGETS=ycs` or `TARGETS=node` for one). It exits non-zero
-when any seed fails on any server. The default, 32 seeds from 1, takes about 15 s per server, 40 s with the build.
+and runs `converge.mjs` with the same seeds against each, once per transport (`TARGETS=ycs` or `TARGETS=node` for one
+server, `TRANSPORTS="signalr mixed"` for some transports). It exits non-zero when any seed fails. The default, 32
+seeds from 1, takes about 16 s per server over WebSocket, 25 s over SignalR and 20 s mixed, 80 s in all, 40 s more with
+the build.
+
+### Transports
+
+`--transport` (`TRANSPORTS` for the script) names the clients' provider:
+
+- `websocket` (the default): y-websocket's `WebsocketProvider` over `/ws`, against the Ycs server and the reference;
+- `signalr`: `interop/signalr/provider.mjs`'s `SignalRProvider` over the hub at `/hub` (derived from `--url`);
+- `mixed`: in each room the clients alternate between the two providers (by their number, joins and replacements
+  included), so one room has WebSocket and SignalR clients, and the fresh client of check 4 is one of each.
+
+The reference server has no hub, so `signalr` and `mixed` run against the Ycs server only (`converge.sh` says so and
+skips the reference). `interop/signalr` needs its own `npm ci` (the script does it when missing); the driver loads the
+provider with a resolution hook (`share-modules.mjs`) so that it uses this directory's yjs, lib0 and y-protocols, one
+copy of each. Steps are the same; an abrupt drop closes the WebSocket under the hub connection without a SignalR close
+message (as `interop/signalr/smoke.mjs` does), and the provider reconnects after its backoff. A SignalR client has no
+traced socket: the quiescence wait counts document and awareness updates arriving or leaving. A failure prints the
+transport, and the replay commands carry it.
 
 From the seed (mulberry32, no dependency), 6 clients (`--clients`) in one or two rooms (`--rooms`) take 40 to 120
 steps (`--steps`); up to two of them join after the start. A step is one of:
@@ -56,7 +75,7 @@ what has arrived, so a race may need a few replays (`--seeds 1` in a loop, or `-
 minimise, pass smaller `--clients`, `--rooms` and `--steps`. `CONVERGE_DUMP=<dir>` writes the updates of a room whose
 oracle differs.
 
-Seeds run 4 at a time (`--parallel`), each in rooms of its own. A soak: `./converge.sh 500` (under 3 min per server),
+Seeds run 4 at a time (`--parallel`), each in rooms of its own. A soak: `./converge.sh 500` (under 3 min per server and transport),
 or a longer one with a different first seed.
 
 ### The oracle
