@@ -412,7 +412,7 @@ public class YXmlFragment : YArrayBase
 
     public IReadOnlyList<object> Slice(int start, int end) => InternalSlice(start, end);
 
-    public void ForEach(Action<object, int, YXmlFragment> f) => ForEach((c, i, self) => f(c, i, (YXmlFragment)self));
+    public void ForEach(Action<object, int, YXmlFragment> f) => base.ForEach((c, i, self) => f(c, i, (YXmlFragment)self));
 
     internal override void Write(IUpdateEncoder encoder)
     {
