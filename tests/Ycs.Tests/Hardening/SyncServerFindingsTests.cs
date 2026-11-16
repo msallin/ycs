@@ -131,4 +131,67 @@ public class SyncServerFindingsTests
 
         Assert.AreEqual((true, false, 1L), (e.PartlyApplied, room.HasPending, room.Store.GetState(7)));
     }
+
+    private static void WriteVarUint(System.IO.Stream stream, ulong value)
+    {
+        while (value > 0x7F)
+        {
+            stream.WriteByte((byte)(0x80 | (value & 0x7F)));
+            value >>= 7;
+        }
+
+        stream.WriteByte((byte)value);
+    }
+
+    // Client 2 inserts "z" with origin (a, 4) and right origin (a, 1): Yjs never writes an item whose right origin
+    // precedes its origin, and gives the two texts of a document that receives it and of one that joins it.
+    private static byte[] ZBetweenEAndB(long a)
+    {
+        var crafted = new System.IO.MemoryStream();
+        foreach (var value in new ulong[] { 1, 1, 2, 0 })
+        {
+            WriteVarUint(crafted, value);
+        }
+
+        crafted.WriteByte(0xC4);
+        foreach (var value in new ulong[] { (ulong)a, 4, (ulong)a, 1, 1 })
+        {
+            WriteVarUint(crafted, value);
+        }
+
+        crafted.Write("z\0"u8);
+        return crafted.ToArray();
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_ItemWhoseRightOriginPrecedesItsOrigin_IsRefusedAndAJoinerSeesTheSameText()
+    {
+        var a = new YDoc(new YDocOptions { ClientId = 1L << 40 });
+        a.GetText("text").Insert(0, "abcdef");
+        var room = new YDoc();
+        room.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+
+        var e = Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(ZBetweenEAndB(1L << 40)));
+        var joiner = new YDoc();
+        joiner.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
+
+        Assert.AreEqual((false, "abcdef", "abcdef"), (e.PartlyApplied, room.GetText("text").ToString(), joiner.GetText("text").ToString()));
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_ItemWhoseRightOriginFollowsItsOrigin_IsAccepted()
+    {
+        // The honest case that looks alike: "ba" typed backwards, then an item between them (origin a, which has the
+        // higher clock; right origin b, the lower one).
+        var a = new YDoc(new YDocOptions { ClientId = 1 });
+        var text = a.GetText("text");
+        text.Insert(0, "b");
+        text.Insert(0, "a");
+        text.Insert(1, "m");
+        var joiner = new YDoc();
+
+        joiner.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
+
+        Assert.AreEqual("amb", joiner.GetText("text").ToString());
+    }
 }

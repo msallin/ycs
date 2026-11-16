@@ -119,6 +119,12 @@ before anything changes:
   so no clock arithmetic overflows;
 * no struct of length 0, no client listed twice, no reference to a later struct of the item's own
   client, no unknown content or type;
+* no item whose right origin precedes its origin within one item of their client (Yjs never writes one, and it
+  accepts it: the item lands where a document that holds the whole state in one update would not place it,
+  so a document and a client that joins it disagree for good). A deliberate divergence: the update is
+  rejected, the document unchanged. Only that case is told from the honest ones (an item between two typed backwards has
+  a right origin of a lower clock than its origin, in two items); a crafted update with the origins in two items
+  that way is applied, as Yjs does;
 * nesting: 'any' and JSON values, and shared types inside each other, at most
   `UpdateLimits.MaxDepth` levels deep (3,000 by default, each counted on its own: about as deep as Yjs'
   recursive walks go before the JavaScript stack runs out, so no Yjs peer writes a deeper document; a
