@@ -44,19 +44,19 @@ internal sealed partial class StructStore
         private readonly List<long> _clientsStructRefsIds = new();
         private readonly List<AbstractStruct> _stack = new();
         private readonly List<ClientStructRefs> _freeRefs = new();
-        private readonly List<Item> _chain = new();
+        private readonly List<PlanItem> _chain = new();
         private Dictionary<long, List<AbstractStruct>> _refs;
 
         // Nesting depth of the types this update creates (by the id of their item), and of the type
         // each item lands in (when it was needed), for the nesting limit.
         private Dictionary<ID, int> _typeDepths;
         private int _maxDepth;
-        private Dictionary<Item, int> _parentDepths;
+        private Dictionary<PlanItem, int> _parentDepths;
 
         // The parent and key of the planned items without a parent (by their references), for the garbage collection check.
-        private Dictionary<Item, (object Parent, string Key)> _keys;
+        private Dictionary<PlanItem, (object Parent, string Key)> _keys;
         private readonly List<(long Client, long Clock, long End)> _ranges = new();
-        private readonly List<Item> _keyChain = new();
+        private readonly List<PlanItem> _keyChain = new();
 
         public IntegrationPlan(StructStore store)
         {
@@ -244,7 +244,7 @@ internal sealed partial class StructStore
                             // All fine, apply the stackhead.
                             if (stackHead is Item { Content: ContentType } typeItem)
                             {
-                                CheckNesting(typeItem);
+                                CheckNesting(PlanItem.Decoded(typeItem));
                             }
 
                             _steps.Add((stackHead, (int)offset, true));
@@ -345,7 +345,7 @@ internal sealed partial class StructStore
         /// the given parent, else the parent of its left origin, else of its right origin. (When the
         /// other origin is a GC struct the item becomes one too; ignoring that only overestimates.)
         /// </summary>
-        private void CheckNesting(Item typeItem)
+        private void CheckNesting(PlanItem typeItem)
         {
             var parentDepth = ParentDepth(typeItem);
             if (parentDepth >= 0)
@@ -360,9 +360,9 @@ internal sealed partial class StructStore
         }
 
         /// <summary>The depth of the type <paramref name="item"/> lands in, or -1 when it becomes a GC struct.</summary>
-        private int ParentDepth(Item item)
+        private int ParentDepth(PlanItem item)
         {
-            _parentDepths ??= new Dictionary<Item, int>();
+            _parentDepths ??= new Dictionary<PlanItem, int>();
             var chain = _chain;
             chain.Clear();
             int depth;
@@ -401,7 +401,7 @@ internal sealed partial class StructStore
                     break;
                 }
 
-                item = next;
+                item = PlanItem.Decoded(next);
             }
 
             foreach (var c in chain)
@@ -463,7 +463,7 @@ internal sealed partial class StructStore
             {
                 foreach (var type in deleted.Keys)
                 {
-                    if (type is { Parent: AbstractType, Content: ContentType content } && HasLiveNonValue(content.Type, doc, !type.Keep && doc.GcFilter(ItemView.Detached(doc, type)), ranges))
+                    if (type is { Parent: AbstractType, Content: ContentType content } && HasLiveNonValue(content.Type, doc, !type.Keep && doc.GcFilter(type.GcView(doc)), ranges))
                     {
                         throw MapValueSplit();
                     }
@@ -474,10 +474,11 @@ internal sealed partial class StructStore
             {
                 // Collected when a type above it is deleted now and collected (it, or one between them).
                 var collected = false;
-                for (var ancestor = ParentTypeItem(part); ancestor != null; ancestor = ParentTypeItem(ancestor))
+                // The walk stops at a collected type: the collection of a type above it does not enter it.
+                for (var ancestor = KeyOf(part).Parent; ancestor is PlanItem type; ancestor = KeyOf(type).Parent)
                 {
-                    collected |= !ancestor.Keep && doc.GcFilter(ItemView.Detached(doc, ancestor));
-                    if (collected && deleted.ContainsKey(ancestor))
+                    collected |= !type.Keep && doc.GcFilter(type.GcView(doc));
+                    if (collected && deleted.ContainsKey(type))
                     {
                         throw MapValueSplit();
                     }
@@ -505,9 +506,9 @@ internal sealed partial class StructStore
         /// The boundaries (with their time) at which the update's references and ranges cut an item with a key that
         /// is not deleted, by item, or null when there is none (the common case: a key's value is one item).
         /// </summary>
-        private Dictionary<Item, List<(long Boundary, int Time)>> MapValueSplits(List<(long Client, long Clock, long End)> ranges)
+        private Dictionary<PlanItem, List<(long Boundary, int Time)>> MapValueSplits(List<(long Client, long Clock, long End)> ranges)
         {
-            Dictionary<Item, List<(long Boundary, int Time)>> splits = null;
+            Dictionary<PlanItem, List<(long Boundary, int Time)>> splits = null;
             foreach (var (str, _, _) in _steps)
             {
                 if (str is Item item)
@@ -538,13 +539,13 @@ internal sealed partial class StructStore
         }
 
         /// <summary>Records <paramref name="boundary"/> if it falls inside the item that holds <paramref name="id"/> and that item may be a key's undeleted value.</summary>
-        private void Split(ref Dictionary<Item, List<(long Boundary, int Time)>> splits, ID id, long boundary, int time)
+        private void Split(ref Dictionary<PlanItem, List<(long Boundary, int Time)>> splits, ID id, long boundary, int time)
         {
             var (target, start) = Target(id);
-            if (target != null && start < boundary && boundary < target.Id.Clock + target.Length
+            if (!target.IsNull && start < boundary && boundary < target.Id.Clock + target.Length
                 && !target.Deleted && target.Content is not ContentDeleted && (target.ParentSub != null || target.Parent == null))
             {
-                splits ??= new Dictionary<Item, List<(long, int)>>();
+                splits ??= new Dictionary<PlanItem, List<(long, int)>>();
                 if (!splits.TryGetValue(target, out var list))
                 {
                     splits[target] = list = new List<(long, int)>();
@@ -558,13 +559,13 @@ internal sealed partial class StructStore
         /// The type items this update deletes by its ranges and the values of keys it replaces (when the new item is
         /// estimated to land last, see <see cref="LandsLast"/>), with the time they are deleted, or null.
         /// </summary>
-        private Dictionary<Item, int> DeletedTypes(YDoc doc, List<(long Client, long Clock, long End)> ranges)
+        private Dictionary<PlanItem, int> DeletedTypes(YDoc doc, List<(long Client, long Clock, long End)> ranges)
         {
-            Dictionary<Item, int> deleted = null;
+            Dictionary<PlanItem, int> deleted = null;
 
-            void Add(Item type, int time)
+            void Add(PlanItem type, int time)
             {
-                deleted ??= new Dictionary<Item, int>();
+                deleted ??= new Dictionary<PlanItem, int>();
                 if (!deleted.TryGetValue(type, out var earlier) || earlier > time)
                 {
                     deleted[type] = time;
@@ -572,9 +573,9 @@ internal sealed partial class StructStore
             }
 
             var chains = new KeyChains();
-            foreach (var (str, _, integrate) in _steps)
+            foreach (var (str, offset, integrate) in _steps)
             {
-                if (integrate && str is Item item && LandsLast(doc, item, chains) is { Deleted: false } replaced)
+                if (integrate && str is Item item && LandsLast(doc, PlanItem.Decoded(item), offset, chains) is { IsNull: false, Deleted: false } replaced)
                 {
                     Add(replaced, ValueReplaced);
                 }
@@ -587,18 +588,32 @@ internal sealed partial class StructStore
                 end = Math.Min(end, GetState(client));
                 for (var clock = start; clock < end;)
                 {
-                    var str = clock < known ? _store.Find(new ID(client, clock)).ToStruct() : FindPlanned(new ID(client, clock));
-                    if (str == null)
+                    PlanItem type;
+                    long structEnd;
+                    if (clock < known)
                     {
-                        break;
+                        var found = _store.Find(new ID(client, clock));
+                        type = PlanItem.Store(found);
+                        structEnd = found.Id.Clock + found.Length;
+                    }
+                    else
+                    {
+                        var planned = FindPlanned(new ID(client, clock));
+                        if (planned == null)
+                        {
+                            break;
+                        }
+
+                        type = planned is Item plannedItem ? PlanItem.Decoded(plannedItem) : default;
+                        structEnd = planned.Id.Clock + planned.Length;
                     }
 
-                    if (str is Item { Deleted: false, Content: ContentType } type)
+                    if (!type.IsNull && !type.Deleted && type.Content is ContentType)
                     {
                         Add(type, RangeDeletes(k + 1));
                     }
 
-                    clock = str.Id.Clock + str.Length;
+                    clock = structEnd;
                 }
             }
 
@@ -614,18 +629,20 @@ internal sealed partial class StructStore
         /// is of a lower client; after an origin only when that is the end of the key's value; without origins, after
         /// the key's first item only when that item's client is lower. Items under a deleted type are deleted.
         /// </summary>
-        private Item LandsLast(YDoc doc, Item item, KeyChains chains)
+        private PlanItem LandsLast(YDoc doc, PlanItem item, int offset, KeyChains chains)
         {
+            // Integrated from the store's state on, an item that overlaps the store has the item before as its origin.
+            var leftOrigin = offset > 0 ? new ID(item.Id.Client, item.Id.Clock + offset - 1) : item.LeftOrigin;
             var (parent, key) = KeyOf(item);
-            if (parent is Item parentItem && (parentItem.Deleted || chains.Deleted.Contains(parentItem)))
+            if (parent is PlanItem parentItem ? parentItem.Deleted || chains.Deleted.Contains(parentItem) : parent is AbstractType { IsCollected: true } collectedParent && collectedParent.ItemDeleted)
             {
                 chains.Deleted.Add(item);
-                return null;
+                return default;
             }
 
             if (item.Content is ContentDeleted || key == null)
             {
-                return null;
+                return default;
             }
 
             // A root is named by planned items and is the type itself for those in the store.
@@ -638,7 +655,7 @@ internal sealed partial class StructStore
             {
                 var type = parent switch
                 {
-                    Item { Parent: AbstractType } typeItem => (typeItem.Content as ContentType)?.Type,
+                    PlanItem { Parent: AbstractType } typeItem => (typeItem.Content as ContentType)?.Type,
                     AbstractType root => root,
                     _ => null,
                 };
@@ -650,12 +667,12 @@ internal sealed partial class StructStore
                         head = head.Left;
                     }
 
-                    chain = (head.ToItem(), value.ToItem());
+                    chain = (PlanItem.Store(head), PlanItem.Store(value));
                 }
             }
 
             bool last;
-            if (chain.Value == null)
+            if (chain.Value.IsNull)
             {
                 last = item.RightOrigin == null;
             }
@@ -663,10 +680,10 @@ internal sealed partial class StructStore
             {
                 last = false;
             }
-            else if (item.LeftOrigin is ID origin)
+            else if (leftOrigin is ID origin)
             {
                 last = origin.Equals(chain.Value.LastId)
-                    || (Target(origin).Item is { } left && !origin.Equals(left.LastId) && left.Id.Client < item.Id.Client && ReferenceEquals(left, chain.Value));
+                    || (Target(origin).Item is { IsNull: false } left && !origin.Equals(left.LastId) && left.Id.Client < item.Id.Client && left == chain.Value);
             }
             else
             {
@@ -674,22 +691,22 @@ internal sealed partial class StructStore
             }
 
             // Without origins and not last, it lands before the key's first item.
-            var first = chain.Head == null || (!last && item.LeftOrigin == null) ? item : chain.Head;
+            var first = chain.Head.IsNull || (!last && leftOrigin == null) ? item : chain.Head;
             chains.Keys[(parent, key)] = (first, last ? item : chain.Value);
             if (!last)
             {
                 chains.Deleted.Add(item);
             }
 
-            return last ? chain.Value : null;
+            return last ? chain.Value : default;
         }
 
         /// <summary>The state of <see cref="LandsLast"/>: per key its first item and value, and the planned items estimated deleted on integration.</summary>
         private sealed class KeyChains
         {
-            public Dictionary<(object, string), (Item Head, Item Value)> Keys { get; } = new();
+            public Dictionary<(object, string), (PlanItem Head, PlanItem Value)> Keys { get; } = new();
 
-            public HashSet<Item> Deleted { get; } = new();
+            public HashSet<PlanItem> Deleted { get; } = new();
         }
 
         /// <summary>
@@ -697,15 +714,15 @@ internal sealed partial class StructStore
         /// <see cref="LandsLast"/>) and keep a part other than the last undeleted: a boundary cuts a part only while
         /// that part is not deleted yet (by an earlier range, or as the key's value with a type above it).
         /// </summary>
-        private List<Item> LiveNonValues(YDoc doc, Dictionary<Item, List<(long Boundary, int Time)>> splits, List<(long Client, long Clock, long End)> ranges, Dictionary<Item, int> deleted)
+        private List<PlanItem> LiveNonValues(YDoc doc, Dictionary<PlanItem, List<(long Boundary, int Time)>> splits, List<(long Client, long Clock, long End)> ranges, Dictionary<PlanItem, int> deleted)
         {
-            var parts = new List<Item>();
+            var parts = new List<PlanItem>();
             if (splits == null)
             {
                 return parts;
             }
 
-            HashSet<Item> values = null;
+            HashSet<PlanItem> values = null;
             foreach (var (target, events) in splits)
             {
                 if (KeyOf(target).Key == null)
@@ -718,13 +735,14 @@ internal sealed partial class StructStore
                     if (values == null)
                     {
                         // The planned items that become a key's value when they integrate, a later planned item replacing them or not.
-                        values = new HashSet<Item>();
+                        values = new HashSet<PlanItem>();
                         var chains = new KeyChains();
-                        foreach (var (str, _, integrate) in _steps)
+                        foreach (var (str, offset, integrate) in _steps)
                         {
-                            if (integrate && str is Item item)
+                            if (integrate && str is Item decoded)
                             {
-                                LandsLast(doc, item, chains);
+                                var item = PlanItem.Decoded(decoded);
+                                LandsLast(doc, item, offset, chains);
                                 if (!chains.Deleted.Contains(item) && item.Content is not ContentDeleted && KeyOf(item).Key != null)
                                 {
                                     values.Add(item);
@@ -741,9 +759,9 @@ internal sealed partial class StructStore
 
                 // When the value is replaced, or a type above it is deleted, its last part (then the key's value) is deleted.
                 var typeDeleted = deleted.TryGetValue(target, out var replacedAt) ? replacedAt : int.MaxValue;
-                for (var ancestor = ParentTypeItem(target); ancestor != null; ancestor = ParentTypeItem(ancestor))
+                for (var ancestor = KeyOf(target).Parent; ancestor is PlanItem type; ancestor = KeyOf(type).Parent)
                 {
-                    if (deleted.TryGetValue(ancestor, out var time))
+                    if (deleted.TryGetValue(type, out var time))
                     {
                         typeDeleted = Math.Min(typeDeleted, time);
                     }
@@ -751,7 +769,7 @@ internal sealed partial class StructStore
 
                 var client = target.Id.Client;
                 var valueEnd = target.Id.Clock + target.Length;
-                var boundaries = new List<long> { Target(target.Id).Start, valueEnd };
+                var boundaries = new List<long> { target.IsStored ? target.Id.Clock : Math.Max(target.Id.Clock, _store.GetState(client)), valueEnd };
                 events.Sort((a, b) => a.Time.CompareTo(b.Time));
                 foreach (var (boundary, time) in events)
                 {
@@ -816,7 +834,7 @@ internal sealed partial class StructStore
                 {
                     if (item.Content is ContentType child)
                     {
-                        stack.Add((child.Type, c || (!item.Keep && doc.GcFilter(ItemView.Detached(doc, item.ToItem())))));
+                        stack.Add((child.Type, c || (!item.Keep && doc.GcFilter(PlanItem.Store(item).GcView(doc)))));
                     }
                 }
             }
@@ -859,23 +877,26 @@ internal sealed partial class StructStore
         /// The item that holds <paramref name="id"/> once the plan is carried out, with the clock it starts at (a
         /// planned item that overlaps the store is integrated from the store's state on), or null for a GC struct.
         /// </summary>
-        private (Item Item, long Start) Target(ID id)
+        private (PlanItem Item, long Start) Target(ID id)
         {
             var known = _store.GetState(id.Client);
             if (id.Clock < known)
             {
-                return _store.Find(id).ToStruct() is Item item ? (item, item.Id.Clock) : (null, 0);
+                var found = _store.Find(id);
+                return found.IsItem ? (PlanItem.Store(found), found.Id.Clock) : (default, 0);
             }
 
-            return id.Clock < GetState(id.Client) && FindPlanned(id) is Item planned ? (planned, Math.Max(planned.Id.Clock, known)) : (null, 0);
+            return id.Clock < GetState(id.Client) && FindPlanned(id) is Item planned ? (PlanItem.Decoded(planned), Math.Max(planned.Id.Clock, known)) : (default, 0);
         }
 
         /// <summary>
-        /// The parent (a root's name or the type's item, or the root type) and key <paramref name="item"/> has once
-        /// integrated: its own, else those of the item its origin (or right origin) refers to, as
-        /// <see cref="Item.ResolveReferences"/> takes them; (null, null) when it is integrated as a GC struct.
+        /// The parent and key <paramref name="item"/> has once integrated: its own, else those of the item its origin
+        /// (or right origin) refers to, as <see cref="Item.ResolveReferences"/> takes them; (null, null) when it is
+        /// integrated as a GC struct. The parent is a root's name, a root type, the <see cref="PlanItem"/> of the type's
+        /// item, or a collected type (its item is gone, <see cref="AbstractType.ItemDeleted"/> and
+        /// <see cref="AbstractType.ParentType"/> tell what its item did).
         /// </summary>
-        private (object Parent, string Key) KeyOf(Item item)
+        private (object Parent, string Key) KeyOf(PlanItem item)
         {
             // Only a planned item has no parent yet; its references are integrated before it. The walk is memoized
             // (a large update's items each refer to the one before).
@@ -893,15 +914,15 @@ internal sealed partial class StructStore
                 {
                     result = (item.Parent switch
                     {
-                        AbstractType type => type._item.IsNull ? type : type._item.ToItem(),
-                        ID id => Target(id).Item,
+                        AbstractType type => ParentOf(type),
+                        ID id => Target(id).Item.Boxed,
                         var root => root,
                     }, item.ParentSub);
                     break;
                 }
 
                 chain.Add(item);
-                if ((item.LeftOrigin is ID l && Target(l).Item == null) || (item.RightOrigin is ID r && Target(r).Item == null) || (item.LeftOrigin ?? item.RightOrigin) is not ID origin)
+                if ((item.LeftOrigin is ID l && Target(l).Item.IsNull) || (item.RightOrigin is ID r && Target(r).Item.IsNull) || (item.LeftOrigin ?? item.RightOrigin) is not ID origin)
                 {
                     result = (null, null);
                     break;
@@ -912,7 +933,7 @@ internal sealed partial class StructStore
 
             if (chain.Count > 0)
             {
-                _keys ??= new Dictionary<Item, (object, string)>();
+                _keys ??= new Dictionary<PlanItem, (object, string)>();
                 foreach (var c in chain)
                 {
                     _keys[c] = result;
@@ -922,8 +943,8 @@ internal sealed partial class StructStore
             return result;
         }
 
-        /// <summary>The item of the type <paramref name="item"/> lands in, or null for a root (or a GC struct).</summary>
-        private Item ParentTypeItem(Item item) => KeyOf(item).Parent as Item;
+        // A type as the parent of an item: its item (a collected type has none), else the type (a root, or collected).
+        private static object ParentOf(AbstractType type) => type.IsCollected || type._item.IsNull ? type : PlanItem.Store(type._item).Boxed;
 
         private List<AbstractStruct> _plannedHintList;
         private int _plannedHint;
