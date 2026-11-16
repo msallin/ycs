@@ -370,9 +370,12 @@ internal sealed class HostileRoom
 
             case 2:
                 {
+                    // From a forger with nothing held back, so that the nesting does not wait: waiting types beyond
+                    // the limit are dropped when they integrate, while the clients that got them as waiting keep them
+                    // (HostileYcsTests, a Ycs bug).
                     var depth = rng.Between(Limits.MaxDepth / 2, Limits.MaxDepth * 2);
                     var asTypes = rng.Chance(0.5);
-                    var update = HostileUpdates.Edit(h.Forger, d =>
+                    var update = HostileUpdates.Edit(Forger(), d =>
                     {
                         if (asTypes)
                         {
@@ -471,9 +474,17 @@ internal sealed class HostileRoom
     /// </summary>
     public void Check(bool full)
     {
+        if (honest.FirstOrDefault(p => p.Session is { CloseCause: YUpdateException e } && e.Message.Contains("MaxPendingStructs", StringComparison.Ordinal)) is { } lockedOut)
+        {
+            // What waits went beyond the limit (an update that let some integrate brought more), and the client's
+            // step 2 carries it back as it got it: Ycs refuses that (HostileYcsTests), on every reconnect.
+            Stats.LockedOut();
+            honest.Remove(lockedOut);
+        }
+
         if (!listener.Connected || honest.Any(p => p.Session is { IsClosed: true }))
         {
-            throw Fail("an honest session closed: " + string.Join(", ", honest.Select(p => p.Session?.CloseReason)) + $", listener {listener.Session!.CloseReason}");
+            throw Fail("an honest session closed: " + string.Join(", ", honest.Select(p => $"{p.Session?.CloseReason} {p.Session?.CloseCause?.Message}")) + $", listener {listener.Session!.CloseReason}");
         }
 
         foreach (var h in hostiles.Where(h => h.Session.IsClosed))
@@ -687,6 +698,11 @@ internal sealed class HostileStats
 
     public void SelfInconsistent() => SelfInconsistentRuns++;
 
+    /// <summary>Honest clients refused for carrying back what waits (see <see cref="HostileRoom"/>).</summary>
+    public int LockedOutClients { get; private set; }
+
+    public void LockedOut() => LockedOutClients++;
+
     /// <summary>Per kind of message: how many were sent, closed their session, and closed it but changed the document.</summary>
     public Dictionary<string, (int Sent, int Closed, int ClosedButChanged)> Kinds { get; } = [];
 
@@ -717,11 +733,12 @@ internal sealed class HostileStats
         }
 
         SelfInconsistentRuns += other.SelfInconsistentRuns;
+        LockedOutClients += other.LockedOutClients;
         PendingExcess(other.MaxPendingExcess);
         AwarenessIds(other.MaxAwarenessIds);
     }
 
     public override string ToString() =>
-        $"closed {string.Join(", ", CloseReasons.OrderBy(e => e.Key).Select(e => $"{e.Key} {e.Value}"))}; most bytes pending {MaxPendingExcess}; most awareness states {MaxAwarenessIds}; documents that differ from their own state {SelfInconsistentRuns}\n"
+        $"closed {string.Join(", ", CloseReasons.OrderBy(e => e.Key).Select(e => $"{e.Key} {e.Value}"))}; most bytes pending {MaxPendingExcess}; most awareness states {MaxAwarenessIds}; documents that differ from their own state {SelfInconsistentRuns}; honest clients locked out {LockedOutClients}\n"
         + string.Join('\n', Kinds.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => $"  {e.Key}: sent {e.Value.Sent}, closed {e.Value.Closed}, of them after a change {e.Value.ClosedButChanged}"));
 }
