@@ -13,7 +13,7 @@ namespace Ycs.Server.Rooms;
 internal sealed class Room
 {
     private readonly Lock gate = new();
-    private readonly YDoc doc = new();
+    private readonly YDoc doc;
     private readonly Awareness.Awareness awareness;
 
     // Under the lock: whether the update being applied may integrate what waited for it, which its origin has not seen.
@@ -22,9 +22,10 @@ internal sealed class Room
     // Copy-on-write under the lock, so that a fan-out iterates a snapshot while a full queue removes its session.
     private Session[] sessions = [];
 
-    public Room(string name, TimeProvider? time = null)
+    public Room(string name, TimeProvider? time = null, UpdateLimits? limits = null)
     {
         Name = name;
+        doc = new YDoc(new YDocOptions { Limits = limits ?? UpdateLimits.Default });
         awareness = new Awareness.Awareness(time ?? TimeProvider.System);
         doc.Update += OnUpdate;
     }
@@ -105,11 +106,21 @@ internal sealed class Room
 
             var change = awareness.ApplyUpdate(update);
 
-            // Updated too, unlike y-websocket's server: a state set again after a removal or a timeout, or over
-            // another session's, is an update, and would outlive this session.
-            session.ControlledIds.UnionWith(change.Added);
-            session.ControlledIds.UnionWith(change.Updated);
-            session.ControlledIds.ExceptWith(change.Removed);
+            // By the state each id is left with, not by the change's lists: a message may set, remove and set one id
+            // again, and a state set again after a removal or a timeout, or over another session's, is an update
+            // (unlike y-websocket's server, which takes only the added ids).
+            foreach (var id in change.Broadcast())
+            {
+                if (awareness.TryGetState(id, out _))
+                {
+                    session.ControlledIds.Add(id);
+                }
+                else
+                {
+                    session.ControlledIds.Remove(id);
+                }
+            }
+
             Broadcast(change);
         }
     }

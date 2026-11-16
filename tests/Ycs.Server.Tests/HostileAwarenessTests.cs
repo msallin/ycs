@@ -59,4 +59,17 @@ public class HostileAwarenessTests
 
         Assert.AreEqual(0, room.AwarenessClientIds.Count);
     }
+
+    [TestMethod]
+    public void Close_StateRemovedAndSetAgainInOneMessage_RemovesIt()
+    {
+        var room = new Room("r");
+        var session = Join(room);
+        session.Receive(Messages.Awareness(5, 1, "{}"));
+        session.Receive(HostileMessages.Awareness((5, 2, "{}"), (5, 3, null), (5, 4, "{\"back\":true}")));
+
+        session.Close();
+
+        Assert.AreEqual(0, room.AwarenessClientIds.Count);
+    }
 }
