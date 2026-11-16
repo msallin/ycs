@@ -148,6 +148,27 @@ internal sealed class Slab
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object ReadOwner(int handle) => _ownerPages[handle >> PageBits]![handle & (PageSlots - 1)]!;
 
+    /// <summary>
+    /// Debug only: the slot's owner is <paramref name="owner"/>. A handle that outlived its struct names a free slot or,
+    /// once the slot is reused, another struct; it fails here, not as a wrong answer later.
+    /// </summary>
+    [Conditional("DEBUG")]
+    public void CheckOwner(int handle, object owner)
+    {
+        var current = PageOrNull(handle) is { } page && IndexOf(handle) < page.Used ? page.Owners[IndexOf(handle)] : null;
+        if (!ReferenceEquals(current, owner))
+        {
+            throw new InvalidOperationException(
+                $"The slot {handle} is owned by {(current == null ? "no struct (it is free)" : "another struct")}, not by the struct that reads it: a handle outlived its struct and the slot was freed or reused. Nothing was changed.");
+        }
+    }
+
+    private Page? PageOrNull(int handle)
+    {
+        var number = PageOf(handle);
+        return handle >= 0 && number < _pages.Count ? _pages[number] : null;
+    }
+
     public void SetOwner(int handle, object? owner)
     {
         var page = PageAt(handle);
@@ -230,9 +251,11 @@ internal sealed class Slab
 
             // The pending chain ends in the free chain's head.
             var tail = page.PendingHead;
+            PoisonFreed(ref page.Slots[tail]);
             while (page.Slots[tail].Payload >= 0)
             {
                 tail = (int)page.Slots[tail].Payload;
+                PoisonFreed(ref page.Slots[tail]);
             }
 
             page.Slots[tail].Payload = page.FreeHead;
@@ -451,6 +474,24 @@ internal sealed class Slab
 
         Publish(number, page);
         PoisonOld(old);
+    }
+
+    // A slot may be read until it can be reused; from then on its fields (but the kind and the free-list link) are garbage,
+    // so a holder that still reads one gets a handle that names no page.
+    [Conditional("DEBUG")]
+    private static void PoisonFreed(ref Slot slot)
+    {
+        const int garbage = 0x5A5A5A5A;
+        slot.Clock = garbage;
+        slot.OriginClock = garbage;
+        slot.ROriginClock = garbage;
+        slot.Length = garbage;
+        slot.Client = garbage;
+        slot.OriginClient = garbage;
+        slot.ROriginClient = garbage;
+        slot.Left = garbage;
+        slot.Right = garbage;
+        slot.Parent = garbage;
     }
 
     // A ref Slot kept across the growth points into the old array: reading it shows these values.

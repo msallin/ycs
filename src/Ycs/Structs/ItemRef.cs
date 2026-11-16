@@ -6,6 +6,7 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Ycs;
@@ -127,17 +128,60 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? ReadId(str.SlotStore, str.Handle) : Unattached(str).Id;
+            return str.Handle >= 0 ? ReadId(str) : Unattached(str).Id;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.SetStart(value);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ID ReadId(StructStore store, int handle)
+    private static ID ReadId(AbstractStruct str)
     {
-        ref readonly var slot = ref store.Slab.Read(handle);
+        var store = str.SlotStore;
+        ref readonly var slot = ref SlotOf(str);
         return new ID(store.ClientTable[slot.Client], slot.Clock);
+    }
+
+    // Every read of a slot goes through these: in Debug the slot's owner must be the struct read (a handle that outlived
+    // its struct names another one once the slot is reused); in Release they are the plain reads.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ref readonly Slot SlotOf(AbstractStruct str)
+    {
+        str.SlotStore.Slab.CheckOwner(str.Handle, str);
+        return ref str.SlotStore.Slab.Read(str.Handle);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static object RefOf(AbstractStruct str)
+    {
+        str.SlotStore.Slab.CheckOwner(str.Handle, str);
+        return str.SlotStore.Slab.ReadRef(str.Handle);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static object KeyOf(AbstractStruct str)
+    {
+        str.SlotStore.Slab.CheckOwner(str.Handle, str);
+        return str.SlotStore.Slab.ReadKey(str.Handle);
+    }
+
+    // The struct a link of the slot of <from> names: in Debug a live slot whose owner holds that handle.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static AbstractStruct LinkedOwner(AbstractStruct from, int handle)
+    {
+        var owner = (AbstractStruct)from.SlotStore.Slab.ReadOwner(handle);
+        CheckLinked(handle, owner, from.SlotStore);
+        return owner;
+    }
+
+    [Conditional("DEBUG")]
+    private static void CheckLinked(int handle, AbstractStruct owner, StructStore store)
+    {
+        if (owner == null || owner.Handle != handle || !ReferenceEquals(owner.SlotStore, store))
+        {
+            throw new InvalidOperationException(
+                $"A link names the slot {handle}, which is free or owned by a struct that does not hold it: the link outlived its target. Nothing was changed.");
+        }
     }
 
     public int Length
@@ -146,7 +190,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? str.SlotStore.Slab.Read(str.Handle).Length : Unattached(str).Length;
+            return str.Handle >= 0 ? SlotOf(str).Length : Unattached(str).Length;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.SetLength(value);
@@ -158,7 +202,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? (str.SlotStore.Slab.Read(str.Handle).Info & Slot.DeletedFlag) != 0 : Unattached(str).Deleted;
+            return str.Handle >= 0 ? (SlotOf(str).Info & Slot.DeletedFlag) != 0 : Unattached(str).Deleted;
         }
     }
 
@@ -185,7 +229,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? str.SlotStore.Slab.Read(str.Handle).Kind : Unattached(str) is Item item ? item.Content.Ref : 0;
+            return str.Handle >= 0 ? SlotOf(str).Kind : Unattached(str) is Item item ? item.Content.Ref : 0;
         }
     }
 
@@ -200,8 +244,8 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
                 return new((Unattached(str) as Item).Left);
             }
 
-            var handle = str.SlotStore.Slab.Read(str.Handle).Left;
-            return handle < 0 ? default : new((AbstractStruct)str.SlotStore.Slab.ReadOwner(handle));
+            var handle = SlotOf(str).Left;
+            return handle < 0 ? default : new(LinkedOwner(str, handle));
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Left = value._struct;
@@ -218,8 +262,8 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
                 return new((Unattached(str) as Item).Right);
             }
 
-            var handle = str.SlotStore.Slab.Read(str.Handle).Right;
-            return handle < 0 ? default : new((AbstractStruct)str.SlotStore.Slab.ReadOwner(handle));
+            var handle = SlotOf(str).Right;
+            return handle < 0 ? default : new(LinkedOwner(str, handle));
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Right = value._struct;
@@ -237,7 +281,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
             }
 
             var store = str.SlotStore;
-            ref readonly var slot = ref store.Slab.Read(str.Handle);
+            ref readonly var slot = ref SlotOf(str);
             return slot.OriginClient < 0 ? null : new ID(store.ClientTable[slot.OriginClient], slot.OriginClock);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -256,7 +300,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
             }
 
             var store = str.SlotStore;
-            ref readonly var slot = ref store.Slab.Read(str.Handle);
+            ref readonly var slot = ref SlotOf(str);
             return slot.ROriginClient < 0 ? null : new ID(store.ClientTable[slot.ROriginClient], slot.ROriginClock);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -275,7 +319,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
                 return (Unattached(str) as Item).Parent;
             }
 
-            var index = str.SlotStore.Slab.Read(str.Handle).Parent;
+            var index = SlotOf(str).Parent;
             return index < 0 ? null : str.SlotStore.Types[index];
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -288,7 +332,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? (string)str.SlotStore.Slab.ReadKey(str.Handle) : (Unattached(str) as Item).ParentSub;
+            return str.Handle >= 0 ? (string)KeyOf(str) : (Unattached(str) as Item).ParentSub;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.ParentSub = value;
@@ -301,7 +345,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            if (str.Handle >= 0 && (str.SlotStore.Slab.Read(str.Handle).Info & Slot.HasRedoneFlag) == 0)
+            if (str.Handle >= 0 && (SlotOf(str).Info & Slot.HasRedoneFlag) == 0)
             {
                 return null;
             }
@@ -318,7 +362,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? (IContentEx)str.SlotStore.Slab.ReadRef(str.Handle) : (Unattached(str) as Item).Content;
+            return str.Handle >= 0 ? (IContentEx)RefOf(str) : (Unattached(str) as Item).Content;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Content = value;
@@ -330,7 +374,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? (str.SlotStore.Slab.Read(str.Handle).Info & Slot.MarkerFlag) != 0 : (Unattached(str) as Item).Marker;
+            return str.Handle >= 0 ? (SlotOf(str).Info & Slot.MarkerFlag) != 0 : (Unattached(str) as Item).Marker;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Marker = value;
@@ -342,7 +386,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? (str.SlotStore.Slab.Read(str.Handle).Info & Slot.KeepFlag) != 0 : (Unattached(str) as Item).Keep;
+            return str.Handle >= 0 ? (SlotOf(str).Info & Slot.KeepFlag) != 0 : (Unattached(str) as Item).Keep;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Keep = value;
@@ -354,7 +398,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             var str = _struct;
-            return str.Handle >= 0 ? (str.SlotStore.Slab.Read(str.Handle).Info & Slot.CountableFlag) != 0 : (Unattached(str) as Item).Countable;
+            return str.Handle >= 0 ? (SlotOf(str).Info & Slot.CountableFlag) != 0 : (Unattached(str) as Item).Countable;
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Countable = value;
