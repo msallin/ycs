@@ -2,12 +2,12 @@
 
 A server that relays for browsers, or a client that applies what a server sends, applies bytes it does not control.
 Ycs is built for that. This page says what is guaranteed and what is left to you; the
-[API reference](api.md#untrusted-input) has the full contract and the measurements.
+[API reference](api.md#limits-and-untrusted-input) has the full contract and the measurements.
 
 ## Malformed updates
 
-Every API that decodes bytes (`ApplyUpdate…`, `TryApplyUpdate…`, `EncodeStateAsUpdate(stateVector)`, everything in
-`YUpdate`, the snapshot and relative-position readers, `SyncProtocol.Read…`) throws only `YUpdateException`
+Every API that decodes bytes (`ApplyUpdate`, `TryApplyUpdate`, `EncodeStateAsUpdate(stateVector)`, everything in
+`YUpdate`, `Snapshot.Decode`, `RelativePosition.Decode`, `SyncProtocol.ReadSyncMessage`) throws only `YUpdateException`
 for malformed input. Its message says what was wrong, never the input's content.
 
 ```csharp
@@ -23,14 +23,14 @@ catch (YUpdateException ex) when (!ex.PartlyApplied)
 
 An update that lets waiting structs of earlier updates integrate retries them, and drops those that fail a check
 (nesting, garbage collection). That is not the sender's fault: the update stands whole and `ApplyUpdate` returns
-normally. The document raises `YDoc.PendingDropped` (the number of structs and the clients they were of), so that a
+normally. The document raises `YDoc.PendingDropped` (a `PendingDrop`: the number of structs and the clients they were of), so that a
 server can log it and resync the peers it handed the waiting structs to. Only when structs of the update itself waited
 for the dropped ones is the update cut short (`PartlyApplied`).
 
-`TryApplyUpdate` returns false instead of throwing.
+`TryApplyUpdate` returns false instead of throwing, for a malformed update and for one applied in part.
 
 `ApplyUpdate` decodes and checks the whole update before it changes the document, so a rejected update leaves it
-unchanged: same content, same state vector, no observer or `Update` event (`AfterTransaction` fires for the empty
+unchanged: same content, same state vector, no observer or `Updated` event (`AfterTransaction` fires for the empty
 transaction). One exception: an update whose conflict resolution exceeds its budget (below), or whose own structs
 waited for waiting structs that were dropped, is applied in part, and `YUpdateException.PartlyApplied` is set. The part
 applied is causally complete and the document stays valid.
@@ -64,14 +64,14 @@ input you trust without limits, per call:
 doc.ApplyUpdate(stored, null, limits: UpdateLimits.Unlimited);
 ```
 
-`new YDocOptions { Limits = … }` sets a document's limits for every update, and every `YUpdate` function
-takes a `limits` argument. `UpdateLimits` is immutable; one instance can be shared.
+`new YDocOptions { Limits = … }` sets a document's limits for every update, and `ApplyUpdate`, `TryApplyUpdate` and every `YUpdate` function
+take a `limits` argument. `UpdateLimits` is immutable; one instance can be shared.
 
 ## Exceptions from your handlers
 
 An exception thrown by an observer or an event handler is never swallowed: it comes out of the outermost
 `Transact` (or `ApplyUpdate`) after every remaining step of the cleanup has run, so the document stays usable. If an
-`Update` handler throws, the handlers after it miss that update; a provider among them did not send it, so resync
+`Updated` handler throws, the handlers after it miss that update; a provider among them did not send it, so resync
 those peers. Better: do not throw from these handlers. Details: [API reference](api.md#exceptions-of-handlers).
 
 ## Thread safety
