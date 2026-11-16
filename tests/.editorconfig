@@ -1,0 +1,9 @@
+[*.cs]
+# Test naming convention: Method_Scenario_Expected.
+dotnet_diagnostic.CA1707.severity = none
+# Inline literal arrays are the test data; a static field per array would hide the case from its test.
+dotnet_diagnostic.CA1861.severity = none
+# Tests declare the local type they exercise (var-free fixtures), not the narrowest return type.
+dotnet_diagnostic.CA1859.severity = none
+# Tests run under one fixed culture, set by the test host; they format fixed values only.
+dotnet_diagnostic.CA1305.severity = none

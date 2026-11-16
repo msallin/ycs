@@ -17,8 +17,8 @@ namespace Ycs;
 /// <seealso cref="RleDecoder"/>
 internal class RleEncoder : AbstractStreamEncoder<byte>
 {
-    private byte? _state = null;
-    private uint _count = 0;
+    private byte? _state;
+    private uint _count;
 
     public RleEncoder(bool pooled = false)
         : base(pooled)

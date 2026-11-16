@@ -189,7 +189,7 @@ public class EncodingTests
         DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (r) => r.ReadVarString(), "😝"); // Surrogate length 4.
     }
 
-    private void DoTestEncoding<T>(string description, Action<Lib0Writer, T> write, Func<Lib0Reader, T> read, T val)
+    private static void DoTestEncoding<T>(string description, Action<Lib0Writer, T> write, Func<Lib0Reader, T> read, T val)
     {
         byte[] encoded;
 

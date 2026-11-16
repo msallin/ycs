@@ -154,7 +154,7 @@ public class RleEncodingTests
         }
     }
 
-    private void TestEncoder<TEncoder, TDecoder>(TEncoder encoder, Func<Lib0Reader, TDecoder> createDecoder, int n = 100)
+    private static void TestEncoder<TEncoder, TDecoder>(TEncoder encoder, Func<Lib0Reader, TDecoder> createDecoder, int n = 100)
         where TEncoder : IEncoder<long>
         where TDecoder : IDecoder<long>
     {
@@ -185,7 +185,7 @@ public class RleEncodingTests
         }
     }
 
-    private void TestEncoder<TEncoder, TDecoder>(TEncoder encoder, Func<Lib0Reader, TDecoder> createDecoder, byte n = 100)
+    private static void TestEncoder<TEncoder, TDecoder>(TEncoder encoder, Func<Lib0Reader, TDecoder> createDecoder, byte n = 100)
         where TEncoder : IEncoder<byte>
         where TDecoder : IDecoder<byte>
     {

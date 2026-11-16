@@ -168,7 +168,7 @@ internal class DeleteSet
         }
     }
 
-    public int? FindIndexSS(IList<DeleteItem> dis, long clock)
+    public static int? FindIndexSS(IList<DeleteItem> dis, long clock)
     {
         var left = 0;
         var right = dis.Count - 1;

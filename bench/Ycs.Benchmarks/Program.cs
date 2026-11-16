@@ -58,22 +58,22 @@ internal static class Program
 
         if (args[0] == "sizes")
         {
-            Sizes.Run(args.Length > 1 ? int.Parse(args[1]) : 200_000);
+            Sizes.Run(args.Length > 1 ? int.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture) : 200_000);
             return 0;
         }
 
         if (args[0] == "gcsurvive")
         {
-            GcSurvive.Run(args.Length > 1 ? int.Parse(args[1]) : 11_000);
+            GcSurvive.Run(args.Length > 1 ? int.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture) : 11_000);
             return 0;
         }
 
         if (args[0] == "loop")
         {
-            return Loop(args[1], args[2], int.Parse(args[3]));
+            return Loop(args[1], args[2], int.Parse(args[3], System.Globalization.CultureInfo.InvariantCulture));
         }
 
-        var runs = args.Length > 1 ? int.Parse(args[1]) : 5;
+        var runs = args.Length > 1 ? int.Parse(args[1], System.Globalization.CultureInfo.InvariantCulture) : 5;
         var (patches, txnStarts, endContent) = LoadTrace(args[0]);
         Console.WriteLine($"trace: {txnStarts.Count - 1} transactions, {patches.Count} patches, {endContent.Length} chars final");
 

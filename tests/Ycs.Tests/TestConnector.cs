@@ -16,16 +16,16 @@ namespace Ycs;
 
 public class TestConnector
 {
-    public ISet<TestYInstance> _allConns = new HashSet<TestYInstance>();
-    public ISet<TestYInstance> _onlineConns = new HashSet<TestYInstance>();
-    public Random _prng = new Random();
+    public ISet<TestYInstance> _allConns { get; set; } = new HashSet<TestYInstance>();
+    public ISet<TestYInstance> _onlineConns { get; set; } = new HashSet<TestYInstance>();
+    public Random _prng { get; set; } = new Random();
 
     public TestYInstance CreateY(int clientId, YDocOptions options)
     {
         return new TestYInstance(this, clientId, options);
     }
 
-    public bool FlushNextMessage(TestYInstance sender, TestYInstance receiver)
+    public static bool FlushNextMessage(TestYInstance sender, TestYInstance receiver)
     {
         Assert.AreNotEqual(sender, receiver);
 

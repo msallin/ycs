@@ -90,7 +90,10 @@ internal sealed class ReferenceRun
 
     public void L(string line) => Log.Append(line).Append('\n');
 
+    // A short label for logs; not a security use.
+#pragma warning disable CA5350
     public static string Hex(byte[] bytes) => bytes.Length <= 48 ? Convert.ToHexString(bytes) : bytes.Length + ":" + Convert.ToHexString(SHA1.HashData(bytes), 0, 8);
+#pragma warning restore CA5350
 
     public static string D(IEnumerable<Delta> delta)
     {

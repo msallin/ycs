@@ -6,6 +6,7 @@
 
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Globalization;
 using System.Diagnostics;
 using System.Text;
 
@@ -721,7 +722,7 @@ internal static class UpdateOperations
     {
         var sb = new StringBuilder();
 
-        sb.AppendLine($"Structs ({decoded.Staged.Count}):");
+        sb.AppendLine(CultureInfo.InvariantCulture, $"Structs ({decoded.Staged.Count}):");
         for (var i = 0; i < decoded.Staged.Count; i++)
         {
             sb.Append("  ").AppendLine(DescribeStruct(decoded.Staged, i));
@@ -732,7 +733,7 @@ internal static class UpdateOperations
         {
             foreach (var range in kvp.Value)
             {
-                sb.Append("  ").AppendLine($"client={kvp.Key} clock={range.Clock} length={range.Length}");
+                sb.Append("  ").AppendLine(CultureInfo.InvariantCulture, $"client={kvp.Key} clock={range.Clock} length={range.Length}");
             }
         }
 

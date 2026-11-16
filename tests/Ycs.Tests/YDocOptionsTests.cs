@@ -13,7 +13,8 @@ public class YDocOptionsTests
         var (a, b) = (new YDoc(options), new YDoc(options));
 
         Assert.AreNotEqual(a.Guid, b.Guid);
-        Assert.AreEqual(a.Guid, a.Guid);
+        var guid = a.Guid;
+        Assert.AreEqual(guid, a.Guid);
     }
 
     [TestMethod]

@@ -494,19 +494,19 @@ public class YMapTests : YTestBase
         void throwingObserver(YMapEvent args)
         {
             throwingObserverCalled = true;
-            throw new Exception("Failure");
+            throw new InvalidOperationException("Failure");
         }
 
         void throwingDeepObserver(IReadOnlyList<YEvent> args, Transaction tr)
         {
             throwingDeepObserverCalled = true;
-            throw new Exception("Deep failure");
+            throw new InvalidOperationException("Deep failure");
         }
 
         map.Observe(throwingObserver);
         map.ObserveDeep(throwingDeepObserver);
 
-        Assert.ThrowsExactly<Exception>(() =>
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
         {
             map["y"] = "2";
         });
@@ -520,7 +520,7 @@ public class YMapTests : YTestBase
         throwingObserverCalled = false;
         throwingDeepObserverCalled = false;
 
-        Assert.ThrowsExactly<Exception>(() =>
+        Assert.ThrowsExactly<InvalidOperationException>(() =>
         {
             map["z"] = "3";
         });

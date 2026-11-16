@@ -313,7 +313,7 @@ public partial class YDoc
             }
         }
 
-        throw new Exception();
+        throw new InvalidOperationException("The type is not a root type of this document.");
     }
 }
 

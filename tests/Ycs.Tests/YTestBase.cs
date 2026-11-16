@@ -19,11 +19,11 @@ public class YTestBase
     // Set to '-1', so the first returned value is '0'.
     private static int _uniqueNumber = -1;
 
-    protected List<TestYInstance> Users;
-    protected TestConnector Connector;
-    protected IDictionary<TestYInstance, YArray> Arrays;
-    protected IDictionary<TestYInstance, YMap> Maps;
-    protected IDictionary<TestYInstance, YText> Texts;
+    protected List<TestYInstance> Users { get; set; }
+    protected TestConnector Connector { get; set; }
+    protected IDictionary<TestYInstance, YArray> Arrays { get; set; }
+    protected IDictionary<TestYInstance, YMap> Maps { get; set; }
+    protected IDictionary<TestYInstance, YText> Texts { get; set; }
 
     [TestCleanup]
     public void Cleanup()
@@ -107,8 +107,8 @@ public class YTestBase
 
         foreach (var kvp in Users[0].GetMap("map"))
         {
-            var otherKvp = userMapValues[0].FirstOrDefault(v => string.Equals(v.Key, kvp.Key));
-            Assert.IsTrue(userMapValues[0].Any(v => string.Equals(v.Key, kvp.Key)), $"key '{kvp.Key}' missing");
+            var otherKvp = userMapValues[0].FirstOrDefault(v => string.Equals(v.Key, kvp.Key, StringComparison.Ordinal));
+            Assert.IsTrue(userMapValues[0].Any(v => string.Equals(v.Key, kvp.Key, StringComparison.Ordinal)), $"key '{kvp.Key}' missing");
             Assert.AreEqual(otherKvp.Value, kvp.Value.ToObject());
         }
 
@@ -139,7 +139,7 @@ public class YTestBase
         }
     }
 
-    protected void CompareUsers(TestYInstance left, TestYInstance right)
+    protected static void CompareUsers(TestYInstance left, TestYInstance right)
     {
 
     }
@@ -197,7 +197,7 @@ public class YTestBase
         }
     }
 
-    protected void CompareYText(YText t1, YText t2)
+    protected static void CompareYText(YText t1, YText t2)
     {
         if (ReferenceEquals(t1, t2))
         {
@@ -244,7 +244,7 @@ public class YTestBase
         }
     }
 
-    internal void CompareStructStores(StructStore ss1, StructStore ss2)
+    internal static void CompareStructStores(StructStore ss1, StructStore ss2)
     {
         Assert.AreEqual(ss1.Clients.Count, ss2.Clients.Count);
 
@@ -277,7 +277,7 @@ public class YTestBase
                         !CompareItemIds(s1.Right.AsItem, s2.Right.AsItem) ||
                         s1.LeftOrigin != s2.LeftOrigin ||
                         s1.RightOrigin != s2.RightOrigin ||
-                        !string.Equals(s1.ParentSub, s2.ParentSub))
+                        !string.Equals(s1.ParentSub, s2.ParentSub, StringComparison.Ordinal))
                     {
                         Assert.Fail("Items don't match");
                     }
@@ -294,7 +294,7 @@ public class YTestBase
 
     private static ItemId? LastIdOfItem(ItemRef reference) => reference.IsItem ? reference.LastId : null;
 
-    internal void CompareDS(DeleteSet ds1, DeleteSet ds2)
+    internal static void CompareDS(DeleteSet ds1, DeleteSet ds2)
     {
         Assert.AreEqual(ds1.Clients.Count, ds2.Clients.Count);
 
@@ -365,7 +365,7 @@ public class YTestBase
         CompareUsers();
     }
 
-    protected int GetUniqueNumber() => Interlocked.Increment(ref _uniqueNumber);
+    protected static int GetUniqueNumber() => Interlocked.Increment(ref _uniqueNumber);
 
     protected static char GetRandomChar(Random rand) => (char)rand.Next('A', 'Z' + 1);
 }

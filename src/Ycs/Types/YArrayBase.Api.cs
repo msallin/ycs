@@ -147,7 +147,7 @@ public abstract partial class YArrayBase
 
         if (length > 0)
         {
-            throw new Exception("Array length exceeded");
+            throw new InvalidOperationException("Array length exceeded");
         }
 
         if (_searchMarkers?.Count > 0)

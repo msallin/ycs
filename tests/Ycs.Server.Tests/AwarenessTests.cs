@@ -13,7 +13,7 @@ public class AwarenessTests
     private static JsonElement LoadFixture()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Fixtures", "awareness-vectors.json");
-        return JsonDocument.Parse(File.ReadAllText(path)).RootElement.Clone();
+        return JsonElement.Parse(File.ReadAllText(path));
     }
 
     private static IEnumerable<JsonElement> Steps => Fixture.GetProperty("steps").EnumerateArray();

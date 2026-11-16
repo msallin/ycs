@@ -24,6 +24,8 @@ internal sealed partial class ChangedTypes : IDictionary<AbstractType, ISet<stri
 
     public ICollection<ISet<string?>> Values => Pairs().Select(static kvp => kvp.Value).ToList();
 
+    // The interface type is the point: ChangedTypes is two IEnumerable<KeyValuePair<,>> and a LINQ call on it is ambiguous.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1859:Use concrete types when possible", Justification = "Selects which of the two enumerable interfaces LINQ binds to.")]
     private IEnumerable<KeyValuePair<AbstractType, ISet<string?>>> Pairs() => this;
 
     public ISet<string?> this[AbstractType key]

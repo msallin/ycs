@@ -698,7 +698,7 @@ internal sealed class Generator
                 }
             case OpKinds.RelPos:
                 {
-                    if (!_run.RelativePositions.Any() || _rng.Chance(0.4))
+                    if (_run.RelativePositions.Count == 0 || _rng.Chance(0.4))
                     {
                         var seqs = TargetsOf(c, "text", "xmlt", "array", "xmlf", "xmle");
                         if (seqs.Count == 0)

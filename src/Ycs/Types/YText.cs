@@ -366,7 +366,7 @@ public partial class YText : YArrayBase
             var right = Right;
             if (right.IsNull)
             {
-                throw new Exception("Unexpected");
+                throw new InvalidOperationException("Unexpected");
             }
 
             switch (right.Content)
