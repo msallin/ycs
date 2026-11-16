@@ -23,6 +23,16 @@ internal sealed class TypeTable
         return _types.Count - 1;
     }
 
+    /// <summary>Puts the cleared entry of <paramref name="index"/> back, which only its own type can be.</summary>
+    public void Restore(int index, AbstractType type)
+    {
+        if (_types[index] == null)
+        {
+            _types[index] = type;
+            _collected--;
+        }
+    }
+
     /// <summary>Clears the entry; the index stays used. Collecting twice is a no-op.</summary>
     public void Collect(int index)
     {

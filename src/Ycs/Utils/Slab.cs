@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace Ycs;
@@ -12,6 +13,13 @@ internal struct Slot
 {
     /// <summary>The kind (bits 8..15 of <see cref="Info"/>) of a slot that is on a free list.</summary>
     public const int FreeKind = 0xFF;
+
+    // The flag bits of Info, as the item's own.
+    public const int KeepFlag = 1 << 0;
+    public const int CountableFlag = 1 << 1;
+    public const int DeletedFlag = 1 << 2;
+    public const int MarkerFlag = 1 << 3;
+    public const int HasRedoneFlag = 1 << 6;
 
     public long Clock;
     public long OriginClock;
@@ -36,8 +44,8 @@ internal struct Slot
 /// <summary>
 /// Slots in pages, addressed by 32-bit handles (<c>page &lt;&lt; 10 | index</c>). Page 0 starts small and doubles by
 /// copy up to <see cref="PageSlots"/>; later pages hold <see cref="PageSlots"/> slots and never move. Beside each page
-/// are two object pages, <c>Refs</c> (content) and <c>Keys</c> (a map item's key), allocated on first use and null for
-/// a free slot.
+/// are three object pages: <c>Refs</c> (content) and <c>Keys</c> (a map item's key), allocated on first use, and
+/// <c>Owners</c> (the struct a handle resolves to); null for a free slot.
 /// </summary>
 /// <remarks>
 /// A freed slot keeps its fields but <see cref="Slot.Payload"/>, which holds the free-list link (readers in the same
@@ -114,6 +122,32 @@ internal sealed class Slab
 
     public object? GetRef(int handle) => PageAt(handle).Refs?[IndexOf(handle)];
 
+    /// <summary>
+    /// The slot of a live handle for reading, without <see cref="At"/>'s checks: the caller holds a handle of a live
+    /// struct (a negative or released one throws all the same, from the array).
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public ref readonly Slot Read(int handle) => ref _pages[handle >> PageBits]!.Slots[handle & (PageSlots - 1)];
+
+    /// <summary><see cref="GetRef"/> of a live handle, unchecked as <see cref="Read"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public object? ReadRef(int handle) => _pages[handle >> PageBits]!.Refs?[handle & (PageSlots - 1)];
+
+    /// <summary><see cref="GetKey"/> of a live handle, unchecked as <see cref="Read"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public object? ReadKey(int handle) => _pages[handle >> PageBits]!.Keys?[handle & (PageSlots - 1)];
+
+    /// <summary>The struct that owns a live slot (the object a handle resolves to).</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public object ReadOwner(int handle) => _pages[handle >> PageBits]!.Owners[handle & (PageSlots - 1)]!;
+
+    public void SetOwner(int handle, object? owner)
+    {
+        var page = PageAt(handle);
+        CheckLive(page, handle);
+        page.Owners[IndexOf(handle)] = owner;
+    }
+
     public void SetRef(int handle, object? value)
     {
         var page = PageAt(handle);
@@ -159,6 +193,8 @@ internal sealed class Slab
         {
             page.Keys[index] = null;
         }
+
+        page.Owners[index] = null;
 
         if (!page.Dirty)
         {
@@ -266,13 +302,13 @@ internal sealed class Slab
                 found.Add($"page {number}: slot {i} is free but on no list");
             }
 
-            if (onList[i] && ((page.Refs?[i] ?? page.Keys?[i]) != null))
+            if (onList[i] && ((page.Refs?[i] ?? page.Keys?[i] ?? page.Owners[i]) != null))
             {
                 found.Add($"page {number}: free slot {i} holds an object");
             }
         }
 
-        if ((page.Refs != null && page.Refs.Length != page.Slots.Length) || (page.Keys != null && page.Keys.Length != page.Slots.Length))
+        if (page.Owners.Length != page.Slots.Length || (page.Refs != null && page.Refs.Length != page.Slots.Length) || (page.Keys != null && page.Keys.Length != page.Slots.Length))
         {
             found.Add($"page {number}: an object page does not match the slots");
         }
@@ -374,6 +410,7 @@ internal sealed class Slab
         var slots = new Slot[Math.Min(old.Length * 2, PageSlots)];
         Array.Copy(old, slots, old.Length);
         page.Slots = slots;
+        Array.Resize(ref page.Owners, slots.Length);
         if (page.Refs != null)
         {
             Array.Resize(ref page.Refs, slots.Length);
@@ -413,6 +450,7 @@ internal sealed class Slab
         public Slot[] Slots = new Slot[capacity];
         public object?[]? Refs;
         public object?[]? Keys;
+        public object?[] Owners = new object?[capacity];
         public int Used;
         public int FreeHead = -1;
         public int FreeCount;

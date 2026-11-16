@@ -32,7 +32,8 @@ public abstract partial class YType
     private bool _collectedKeep;
 
     // The index in the type table of the store the type's items are in: assigned when a slot first names the type, kept
-    // after the collection (the table's entry is cleared, the index is not reused).
+    // after the collection (the table's entry is cleared, the index is not reused). A slot that names a collected type
+    // (an item inserted into it, which reads its parent from the table) puts the entry back.
     private int _tableIndex = -1;
 
     internal int TableIndex(TypeTable table)
@@ -40,10 +41,10 @@ public abstract partial class YType
         if (_tableIndex < 0)
         {
             _tableIndex = table.Add(this);
-            if (_collected)
-            {
-                table.Collect(_tableIndex);
-            }
+        }
+        else if (_collected)
+        {
+            table.Restore(_tableIndex, this);
         }
 
         return _tableIndex;

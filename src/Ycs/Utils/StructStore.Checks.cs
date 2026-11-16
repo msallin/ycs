@@ -24,14 +24,14 @@ internal sealed partial class StructStore
                 continue;
             }
 
-            var left = s.Left;
-            if (!left.IsNull && (!IsAttached(left) || !left.IsItem || left.Right != s))
+            var left = s.ObjectLeft; // the objects' links: the slots' are compared in SlotViolation
+            if (!left.IsNull && (!IsAttached(left) || !left.IsItem || left.ObjectRight != s))
             {
                 return $"the left of {s.Id.Client}:{s.Id.Clock} is detached or does not point back";
             }
 
-            var right = s.Right;
-            if (!right.IsNull && (!IsAttached(right) || !right.IsItem || right.Left != s))
+            var right = s.ObjectRight;
+            if (!right.IsNull && (!IsAttached(right) || !right.IsItem || right.ObjectLeft != s))
             {
                 return $"the right of {s.Id.Client}:{s.Id.Clock} is detached or does not point back";
             }
@@ -167,58 +167,9 @@ internal sealed partial class StructStore
     /// of its left and right neighbours, or its parent (the index of the parent type in the type table, whose entry is
     /// that type until it is collected).
     /// </summary>
-    private string SlotViolation(ItemRef s)
-    {
-        if (s.SlotStore != this || s.Handle < 0)
-        {
-            return $"{s.Id.Client}:{s.Id.Clock} has no slot in this store (handle {s.Handle})";
-        }
+    private string SlotViolation(ItemRef s) => s.SlotViolation(this);
 
-        var slot = Slab.At(s.Handle);
-        if (slot.IsFree)
-        {
-            return $"{s.Id.Client}:{s.Id.Clock} names a free slot";
-        }
-
-        if (!ReferenceEquals(Slab.GetRef(s.Handle), s.IsItem ? s.Content : null))
-        {
-            return $"the slot of {s.Id.Client}:{s.Id.Clock} holds another content object than the struct";
-        }
-
-        if (!ReferenceEquals(Slab.GetKey(s.Handle), s.IsItem ? s.ParentSub : null))
-        {
-            return $"the slot of {s.Id.Client}:{s.Id.Clock} holds another key than the struct";
-        }
-
-        var left = s.IsItem ? s.LeftOrigin : null;
-        var right = s.IsItem ? s.RightOrigin : null;
-        var info = (s.IsItem ? (s.Keep ? 1 : 0) | (s.Countable ? 2 : 0) | (s.Marker ? 8 : 0) | (s.Redone != null ? 64 : 0) | s.Content.Ref << 8 : 0) | (s.Deleted ? 4 : 0);
-        if (slot.Clock != s.Id.Clock || !ClientTable.TryGetIndex(s.Id.Client, out var client) || slot.Client != client || slot.Length != s.Length)
-        {
-            return $"the slot of {s.Id.Client}:{s.Id.Clock} differs in id or length";
-        }
-
-        if (!SlotOrigin(left, slot.OriginClient, slot.OriginClock) || !SlotOrigin(right, slot.ROriginClient, slot.ROriginClock))
-        {
-            return $"the slot of {s.Id.Client}:{s.Id.Clock} differs in an origin";
-        }
-
-        if (slot.Info != info)
-        {
-            return $"the slot of {s.Id.Client}:{s.Id.Clock} holds info {slot.Info}, the struct {info}";
-        }
-
-        var leftHandle = s.IsItem ? s.Left.Handle : -1;
-        var rightHandle = s.IsItem ? s.Right.Handle : -1;
-        if (slot.Left != leftHandle || slot.Right != rightHandle)
-        {
-            return $"the slot of {s.Id.Client}:{s.Id.Clock} links {slot.Left} and {slot.Right}, the struct {leftHandle} and {rightHandle}";
-        }
-
-        return ParentViolation(s.Id, slot.Parent, s.IsItem ? s.Parent as AbstractType : null);
-    }
-
-    private string ParentViolation(ID id, int parent, AbstractType type)
+    internal string ParentViolation(ID id, int parent, AbstractType type)
     {
         if (type == null)
         {
@@ -226,7 +177,7 @@ internal sealed partial class StructStore
         }
 
         var index = type.TableIndexForTests;
-        if (index < 0 || parent != index || index >= Types.Count || !ReferenceEquals(Types[index], type.IsCollected ? null : type))
+        if (index < 0 || parent != index || index >= Types.Count || !(ReferenceEquals(Types[index], type) || (type.IsCollected && Types[index] == null)))
         {
             return $"the slot of {id.Client}:{id.Clock} names parent {parent}, the struct's type has index {index} ({(index >= 0 && index < Types.Count && Types[index] != null ? "a live entry" : "no live entry")})";
         }
@@ -276,7 +227,7 @@ internal sealed partial class StructStore
         return null;
     }
 
-    private bool SlotOrigin(ID? origin, int client, long clock) =>
+    internal bool SlotOrigin(ID? origin, int client, long clock) =>
         origin is ID id ? ClientTable.TryGetIndex(id.Client, out var index) && index == client && id.Clock == clock : client == -1 && clock == 0;
 
     /// <summary>
@@ -303,6 +254,7 @@ internal sealed partial class StructStore
     private static bool IsAttachedInOwner(ItemRef item) =>
         !item.IsNull && item.Parent is AbstractType { Doc: { } owner } && owner.Store.IsAttached(item);
 
+    // By the object: a holder that names a detached struct is what is looked for, and reading it would throw.
     private bool IsAttached(ItemRef held) =>
-        Clients.TryGetValue(held.Id.Client, out var structs) && structs.FindIndex(held.Id.Clock) is var index && index >= 0 && index < structs.Count && structs[index] == held;
+        held.HasSlot && Clients.TryGetValue(held.ObjectId.Client, out var structs) && structs.FindIndex(held.ObjectId.Clock) is var index && index >= 0 && index < structs.Count && structs[index] == held;
 }

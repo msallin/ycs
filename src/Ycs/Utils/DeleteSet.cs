@@ -347,6 +347,7 @@ internal class DeleteSet
         for (var k = first + 1; k <= pos; k++)
         {
             var right = structs[k];
+            var map = MapEntryOf(right);
             if (!left.MergeWith(right))
             {
                 throw new InvalidOperationException(
@@ -355,7 +356,7 @@ internal class DeleteSet
                     "document is inconsistent and must not be used further.");
             }
 
-            RetargetMapEntry(left, right);
+            RetargetMapEntry(map, left, right);
         }
 
         structs.RemoveMerged(first + 1, merged);
@@ -374,12 +375,18 @@ internal class DeleteSet
         var i = pos;
         for (; i > 0; right = left, left = --i > 0 ? structs[i - 1] : default)
         {
-            if (left.Deleted != right.Deleted || !left.IsSameKind(right) || !left.MergeWith(right))
+            if (left.Deleted != right.Deleted || !left.IsSameKind(right))
             {
                 break;
             }
 
-            RetargetMapEntry(left, right);
+            var map = MapEntryOf(right);
+            if (!left.MergeWith(right))
+            {
+                break;
+            }
+
+            RetargetMapEntry(map, left, right);
         }
 
         var merged = pos - i;
@@ -391,15 +398,15 @@ internal class DeleteSet
         return merged;
     }
 
-    private static void RetargetMapEntry(ItemRef left, ItemRef right)
+    // Read before the merge: a merged struct is detached and reads nothing.
+    private static (AbstractType Parent, string Key) MapEntryOf(ItemRef right) =>
+        right.IsItem && right.ParentSub != null ? ((AbstractType)right.Parent, right.ParentSub) : default;
+
+    private static void RetargetMapEntry((AbstractType Parent, string Key) map, ItemRef left, ItemRef right)
     {
-        if (right.IsItem && right.ParentSub != null)
+        if (map.Key != null && map.Parent._map.TryGetValue(map.Key, out var value) && value == right)
         {
-            var parent = (AbstractType)right.Parent;
-            if (parent._map.TryGetValue(right.ParentSub, out var value) && value == right)
-            {
-                parent._map[right.ParentSub] = left;
-            }
+            map.Parent._map[map.Key] = left;
         }
     }
 

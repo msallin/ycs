@@ -48,7 +48,7 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>The last content address of this struct.</summary>
-    public ID LastId => _struct.LastId;
+    public ID LastId => Length == 1 ? Id : new ID(Id.Client, Id.Clock + Length - 1);
 
     // Deleting a GC struct does nothing (it is deleted already).
     public void Delete(Transaction transaction)
@@ -395,6 +395,12 @@ internal readonly partial struct ItemRef
                 Left = transaction.Doc.Store.ResolveConflict(this, left, o);
             }
 
+            // Its neighbours' links name its handle from here on, so it has one before the first of them is written.
+            if (Handle < 0)
+            {
+                AttachSlot(transaction.Doc.Store);
+            }
+
             // Reconnect left/right + update parent map/start if necessary.
             if (!Left.IsNull)
             {
@@ -586,6 +592,7 @@ internal readonly partial struct ItemRef
             Parent,
             ParentSub,
             Content.Splice(diff)));
+        rightItem.AttachSlot(transaction.Doc.Store);
 
         if (Deleted)
         {

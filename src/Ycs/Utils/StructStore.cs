@@ -139,7 +139,11 @@ internal sealed partial class StructStore
         }
 
         // The slot first: when it cannot be attached the store is unchanged, and a list never holds a struct without one.
-        str.AttachSlot(this);
+        if (str.Handle < 0)
+        {
+            str.AttachSlot(this);
+        }
+
         if (!known)
         {
             structs = _capacityHints != null && _capacityHints.Remove(str.Id.Client, out var capacity) ? new ClientStructs(capacity) : new ClientStructs();
@@ -226,9 +230,7 @@ internal sealed partial class StructStore
     {
         Version++;
         MaySplitMapValues |= item.ParentSub != null && !item.Deleted;
-        var right = item.SplitItem(transaction, diff);
-        right.AttachSlot(this);
-        return right;
+        return item.SplitItem(transaction, diff);
     }
 
     /// <inheritdoc cref="ClientStructs.FindIndex(long)"/>

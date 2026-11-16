@@ -2,8 +2,8 @@
 
 namespace Ycs;
 
-// The shadow of the slab: a struct of a store has one live slot, written whenever one of its scalars changes. Reads
-// still come from the object. A struct that is in no store (decoded, not yet integrated, merged away) has no handle.
+// A struct of a store has one live slot, written whenever one of its scalars changes; ItemRef reads the slot, the object
+// is a mirror. A struct that is in no store (decoded, not yet integrated, merged away) has no handle.
 internal abstract partial class AbstractStruct
 {
     /// <summary>The store whose slab holds this struct's slot; null while <see cref="Handle"/> is -1.</summary>
@@ -27,6 +27,7 @@ internal abstract partial class AbstractStruct
 
         SlotStore = store;
         Handle = store.Slab.Allocate();
+        store.Slab.SetOwner(Handle, this);
         WriteSlot();
     }
 
@@ -43,6 +44,7 @@ internal abstract partial class AbstractStruct
         old.SlotStore = null;
         old.Handle = -1;
         SlotStore.Slab.At(Handle) = Slot.Empty;
+        SlotStore.Slab.SetOwner(Handle, this);
         WriteSlot();
     }
 

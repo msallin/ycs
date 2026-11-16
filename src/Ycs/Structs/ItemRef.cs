@@ -14,8 +14,9 @@ namespace Ycs;
 /// A struct of the store (an item or a GC struct) as the library holds it: the members of Yjs' <c>Item</c> and
 /// <c>AbstractStruct</c>, so that ported code reads like Yjs. It wraps today's object; <c>default</c> is Yjs' null
 /// (<see cref="IsNull"/>), and two references are equal when they name the same struct (by reference while it wraps
-/// an object). The members of an item throw <see cref="NullReferenceException"/> on a GC struct, as
-/// <c>(str as Item).Member</c> does: a type test, which the walks take faster than a cast.
+/// an object). A struct of a store is read from its slot (<see cref="Slab"/>); the object is written along, as a
+/// mirror the store's checks compare. The members of an item read as none on a GC struct, and throw
+/// <see cref="NullReferenceException"/> on a struct outside a store: a type test, which the walks take faster than a cast.
 /// </summary>
 /// <remarks>
 /// Valid until its struct is merged away or its type collected: a holder may keep one across a split (the left part
@@ -99,18 +100,54 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     /// <summary>Whether both are structs of one kind (the merge rules compare the constructors).</summary>
     public bool IsSameKind(ItemRef other) => _struct.GetType() == other._struct.GetType();
 
+    // Reads. A struct of a store has a handle and its slot is read (an index into a page array); the object is a mirror
+    // that is only written. A struct that never was in a store (decoded, or an item before its slot is attached) has no
+    // slot and is read as the object it is. A struct that left the store (merged away, replaced) has no slot and no
+    // right to its object's values: reading it throws.
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static AbstractStruct Unattached(AbstractStruct str)
+    {
+        if (str is Item { Detached: true } or GC { Detached: true })
+        {
+            ThrowDetached(str);
+        }
+
+        return str;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static void ThrowDetached(AbstractStruct str) =>
+        throw new InvalidOperationException(
+            $"The struct {str.Id.Client}:{str.Id.Clock} left the store (merged into its left neighbour or replaced by a GC struct) and its slot is freed: " +
+            "a reference to it is stale and reads nothing. Nothing was changed; the holder must take the struct that replaced it.");
+
     public ID Id
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _struct.Id;
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? ReadId(str.SlotStore, str.Handle) : Unattached(str).Id;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.SetStart(value);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static ID ReadId(StructStore store, int handle)
+    {
+        ref readonly var slot = ref store.Slab.Read(handle);
+        return new ID(store.ClientTable[slot.Client], slot.Clock);
     }
 
     public int Length
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _struct.Length;
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? str.SlotStore.Slab.Read(str.Handle).Length : Unattached(str).Length;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.SetLength(value);
     }
@@ -118,7 +155,11 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public bool Deleted
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => _struct.Deleted;
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? (str.SlotStore.Slab.Read(str.Handle).Info & Slot.DeletedFlag) != 0 : Unattached(str).Deleted;
+        }
     }
 
     /// <summary>This reference when the struct is an item, else <c>default</c> (what <c>as Item</c> gives).</summary>
@@ -130,16 +171,38 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
 
     // The members of an item. Every accessor is inlined: Integrate and the walks read dozens of them, beyond the
     // JIT's inlining budget, and a call per read cost the walks up to 15 % (bench/Ycs.Compare/README.md, "ItemRef").
+    // A GC struct's slot holds no links, origins, parent, content or key: they read as none.
     private Item ItemObject
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => _struct as Item;
     }
 
+    // The kind of the content (its reference number); 0 for a GC struct.
+    internal int ContentRef
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? str.SlotStore.Slab.Read(str.Handle).Kind : Unattached(str) is Item item ? item.Content.Ref : 0;
+        }
+    }
+
     public ItemRef Left
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => new(ItemObject.Left);
+        get
+        {
+            var str = _struct;
+            if (str.Handle < 0)
+            {
+                return new((Unattached(str) as Item).Left);
+            }
+
+            var handle = str.SlotStore.Slab.Read(str.Handle).Left;
+            return handle < 0 ? default : new((AbstractStruct)str.SlotStore.Slab.ReadOwner(handle));
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Left = value._struct;
     }
@@ -147,7 +210,17 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public ItemRef Right
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => new(ItemObject.Right);
+        get
+        {
+            var str = _struct;
+            if (str.Handle < 0)
+            {
+                return new((Unattached(str) as Item).Right);
+            }
+
+            var handle = str.SlotStore.Slab.Read(str.Handle).Right;
+            return handle < 0 ? default : new((AbstractStruct)str.SlotStore.Slab.ReadOwner(handle));
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Right = value._struct;
     }
@@ -155,7 +228,18 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public ID? LeftOrigin
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.LeftOrigin;
+        get
+        {
+            var str = _struct;
+            if (str.Handle < 0)
+            {
+                return (Unattached(str) as Item).LeftOrigin;
+            }
+
+            var store = str.SlotStore;
+            ref readonly var slot = ref store.Slab.Read(str.Handle);
+            return slot.OriginClient < 0 ? null : new ID(store.ClientTable[slot.OriginClient], slot.OriginClock);
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.LeftOrigin = value;
     }
@@ -163,7 +247,18 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public ID? RightOrigin
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.RightOrigin;
+        get
+        {
+            var str = _struct;
+            if (str.Handle < 0)
+            {
+                return (Unattached(str) as Item).RightOrigin;
+            }
+
+            var store = str.SlotStore;
+            ref readonly var slot = ref store.Slab.Read(str.Handle);
+            return slot.ROriginClient < 0 ? null : new ID(store.ClientTable[slot.ROriginClient], slot.ROriginClock);
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.RightOrigin = value;
     }
@@ -172,7 +267,17 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public object Parent
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.Parent;
+        get
+        {
+            var str = _struct;
+            if (str.Handle < 0)
+            {
+                return (Unattached(str) as Item).Parent;
+            }
+
+            var index = str.SlotStore.Slab.Read(str.Handle).Parent;
+            return index < 0 ? null : str.SlotStore.Types[index];
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Parent = value;
     }
@@ -180,15 +285,29 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public string ParentSub
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.ParentSub;
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? (string)str.SlotStore.Slab.ReadKey(str.Handle) : (Unattached(str) as Item).ParentSub;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.ParentSub = value;
     }
 
+    // The id a redone item names is not in the slot (only whether it has one is).
     public ID? Redone
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.Redone;
+        get
+        {
+            var str = _struct;
+            if (str.Handle >= 0 && (str.SlotStore.Slab.Read(str.Handle).Info & Slot.HasRedoneFlag) == 0)
+            {
+                return null;
+            }
+
+            return (Unattached(str) as Item).Redone;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Redone = value;
     }
@@ -196,7 +315,11 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public IContentEx Content
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.Content;
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? (IContentEx)str.SlotStore.Slab.ReadRef(str.Handle) : (Unattached(str) as Item).Content;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Content = value;
     }
@@ -204,7 +327,11 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public bool Marker
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.Marker;
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? (str.SlotStore.Slab.Read(str.Handle).Info & Slot.MarkerFlag) != 0 : (Unattached(str) as Item).Marker;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Marker = value;
     }
@@ -212,7 +339,11 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public bool Keep
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.Keep;
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? (str.SlotStore.Slab.Read(str.Handle).Info & Slot.KeepFlag) != 0 : (Unattached(str) as Item).Keep;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Keep = value;
     }
@@ -220,11 +351,14 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public bool Countable
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => ItemObject.Countable;
+        get
+        {
+            var str = _struct;
+            return str.Handle >= 0 ? (str.SlotStore.Slab.Read(str.Handle).Info & Slot.CountableFlag) != 0 : (Unattached(str) as Item).Countable;
+        }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set => ItemObject.Countable = value;
     }
-
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static bool operator ==(ItemRef left, ItemRef right) => ReferenceEquals(left._struct, right._struct);
