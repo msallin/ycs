@@ -24,7 +24,7 @@ using var deepSubscription = doc.GetMap("map").ObserveDeep((events, _) => deepOb
 doc.Updated += (_, e) => kept = e.Update;
 
 text.Insert(0, "AOT ");
-text.Format(0, 3, new Dictionary<string, object> { ["italic"] = true, ["size"] = 1.5 });
+text.Format(0, 3, new Dictionary<string, YValue> { ["italic"] = true, ["size"] = 1.5 });
 doc.GetMap("map").Set("added", new Dictionary<string, object> { ["n"] = 42, ["list"] = new object?[] { "x", 2.5, null } });
 
 doc.GetMap("map").Set("observed", 1);
@@ -45,7 +45,7 @@ foreach (var v2 in new[] { false, true })
 
     var copyText = copy.GetText("text");
     Check(copyText.ToString() == "AOT plain bold tail", $"v{(v2 ? 2 : 1)}: unexpected text '{copyText}'");
-    Check(copyText.ToDelta()[0].Attributes?["italic"] is true, $"v{(v2 ? 2 : 1)}: formatting lost");
+    Check(copyText.ToDelta()[0].Attributes?["italic"] == YValue.True, $"v{(v2 ? 2 : 1)}: formatting lost");
     var added = (IDictionary<string, object>)copy.GetMap("map").Get("added");
     Check(added["n"] is 42, $"v{(v2 ? 2 : 1)}: map value lost");
     Console.WriteLine($"v{(v2 ? 2 : 1)}: {update.Length} bytes, text '{copyText}'");

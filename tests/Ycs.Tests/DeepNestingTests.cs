@@ -61,7 +61,7 @@ public class DeepNestingTests
             _ = doc.GetText("t").ToDelta();
             doc.GetMap("m").Clear();
             doc.GetArray("a").Delete(0, doc.GetArray("a").Length);
-            doc.GetText("t").Delete(0, doc.GetText("t").Length);
+            doc.GetText("t").Remove(0, doc.GetText("t").Length);
             doc.GetXmlFragment("x").Delete(0, doc.GetXmlFragment("x").Length);
             _ = doc.EncodeStateAsUpdateV2();
         });
@@ -154,7 +154,7 @@ public class DeepNestingTests
             _ = doc.GetText("t").ToDelta();
             encoded = v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1();
             doc.GetMap("m").Clear();
-            doc.GetText("t").Delete(0, doc.GetText("t").Length);
+            doc.GetText("t").Remove(0, doc.GetText("t").Length);
         });
 
         Assert.IsNull(error, error?.ToString());
@@ -177,10 +177,10 @@ public class DeepNestingTests
                             doc.GetMap("m").Set("v", NestedValue(HostileDepth));
                             break;
                         case "format":
-                            doc.GetText("t").Insert(0, "abc", new Dictionary<string, object> { ["deep"] = NestedValue(HostileDepth) });
+                            doc.GetText("t").Insert(0, "abc", new Dictionary<string, YValue> { ["deep"] = YValue.FromObject(NestedValue(HostileDepth)) });
                             break;
                         case "embed":
-                            doc.GetText("t").InsertEmbed(0, new Dictionary<string, object> { ["deep"] = NestedValue(HostileDepth) });
+                            doc.GetText("t").InsertEmbed(0, YValue.FromObject(new Dictionary<string, object> { ["deep"] = NestedValue(HostileDepth) }));
                             break;
                         default:
                             NestMaps(doc.GetMap("m"), HostileDepth);

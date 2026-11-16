@@ -15,9 +15,9 @@ public class RemoveNonTextTests
         var doc = new YDoc();
         doc.ApplyUpdate(Convert.FromBase64String("AQQBAAQBBHRleHQBYYQBAAFixwEAAQEBKAABAgFrAXcBdgA="));
         var text = doc.GetText("text");
-        text.Insert(3, "c", new Dictionary<string, object> { ["bold"] = true });
-        text.InsertEmbed(0, new Dictionary<string, object> { ["image"] = "x" });
-        text.Format(0, 3, new Dictionary<string, object> { ["italic"] = true });
+        text.Insert(3, "c", new Dictionary<string, YValue> { ["bold"] = true });
+        text.InsertEmbed(0, YValue.FromObject(new Dictionary<string, object> { ["image"] = "x" }));
+        text.Format(0, 3, new Dictionary<string, YValue> { ["italic"] = true });
 
         var removed = text.RemoveNonText();
 
@@ -34,8 +34,8 @@ public class RemoveNonTextTests
     {
         var doc = new YDoc();
         var text = doc.GetText("text");
-        text.Insert(0, "ab", new Dictionary<string, object> { ["bold"] = true });
-        text.InsertEmbed(1, new Dictionary<string, object> { ["image"] = "x" });
+        text.Insert(0, "ab", new Dictionary<string, YValue> { ["bold"] = true });
+        text.InsertEmbed(1, YValue.FromObject(new Dictionary<string, object> { ["image"] = "x" }));
         var peer = new YDoc();
         peer.ApplyUpdate(doc.EncodeStateAsUpdate());
         var vector = peer.EncodeStateVector();
@@ -54,7 +54,7 @@ public class RemoveNonTextTests
         var doc = new YDoc();
         var text = doc.GetText("text");
         text.Insert(0, "plain");
-        text.Delete(1, 1);
+        text.Remove(1, 1);
         var updates = 0;
         doc.Updated += (_, _) => updates++;
 
@@ -75,14 +75,14 @@ public class RemoveNonTextTests
         for (var i = 0; i < 50; i++)
         {
             text.Insert(text.Length, "0123456789");
-            text.InsertEmbed(text.Length, new Dictionary<string, object> { ["n"] = i });
+            text.InsertEmbed(text.Length, YValue.FromObject(new Dictionary<string, object> { ["n"] = i }));
             expected.Append("0123456789");
         }
 
         for (var i = 0; i < 20; i++)
         {
             text.Insert(i * 23 % text.Length, "z");
-            text.Delete(i * 23 % text.Length, 1);
+            text.Remove(i * 23 % text.Length, 1);
         }
 
         text.RemoveNonText();

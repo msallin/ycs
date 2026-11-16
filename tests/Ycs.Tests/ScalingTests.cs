@@ -60,7 +60,7 @@ public class ScalingTests
         for (var i = 0; i < 20_000; i++)
         {
             text.Insert(random.Next(text.Length + 1), "bb");
-            text.Delete(random.Next(text.Length), 1);
+            text.Remove(random.Next(text.Length), 1);
         }
 
         Assert.IsLessThan(3_000, stopwatch.ElapsedMilliseconds);

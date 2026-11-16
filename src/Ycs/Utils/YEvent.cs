@@ -8,21 +8,6 @@
 
 namespace Ycs;
 
-public class Delta
-{
-    /// <summary>
-    /// What <see cref="Insert"/> holds for an embed whose value is null (Yjs' <c>{ insert: null }</c>,
-    /// which only another peer can write), since a null <see cref="Insert"/> means no insert: an embed
-    /// of length 1, as every embed. <see cref="YText.ApplyDelta"/> inserts it as that embed.
-    /// </summary>
-    public static readonly object NullEmbed = new();
-
-    public object Insert;
-    public int? Delete;
-    public int? Retain;
-    public IDictionary<string, object> Attributes;
-}
-
 /// <summary>
 /// The sets in <see cref="Transaction.Changed"/>: per changed type, the map keys that changed, and
 /// <c>null</c> when its list of children changed.
@@ -254,6 +239,30 @@ public abstract partial class YEvent
 
     private static object LastValue(ItemRef item) => AbstractType.ValueAt(item.Content, item.Length - 1);
 
+    private enum DeltaRun
+    {
+        None,
+        Delete,
+        Insert,
+        Retain,
+    }
+
+    private static void PackRun(List<Delta> delta, DeltaRun run, int count, List<YValue> inserted)
+    {
+        switch (run)
+        {
+            case DeltaRun.Delete:
+                delta.Add(new Delta.Delete(count));
+                break;
+            case DeltaRun.Insert:
+                delta.Add(new Delta.InsertItems(inserted));
+                break;
+            case DeltaRun.Retain:
+                delta.Add(new Delta.Retain(count));
+                break;
+        }
+    }
+
     private YChanges CollectChanges()
     {
         if (_changes == null)
@@ -272,15 +281,10 @@ public abstract partial class YEvent
 
             if (changed.Contains(null))
             {
-                Delta lastOp = null;
-
-                void packOp()
-                {
-                    if (lastOp != null)
-                    {
-                        delta.Add(lastOp);
-                    }
-                }
+                // The run being collected: none, a deletion or a retain (counted), or an insertion (its items).
+                var run = DeltaRun.None;
+                var count = 0;
+                List<YValue> inserted = null;
 
                 for (var item = Target._start; !item.IsNull; item = item.Right.AsItem)
                 {
@@ -288,49 +292,50 @@ public abstract partial class YEvent
                     {
                         if (Deletes(item) && !Adds(item))
                         {
-                            if (lastOp == null || lastOp.Delete == null)
+                            if (run != DeltaRun.Delete)
                             {
-                                packOp();
-                                lastOp = new Delta { Delete = 0 };
+                                PackRun(delta, run, count, inserted);
+                                run = DeltaRun.Delete;
+                                count = 0;
                             }
 
-                            lastOp.Delete += item.Length;
+                            count += item.Length;
                             deleted.Add(ItemView.Of(Target.Doc, item));
                         }
-                        else
+                    }
+                    else if (Adds(item))
+                    {
+                        if (run != DeltaRun.Insert)
                         {
-                            // Do nothing.
+                            PackRun(delta, run, count, inserted);
+                            run = DeltaRun.Insert;
+                            inserted = new List<YValue>(1);
                         }
+
+                        foreach (var value in item.Content.GetContent())
+                        {
+                            inserted.Add(YValue.FromStored(value));
+                        }
+
+                        added.Add(ItemView.Of(Target.Doc, item));
                     }
                     else
                     {
-                        if (Adds(item))
+                        if (run != DeltaRun.Retain)
                         {
-                            if (lastOp == null || lastOp.Insert == null)
-                            {
-                                packOp();
-                                lastOp = new Delta { Insert = new List<object>(1) };
-                            }
-
-                            (lastOp.Insert as List<object>).AddRange(item.Content.GetContent());
-                            added.Add(ItemView.Of(Target.Doc, item));
+                            PackRun(delta, run, count, inserted);
+                            run = DeltaRun.Retain;
+                            count = 0;
                         }
-                        else
-                        {
-                            if (lastOp == null || lastOp.Retain == null)
-                            {
-                                packOp();
-                                lastOp = new Delta { Retain = 0 };
-                            }
 
-                            lastOp.Retain += item.Length;
-                        }
+                        count += item.Length;
                     }
                 }
 
-                if (lastOp != null && lastOp.Retain == null)
+                // A trailing retain says nothing.
+                if (run != DeltaRun.Retain)
                 {
-                    packOp();
+                    PackRun(delta, run, count, inserted);
                 }
             }
 

@@ -63,7 +63,7 @@ public class SharedTextTests
         other.Updated += (_, e) => updates.Add(e.Update.ToArray());
         var text = other.GetText(SharedText.Name);
         text.Insert(0, "a\r\nb");
-        text.InsertEmbed(1, new Dictionary<string, object> { ["image"] = "x" });
+        text.InsertEmbed(1, YValue.FromObject(new Dictionary<string, object> { ["image"] = "x" }));
         var page = new Page();
 
         foreach (var update in updates)

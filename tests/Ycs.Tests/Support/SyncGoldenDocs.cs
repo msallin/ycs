@@ -15,8 +15,8 @@ internal static class SyncGoldenDocs
         var text = new YDoc(new YDocOptions { ClientId = 2 });
         var t = text.GetText("t");
         t.Insert(0, "hello world");
-        t.Delete(2, 3);
-        t.Format(0, 2, new Dictionary<string, object> { ["bold"] = true });
+        t.Remove(2, 3);
+        t.Format(0, 2, new Dictionary<string, YValue> { ["bold"] = true });
         yield return ("text", text);
 
         var mixed = new YDoc(new YDocOptions { ClientId = 3 });

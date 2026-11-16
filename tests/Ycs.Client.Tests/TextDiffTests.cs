@@ -97,11 +97,11 @@ public class TextDiffTests
         var changes = new List<TextDiff>();
         Delta[] delta =
         [
-            new() { Retain = 2 },
-            new() { Insert = "ab" },
-            new() { Delete = 1 },
-            new() { Retain = 3, Attributes = new Dictionary<string, object> { ["bold"] = true } },
-            new() { Insert = new Dictionary<string, object> { ["image"] = "x" } },
+            new Delta.Retain(2),
+            new Delta.Insert("ab"),
+            new Delta.Delete(1),
+            new Delta.Retain(3) { Attributes = new Dictionary<string, YValue> { ["bold"] = true } },
+            new Delta.Insert(YValue.Object(new KeyValuePair<string, YValue>("image", "x"))),
         ];
 
         TextDiff.FromDelta(delta, changes);
@@ -109,13 +109,13 @@ public class TextDiffTests
         CollectionAssert.AreEqual(new[] { new TextDiff(2, 0, "ab"), new TextDiff(4, 1, string.Empty), new TextDiff(7, 0, "\uFFFC") }, changes);
     }
 
-    // A null embed (another peer's { insert: null }) is Delta.NullEmbed, not a missing insert: one placeholder, so the
+    // A null embed (another peer's { insert: null }) is not a missing insert: one placeholder, so the
     // "c" after it stays at index 2, where a skipped null embed would have left it one off (ycs' E4 fix).
     [TestMethod]
     public void FromDelta_NullEmbed_IsOnePlaceholderAndLaterTextDoesNotShift()
     {
         var changes = new List<TextDiff>();
-        Delta[] delta = [new() { Insert = "ab" }, new() { Insert = Delta.NullEmbed }, new() { Retain = 1 }, new() { Insert = "c" }];
+        Delta[] delta = [new Delta.Insert("ab"), new Delta.Insert(YValue.Null), new Delta.Retain(1), new Delta.Insert("c")];
 
         TextDiff.FromDelta(delta, changes);
 

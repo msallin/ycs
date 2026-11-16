@@ -84,7 +84,7 @@ public class TransactionReuseTests
         doc.Transact(tr =>
         {
             tr.Meta["k"] = 1;
-            text.Delete(0, 1);
+            text.Remove(0, 1);
         }, origin: "first");
         string seen = null;
         doc.AfterTransaction += (_, tr) => seen =
@@ -330,7 +330,7 @@ public class TransactionReuseTests
         undo.StopCapturing();
         text.Insert(1, "b");
         undo.StopCapturing();
-        text.Delete(0, 1);
+        text.Remove(0, 1);
 
         undo.Undo();
         undo.Undo();

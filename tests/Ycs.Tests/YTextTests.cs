@@ -34,10 +34,10 @@ public class YTextTests : YTestBase
         text.Insert(2, "X");
         Assert.AreEqual("aXb", text.ToString());
 
-        text.Delete(1, 1);
+        text.Remove(1, 1);
         Assert.AreEqual("aXb", text.ToString());
         Assert.AreEqual(3, text.Length);
-        Assert.IsFalse(text.ToDelta().Any(d => d.Insert is YType), "the embedded type should be deleted");
+        Assert.IsFalse(text.ToDelta().Any(d => d.Inserted() is YType), "the embedded type should be deleted");
     }
 
     [TestMethod]
@@ -53,28 +53,28 @@ public class YTextTests : YTestBase
         });
 
         // Does not throw when deleting zero elements with position 0.
-        text0.Delete(0, 0);
+        text0.Remove(0, 0);
 
         text0.Insert(0, "abc");
         Assert.AreEqual("abc", text0.ToString());
-        Assert.AreEqual("abc", delta[0].Insert);
+        Assert.AreEqual("abc", delta[0].Inserted());
         delta = null;
 
-        text0.Delete(0, 1);
+        text0.Remove(0, 1);
         Assert.AreEqual("bc", text0.ToString());
-        Assert.AreEqual(1, delta[0].Delete);
+        Assert.AreEqual(1, delta[0].Deleted());
         delta = null;
 
-        text0.Delete(1, 1);
+        text0.Remove(1, 1);
         Assert.AreEqual("b", text0.ToString());
-        Assert.AreEqual(1, delta[0].Retain);
-        Assert.AreEqual(1, delta[1].Delete);
+        Assert.AreEqual(1, delta[0].Retained());
+        Assert.AreEqual(1, delta[1].Deleted());
         delta = null;
 
         Users[0].Transact(tr =>
         {
             text0.Insert(0, "1");
-            text0.Delete(0, 1);
+            text0.Remove(0, 1);
         });
 
         CompareUsers();
@@ -92,46 +92,46 @@ public class YTextTests : YTestBase
             delta = e.Delta;
         });
 
-        text0.Insert(0, "abc", new Dictionary<string, object> { { "bold", true } });
+        text0.Insert(0, "abc", new Dictionary<string, YValue> { { "bold", true } });
         Assert.AreEqual("abc", text0.ToString());
 
         var text0Delta = text0.ToDelta();
         Assert.AreEqual(1, text0Delta?.Count);
-        Assert.AreEqual("abc", text0Delta[0].Insert);
+        Assert.AreEqual("abc", text0Delta[0].Inserted());
         Assert.AreEqual(true, text0Delta[0].Attributes["bold"]);
 
-        text0.Delete(0, 1);
+        text0.Remove(0, 1);
         Assert.AreEqual("bc", text0.ToString());
         text0Delta = text0.ToDelta();
         Assert.AreEqual(1, text0Delta?.Count);
-        Assert.AreEqual("bc", text0Delta[0].Insert);
+        Assert.AreEqual("bc", text0Delta[0].Inserted());
         Assert.AreEqual(true, text0Delta[0].Attributes["bold"]);
         // Yjs drops a trailing retain that assigns no attributes, so this is one op, not two.
         // Verified against yjs 13.6.32: [{delete:1}].
         Assert.AreEqual(1, delta?.Count);
-        Assert.AreEqual(1, delta[0].Delete);
+        Assert.AreEqual(1, delta[0].Deleted());
         delta = null;
 
-        text0.Delete(1, 1);
+        text0.Remove(1, 1);
         Assert.AreEqual("b", text0.ToString());
         text0Delta = text0.ToDelta();
         Assert.AreEqual(1, text0Delta?.Count);
-        Assert.AreEqual("b", text0Delta[0].Insert);
+        Assert.AreEqual("b", text0Delta[0].Inserted());
         Assert.AreEqual(true, text0Delta[0].Attributes["bold"]);
         Assert.AreEqual(2, delta?.Count);
-        Assert.AreEqual(1, delta[0].Retain);
-        Assert.AreEqual(1, delta[1].Delete);
+        Assert.AreEqual(1, delta[0].Retained());
+        Assert.AreEqual(1, delta[1].Deleted());
         delta = null;
 
-        text0.Insert(0, "z", new Dictionary<string, object> { { "bold", true } });
+        text0.Insert(0, "z", new Dictionary<string, YValue> { { "bold", true } });
         Assert.AreEqual("zb", text0.ToString());
         text0Delta = text0.ToDelta();
         Assert.AreEqual(1, text0Delta?.Count);
-        Assert.AreEqual("zb", text0Delta[0].Insert);
+        Assert.AreEqual("zb", text0Delta[0].Inserted());
         Assert.AreEqual(true, text0Delta[0].Attributes["bold"]);
         // yjs 13.6.32: [{insert:'z',attributes:{bold:true}}] - the trailing bare retain is dropped.
         Assert.AreEqual(1, delta?.Count);
-        Assert.AreEqual("z", delta[0].Insert);
+        Assert.AreEqual("z", delta[0].Inserted());
         Assert.AreEqual(true, delta[0].Attributes["bold"]);
         delta = null;
 
@@ -142,30 +142,30 @@ public class YTextTests : YTestBase
         Assert.AreEqual("yzb", text0.ToString());
         text0Delta = text0.ToDelta();
         Assert.AreEqual(2, text0Delta?.Count);
-        Assert.AreEqual("y", text0Delta[0].Insert);
+        Assert.AreEqual("y", text0Delta[0].Inserted());
         Assert.IsNull(text0Delta[0].Attributes);
-        Assert.AreEqual("zb", text0Delta[1].Insert);
+        Assert.AreEqual("zb", text0Delta[1].Inserted());
         Assert.AreEqual(true, text0Delta[1].Attributes["bold"]);
         // yjs 13.6.32: [{insert:'y'}].
         Assert.AreEqual(1, delta?.Count);
-        Assert.AreEqual("y", delta[0].Insert);
+        Assert.AreEqual("y", delta[0].Inserted());
         Assert.IsNull(delta[0].Attributes);
         delta = null;
 
-        text0.Format(0, 2, new Dictionary<string, object> { { "bold", null } });
+        text0.Format(0, 2, new Dictionary<string, YValue> { { "bold", YValue.Null } });
         Assert.AreEqual("yzb", text0.ToString());
         text0Delta = text0.ToDelta();
         Assert.AreEqual(2, text0Delta?.Count);
-        Assert.AreEqual("yz", text0Delta[0].Insert);
+        Assert.AreEqual("yz", text0Delta[0].Inserted());
         Assert.IsNull(text0Delta[0].Attributes);
-        Assert.AreEqual("b", text0Delta[1].Insert);
+        Assert.AreEqual("b", text0Delta[1].Inserted());
         Assert.AreEqual(true, text0Delta[1].Attributes["bold"]);
         // yjs 13.6.32: [{retain:1},{retain:1,attributes:{bold:null}}] - the retain that *does*
         // assign attributes survives, the bare one after it does not.
         Assert.AreEqual(2, delta?.Count);
-        Assert.AreEqual(1, delta[0].Retain);
-        Assert.AreEqual(1, delta[1].Retain);
-        Assert.AreEqual(null, delta[1].Attributes["bold"]);
+        Assert.AreEqual(1, delta[0].Retained());
+        Assert.AreEqual(1, delta[1].Retained());
+        Assert.AreEqual(YValue.Null, delta[1].Attributes["bold"]);
 
         CompareUsers();
     }
@@ -176,17 +176,14 @@ public class YTextTests : YTestBase
         Init(users: 1);
         var text0 = Texts[Users[0]];
 
-        text0.ApplyDelta(new[]
+        text0.ApplyDelta(new Delta[]
         {
-            new Delta
-            {
-                Insert = new Dictionary<string, string> { { "linebreak", "s" } }
-            }
+            new Delta.Insert(YValue.FromObject(new Dictionary<string, string> { { "linebreak", "s" } }))
         });
 
         var delta = text0.ToDelta();
         Assert.AreEqual(1, delta?.Count);
-        Assert.AreEqual("s", (delta[0].Insert as IDictionary<string, object>)["linebreak"]);
+        Assert.AreEqual("s", delta[0].Inserted()["linebreak"]);
     }
 
     [TestMethod]
@@ -196,73 +193,49 @@ public class YTextTests : YTestBase
         var text0 = Texts[Users[0]];
         var doc0 = text0.Doc;
 
-        text0.ApplyDelta(new[]
+        text0.ApplyDelta(new Delta[]
         {
-            new Delta
-            {
-                Insert = "abcd"
-            }
+            new Delta.Insert("abcd")
         });
 
         var snapshot1 = doc0.CreateSnapshot();
 
-        text0.ApplyDelta(new[]
+        text0.ApplyDelta(new Delta[]
         {
-            new Delta
-            {
-                Retain = 1
-            },
-            new Delta
-            {
-                Insert = "x"
-            },
-            new Delta
-            {
-                Delete = 1
-            }
+            new Delta.Retain(1),
+            new Delta.Insert("x"),
+            new Delta.Delete(1)
         });
 
         var snapshot2 = doc0.CreateSnapshot();
 
-        text0.ApplyDelta(new[]
+        text0.ApplyDelta(new Delta[]
         {
-            new Delta
-            {
-                Retain = 2
-            },
-            new Delta
-            {
-                Delete = 3
-            },
-            new Delta
-            {
-                Insert = "x"
-            },
-            new Delta
-            {
-                Delete = 1
-            }
+            new Delta.Retain(2),
+            new Delta.Delete(3),
+            new Delta.Insert("x"),
+            new Delta.Delete(1)
         });
 
         var state1 = text0.ToDelta(snapshot1);
         Assert.AreEqual(1, state1?.Count);
-        Assert.AreEqual("abcd", state1[0].Insert);
+        Assert.AreEqual("abcd", state1[0].Inserted());
 
         var state2 = text0.ToDelta(snapshot2);
         Assert.AreEqual(1, state2?.Count);
-        Assert.AreEqual("axcd", state2[0].Insert);
+        Assert.AreEqual("axcd", state2[0].Inserted());
 
         var stateDiff = text0.ToDelta(snapshot2, snapshot1);
         Assert.AreEqual(4, stateDiff.Count);
-        Assert.AreEqual("a", stateDiff[0].Insert);
+        Assert.AreEqual("a", stateDiff[0].Inserted());
 
-        Assert.AreEqual("x", stateDiff[1].Insert);
-        Assert.AreEqual(YText.YTextChangeType.Added, (stateDiff[1].Attributes["ychange"] as YText.YTextChangeAttributes).Type);
+        Assert.AreEqual("x", stateDiff[1].Inserted());
+        Assert.AreEqual("added", stateDiff[1].Attributes["ychange"]["type"]);
 
-        Assert.AreEqual("b", stateDiff[2].Insert);
-        Assert.AreEqual(YText.YTextChangeType.Removed, (stateDiff[2].Attributes["ychange"] as YText.YTextChangeAttributes).Type);
+        Assert.AreEqual("b", stateDiff[2].Inserted());
+        Assert.AreEqual("removed", stateDiff[2].Attributes["ychange"]["type"]);
 
-        Assert.AreEqual("cd", stateDiff[3].Insert);
+        Assert.AreEqual("cd", stateDiff[3].Inserted());
         Assert.IsNull(stateDiff[3].Attributes);
     }
 
@@ -273,31 +246,22 @@ public class YTextTests : YTestBase
         var text0 = Texts[Users[0]];
         var doc0 = text0.Doc;
 
-        text0.ApplyDelta(new[]
+        text0.ApplyDelta(new Delta[]
         {
-            new Delta
-            {
-                Insert = "abcd"
-            }
+            new Delta.Insert("abcd")
         });
 
         var snapshot1 = doc0.CreateSnapshot();
 
-        text0.ApplyDelta(new[]
+        text0.ApplyDelta(new Delta[]
         {
-            new Delta
-            {
-                Retain = 4
-            },
-            new Delta
-            {
-                Insert = "e"
-            }
+            new Delta.Retain(4),
+            new Delta.Insert("e")
         });
 
         var state1 = text0.ToDelta(snapshot1);
         Assert.AreEqual(1, state1?.Count);
-        Assert.AreEqual("abcd", state1[0].Insert);
+        Assert.AreEqual("abcd", state1[0].Inserted());
     }
 
     [TestMethod]
@@ -306,19 +270,19 @@ public class YTextTests : YTestBase
         Init(users: 1);
         var text0 = Texts[Users[0]];
 
-        text0.Insert(0, "ab", new Dictionary<string, object> { { "bold", true } });
-        text0.InsertEmbed(1, new[] { "this", "is", "embed" }, new Dictionary<string, object> { { "width", 100 } });
+        text0.Insert(0, "ab", new Dictionary<string, YValue> { { "bold", true } });
+        text0.InsertEmbed(1, YValue.FromObject(new[] { "this", "is", "embed" }), new Dictionary<string, YValue> { { "width", 100 } });
 
         var delta = text0.ToDelta();
         Assert.AreEqual(3, delta?.Count);
 
-        Assert.AreEqual("a", delta[0].Insert);
+        Assert.AreEqual("a", delta[0].Inserted());
         Assert.AreEqual(true, delta[0].Attributes["bold"]);
 
-        CollectionAssert.AreEqual(new[] { "this", "is", "embed" }, (ICollection)delta[1].Insert);
+        CollectionAssert.AreEqual(new[] { "this", "is", "embed" }, delta[1].Inserted().EnumerateArray().Select(v => v.GetString()).ToList());
         Assert.AreEqual(100, delta[1].Attributes["width"]);
 
-        Assert.AreEqual("b", delta[2].Insert);
+        Assert.AreEqual("b", delta[2].Inserted());
         Assert.AreEqual(true, delta[2].Attributes["bold"]);
     }
 
@@ -328,19 +292,19 @@ public class YTextTests : YTestBase
         Init(users: 1);
         var text0 = Texts[Users[0]];
 
-        text0.Insert(0, "ab", new Dictionary<string, object> { { "bold", true } });
-        text0.InsertEmbed(1, new[] { "this", "is", "embed" });
+        text0.Insert(0, "ab", new Dictionary<string, YValue> { { "bold", true } });
+        text0.InsertEmbed(1, YValue.FromObject(new[] { "this", "is", "embed" }));
 
         var delta = text0.ToDelta();
         Assert.AreEqual(3, delta?.Count);
 
-        Assert.AreEqual("a", delta[0].Insert);
+        Assert.AreEqual("a", delta[0].Inserted());
         Assert.AreEqual(true, delta[0].Attributes["bold"]);
 
-        CollectionAssert.AreEqual(new[] { "this", "is", "embed" }, (ICollection)delta[1].Insert);
+        CollectionAssert.AreEqual(new[] { "this", "is", "embed" }, delta[1].Inserted().EnumerateArray().Select(v => v.GetString()).ToList());
         Assert.IsNull(delta[1].Attributes);
 
-        Assert.AreEqual("b", delta[2].Insert);
+        Assert.AreEqual("b", delta[2].Inserted());
         Assert.AreEqual(true, delta[2].Attributes["bold"]);
     }
 
@@ -350,8 +314,8 @@ public class YTextTests : YTestBase
         Init(users: 1);
         var text0 = Texts[Users[0]];
 
-        text0.Insert(0, "ab", new Dictionary<string, object> { { "bold", true } });
-        text0.Delete(0, 2);
+        text0.Insert(0, "ab", new Dictionary<string, YValue> { { "bold", true } });
+        text0.Remove(0, 2);
 
         Assert.AreEqual(1, GetTypeChildren(text0));
     }
@@ -363,8 +327,8 @@ public class YTextTests : YTestBase
         var text0 = Texts[Users[0]];
 
         text0.Insert(0, "1234");
-        text0.Insert(2, "ab", new Dictionary<string, object> { { "bold", true } });
-        text0.Delete(2, 2);
+        text0.Insert(2, "ab", new Dictionary<string, YValue> { { "bold", true } });
+        text0.Remove(2, 2);
 
         Assert.AreEqual(3, GetTypeChildren(text0));
     }
@@ -378,32 +342,32 @@ public class YTextTests : YTestBase
         text0.Insert(0, "Test\nMulti-line\nFormatting");
         text0.ApplyDelta(new List<Delta>
         {
-            new Delta { Retain = 4, Attributes = new Dictionary<string, object> { { "bold", true } } },
-            new Delta { Retain = 1 }, // newline character
-            new Delta { Retain = 10, Attributes = new Dictionary<string, object> { { "bold", true } } },
-            new Delta { Retain = 1 }, // newline character
-            new Delta { Retain = 10, Attributes = new Dictionary<string, object> { { "bold", true } } }
+            new Delta.Retain(4) { Attributes = new Dictionary<string, YValue> { { "bold", true } } },
+            new Delta.Retain(1), // newline character
+            new Delta.Retain(10) { Attributes = new Dictionary<string, YValue> { { "bold", true } } },
+            new Delta.Retain(1), // newline character
+            new Delta.Retain(10) { Attributes = new Dictionary<string, YValue> { { "bold", true } } }
         });
 
         var delta = text0.ToDelta();
 
         Assert.AreEqual(5, delta.Count);
 
-        Assert.AreEqual("Test", delta[0].Insert);
+        Assert.AreEqual("Test", delta[0].Inserted());
         Assert.IsTrue(delta[0].Attributes?.ContainsKey("bold") ?? false);
         Assert.AreEqual(true, delta[0].Attributes["bold"]);
 
-        Assert.AreEqual("\n", delta[1].Insert);
+        Assert.AreEqual("\n", delta[1].Inserted());
         Assert.AreEqual(0, delta[1].Attributes?.Count ?? 0);
 
-        Assert.AreEqual("Multi-line", delta[2].Insert);
+        Assert.AreEqual("Multi-line", delta[2].Inserted());
         Assert.IsTrue(delta[2].Attributes?.ContainsKey("bold") ?? false);
         Assert.AreEqual(true, delta[2].Attributes["bold"]);
 
-        Assert.AreEqual("\n", delta[3].Insert);
+        Assert.AreEqual("\n", delta[3].Inserted());
         Assert.AreEqual(0, delta[3].Attributes?.Count ?? 0);
 
-        Assert.AreEqual("Formatting", delta[4].Insert);
+        Assert.AreEqual("Formatting", delta[4].Inserted());
         Assert.IsTrue(delta[4].Attributes?.ContainsKey("bold") ?? false);
         Assert.AreEqual(true, delta[4].Attributes["bold"]);
     }
@@ -442,7 +406,7 @@ public class YTextTests : YTestBase
             else
             {
                 var len = rand.Next(0, Math.Min(3, text0.Length - pos));
-                text0.Delete(pos, len);
+                text0.Remove(pos, len);
                 expectedResult.Remove(pos, len);
             }
         }
@@ -496,7 +460,7 @@ public class YTextTests : YTestBase
             text0.Insert(0, "👾👾");
 
             // Partially delete surrogate.
-            text0.Delete(1, 2);
+            text0.Remove(1, 2);
 
             CompareUsers();
         }
@@ -512,7 +476,7 @@ public class YTextTests : YTestBase
             text0.Insert(0, "👾👾");
 
             // Formatting will also split surrogates.
-            text0.Format(1, 2, new Dictionary<string, object> { { "bold", true } });
+            text0.Format(1, 2, new Dictionary<string, YValue> { { "bold", true } });
 
             CompareUsers();
         }
@@ -580,7 +544,7 @@ public class YTextTests : YTestBase
                 var overwrite = Math.Min(rand.Next(0, contentLen - insertPos), contentLen);
 
                 var prevText = ytext.ToString();
-                ytext.Delete(insertPos, overwrite);
+                ytext.Remove(insertPos, overwrite);
                 Assert.AreEqual(prevText.Substring(0, insertPos) + prevText.Substring(insertPos + overwrite), ytext.ToString());
             }
         }, users, iterations);
@@ -607,12 +571,12 @@ public class YTextTests : YTestBase
     */
     public void TestRandomYTextFeatures(int users, int iterations)
     {
-        var attributes = new[]
+        var attributes = new Dictionary<string, YValue>[]
         {
             null,
-            new Dictionary<string, object> { { "bold", true } },
-            new Dictionary<string, object> { { "italic", true } },
-            new Dictionary<string, object> { { "italic", true }, { "color", "#888" } }
+            new Dictionary<string, YValue> { { "bold", true } },
+            new Dictionary<string, YValue> { { "italic", true } },
+            new Dictionary<string, YValue> { { "italic", true }, { "color", "#888" } }
         };
 
         RandomTests(new List<Action<TestYInstance, Random>>
@@ -632,7 +596,7 @@ public class YTextTests : YTestBase
             {
                 var ytext = user.GetText("text");
                 var insertPos = rand.Next(0, ytext.Length + 1);
-                ytext.InsertEmbed(insertPos, new[] { "video", "https://www.youtube.com/watch?v=dQw4w9WgXcQ" });
+                ytext.InsertEmbed(insertPos, YValue.FromObject(new[] { "video", "https://www.youtube.com/watch?v=dQw4w9WgXcQ" }));
             },
 
             // Delete text
@@ -642,7 +606,7 @@ public class YTextTests : YTestBase
                 var contentLen = ytext.Length;
                 var insertPos = rand.Next(0, contentLen + 1);
                 var overwrite = Math.Min(rand.Next(0, contentLen - insertPos), contentLen);
-                ytext.Delete(insertPos, overwrite);
+                ytext.Remove(insertPos, overwrite);
             },
 
             // Format text.
@@ -666,19 +630,12 @@ public class YTextTests : YTestBase
                 var ops = new List<Delta>();
                 if (insertPos > 0)
                 {
-                    ops.Add(new Delta { Retain = insertPos });
+                    ops.Add(new Delta.Retain(insertPos));
                 }
 
-                ops.Add(new Delta
-                {
-                    Insert = text
-                });
+                ops.Add(new Delta.Insert(YValue.FromObject(text)));
 
-                ops.Add(new Delta
-                {
-                    Insert = "\n",
-                    Attributes = new Dictionary<string, object> { { "code-block", true } }
-                });
+                ops.Add(new Delta.Insert("\n") { Attributes = new Dictionary<string, YValue> { { "code-block", true } } });
 
                 ytext.ApplyDelta(ops);
             },

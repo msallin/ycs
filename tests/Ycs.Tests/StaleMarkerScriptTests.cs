@@ -182,7 +182,7 @@ public class StaleMarkerScriptTests
                     ya.Insert(at, new object[] { op[3].GetInt32() });
                     break;
                 case (_, YText yt):
-                    yt.Delete(at, op[3].GetInt32());
+                    yt.Remove(at, op[3].GetInt32());
                     break;
                 case (_, YArray ya):
                     ya.Delete(at, op[3].GetInt32());

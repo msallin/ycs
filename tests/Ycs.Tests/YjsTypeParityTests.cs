@@ -55,7 +55,7 @@ public class YjsTypeParityTests
 
         doc.Transact(_ =>
         {
-            text.InsertEmbed(0, new Dictionary<string, object> { ["img"] = 1 });
+            text.InsertEmbed(0, YValue.FromObject(new Dictionary<string, object> { ["img"] = 1 }));
             text.Insert(2, "b");
         });
 
@@ -70,8 +70,8 @@ public class YjsTypeParityTests
         a.GetText("t").Insert(0, "abcd");
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         var beforeFormat = a.EncodeStateVector();
-        a.GetText("t").Format(0, 4, new Dictionary<string, object> { ["bold"] = true });
-        b.GetText("t").Format(1, 2, new Dictionary<string, object> { ["bold"] = true });
+        a.GetText("t").Format(0, 4, new Dictionary<string, YValue> { ["bold"] = true });
+        b.GetText("t").Format(1, 2, new Dictionary<string, YValue> { ["bold"] = true });
         var o = new YDoc(new YDocOptions { ClientId = 3 });
         o.ApplyUpdate(b.EncodeStateAsUpdate());
         var deltas = new List<string>();
@@ -98,7 +98,7 @@ public class YjsTypeParityTests
         o.GetText("t").Observe(e => deltas.Add(Json(e.Delta)));
         a.Transact(_ =>
         {
-            t.InsertEmbed(1, new YMap(new Dictionary<string, object> { ["k"] = 1 }));
+            t.InsertEmbed(1, YValue.FromObject(new YMap(new Dictionary<string, object> { ["k"] = 1 })));
             t.Insert(3, "c");
         });
 
@@ -107,7 +107,7 @@ public class YjsTypeParityTests
         var delta = o.GetText("t").ToDelta();
         Assert.AreEqual(
             """[{"insert":"a"},{"insert":"<YMap>"},{"insert":"bc"}] [[{"retain":1},{"insert":"<YMap>"},{"retain":1},{"insert":"c"}]] 4 1""",
-            $"{Json(delta)} {Json(deltas)} {o.GetText("t").Length} {((YMap)delta[1].Insert).Get("k")}");
+            $"{Json(delta)} {Json(deltas)} {o.GetText("t").Length} {((YMap)delta[1].Inserted().ToObject()).Get("k")}");
     }
 
     [TestMethod]
@@ -118,7 +118,7 @@ public class YjsTypeParityTests
         text.Insert(0, "ab");
         var map = new YMap();
 
-        text.InsertEmbed(1, map, new Dictionary<string, object> { ["bold"] = true });
+        text.InsertEmbed(1, map, new Dictionary<string, YValue> { ["bold"] = true });
         map.Set("x", 2);
 
         Assert.AreEqual(
@@ -138,7 +138,7 @@ public class YjsTypeParityTests
         doc.Transact(_ =>
         {
             text.Insert(1, "a");
-            text.Delete(3, 1);
+            text.Remove(3, 1);
         });
 
         Assert.AreEqual(
@@ -157,7 +157,7 @@ public class YjsTypeParityTests
         var after = Snapshot.DecodeSnapshot(System.Convert.FromBase64String("AYG8wZYLAQACAYG8wZYLBQ=="));
         var text = doc.GetText("t");
 
-        var delta = text.ToDelta(after, before, (type, id) => new YText.YTextChangeAttributes { Type = type, User = id.Client });
+        var delta = text.ToDelta(after, before, (type, id) => new YChange(type, id.Client));
 
         Assert.AreEqual(
             """[{"insert":"z"},{"attributes":{"ychange":{"type":"removed","user":3000000001}},"insert":"ab"},{"attributes":{"ychange":{"type":"added","user":3000000001}},"insert":"X"},{"insert":"c"}]""",
@@ -253,7 +253,7 @@ public class YjsTypeParityTests
     {
         var text = new YDoc().GetText("t");
 
-        Assert.ThrowsExactly<System.InvalidOperationException>(() => text.Delete(0, 1));
+        Assert.ThrowsExactly<System.InvalidOperationException>(() => text.Remove(0, 1));
     }
 
     [TestMethod]
@@ -261,7 +261,7 @@ public class YjsTypeParityTests
     {
         var doc = new YDoc();
         var text = new YText();
-        text.Delete(0, 1);
+        text.Remove(0, 1);
         text.Insert(0, "a");
 
         doc.GetMap("m").Set("t", text);
@@ -330,9 +330,9 @@ public class YjsTypeParityTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("t");
-        text.Insert(0, "abc", new Dictionary<string, object> { ["l"] = new Dictionary<string, object> { ["0"] = 1, ["1"] = 2 } });
+        text.Insert(0, "abc", new Dictionary<string, YValue> { ["l"] = YValue.FromObject(new Dictionary<string, object> { ["0"] = 1, ["1"] = 2 }) });
 
-        text.Format(0, 3, new Dictionary<string, object> { ["l"] = new List<object> { 1, 2 } });
+        text.Format(0, 3, new Dictionary<string, YValue> { ["l"] = YValue.FromObject(new List<object> { 1, 2 }) });
 
         Assert.AreEqual("AQMBAAYBAXQBbA17IjAiOjEsIjEiOjJ9hAEAA2FiY4YBAwFsBG51bGwA", System.Convert.ToBase64String(doc.EncodeStateAsUpdate()));
     }
@@ -342,7 +342,7 @@ public class YjsTypeParityTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
 
-        doc.GetText("t").Insert(0, "abc", new Dictionary<string, object> { ["b"] = true, ["1"] = "x", ["0"] = "y" });
+        doc.GetText("t").Insert(0, "abc", new Dictionary<string, YValue> { ["b"] = true, ["1"] = "x", ["0"] = "y" });
 
         Assert.AreEqual("AQcBAAYBAXQBMAMieSKGAQABMQMieCKGAQEBYgR0cnVlhAECA2FiY4YBBQEwBG51bGyGAQYBMQRudWxshgEHAWIEbnVsbAA=", System.Convert.ToBase64String(doc.EncodeStateAsUpdate()));
     }
@@ -404,14 +404,8 @@ public class YjsTypeParityTests
 
         var text = new YXmlText();
         fragment.Insert(1, new object[] { text, new YXmlHook("h") });
-        text.Insert(0, "ab", new Dictionary<string, object>
-        {
-            ["color"] = "red",
-            ["bold"] = true,
-            ["link"] = new Dictionary<string, object> { ["href"] = "u", ["a"] = 1 },
-            ["l"] = new List<object> { 1, 2 },
-        });
-        text.InsertEmbed(2, new Dictionary<string, object> { ["img"] = 1 });
+        text.Insert(0, "ab", new Dictionary<string, YValue> { ["color"] = "red", ["bold"] = true, ["link"] = YValue.FromObject(new Dictionary<string, object> { ["href"] = "u", ["a"] = 1 }), ["l"] = YValue.FromObject(new List<object> { 1, 2 }) });
+        text.InsertEmbed(2, YValue.FromObject(new Dictionary<string, object> { ["img"] = 1 }));
 
         var culture = System.Globalization.CultureInfo.CurrentCulture;
         System.Globalization.CultureInfo.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
@@ -447,9 +441,9 @@ public class YjsTypeParityTests
 
         text.ApplyDelta(
         [
-            new Delta { Insert = "a" },
-            new Delta { Insert = new YArray(), Attributes = new Dictionary<string, object> { ["b"] = 1 } },
-            new Delta { Insert = "c" },
+            new Delta.Insert("a"),
+            new Delta.Insert(YValue.FromObject(new YArray())) { Attributes = new Dictionary<string, YValue> { ["b"] = 1 } },
+            new Delta.Insert("c"),
         ]);
 
         Assert.AreEqual("AQUBAAQBAXQBYYYBAAFiATGHAQEAhgECAWIEbnVsbIQBAwFjAA== 3", $"{System.Convert.ToBase64String(doc.EncodeStateAsUpdate())} {text.Length}");

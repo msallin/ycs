@@ -72,7 +72,7 @@ internal sealed class CorpusDoc
 
     public void InsertText(string root, int index, string text) => _doc.GetText(root).Insert(index, text);
 
-    public void DeleteText(string root, int index, int length) => _doc.GetText(root).Delete(index, length);
+    public void DeleteText(string root, int index, int length) => _doc.GetText(root).Remove(index, length);
 
     /// <summary>Makes the changes of one scripted step (gen.mjs' runOp) in one transaction.</summary>
     public void EditText(IReadOnlyList<TextOp> ops) => _doc.Transact(_ =>
@@ -83,16 +83,16 @@ internal sealed class CorpusDoc
             switch (op.Op)
             {
                 case "insert":
-                    text.Insert(op.At, op.Text, op.Attributes);
+                    text.Insert(op.At, op.Text, Attributes(op.Attributes));
                     break;
                 case "delete":
-                    text.Delete(op.At, op.Length);
+                    text.Remove(op.At, op.Length);
                     break;
                 case "format":
-                    text.Format(op.At, op.Length, op.Attributes);
+                    text.Format(op.At, op.Length, Attributes(op.Attributes));
                     break;
                 case "embed":
-                    text.InsertEmbed(op.At, op.Embed, op.Attributes);
+                    text.InsertEmbed(op.At, YValue.FromObject(op.Embed), Attributes(op.Attributes));
                     break;
                 default:
                     throw new ArgumentException($"Unknown text op '{op.Op}'.", nameof(ops));
@@ -100,16 +100,19 @@ internal sealed class CorpusDoc
         }
     });
 
+    private static Dictionary<string, YValue> Attributes(IDictionary<string, object> attributes) =>
+        attributes?.ToDictionary(kvp => kvp.Key, kvp => YValue.FromObject(kvp.Value));
+
     /// <summary>Y.Text.toDelta() as plain values: a list of {insert, attributes?}.</summary>
     public object Delta(string root)
     {
         var result = new List<object>();
         foreach (var d in _doc.GetText(root).ToDelta())
         {
-            var op = new Dictionary<string, object> { ["insert"] = Plain(d.Insert) };
+            var op = new Dictionary<string, object> { ["insert"] = Plain(((Delta.Insert)d).Value.ToObject()) };
             if (d.Attributes is { Count: > 0 })
             {
-                op["attributes"] = Plain(d.Attributes);
+                op["attributes"] = Plain(d.Attributes.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToObject()));
             }
 
             result.Add(op);

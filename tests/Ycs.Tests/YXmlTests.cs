@@ -58,7 +58,7 @@ public class YXmlTests
         Assert.AreEqual("Hello world", boldText.ToString().Replace("<bold>", "").Replace("</bold>", ""));
 
         var delta = boldText.ToDelta();
-        Assert.IsTrue(delta.Any(d => (string)d.Insert == "Hello " && Equals(d.Attributes?["bold"], true)));
+        Assert.IsTrue(delta.Any(d => (string)d.Inserted() == "Hello " && Equals(d.Attributes?["bold"], true)));
 
         var em = children[1] as YXmlElement;
         Assert.IsNotNull(em);

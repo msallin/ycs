@@ -98,24 +98,22 @@ internal sealed class ReferenceRun
         var sb = new StringBuilder("[");
         foreach (var d in delta)
         {
-            if (d.Insert != null)
+            switch (d)
             {
-                sb.Append("ins(").Append(V(d.Insert)).Append(')');
-            }
-
-            if (d.Retain != null)
-            {
-                sb.Append("ret(").Append(d.Retain).Append(')');
-            }
-
-            if (d.Delete != null)
-            {
-                sb.Append("del(").Append(d.Delete).Append(')');
+                case Delta.Insert insert:
+                    sb.Append("ins(").Append(V(insert.Value.ToObject())).Append(')');
+                    break;
+                case Delta.Retain retain:
+                    sb.Append("ret(").Append(retain.Length).Append(')');
+                    break;
+                case Delta.Delete delete:
+                    sb.Append("del(").Append(delete.Length).Append(')');
+                    break;
             }
 
             if (d.Attributes != null)
             {
-                sb.Append('{').Append(string.Join(",", d.Attributes.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + V(k.Value)))).Append('}');
+                sb.Append('{').Append(string.Join(",", d.Attributes.OrderBy(k => k.Key, StringComparer.Ordinal).Select(k => k.Key + "=" + Attribute(k.Key, k.Value)))).Append('}');
             }
 
             sb.Append(' ');
@@ -124,6 +122,11 @@ internal sealed class ReferenceRun
         return sb.Append(']').ToString();
     }
 
+    private static string Attribute(string key, YValue value) =>
+        key == "ychange" && value.Kind == YValueKind.Object
+            ? "ychange(" + (value["type"] == "added" ? "Added" : "Removed") + "," + (value.TryGetMember("user", out var user) ? V(user.ToObject()) : "") + ")"
+            : V(value.ToObject());
+
     public static string V(object v) => v switch
     {
         null => "null",
@@ -131,7 +134,6 @@ internal sealed class ReferenceRun
         YText t => "YText(" + Esc(t.ToString()) + ")",
         YArray a => "YArray(" + string.Join(",", a.ToArray().Select(V)) + ")",
         YMap => "YMap",
-        YText.YTextChangeAttributes y => "ychange(" + y.Type + "," + y.User + ")",
         System.Collections.IEnumerable e => "[" + string.Join(",", e.Cast<object>().Select(V)) + "]",
         _ => Convert.ToString(v, CultureInfo.InvariantCulture),
     };

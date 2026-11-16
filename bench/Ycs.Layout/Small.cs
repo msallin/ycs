@@ -79,7 +79,7 @@ internal static class Small
 
         for (var i = 0; i < n / 10; i++)
         {
-            text.Delete(rng.Next(text.Length), 1);
+            text.Remove(rng.Next(text.Length), 1);
         }
     }
 

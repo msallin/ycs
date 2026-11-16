@@ -53,7 +53,7 @@ public class ClientStructsTests
                         break;
                     case 1 when text.Length > 0:
                         var at = random.Next(text.Length);
-                        text.Delete(at, Math.Min(1 + random.Next(3), text.Length - at));
+                        text.Remove(at, Math.Min(1 + random.Next(3), text.Length - at));
                         break;
                     case 2:
                         array.Insert(random.Next(array.Length + 1), new object[] { (long)step, (long)round });

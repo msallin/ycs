@@ -36,9 +36,9 @@ public class PermanentUserDataYjsTests
         peer.GetMap("users").Set("eve", new YMap());
 
         Sync(peer, doc);
-        text.Delete(0, 1);
+        text.Remove(0, 1);
         pud.SetUserMapping(doc, 1, "alice");
-        text.Delete(0, 1);
+        text.Remove(0, 1);
 
         Assert.AreEqual(("alice", "alice"), (pud.GetUserByClientId(1), pud.GetUserByDeletedId(new ItemId(1, 1))));
     }
@@ -74,7 +74,7 @@ public class PermanentUserDataYjsTests
         var dsLengthAtUpdates = new List<int>();
         doc.Updated += (_, _) => dsLengthAtUpdates.Add(ds.Length);
 
-        text.Delete(0, 1);
+        text.Remove(0, 1);
 
         CollectionAssert.AreEqual(new[] { 0, 1 }, dsLengthAtUpdates);
     }

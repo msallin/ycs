@@ -62,7 +62,7 @@ public class FormattingCleanupTests
         e.AfterTransaction += (_, _) => transactions++;
 
         e.ApplyUpdateV1(d.EncodeStateAsUpdateV1());
-        d.GetText("text").Delete(0, 1);
+        d.GetText("text").Remove(0, 1);
         e.ApplyUpdateV1(d.EncodeStateAsUpdateV1(e.EncodeStateVector()));
 
         Assert.AreEqual(2, transactions, "one per update, as in Yjs");
@@ -84,8 +84,8 @@ public class FormattingCleanupTests
         var parts = new System.Text.StringBuilder();
         foreach (var op in text.ToDelta())
         {
-            parts.Append('[').Append(op.Insert);
-            foreach (var attribute in op.Attributes ?? new Dictionary<string, object>())
+            parts.Append('[').Append(op.Inserted());
+            foreach (var attribute in op.Attributes ?? new Dictionary<string, YValue>())
             {
                 parts.Append(' ').Append(attribute.Key);
             }
@@ -117,7 +117,7 @@ public class FormattingCleanupTests
         target.ApplyUpdate(source.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
         byte[] update = null;
         source.Updated += (_, e) => update = e.Update.ToArray();
-        source.Transact(_ => texts.ForEach(text => text.Format(0, 2, new Dictionary<string, object> { ["italic"] = true })));
+        source.Transact(_ => texts.ForEach(text => text.Format(0, 2, new Dictionary<string, YValue> { ["italic"] = true })));
 
         var stopwatch = Stopwatch.StartNew();
         target.ApplyUpdate(update, null, UpdateLimits.Unlimited);
@@ -125,5 +125,5 @@ public class FormattingCleanupTests
         Assert.IsLessThan(1_500, stopwatch.ElapsedMilliseconds);
     }
 
-    private static Dictionary<string, object> Bold() => new() { ["bold"] = true };
+    private static Dictionary<string, YValue> Bold() => new() { ["bold"] = true };
 }

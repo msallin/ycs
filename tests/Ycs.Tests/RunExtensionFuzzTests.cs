@@ -104,7 +104,7 @@ public class RunExtensionFuzzTests
         YText nt = null;
         YArray na = null;
         c.LogUpdates(doc, "d");
-        var bold = new Dictionary<string, object> { ["bold"] = true };
+        var bold = new Dictionary<string, YValue> { ["bold"] = true };
         var relpos = new List<RelativePosition>();
         var snapshots = new List<Snapshot>();
         UndoManager um = null;
@@ -141,7 +141,7 @@ public class RunExtensionFuzzTests
                 if (r == 0 && pt.Length > 0)
                 {
                     var at = rng.Int(pt.Length);
-                    pt.Delete(at, Math.Min(1 + rng.Int(3), pt.Length - at));
+                    pt.Remove(at, Math.Min(1 + rng.Int(3), pt.Length - at));
                 }
                 else if (r <= 2)
                 {
@@ -175,12 +175,12 @@ public class RunExtensionFuzzTests
 
             var s = snapshots[rng.Int(snapshots.Count)];
             var prev = rng.Chance(0.5) ? snapshots[rng.Int(snapshots.Count)] : null;
-            Func<YText.YTextChangeType, ItemId, YText.YTextChangeAttributes> cy = rng.Chance(0.5)
+            Func<YChangeKind, ItemId, YChange> cy = rng.Chance(0.5)
                 ? null
                 : (type, id) =>
                 {
                     c.L($"ychange {type} {id.Client}:{id.Clock}");
-                    return new YText.YTextChangeAttributes { Type = type, User = rng.Chance(0.5) ? id.Client : null };
+                    return new YChange(type, rng.Chance(0.5) ? id.Client : null);
                 };
             c.L("snap delta " + ReferenceRun.D(t.ToDelta(s, prev, cy)) + " array " + ReferenceRun.V(a.ToArraySnapshot(s)));
         }
@@ -374,7 +374,7 @@ public class RunExtensionFuzzTests
                 if (caret > 0)
                 {
                     caret--;
-                    t.Delete(caret, 1);
+                    t.Remove(caret, 1);
                 }
             }
             else if (r < 40)
@@ -393,7 +393,7 @@ public class RunExtensionFuzzTests
             {
                 var at = rng.Int(t.Length);
                 var len = Math.Min(1 + rng.Int(4), t.Length - at);
-                t.Delete(at, len);
+                t.Remove(at, len);
                 caret = at;
             }
             else if (r < 62)

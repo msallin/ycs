@@ -18,7 +18,7 @@ public class SnapshotInputTests
     private static Snapshot ForeignSnapshot()
     {
         var other = Doc(2, "xy");
-        other.GetText("t").Delete(0, 1);
+        other.GetText("t").Remove(0, 1);
         return Snapshot.DecodeSnapshot(other.CreateSnapshot().EncodeSnapshot());
     }
 

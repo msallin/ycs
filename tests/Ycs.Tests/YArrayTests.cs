@@ -314,14 +314,14 @@ public class YArrayTests : YTestBase
         Assert.AreEqual(2, changes.Added.Count);
         Assert.AreEqual(0, changes.Deleted.Count);
         Assert.AreEqual(1, changes.Delta.Count);
-        CollectionAssert.AreEqual(new object[] { newArr, 4, "dtrn" }, (ICollection)changes.Delta[0].Insert);
+        CollectionAssert.AreEqual(new object[] { newArr, 4, "dtrn" }, ((Delta.InsertItems)changes.Delta[0]).Items.Select(v => v.ToObject()).ToList());
         changes = null;
 
         array0.Delete(0, 2);
         Assert.IsNotNull(changes);
         Assert.AreEqual(0, changes.Added.Count);
         Assert.AreEqual(2, changes.Deleted.Count);
-        Assert.AreEqual(2, changes.Delta[0].Delete);
+        Assert.AreEqual(2, changes.Delta[0].Deleted());
         changes = null;
 
         array0.Insert(1, new object[] { 0.1 });
@@ -329,8 +329,8 @@ public class YArrayTests : YTestBase
         Assert.AreEqual(1, changes.Added.Count);
         Assert.AreEqual(0, changes.Deleted.Count);
         Assert.AreEqual(2, changes.Delta.Count);
-        Assert.AreEqual(1, changes.Delta[0].Retain);
-        CollectionAssert.AreEqual(new object[] { 0.1 }, (ICollection)changes.Delta[1].Insert);
+        Assert.AreEqual(1, changes.Delta[0].Retained());
+        CollectionAssert.AreEqual(new object[] { 0.1 }, ((Delta.InsertItems)changes.Delta[1]).Items.Select(v => v.ToObject()).ToList());
 
         CompareUsers();
     }

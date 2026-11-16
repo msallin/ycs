@@ -248,7 +248,7 @@ public class CoreParityTests
         var doc = new YDoc(new YDocOptions { ClientId = (1L << 53) - 1 });
 
         doc.GetText("t").Insert(0, "max");
-        doc.GetText("t").Delete(0, 1);
+        doc.GetText("t").Remove(0, 1);
         doc.GetMap("m").Set("a", 1);
         doc.GetMap("m").Set("a", 2);
 
@@ -286,7 +286,7 @@ public class CoreParityTests
 
         var delta = doc.GetText("t").ToDelta(snapshot);
 
-        Assert.AreEqual(" world", string.Concat(System.Linq.Enumerable.Select(delta, d => d.Insert)));
+        Assert.AreEqual(" world", string.Concat(System.Linq.Enumerable.Select(delta, d => d.Inserted())));
     }
 
     private static (byte[] First, byte[] Second) LargeUpdateAfterItsBase()
@@ -400,7 +400,7 @@ public class CoreParityTests
         var doc = new YDoc();
 
         doc.ApplyUpdate(B(update));
-        var embed = (IDictionary<string, object>)doc.GetText("t").ToDelta()[0].Insert;
+        var embed = (IDictionary<string, object>)doc.GetText("t").ToDelta()[0].Inserted().ToObject();
 
         Assert.AreEqual(("a\uD83Db", 1, update), ((string)embed["v"], embed["k\uDC00"], S(doc.EncodeStateAsUpdate())));
     }

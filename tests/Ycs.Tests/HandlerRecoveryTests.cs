@@ -58,7 +58,7 @@ public class HandlerRecoveryTests
                 });
                 break;
             case 4:
-                text.Delete(1, 2);
+                text.Remove(1, 2);
                 break;
             default:
                 text.Insert(text.Length, ((char)('a' + i)).ToString());

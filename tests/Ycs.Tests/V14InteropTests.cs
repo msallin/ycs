@@ -214,9 +214,9 @@ public class V14InteropTests
             {
                 case "text":
                     var text = doc.GetText(name);
-                    text.Insert(0, "ycs ", new Dictionary<string, object> { ["italic"] = true });
-                    text.Format(4, 2, new Dictionary<string, object> { ["bold"] = null, ["code"] = true });
-                    text.Delete(text.Length - 1, 1);
+                    text.Insert(0, "ycs ", new Dictionary<string, YValue> { ["italic"] = true });
+                    text.Format(4, 2, new Dictionary<string, YValue> { ["bold"] = YValue.Null, ["code"] = true });
+                    text.Remove(text.Length - 1, 1);
                     break;
                 case "map":
                     var map = doc.GetMap(name);
@@ -340,7 +340,7 @@ public class V14InteropTests
 
     private static List<object> Delta(YText text) => text.ToDelta().Select(d =>
     {
-        var op = new Dictionary<string, object> { ["insert"] = Value(d.Insert) };
+        var op = new Dictionary<string, object> { ["insert"] = Value(d.Inserted().ToObject()) };
         if (d.Attributes?.Count > 0)
         {
             op["attributes"] = Value(d.Attributes);

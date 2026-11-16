@@ -109,7 +109,7 @@ internal static class Editing
             else if (text.Length > 0 && rng.Below(4) == 0)
             {
                 var pos = rng.Below(text.Length);
-                text.Delete(pos, Math.Min(1 + rng.Below(3), text.Length - pos));
+                text.Remove(pos, Math.Min(1 + rng.Below(3), text.Length - pos));
             }
             else
             {

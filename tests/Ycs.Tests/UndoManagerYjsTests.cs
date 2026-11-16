@@ -55,7 +55,7 @@ public class UndoManagerYjsTests
         var um = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
         text.Insert(0, "a");
         text.Insert(1, "b");
-        doc.Transact(_ => text.Delete(1, 1), "untracked");
+        doc.Transact(_ => text.Remove(1, 1), "untracked");
 
         var result = um.Undo();
 

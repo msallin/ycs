@@ -34,17 +34,17 @@ public class RunExtensionYjsTests
         {
             t.Insert(0, "a");
             t.Insert(1, "b");
-            t.Delete(1, 1);
+            t.Remove(1, 1);
             t.Insert(1, "c");
             t.Insert(2, "d");
-            t.Delete(2, 1);
+            t.Remove(2, 1);
         });
         var peer = Doc(2);
         Sync(doc, peer);
         var pt = peer.GetText("t");
         peer.GetMap("m").Set("k", 1);
         pt.Insert(2, "e");
-        pt.Delete(0, 1);
+        pt.Remove(0, 1);
         m.Observe(_ => t.Insert(2, "f"));
 
         Sync(peer, doc);
@@ -87,7 +87,7 @@ public class RunExtensionYjsTests
             {
                 t.Insert(0, "a");
                 t.Insert(1, "b");
-                t.Delete(0, 2);
+                t.Remove(0, 2);
             });
         });
 
@@ -104,7 +104,7 @@ public class RunExtensionYjsTests
             doc.Transact(_ =>
             {
                 t.Insert(1, "b");
-                t.Delete(0, 2);
+                t.Remove(0, 2);
             });
         });
 
@@ -166,14 +166,14 @@ public class RunExtensionYjsTests
             t.Insert(3, "d");
             t.Insert(4, "e");
             t.Insert(5, "f");
-            t.Delete(1, 2);
+            t.Remove(1, 2);
             var s2 = doc.CreateSnapshot();
 
             // A user that never equals the client, as Yjs' 'u' + client: every item is a change of its own.
             withChanges = Describe(t.ToDelta(s2, s1, (type, id) =>
             {
                 calls.Add($"{type} {id.Client}:{id.Clock}");
-                return new YText.YTextChangeAttributes { Type = type };
+                return new YChange(type, null);
             }));
             plain = Describe(t.ToDelta(s2, s1));
         });
@@ -284,7 +284,7 @@ public class RunExtensionYjsTests
         var pt = peer.GetText("t");
         t.Insert(0, "a");
         Sync(doc, peer);
-        pt.Delete(0, 1);
+        pt.Remove(0, 1);
 
         doc.Transact(_ =>
         {
@@ -415,5 +415,5 @@ public class RunExtensionYjsTests
 
     // Each op as its insert, and its ychange type after a colon.
     private static string Describe(IEnumerable<Delta> delta) =>
-        string.Join("|", delta.Select(d => d.Insert + (d.Attributes != null && d.Attributes.TryGetValue("ychange", out var c) ? ":" + ((YText.YTextChangeAttributes)c).Type : "")));
+        string.Join("|", delta.Select(d => d.Inserted() + (d.Attributes != null && d.Attributes.TryGetValue("ychange", out var c) ? ":" + (c["type"] == "added" ? "Added" : "Removed") : "")));
 }

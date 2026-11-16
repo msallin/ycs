@@ -95,7 +95,7 @@ internal static class Program
                     for (int i = from; i < to; i++)
                     {
                         var (pos, del, ins) = patches[i];
-                        if (del > 0) text.Delete(pos, del);
+                        if (del > 0) text.Remove(pos, del);
                         if (ins.Length > 0) text.Insert(pos, ins);
                     }
                 });
@@ -165,7 +165,7 @@ internal static class Program
                 for (int i = txnStarts[t]; i < txnStarts[t + 1]; i++)
                 {
                     var (pos, del, ins) = patches[i];
-                    if (del > 0) text.Delete(pos, del);
+                    if (del > 0) text.Remove(pos, del);
                     if (ins.Length > 0) text.Insert(pos, ins);
                 }
             });

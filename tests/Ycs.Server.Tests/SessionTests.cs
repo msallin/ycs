@@ -309,7 +309,7 @@ public class SessionTests
     {
         var source = new YDoc(new YDocOptions { ClientId = 9 });
         source.GetText("text").Insert(0, "lost");
-        source.GetText("text").Delete(1, 1);
+        source.GetText("text").Remove(1, 1);
         var update = source.EncodeStateAsUpdateV1();
         return kind switch
         {
