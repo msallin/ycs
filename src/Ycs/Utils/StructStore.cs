@@ -303,6 +303,7 @@ internal sealed partial class StructStore
 
         int index = FindIndexSS(structs, oldStruct.Id.Clock);
         structs.Replace(index, newStruct);
+        oldStruct.MarkDetached();
         Departures++;
     }
 

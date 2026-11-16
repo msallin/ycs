@@ -24,6 +24,10 @@ public partial class Item : AbstractStruct
         HasLeftOrigin = 1 << 4,
         HasRightOrigin = 1 << 5,
         HasRedone = 1 << 6,
+
+        // Set once, on the right part of a merge and on an item a GC struct replaced: the struct is in no list, and
+        // its Id and Length are the range it held (an ItemView's hint is stale).
+        Detached = 1 << 7,
     }
 
     private InfoEnum _info;
@@ -165,6 +169,10 @@ public partial class Item : AbstractStruct
     }
 
     public override bool Deleted => _info.HasFlag(InfoEnum.Deleted);
+
+    internal bool Detached => (_info & InfoEnum.Detached) != 0;
+
+    internal void MarkDetached() => _info |= InfoEnum.Detached;
 
     /// <summary>
     /// Computes the last content address of this Item.

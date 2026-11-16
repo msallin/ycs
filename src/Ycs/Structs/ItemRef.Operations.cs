@@ -147,7 +147,21 @@ internal readonly partial struct ItemRef
         }
 
         Length += right.Length;
+        right.MarkDetached();
         return true;
+    }
+
+    /// <summary>Marks the struct as out of every list (merged away, or replaced by a GC struct).</summary>
+    public void MarkDetached()
+    {
+        if (_struct is Item item)
+        {
+            item.MarkDetached();
+        }
+        else
+        {
+            ((GC)_struct).MarkDetached();
+        }
     }
 
     /// <summary>
