@@ -6,20 +6,23 @@
 //   4. every connected client sees exactly the other connected clients' last awareness states.
 // The seed fixes the steps, not the timing, so a race may need a few replays.
 // Usage: node converge.mjs --url ws://127.0.0.1:5000/ws [--seeds 10] [--first 1] [--parallel 4]
-//        [--clients 6] [--rooms 1|2] [--steps n] [--name ycs] [--verbose]
+//        [--clients 6] [--rooms 1|2] [--steps n] [--name ycs] [--transport websocket|signalr|mixed] [--verbose]
+// The transport is the clients' provider: y-websocket's over /ws, interop/signalr's over the hub at /hub (the Ycs
+// server only; the hub is on the --url's host), or mixed: the clients alternate between the two in each room.
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import WebSocket from 'ws'
 import { sleep, waitFor } from './wait.mjs'
 import { writeFileSync } from 'node:fs'
+import { register } from 'node:module'
 
 const parseArgs = argv => {
-  const options = { seeds: 10, first: 1, parallel: 4, name: 'server', verbose: false }
+  const options = { seeds: 10, first: 1, parallel: 4, name: 'server', transport: 'websocket', verbose: false }
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i].replace(/^--/, '')
     if (key === 'verbose') {
       options.verbose = true
-    } else if (['url', 'name'].includes(key)) {
+    } else if (['url', 'name', 'transport'].includes(key)) {
       options[key] = argv[++i]
     } else if (['seeds', 'first', 'parallel', 'clients', 'rooms', 'steps'].includes(key)) {
       options[key] = Number(argv[++i])
@@ -27,12 +30,25 @@ const parseArgs = argv => {
       throw new Error(`unknown option ${argv[i]}`)
     }
   }
+  if (!['websocket', 'signalr', 'mixed'].includes(options.transport)) {
+    throw new Error(`unknown transport ${options.transport}: websocket, signalr or mixed`)
+  }
   options.url ??= process.env.YCS_SERVER_URL
   if (!options.url) {
     throw new Error('usage: node converge.mjs --url ws://host:port/ws [--seeds n] [--first seed] ...')
   }
   return options
 }
+
+// Set once the options are parsed, when the transport is not websocket.
+let SignalRProvider = null
+
+// The socket under a provider, for an abrupt drop (SignalR: the hub connection's private WebSocket, closed without a
+// hub close message), or null while it has none.
+const socketOf = provider =>
+  SignalRProvider !== null && provider instanceof SignalRProvider
+    ? provider.hub?.connection?.transport?._webSocket ?? null
+    : provider.ws
 
 // mulberry32
 const prng = seed => {
@@ -121,7 +137,7 @@ const runSeed = async (seed, options) => {
   const roomCount = options.rooms ?? (r.chance(0.3) ? 2 : 1)
   const stepCount = options.steps ?? 40 + r.int(80)
   let lateCount = Math.min(r.int(3), clientCount - roomCount)
-  const tag = `${options.name}-s${seed}-${process.pid}-${Date.now().toString(36)}`
+  const tag = `${options.name}${options.transport === 'websocket' ? '' : `-${options.transport}`}-s${seed}-${process.pid}-${Date.now().toString(36)}`
 
   let lastActivity = Date.now()
   const mark = () => { lastActivity = Date.now() }
@@ -144,17 +160,22 @@ const runSeed = async (seed, options) => {
   let step = 0
   const log = options.verbose ? (...a) => console.log(`  [${seed}:${step}]`, ...a) : () => {}
 
+  // A client of the room: mixed alternates between the providers by the client's number.
+  const newProvider = (url, room, doc, number, WebSocketPolyfill) =>
+    options.transport === 'signalr' || (options.transport === 'mixed' && number % 2 === 1)
+      ? new SignalRProvider(url.replace(/^ws/, 'http').replace(/\/ws$/, '/hub'), room, doc, { maxBackoffTime: 500 })
+      : new WebsocketProvider(url, room, doc, { WebSocketPolyfill, disableBc: true, maxBackoffTime: 500 })
+
   const join = room => {
     const doc = new Y.Doc()
-    const provider = new WebsocketProvider(options.url, room.name, doc, {
-      WebSocketPolyfill: TracedWebSocket,
-      disableBc: true,
-      maxBackoffTime: 500
-    })
+    const provider = newProvider(options.url, room.name, doc, all.length, TracedWebSocket)
     const client = { name: `c${all.length}`, room, doc, provider, alive: true, cursor: 0 }
+    // A SignalR provider has no traced socket: what arrives (document and awareness updates) marks the activity.
     doc.on('update', (update, origin) => {
+      mark()
       if (origin !== provider) room.updates.push(update)
     })
+    provider.awareness.on('update', mark)
     provider.awareness.setLocalStateField('user', { name: client.name })
     room.clients.push(client)
     all.push(client)
@@ -277,9 +298,9 @@ const runSeed = async (seed, options) => {
         provider.connect()
         break
       case 'drop':
-        if (provider.ws !== null) {
+        if (socketOf(provider) !== null) {
           log(`${client.name} drops`)
-          provider.ws.terminate()
+          socketOf(provider).terminate()
         }
         break
       case 'replace':
@@ -366,16 +387,19 @@ const runSeed = async (seed, options) => {
   }
 
   const checkFreshClient = async (room, reference, referenceVector) => {
-    const doc = new Y.Doc()
-    const provider = new WebsocketProvider(options.url, room.name, doc, { WebSocketPolyfill: WebSocket, disableBc: true })
-    try {
-      await waitFor('fresh client synced', () => provider.synced, 10000)
-        .catch(() => fail(`a fresh client did not sync with ${room.name} within 10 s`))
-      // The fresh doc adds no client of its own: it made no edit.
-      const d = firstDifference(referenceVector, stateVectorOf(doc), '/stateVector') ?? firstDifference(reference, contentOf(doc))
-      if (d !== null) fail(`a fresh client differs from the clients in ${room.name}`, d)
-    } finally {
-      provider.destroy()
+    // One fresh client per provider in use: numbers 0 and 1 give a WebSocket and a SignalR one.
+    for (const number of options.transport === 'mixed' ? [0, 1] : [0]) {
+      const doc = new Y.Doc()
+      const provider = newProvider(options.url, room.name, doc, options.transport === 'signalr' ? 1 : number, WebSocket)
+      try {
+        await waitFor('fresh client synced', () => provider.synced, 10000)
+          .catch(() => fail(`a fresh client (${provider.constructor.name}) did not sync with ${room.name} within 10 s`))
+        // The fresh doc adds no client of its own: it made no edit.
+        const d = firstDifference(referenceVector, stateVectorOf(doc), '/stateVector') ?? firstDifference(reference, contentOf(doc))
+        if (d !== null) fail(`a fresh client (${provider.constructor.name}) differs from the clients in ${room.name}`, d)
+      } finally {
+        provider.destroy()
+      }
     }
   }
 
@@ -406,6 +430,10 @@ const runSeed = async (seed, options) => {
 // Every provider adds an exit listener.
 process.setMaxListeners(0)
 const options = parseArgs(process.argv.slice(2))
+if (options.transport !== 'websocket') {
+  register('./share-modules.mjs', import.meta.url)
+  ;({ SignalRProvider } = await import('../signalr/provider.mjs'))
+}
 const seeds = Array.from({ length: options.seeds }, (_, i) => options.first + i)
 const results = []
 const started = Date.now()
@@ -423,14 +451,14 @@ const worker = async () => {
     console.log([
       `FAIL ${options.name} seed ${seed}: ${result.steps} steps, ${result.clients} clients, ${result.rooms} room(s), failed at step ${result.step}${unexpected}`,
       `    ${result.error.message}`,
-      `    replay: TARGETS=${options.name} interop/server/converge.sh 1 ${seed}${overrides}`,
-      `        or: node interop/server/converge.mjs --url ${options.url} --first ${seed} --seeds 1 --parallel 1${overrides} --verbose`
+      `    replay: TRANSPORTS=${options.transport} TARGETS=${options.name} interop/server/converge.sh 1 ${seed}${overrides}`,
+      `        or: node interop/server/converge.mjs --url ${options.url} --first ${seed} --seeds 1 --parallel 1 --transport ${options.transport}${overrides} --verbose`
     ].join('\n'))
   }
 }
 await Promise.all(Array.from({ length: Math.max(1, options.parallel) }, worker))
 const failed = results.filter(x => !x.ok)
-console.log(`${options.name}: ${results.length - failed.length}/${results.length} seeds converged ` +
+console.log(`${options.name} (${options.transport}): ${results.length - failed.length}/${results.length} seeds converged ` +
   `(${options.first}..${options.first + options.seeds - 1}) in ${((Date.now() - started) / 1000).toFixed(1)} s` +
   (failed.length > 0 ? `; failed: ${failed.map(x => x.seed).sort((a, b) => a - b).join(' ')}` : ''))
 // The providers' awareness timers would keep the process alive.
