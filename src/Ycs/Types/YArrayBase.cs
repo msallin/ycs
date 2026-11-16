@@ -170,12 +170,10 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
     /// Yjs only enables them for Y.Array and Y.Text, and disables them for a text as soon as it
     /// holds formatting (see <see cref="ContentFormat"/>).
     /// </summary>
-    // ItemRef lifetime (docs/design-item-layout.md, 3.1): the type's collection does not clear the markers, so a
-    // collected type keeps references to items that are gone (2.4, H5).
     private protected ArraySearchMarkerCollection _searchMarkers;
 
     // An item of this list (any: a push walks from it to the end), or null. Items leave a list only by merging into
-    // their left neighbour (OnMerge moves the hint there) or when the whole type is collected (ForgetPushHint).
+    // their left neighbour (OnMerge moves the hint there) or when the whole type is collected (ForgetList).
     private ItemRef _pushHint;
 
     // An empty list for the values of the next insert (see InsertGenericsAfterReturningLast), or null.
@@ -238,8 +236,15 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
         }
     }
 
-    /// <summary>The type was garbage collected: its list is gone (<see cref="ContentType"/>).</summary>
-    internal void ForgetPushHint() => _pushHint = default;
+    /// <summary>
+    /// The type was garbage collected: its list is gone (<see cref="ContentType"/>). The markers and the hint name items
+    /// of that list, so they go too: a user's reference to the type outlives it.
+    /// </summary>
+    internal void ForgetList()
+    {
+        _pushHint = default;
+        _searchMarkers?.Clear();
+    }
 
     /// <summary>The markers in their order, as "client:clock@index" (the tests compare them).</summary>
     internal string DescribeSearchMarkers() =>
@@ -649,13 +654,13 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     protected void ForEach(Action<object, int, YArrayBase> fun)
     {
-        // ItemRef lifetime (docs/design-item-layout.md, 3.1): n is held across fun, which can end transactions that
-        // merge it away or collect the type.
         int index = 0;
         var n = _start;
 
         while (!n.IsNull)
         {
+            var id = n.Id;
+            var departures = Doc.Store.Departures;
             if (n.Countable && !n.Deleted)
             {
                 var c = n.Content.GetContent();
