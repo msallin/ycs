@@ -30,7 +30,7 @@ var positions = input["positions"].AsArray().Select(p =>
 
     if (!rpos.TryResolve(doc, out var abs))
     {
-        throw new Exception($"'{label}': could not resolve to an absolute position");
+        throw new InvalidOperationException($"'{label}': could not resolve to an absolute position");
     }
 
     return new

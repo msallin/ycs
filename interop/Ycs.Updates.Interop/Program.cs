@@ -78,7 +78,7 @@ Console.WriteLine(JsonSerializer.Serialize(new
         diffedV2 = BytesToB64(s2DiffedV2),
         convertedV1ToV2 = BytesToB64(s2ConvertedV1ToV2),
         convertedV2ToV1RoundTrip = BytesToB64(s2ConvertedRoundTrip),
-        parseUpdateMetaFrom = meta.From.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
-        parseUpdateMetaTo = meta.To.ToDictionary(kvp => kvp.Key.ToString(), kvp => kvp.Value),
+        parseUpdateMetaFrom = meta.From.ToDictionary(kvp => kvp.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), kvp => kvp.Value),
+        parseUpdateMetaTo = meta.To.ToDictionary(kvp => kvp.Key.ToString(System.Globalization.CultureInfo.InvariantCulture), kvp => kvp.Value),
     },
 }, jsonOptions));

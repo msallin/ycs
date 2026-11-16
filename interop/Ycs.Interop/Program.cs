@@ -29,7 +29,7 @@ static object Plain(object value) => value switch
     YArray a => a.ToArray().Select(v => Plain(v.ToObject())).ToList(),
     YText t => t.ToString(),
     // Yjs' toJSON renders a Uint8Array as an object keyed by index; match that shape.
-    byte[] b => b.Select((x, i) => (i, x)).ToDictionary(p => p.i.ToString(), p => (object)(int)p.x),
+    byte[] b => b.Select((x, i) => (i, x)).ToDictionary(p => p.i.ToString(System.Globalization.CultureInfo.InvariantCulture), p => (object)(int)p.x),
     _ => value
 };
 
