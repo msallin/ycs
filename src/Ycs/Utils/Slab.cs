@@ -40,10 +40,11 @@ internal struct Slot
 /// a free slot.
 /// </summary>
 /// <remarks>
-/// A freed slot keeps its fields (readers in the same cleanup may still look at it) but its object entries are
-/// cleared. It is reused only after <see cref="AllowReuse"/>, which the owner calls when nothing that could read a freed
-/// slot is pending (the outermost batch's end). A page, but page 0, whose slots are all free is released then. A
-/// <c>ref Slot</c> is valid until the next <see cref="Allocate"/>, which may move page 0.
+/// A freed slot keeps its fields but <see cref="Slot.Payload"/>, which holds the free-list link (readers in the same
+/// cleanup may still look at the others), and its object entries are cleared. It is reused only after
+/// <see cref="AllowReuse"/>, which the owner calls when nothing that could read a freed slot is pending (the outermost
+/// batch's end). A page, but page 0, whose slots are all free is released then. A <c>ref Slot</c> is valid until the
+/// next <see cref="Allocate"/>, which may move page 0.
 /// </remarks>
 internal sealed class Slab
 {
