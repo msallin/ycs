@@ -36,3 +36,6 @@ leaves in `$TMPDIR` when bumping the tested Yjs version.
 item for one clock, merged and left pending in every order (which one Yjs keeps depends on the order of V8's sort).
 `js/v8-sort.mjs` writes `tests/Ycs.Tests/Fixtures/v8-sort.json`: the orders V8's `Array.prototype.sort` gives for
 comparisons consistent and not, which `StableSort` must reproduce. Both: `cd js && node <script> > <fixture>`.
+`js/pending-orders.mjs` writes `tests/Ycs.Tests/Fixtures/pending-orders.json.gz`: sets of 3 to 5 updates that wait for
+a struct that never arrives and overlap by clock (items, deleted items, GC structs, Skip structs), left pending in every
+order (`cd js && node pending-orders.mjs | gzip -9 > ../../tests/Ycs.Tests/Fixtures/pending-orders.json.gz`).

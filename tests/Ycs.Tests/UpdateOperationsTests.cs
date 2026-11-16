@@ -7,6 +7,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Linq;
 using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -553,6 +554,47 @@ public class UpdateOperationsTests
         }
 
         Assert.AreEqual((c.GetProperty("pending").GetString(), c.GetProperty("pendingV2").GetString()), (Hex(fromV1.EncodeStateAsUpdateV1()), Hex(fromV2.EncodeStateAsUpdateV2())), $"{c.GetProperty("name")} {c.GetProperty("order")}");
+    }
+
+    private static readonly Lazy<JsonDocument> PendingOrders = new(() =>
+    {
+        using var file = File.OpenRead(Path.Combine(AppContext.BaseDirectory, "Fixtures", "pending-orders.json.gz"));
+        using var gzip = new GZipStream(file, CompressionMode.Decompress);
+        return JsonDocument.Parse(gzip);
+    });
+
+    public static IEnumerable<object[]> PendingOrderSets =>
+        PendingOrders.Value.RootElement.GetProperty("sets").EnumerateArray().Select(s => new object[] { s.GetProperty("name").GetString() });
+
+    /// <summary>
+    /// Sets of 3 to 5 updates that wait for a struct that never arrives and overlap by clock, applied in every order
+    /// (Fixtures/pending-orders.json.gz, recorded from Yjs 13.6.32 by interop/js/pending-orders.mjs): the state, of
+    /// which the pending structs are part, is Yjs', which merges every remainder into what waits, in v1 and v2.
+    /// </summary>
+    [TestMethod]
+    [DynamicData(nameof(PendingOrderSets))]
+    public void ApplyUpdate_OverlappingPendingInEveryOrder_EncodesWhatYjsEncodes(string name)
+    {
+        var set = PendingOrders.Value.RootElement.GetProperty("sets").EnumerateArray().Single(s => s.GetProperty("name").GetString() == name);
+        var updates = set.GetProperty("updates").EnumerateArray().Select(u => Convert.FromHexString(u.GetString())).ToList();
+        var orders = set.GetProperty("orders").EnumerateArray().ToList();
+
+        var actual = orders.Select(o =>
+        {
+            var order = o.GetProperty("order").GetString().Select(c => updates[c - '0']).ToList();
+            var fromV1 = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
+            var fromV2 = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
+            foreach (var u in order)
+            {
+                fromV1.ApplyUpdateV1(u);
+                fromV2.ApplyUpdateV2(UpdateOperations.ConvertUpdateFormatV1ToV2(u));
+            }
+
+            return $"{o.GetProperty("order").GetString()} {Hex(fromV1.EncodeStateAsUpdateV1())} {Hex(fromV2.EncodeStateAsUpdateV2())}";
+        });
+
+        var expected = orders.Select(o => $"{o.GetProperty("order").GetString()} {o.GetProperty("pending").GetString()} {o.GetProperty("pendingV2").GetString()}");
+        Assert.AreEqual(string.Join("\n", expected), string.Join("\n", actual));
     }
 
     private static string Hex(byte[] bytes) => Convert.ToHexStringLower(bytes);

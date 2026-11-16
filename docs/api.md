@@ -173,6 +173,21 @@ default of 2,097,152 structs before allowed 2.3 GiB and 1.2 GiB), and
 `EncodeStateAsUpdate` with 131,072 shared types pending allocates about 120 MiB per call (every
 joining peer). Halving the limits halves these.
 
+<a id="pending-structs-kept"></a>**Pending structs, kept.** Yjs keeps what waits as one encoded update and merges
+every new remainder into it (`pending.update = mergeUpdatesV2([pending.update, rest])`), which costs the size of
+everything pending per update: Ycs merging so took 4.4 s for 8,000 updates waiting for a missing client, and takes 38
+ms (`dotnet run -c Release --project bench/Ycs.Benchmarks -- perf`, "pending"). Ycs merges a remainder into what waits
+at once only when it shares a clock with a pending GC struct or item; the others are kept as they come and merged
+once, when they are retried or the state is encoded. That gives Yjs' bytes in every order: where structs overlap, the
+merge is not associative (the reader written first keeps writing its contiguous structs, so 1:2-6, then 1:1, then
+1:1-4 keep 1:2-6 whole in Yjs and would split it in one merge of all three), so those are merged as Yjs merges them.
+For updates that share no clock, one merge equals Yjs' fold: no struct is sliced or skipped, the gaps become the same
+Skip structs, items never merge (`Item.mergeWith` asks for `this.right === right`, which is null for an item read from
+an update), and a run of adjacent GC structs is written as it is up to the first two of it that come from different
+updates and joined from there on, which the fold finds in the same place, however the updates are grouped. Checked
+against Yjs 13.6.32 in 69,224 orders of 3 to 5 overlapping updates and 200 sets of 64 to 263 (`tests/Ycs.Tests`
+replays 1,128 of them, `interop/js/pending-orders.mjs`).
+
 <a id="pending-structs-retried"></a>**Pending structs, retried.** An update that brings what pending structs (from earlier updates)
 waited for retries them in its own transaction, after it was carried out, as Yjs does: they are read
 again and planned and checked as an update of their own (nesting, garbage collection). When that

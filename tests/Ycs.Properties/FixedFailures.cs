@@ -78,7 +78,7 @@ internal static class FixedFailures
             "A GC struct and an item for one clock, in two updates that both wait (a peer with gc wrote the item in a remote " +
             "transaction's update and as a GC struct in its observer's nested one): Yjs keeps the later update's struct, as V8's " +
             "sort orders mergeUpdatesV2's readers (its comparison answers -1 for both orders); StableSort is V8's TimSort now, " +
-            "and a remainder that shares a clock with a pending struct of the other kind is merged into what waits at once, " +
+            "and a remainder that shares a clock with a pending struct is merged into what waits at once, " +
             "as Yjs merges every one. Ycs kept the earlier update's struct.",
             """{"clients":[{"gc":false,"id":4,"quiet":true},{"gc":true,"id":4294966843},{"gc":false,"gcf":3,"id":9,"quiet":true}],"roots":[{"kind":"text","name":"t"},{"kind":"array","name":"a"}],"steps":[{"at":0,"c":1,"op":"ains","path":["a"],"values":[{"$t":"xmle","n":"p","v":[{"$t":"xmlt"}]}]},{"at":0,"c":0,"op":"insert","path":["t"],"text":"a"},{"c":1,"id":"x0","op":"react","ops":[{"at":0,"op":"insert","path":["a",0,0],"text":"a"},{"at":0,"len":1,"op":"delete","path":["a"]}],"path":["t"],"txn":true},{"from":0,"k":0,"op":"deliver","to":1,"via":"v1"},{"from":1,"k":2,"op":"deliver","to":2,"via":"v1to2"},{"from":1,"k":1,"op":"deliver","to":2,"via":"v2"}]}"""),
     ];

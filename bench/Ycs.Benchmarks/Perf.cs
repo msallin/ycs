@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace Ycs.Benchmarks;
 
@@ -126,6 +127,63 @@ internal static class Perf
                 }
             };
         });
+
+        // Pending structs: remainders that share no clock with what waits are kept apart and merged once, when retried.
+        Case("pending: 8,000 updates waiting for a missing client", () =>
+        {
+            var updates = Enumerable.Range(100, 8_000).Select(WaitingForClient99).ToList();
+            var doc = new YDoc();
+            return () => updates.ForEach(u => doc.ApplyUpdateV1(u));
+        });
+
+        Case("pending: 8,000 keystrokes delivered last first, then retried", () =>
+        {
+            var updates = Keystrokes(8_000);
+            updates.Reverse();
+            var doc = new YDoc();
+            return () => updates.ForEach(u => doc.ApplyUpdateV1(u));
+        });
+
+        Case("pending: 8,000 keystrokes, the first withheld, then retried", () =>
+        {
+            var updates = Keystrokes(8_000);
+            updates.Add(updates[0]);
+            updates.RemoveAt(0);
+            var doc = new YDoc();
+            return () => updates.ForEach(u => doc.ApplyUpdateV1(u));
+        });
+    }
+
+    /// <summary>One v1 update per keystroke of client 7 typing <paramref name="count"/> characters.</summary>
+    private static List<byte[]> Keystrokes(int count)
+    {
+        var source = new YDoc(new YDocOptions { ClientId = 7 });
+        var updates = new List<byte[]>();
+        source.Update += (_, e) => updates.Add(e.data);
+        var text = source.GetText("t");
+        for (var i = 0; i < count; i++)
+        {
+            text.Insert(i, "a");
+        }
+
+        return updates;
+    }
+
+    /// <summary>A v1 update: the item <paramref name="client"/>:0, a string whose left origin 99:0 never arrives.</summary>
+    private static byte[] WaitingForClient99(int client)
+    {
+        var bytes = new List<byte> { 1, 1 };
+        for (var v = (uint)client; ; v >>= 7)
+        {
+            bytes.Add((byte)(v > 0x7F ? 0x80 | (v & 0x7F) : v));
+            if (v <= 0x7F)
+            {
+                break;
+            }
+        }
+
+        bytes.AddRange(new byte[] { 0, 0x84, 99, 0, 1, (byte)'c', 0 });
+        return bytes.ToArray();
     }
 
     private static (YDoc Doc, YText Text) Typed(int length)

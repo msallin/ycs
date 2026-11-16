@@ -28,23 +28,23 @@ internal sealed partial class StructStore
     /// <summary>
     /// Structs that could not be integrated yet (Yjs' <c>store.pendingStructs</c>), and per client the
     /// lowest clock that is missing for them. Yjs keeps one encoded update and merges every new remainder
-    /// into it, which costs the size of everything pending per update; here the remainders (encoded v2
-    /// updates) are kept as they come and merged once, when they are retried or compacted.
+    /// into it (<c>mergeUpdatesV2([pending.update, rest])</c>), which costs the size of everything pending per
+    /// update; here a remainder that shares no clock with what waits is kept as it comes (an encoded v2 update),
+    /// and the remainders are merged once, when they are retried or compacted.
     /// <br/>
-    /// That gives Yjs' bytes only while no GC struct of one remainder shares a clock with an item of another: merging
-    /// them is not associative (Yjs' <c>mergeUpdatesV2</c> keeps the struct its sort puts first, and its comparison
-    /// answers "less" for both orders of a GC struct and an item at one clock), so <see cref="Add"/> merges such a
-    /// remainder into what waits at once, as Yjs merges every one.
+    /// A remainder that shares a clock with what waits is merged at once, as Yjs merges every one: where structs
+    /// overlap, merging is not associative. Remainders disjoint by clock give the fold's bytes in one merge
+    /// (docs/api.md, "Pending structs, kept").
     /// <br/>
     /// They are re-read from their encoding when they are retried, so a root type realized in between
     /// (e.g. with <see cref="YDoc.GetText"/>) is resolved then.
     /// </summary>
     internal sealed class PendingStructs
     {
-        // The clocks of the GC structs and of the items of every remainder added; never lowered (a merge can drop one
-        // of a GC struct and an item), which can only make a later Add merge where it need not.
-        private readonly ClockRanges _gcs = new();
-        private readonly ClockRanges _items = new();
+        // The clocks of the GC structs and items of every remainder added (Skip structs are gaps). Never lowered: a
+        // remainder rejected after Add stays recorded, which can only make a later Add merge where it need not,
+        // and a merge at once is Yjs' own step.
+        private readonly ClockRanges _clocks = new();
 
         public Dictionary<long, long> Missing { get; } = new();
         public List<byte[]> Updates { get; } = new();
@@ -56,7 +56,7 @@ internal sealed partial class StructStore
         /// <summary>Adds the remainder <paramref name="update"/>, which holds the structs of <paramref name="rest"/>.</summary>
         public void Add(byte[] update, long structs, StructStore rest)
         {
-            if (SharesAClockOfTheOtherKind(rest))
+            if (SharesAClock(rest))
             {
                 // Yjs' pending.update = mergeUpdatesV2([pending.update, rest.update]).
                 var merged = new List<byte[]> { Merge(), update };
@@ -75,20 +75,22 @@ internal sealed partial class StructStore
                 for (var i = 0; i < list.Count; i++)
                 {
                     var str = list[i];
-                    (str is GC ? _gcs : str is Item ? _items : null)?.Add(client, str.Id.Clock, str.Id.Clock + str.Length);
+                    if (str is not Skip)
+                    {
+                        _clocks.Add(client, str.Id.Clock, str.Id.Clock + str.Length);
+                    }
                 }
             }
         }
 
-        private bool SharesAClockOfTheOtherKind(StructStore rest)
+        private bool SharesAClock(StructStore rest)
         {
             foreach (var (client, list) in rest.Clients)
             {
                 for (var i = 0; i < list.Count; i++)
                 {
                     var str = list[i];
-                    var other = str is GC ? _items : str is Item ? _gcs : null;
-                    if (other != null && other.Overlaps(client, str.Id.Clock, str.Id.Clock + str.Length))
+                    if (str is not Skip && _clocks.Overlaps(client, str.Id.Clock, str.Id.Clock + str.Length))
                     {
                         return true;
                     }
