@@ -291,7 +291,7 @@ public class HardeningTests
 
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         textA.Insert(250, "-");
-        textA.Delete(250, 1);
+        textA.Remove(250, 1);
         b.GetText("t").Insert(0, "12345");
         var remote = b.EncodeStateAsUpdate(a.EncodeStateVector());
 

@@ -188,7 +188,7 @@ public class CodecReuseTests
         {
             var peer = new YDoc(new YDocOptions { ClientId = client });
             peer.GetText("text").Insert(0, $"{client} ");
-            peer.GetText("text").Delete(0, 1);
+            peer.GetText("text").Remove(0, 1);
             doc.ApplyUpdate(peer.EncodeStateAsUpdate());
         }
 
@@ -227,7 +227,7 @@ public class CodecReuseTests
         text.Insert(0, "hello");
         var stateVector = doc.EncodeStateVector();
         text.Insert(5, " world");
-        text.Delete(0, 1);
+        text.Remove(0, 1);
         var destination = new ArrayBufferWriter<byte>(4096);
 
         var allocated = Allocated(() =>
@@ -382,7 +382,7 @@ public class CodecReuseTests
         var text = source.GetText("text");
         text.Insert(0, "abc");
         text.Insert(3, "def");
-        text.Delete(1, 2);
+        text.Remove(1, 2);
         var doc = new YDoc();
         var pick = v2 ? 1 : 0;
 
@@ -498,8 +498,8 @@ public class CodecReuseTests
         var doc = new YDoc(new YDocOptions { ClientId = clientId });
         var text = doc.GetText("text");
         text.Insert(0, $"hello {clientId} 😀 world");
-        text.Format(0, 5, new Dictionary<string, object> { ["bold"] = true });
-        text.Delete(2, 2);
+        text.Format(0, 5, new Dictionary<string, YValue> { ["bold"] = true });
+        text.Remove(2, 2);
         var map = doc.GetMap("map");
         map.Set("number", clientId);
         map.Set("list", new List<object> { "a", 1, true });
@@ -519,14 +519,14 @@ public class CodecReuseTests
             text.Insert(random.Next(text.Length + 1), "ab" + i);
             if (i % 5 == 0)
             {
-                text.Delete(random.Next(text.Length - 2), 2);
+                text.Remove(random.Next(text.Length - 2), 2);
             }
         }
 
         var peer = new YDoc(new YDocOptions { ClientId = 4 });
         peer.ApplyUpdate(doc.EncodeStateAsUpdate());
         peer.GetMap("map").Set("k", "v");
-        peer.GetText("text").Delete(1, 3);
+        peer.GetText("text").Remove(1, 3);
         doc.ApplyUpdate(peer.EncodeStateAsUpdate());
         return doc;
     }

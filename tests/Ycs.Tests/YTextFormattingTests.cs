@@ -17,7 +17,7 @@ public class YTextFormattingTests
         var text = NewText();
         text.Insert(0, "ab");
 
-        text.Format(1, 3, new Dictionary<string, object> { ["bold"] = true });
+        text.Format(1, 3, new Dictionary<string, YValue> { ["bold"] = true });
 
         Assert.AreEqual("ab\n\n", text.ToString());
     }
@@ -29,8 +29,8 @@ public class YTextFormattingTests
 
         text.ApplyDelta(new List<Delta>
         {
-            new() { Insert = "a", Attributes = new Dictionary<string, object> { ["bold"] = true } },
-            new() { Insert = "b" },
+            new Delta.Insert("a") { Attributes = new Dictionary<string, YValue> { ["bold"] = true } },
+            new Delta.Insert("b"),
         });
 
         Assert.AreEqual("AQQBAAYBAXQEYm9sZAR0cnVlhAEAAWGGAQEEYm9sZARudWxshAECAWIA", Convert.ToBase64String(text.Doc.EncodeStateAsUpdate()));
@@ -41,9 +41,9 @@ public class YTextFormattingTests
     {
         var text = NewText();
         text.Insert(0, "abc");
-        text.Format(0, 3, new Dictionary<string, object> { ["size"] = 1 });
+        text.Format(0, 3, new Dictionary<string, YValue> { ["size"] = 1 });
 
-        text.Format(1, 1, new Dictionary<string, object> { ["size"] = 1.0 });
+        text.Format(1, 1, new Dictionary<string, YValue> { ["size"] = 1.0 });
 
         Assert.AreEqual("AQMBAAQBAXQDYWJjRgEABHNpemUBMYYBAgRzaXplBG51bGwA", Convert.ToBase64String(text.Doc.EncodeStateAsUpdate()));
     }

@@ -37,7 +37,7 @@ public class YTextToStringTests
         var text = NewText("hello");
         _ = text.ToString();
 
-        text.Delete(0, 1);
+        text.Remove(0, 1);
 
         Assert.AreEqual("ello", text.ToString());
     }
@@ -51,7 +51,7 @@ public class YTextToStringTests
         text.Doc.Transact(tr =>
         {
             _ = text.ToString();
-            text.Delete(0, 1);
+            text.Remove(0, 1);
             text.Insert(0, "j");
             inside = text.ToString();
         });
@@ -71,7 +71,7 @@ public class YTextToStringTests
         remoteText.Insert(0, ">");
         local.Doc.ApplyUpdate(remote.EncodeStateAsUpdate(local.Doc.EncodeStateVector()));
         var afterInsert = local.ToString();
-        remoteText.Delete(1, 2);
+        remoteText.Remove(1, 2);
         local.Doc.ApplyUpdate(remote.EncodeStateAsUpdate(local.Doc.EncodeStateVector()));
 
         Assert.AreEqual(">hello", afterInsert);
@@ -101,7 +101,7 @@ public class YTextToStringTests
         text.Insert(3, "XYZ");
         _ = text.ToString();
 
-        text.Delete(2, 5);
+        text.Remove(2, 5);
 
         Assert.AreEqual("abef", text.ToString());
         Assert.AreEqual("abef", Reloaded(text.Doc).ToString());
@@ -131,7 +131,7 @@ public class YTextToStringTests
         var text = NewText("hello");
         _ = text.ToString();
 
-        text.Format(1, 2, new Dictionary<string, object> { ["bold"] = true });
+        text.Format(1, 2, new Dictionary<string, YValue> { ["bold"] = true });
 
         Assert.AreEqual("hello", text.ToString());
     }
@@ -141,7 +141,7 @@ public class YTextToStringTests
     {
         var text = NewText("ab");
 
-        text.InsertEmbed(1, new Dictionary<string, object> { ["image"] = "x" });
+        text.InsertEmbed(1, YValue.FromObject(new Dictionary<string, object> { ["image"] = "x" }));
 
         Assert.AreEqual("ab", text.ToString());
     }
@@ -150,7 +150,7 @@ public class YTextToStringTests
     public void CopyTo_LengthLongDestination_WritesTheTextWithoutEmbeds()
     {
         var text = NewText("ab");
-        text.InsertEmbed(1, new Dictionary<string, object> { ["image"] = "x" });
+        text.InsertEmbed(1, YValue.FromObject(new Dictionary<string, object> { ["image"] = "x" }));
         var destination = new char[text.Length];
 
         var written = text.CopyTo(destination);

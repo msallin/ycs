@@ -49,13 +49,74 @@ readonly struct Ycs.DeletedRange : System.IEquatable<DeletedRange>
     static bool op_Equality(DeletedRange left, DeletedRange right)
     static bool op_Inequality(DeletedRange left, DeletedRange right)
     void Deconstruct(out long Clock, out long Length)
-class Ycs.Delta
-    Delta()
-    System.Collections.Generic.IDictionary<string, object> Attributes
-    int? Delete
-    int? Retain
-    object Insert
-    static readonly object NullEmbed
+abstract class Ycs.Delta : System.IEquatable<Delta>
+    System.Collections.Generic.IReadOnlyDictionary<string, YValue>? Attributes { get; init; }
+    abstract Delta <Clone>$()
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    protected Delta(Delta original)
+    protected virtual System.Type EqualityContract { protected get; }
+    protected virtual bool PrintMembers(System.Text.StringBuilder builder)
+    static bool op_Equality(Delta? left, Delta? right)
+    static bool op_Inequality(Delta? left, Delta? right)
+    virtual bool Equals(Delta? other)
+sealed class Ycs.Delta.Delete : Delta, System.IEquatable<Delta.Delete>
+    Delete(int Length)
+    bool Equals(Delta.Delete? other)
+    int Length { get; init; }
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    protected override System.Type EqualityContract { protected get; }
+    protected override bool PrintMembers(System.Text.StringBuilder builder)
+    sealed override bool Equals(Delta? other)
+    static bool op_Equality(Delta.Delete? left, Delta.Delete? right)
+    static bool op_Inequality(Delta.Delete? left, Delta.Delete? right)
+    virtual Delta.Delete <Clone>$()
+    void Deconstruct(out int Length)
+sealed class Ycs.Delta.Insert : Delta, System.IEquatable<Delta.Insert>
+    Insert(YValue Value)
+    YValue Value { get; init; }
+    bool Equals(Delta.Insert? other)
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    protected override System.Type EqualityContract { protected get; }
+    protected override bool PrintMembers(System.Text.StringBuilder builder)
+    sealed override bool Equals(Delta? other)
+    static bool op_Equality(Delta.Insert? left, Delta.Insert? right)
+    static bool op_Inequality(Delta.Insert? left, Delta.Insert? right)
+    virtual Delta.Insert <Clone>$()
+    void Deconstruct(out YValue Value)
+sealed class Ycs.Delta.InsertItems : Delta, System.IEquatable<Delta.InsertItems>
+    InsertItems(System.Collections.Generic.IReadOnlyList<YValue> Items)
+    System.Collections.Generic.IReadOnlyList<YValue> Items { get; init; }
+    bool Equals(Delta.InsertItems? other)
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    protected override System.Type EqualityContract { protected get; }
+    protected override bool PrintMembers(System.Text.StringBuilder builder)
+    sealed override bool Equals(Delta? other)
+    static bool op_Equality(Delta.InsertItems? left, Delta.InsertItems? right)
+    static bool op_Inequality(Delta.InsertItems? left, Delta.InsertItems? right)
+    virtual Delta.InsertItems <Clone>$()
+    void Deconstruct(out System.Collections.Generic.IReadOnlyList<YValue> Items)
+sealed class Ycs.Delta.Retain : Delta, System.IEquatable<Delta.Retain>
+    Retain(int Length)
+    bool Equals(Delta.Retain? other)
+    int Length { get; init; }
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
+    protected override System.Type EqualityContract { protected get; }
+    protected override bool PrintMembers(System.Text.StringBuilder builder)
+    sealed override bool Equals(Delta? other)
+    static bool op_Equality(Delta.Retain? left, Delta.Retain? right)
+    static bool op_Inequality(Delta.Retain? left, Delta.Retain? right)
+    virtual Delta.Retain <Clone>$()
+    void Deconstruct(out int Length)
 readonly struct Ycs.ItemId : System.IEquatable<ItemId>
     ItemId(long Client, long Clock)
     bool Equals(ItemId other)
@@ -326,6 +387,20 @@ abstract class Ycs.YArrayBase : YType, System.Collections.Generic.IEnumerable<ob
     System.Collections.Generic.IEnumerator<object> GetEnumerator()
     System.Collections.Generic.IList<object> ToArraySnapshot(Snapshot snapshot)
 sealed class Ycs.YArrayEvent : YEvent
+readonly struct Ycs.YChange : System.IEquatable<YChange>
+    YChange(YChangeKind Kind, long? User)
+    YChangeKind Kind { get; init; }
+    bool Equals(YChange other)
+    long? User { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(YChange left, YChange right)
+    static bool op_Inequality(YChange left, YChange right)
+    void Deconstruct(out YChangeKind Kind, out long? User)
+enum Ycs.YChangeKind : int
+    Added = 0
+    Removed = 1
 sealed class Ycs.YChanges
     System.Collections.Generic.IReadOnlyDictionary<string, KeyChange> Keys { get; }
     System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
@@ -421,33 +496,26 @@ class Ycs.YMap : YType, System.Collections.Generic.IEnumerable<System.Collection
 sealed class Ycs.YMapEvent : YEvent
     System.Collections.Generic.IReadOnlySet<string> KeysChanged { get; }
 class Ycs.YText : YArrayBase
-    System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> GetAttributes()
-    System.Collections.Generic.IList<Delta> ToDelta(Snapshot snapshot = null, Snapshot prevSnapshot = null, System.Func<YText.YTextChangeType, ItemId, YText.YTextChangeAttributes> computeYChange = null)
+    System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>> GetAttributes()
+    System.Collections.Generic.IReadOnlyList<Delta> ToDelta()
+    System.Collections.Generic.IReadOnlyList<Delta> ToDelta(Snapshot? snapshot, Snapshot? previous = null, System.Func<YChangeKind, ItemId, YChange>? computeYChange = null)
     System.IDisposable Observe(System.Action<YTextEvent> handler)
     YText Clone()
-    YText()
-    YText(string str)
+    YText(string? text = null)
+    YValue? GetAttribute(string name)
     bool RemoveNonText()
     int CleanupFormatting()
     int CopyTo(System.Span<char> destination)
-    object GetAttribute(string name)
     override object ToJson()
     override string ToString()
-    void ApplyDelta(System.Collections.Generic.IList<Delta> delta, bool sanitize = true)
-    void Delete(int index, int length)
-    void Format(int index, int length, System.Collections.Generic.IDictionary<string, object> attributes)
-    void Insert(int index, string text, System.Collections.Generic.IDictionary<string, object> attributes = null)
-    void InsertEmbed(int index, object embed, System.Collections.Generic.IDictionary<string, object> attributes = null)
+    void ApplyDelta(System.Collections.Generic.IEnumerable<Delta> delta, bool sanitize = true)
+    void Format(int index, int length, System.Collections.Generic.IReadOnlyDictionary<string, YValue> attributes)
+    void Insert(int index, string text, System.Collections.Generic.IReadOnlyDictionary<string, YValue>? attributes = null)
+    void InsertEmbed(int index, YValue embed, System.Collections.Generic.IReadOnlyDictionary<string, YValue>? attributes = null)
+    void Remove(int index, int length)
     void RemoveAttribute(string name)
-    void SetAttribute(string name, object value)
+    void SetAttribute(string name, YValue value)
     void WriteTo(System.Buffers.IBufferWriter<char> writer)
-class Ycs.YText.YTextChangeAttributes
-    YText.YTextChangeType Type { get; set; }
-    YTextChangeAttributes()
-    long? User { get; set; }
-enum Ycs.YText.YTextChangeType : int
-    Added = 0
-    Removed = 1
 sealed class Ycs.YTextEvent : YEvent
     System.Collections.Generic.IReadOnlySet<string> KeysChanged { get; }
     bool ChildListChanged { get; }
@@ -583,11 +651,10 @@ sealed class Ycs.YXmlHook : YMap
     YXmlHook(string hookName)
     string HookName { get; }
 sealed class Ycs.YXmlText : YText
+    YType? NextSibling { get; }
+    YType? PrevSibling { get; }
     YXmlText Clone()
-    YXmlText()
-    YXmlText(string str)
-    object NextSibling { get; }
-    object PrevSibling { get; }
+    YXmlText(string? text = null)
     override object ToJson()
     override string ToString()
 sealed class Ycs.YXmlTreeWalker : System.Collections.Generic.IEnumerable<YType>, System.Collections.Generic.IEnumerator<YType>, System.Collections.IEnumerable, System.Collections.IEnumerator, System.IDisposable

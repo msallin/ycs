@@ -140,7 +140,7 @@ internal sealed class HostileRoom
                 break;
             case 2 when text.Length > 0:
                 var at = rng.Int(text.Length);
-                text.Delete(at, Math.Min(text.Length - at, rng.Between(1, 6)));
+                text.Remove(at, Math.Min(text.Length - at, rng.Between(1, 6)));
                 break;
             case 3:
                 doc.GetMap("map").Set($"k{rng.Int(8)}", rng.Int(1_000));

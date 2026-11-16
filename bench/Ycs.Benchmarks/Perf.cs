@@ -23,7 +23,7 @@ internal static class Perf
             {
                 for (var i = 40_000 - 1; i >= 0; i--)
                 {
-                    text.Delete(i, 1);
+                    text.Remove(i, 1);
                 }
             };
         });
@@ -82,7 +82,7 @@ internal static class Perf
                 for (var i = 0; i < 40_000; i++)
                 {
                     text.Insert(random.Next(text.Length + 1), "bb");
-                    text.Delete(random.Next(text.Length), 1);
+                    text.Remove(random.Next(text.Length), 1);
                 }
             };
         });

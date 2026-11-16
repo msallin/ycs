@@ -24,7 +24,7 @@ using var deepSubscription = doc.GetMap("map").ObserveDeep((events, _) => deepOb
 doc.Updated += (_, e) => kept = e.Update;
 
 text.Insert(0, "AOT ");
-text.Format(0, 3, new Dictionary<string, object> { ["italic"] = true, ["size"] = 1.5 });
+text.Format(0, 3, new Dictionary<string, YValue> { ["italic"] = true, ["size"] = 1.5 });
 doc.GetMap("map").Set("added", new Dictionary<string, object> { ["n"] = 42, ["list"] = new object?[] { "x", 2.5, null } });
 
 doc.GetMap("map").Set("observed", 1);
@@ -45,7 +45,7 @@ foreach (var v2 in new[] { false, true })
 
     var copyText = copy.GetText("text");
     Check(copyText.ToString() == "AOT plain bold tail", $"v{(v2 ? 2 : 1)}: unexpected text '{copyText}'");
-    Check(copyText.ToDelta()[0].Attributes?["italic"] is true, $"v{(v2 ? 2 : 1)}: formatting lost");
+    Check(copyText.ToDelta()[0].Attributes?["italic"] == YValue.True, $"v{(v2 ? 2 : 1)}: formatting lost");
     var added = (IDictionary<string, object>)copy.GetMap("map").Get("added");
     Check(added["n"] is 42, $"v{(v2 ? 2 : 1)}: map value lost");
     Console.WriteLine($"v{(v2 ? 2 : 1)}: {update.Length} bytes, text '{copyText}'");
@@ -62,6 +62,20 @@ foreach (var v2 in new[] { false, true })
     Check(decoded.Encode().AsSpan().SequenceEqual(position.Encode()) && RelativePosition.FromJson(parsed.RootElement) == position, $"v{(v2 ? 2 : 1)}: position lost");
     Check(decoded.TryResolve(copy, out var absolute) && absolute.Index == 4, $"v{(v2 ? 2 : 1)}: position resolves elsewhere");
 }
+
+// The text API: embeds, deltas of both kinds, a snapshot with ychange, the span and writer reads.
+var edited = new YDoc();
+var note = edited.GetText("note");
+note.Insert(0, "ab");
+note.InsertEmbed(1, YValue.Object(new KeyValuePair<string, YValue>("image", "x.png")));
+var before = edited.CreateSnapshot();
+note.ApplyDelta([new Delta.Retain(1), new Delta.Insert("Z") { Attributes = new Dictionary<string, YValue> { ["bold"] = true } }, new Delta.Delete(1)]);
+var runs = note.ToDelta();
+Check(runs.Count == 3 && runs[1] is Delta.Insert { Value.Kind: YValueKind.String } && runs[1].Attributes!["bold"] == YValue.True, "text delta lost");
+var changes = note.ToDelta(edited.CreateSnapshot(), before, (kind, id) => new YChange(kind, id.Client));
+Check(changes.Any(d => d.Attributes?["ychange"]["type"] == "added"), "ychange lost");
+Span<char> chars = stackalloc char[note.Length];
+Check(note.CopyTo(chars) == 3 && chars[..3].SequenceEqual("aZb".AsSpan()) && note.ToString() == "aZb", "text read lost");
 
 Console.WriteLine("OK");
 return 0;

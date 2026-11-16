@@ -207,7 +207,7 @@ public class ContentStringTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("text");
         text.Insert(0, "abcdef");
-        text.Format(2, 2, new Dictionary<string, object> { ["bold"] = true });
+        text.Format(2, 2, new Dictionary<string, YValue> { ["bold"] = true });
         var copy = new YDoc(new YDocOptions { ClientId = 2 });
 
         copy.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
@@ -215,7 +215,7 @@ public class ContentStringTests
         Assert.AreEqual(Json(text.ToDelta()), Json(copy.GetText("text").ToDelta()));
     }
 
-    private static string Json(IEnumerable<Delta> delta) => string.Join(",", delta.Select(d => $"{d.Insert}:{string.Join(";", d.Attributes?.Select(a => a.Key) ?? [])}"));
+    private static string Json(IEnumerable<Delta> delta) => string.Join(",", delta.Select(d => $"{d.Inserted()}:{string.Join(";", d.Attributes?.Select(a => a.Key) ?? [])}"));
 
     private static ContentString Grown(int length)
     {

@@ -58,9 +58,9 @@ public class EventLifetimeTests
             kept.Add((YTextEvent)e);
         });
         text.Insert(0, "ab");
-        text.Format(0, 1, new Dictionary<string, object> { ["bold"] = true });
+        text.Format(0, 1, new Dictionary<string, YValue> { ["bold"] = true });
 
-        Assert.AreEqual("ab|1:bold", $"{kept[0].Delta[0].Insert}|{kept[1].Delta[0].Retain}:{string.Join(",", kept[1].Delta[0].Attributes.Keys)}");
+        Assert.AreEqual("ab|1:bold", $"{kept[0].Delta[0].Inserted()}|{kept[1].Delta[0].Retained()}:{string.Join(",", kept[1].Delta[0].Attributes.Keys)}");
     }
 
     [TestMethod]
@@ -128,7 +128,7 @@ public class EventLifetimeTests
         map.Observe(e =>
         {
             mapEvent = e;
-            outerDeltaInTheNestedHandler = (string)textEvent.Delta[0].Insert;
+            outerDeltaInTheNestedHandler = textEvent.Delta[0].Inserted().GetString();
             _ = e.Keys;
         });
 

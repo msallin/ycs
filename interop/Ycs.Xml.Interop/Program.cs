@@ -52,8 +52,8 @@ var boldText = children[0] as YXmlText;
 Check(boldText != null, "first paragraph child is not a YXmlText");
 Check(ReferenceEquals(paragraph.FirstChild, boldText), "paragraph.FirstChild does not match the first child");
 var delta = boldText.ToDelta();
-Check(delta.Any(d => d.Insert is string s && s.Contains("Hello") && d.Attributes != null &&
-                      d.Attributes.TryGetValue("bold", out var boldVal) && Equals(boldVal, true)),
+Check(delta.Any(d => d is Delta.Insert { Value: var inserted } && inserted.TryGetString(out var s) && s.Contains("Hello") && d.Attributes != null &&
+                      d.Attributes.TryGetValue("bold", out var boldVal) && boldVal == YValue.True),
     "bold formatting lost on read");
 
 var em = children[1] as YXmlElement;
@@ -85,7 +85,7 @@ doc.Transact(_ =>
     em.SetAttribute("shout-level", "11");
 
     var tail = new YXmlText();
-    tail.Insert(0, "tail", new Dictionary<string, object> { { "italic", true } });
+    tail.Insert(0, "tail", new Dictionary<string, YValue> { { "italic", true } });
     frag.Push(new object[] { tail });
 });
 

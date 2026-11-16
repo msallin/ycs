@@ -30,8 +30,8 @@ public class UpdateOperationsFuzzTests
         a.Updated += (_, e) => seeds.Add((e.Update.ToArray(), YUpdate.Convert(e.Update.ToArray(), UpdateFormat.V1, UpdateFormat.V2)));
 
         a.GetText("t").Insert(0, "hello world");
-        a.GetText("t").Format(0, 5, new Dictionary<string, object> { ["bold"] = true });
-        a.GetText("t").Delete(2, 3);
+        a.GetText("t").Format(0, 5, new Dictionary<string, YValue> { ["bold"] = true });
+        a.GetText("t").Remove(2, 3);
         a.GetMap("m").Set("k", new Dictionary<string, object> { ["n"] = 1.5, ["l"] = new List<object> { "x", null, true } });
         a.GetArray("a").Insert(0, new object[] { 1, "two", new byte[] { 3 }, new YMap() });
         a.GetArray("a").Delete(1, 1);

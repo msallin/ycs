@@ -4,7 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+#nullable enable
 
 using System.Globalization;
 using System.Runtime.CompilerServices;
@@ -17,13 +17,8 @@ public sealed partial class YXmlText
     // JS has no explicit constructor here: a derived class without one implicitly forwards its
     // arguments to 'super(...)', so 'new Y.XmlText(str)' still works (verified against real Yjs).
     // C# doesn't do that forwarding, so it's spelled out explicitly to match.
-    public YXmlText()
-    {
-        // Do nothing.
-    }
-
-    public YXmlText(string str)
-        : base(str)
+    public YXmlText(string? text = null)
+        : base(text)
     {
         // Do nothing.
     }
@@ -31,7 +26,7 @@ public sealed partial class YXmlText
     /// <summary>
     /// The next sibling in this text node's parent, or null.
     /// </summary>
-    public object NextSibling
+    public YType? NextSibling
     {
         get
         {
@@ -43,7 +38,7 @@ public sealed partial class YXmlText
     /// <summary>
     /// The previous sibling in this text node's parent, or null.
     /// </summary>
-    public object PrevSibling
+    public YType? PrevSibling
     {
         get
         {
@@ -52,7 +47,7 @@ public sealed partial class YXmlText
         }
     }
 
-    public new YXmlText Clone() => InternalClone() as YXmlText;
+    public new YXmlText Clone() => (YXmlText)InternalClone();
 
     /// <summary>
     /// Yjs' <c>toString</c>: each attribute of a run as a tag around it, whose XML attributes are the
@@ -68,14 +63,14 @@ public sealed partial class YXmlText
 
         foreach (var delta in ToDelta())
         {
-            var nestedNodes = new List<(string NodeName, List<(string Key, object Value)> Attrs)>();
+            var nestedNodes = new List<(string NodeName, List<(string Key, object? Value)> Attrs)>();
 
             if (delta.Attributes != null)
             {
                 foreach (var kvp in delta.Attributes)
                 {
-                    var attrs = new List<(string Key, object Value)>();
-                    switch (kvp.Value)
+                    var attrs = new List<(string Key, object? Value)>();
+                    switch (kvp.Value.Stored())
                     {
                         case IDictionary<string, object> valueMap:
                             foreach (var akv in valueMap)
@@ -119,7 +114,7 @@ public sealed partial class YXmlText
                 sb.Append('>');
             }
 
-            sb.Append(JsValue.ToJsString(delta.Insert == Delta.NullEmbed ? null : delta.Insert));
+            sb.Append(JsValue.ToJsString(((Delta.Insert)delta).Value.Stored()));
 
             for (int i = nestedNodes.Count - 1; i >= 0; i--)
             {

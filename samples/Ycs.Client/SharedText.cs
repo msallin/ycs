@@ -99,7 +99,7 @@ internal sealed class SharedText
     {
         if (diff.Removed > 0)
         {
-            text.Delete(diff.Start, diff.Removed);
+            text.Remove(diff.Start, diff.Removed);
         }
 
         if (diff.Inserted.Length > 0)
@@ -117,7 +117,7 @@ internal sealed class SharedText
         {
             if (value[i] == '\r')
             {
-                text.Delete(i, 1);
+                text.Remove(i, 1);
             }
         }
     }

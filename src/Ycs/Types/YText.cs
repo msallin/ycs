@@ -79,7 +79,7 @@ public sealed class YTextEvent : YEvent
 
                     // An embed, or null while the text inserted so far is in insertText: appending to a string is
                     // quadratic in the run's length.
-                    object insert = null;
+                    YValue? insert = null;
                     var insertText = new StringBuilder();
                     int retain = 0;
                     int deleteLen = 0;
@@ -95,27 +95,19 @@ public sealed class YTextEvent : YEvent
                                 case ChangeType.Delete:
                                     if (deleteLen > 0)
                                     {
-                                        op = new Delta { Delete = deleteLen };
+                                        op = new Delta.Delete(deleteLen);
                                     }
 
                                     deleteLen = 0;
                                     break;
                                 case ChangeType.Insert:
                                     var inserted = insert ?? insertText.ToString();
-                                    if (inserted is not string pending || pending.Length > 0)
+                                    if (!inserted.TryGetString(out var pending) || pending.Length > 0)
                                     {
-                                        op = new Delta { Insert = inserted };
-                                        if (currentAttributes.Count > 0)
+                                        op = new Delta.Insert(inserted)
                                         {
-                                            op.Attributes = new Dictionary<string, object>();
-                                            foreach (var kvp in currentAttributes)
-                                            {
-                                                if (kvp.Value != null)
-                                                {
-                                                    op.Attributes[kvp.Key] = kvp.Value;
-                                                }
-                                            }
-                                        }
+                                            Attributes = currentAttributes.Count > 0 ? YText.AttributeValues(currentAttributes, skipNull: true) : null,
+                                        };
                                     }
 
                                     insert = null;
@@ -124,11 +116,10 @@ public sealed class YTextEvent : YEvent
                                 case ChangeType.Retain:
                                     if (retain > 0)
                                     {
-                                        op = new Delta { Retain = retain };
-                                        if (attributes.Count > 0)
+                                        op = new Delta.Retain(retain)
                                         {
-                                            op.Attributes = new Dictionary<string, object>(attributes);
-                                        }
+                                            Attributes = attributes.Count > 0 ? YText.AttributeValues(attributes, skipNull: false) : null,
+                                        };
                                     }
 
                                     retain = 0;
@@ -323,7 +314,7 @@ public sealed class YTextEvent : YEvent
                     while (delta.Count > 0)
                     {
                         var lastOp = delta[delta.Count - 1];
-                        if (lastOp.Retain != null && lastOp.Attributes == null)
+                        if (lastOp is Delta.Retain && lastOp.Attributes == null)
                         {
                             // Drop trailing retains that don't assign attributes; a retain that
                             // *does* carry attributes is a real formatting op and must survive.
@@ -511,21 +502,6 @@ public partial class YText : YArrayBase
         }
     }
 
-    public enum YTextChangeType
-    {
-        Added,
-        Removed
-    }
-
-    /// <summary>The <c>ychange</c> attribute of <see cref="ToDelta"/>: whether, and by whom, the text was added or removed.</summary>
-    public class YTextChangeAttributes
-    {
-        public YTextChangeType Type { get; set; }
-
-        /// <summary>The client id of the change; null when <c>computeYChange</c> does not set it (as the default does not).</summary>
-        public long? User { get; set; }
-    }
-
     // TODO: [alekseyk] To util class? Might not be needed here.
     internal const int YTextRefId = 2;
     internal const string ChangeKey = "ychange";
@@ -542,7 +518,7 @@ public partial class YText : YArrayBase
     }
 
     /// <summary>A change made before the text is in a document, replayed when it is integrated.</summary>
-    private readonly record struct PendingOperation(PendingKind Kind, int Index, int Length, string Name, object Value, IDictionary<string, object> Attributes);
+    private readonly record struct PendingOperation(PendingKind Kind, int Index, int Length, string Name, object Value, IReadOnlyDictionary<string, YValue> Attributes);
 
     private List<PendingOperation> _pending;
 
@@ -614,19 +590,19 @@ public partial class YText : YArrayBase
                     Insert(op.Index, (string)op.Value, op.Attributes);
                     break;
                 case PendingKind.InsertEmbed:
-                    InsertEmbed(op.Index, op.Value, op.Attributes);
+                    InsertEmbed(op.Index, (YValue)op.Value, op.Attributes);
                     break;
                 case PendingKind.Delete:
-                    Delete(op.Index, op.Length);
+                    Remove(op.Index, op.Length);
                     break;
                 case PendingKind.Format:
                     Format(op.Index, op.Length, op.Attributes);
                     break;
                 case PendingKind.ApplyDelta:
-                    ApplyDelta((IList<Delta>)op.Value, sanitize: op.Length != 0);
+                    ApplyDelta((Delta[])op.Value, sanitize: op.Length != 0);
                     break;
                 case PendingKind.SetAttribute:
-                    SetAttribute(op.Name, op.Value);
+                    SetAttribute(op.Name, (YValue)op.Value);
                     break;
                 case PendingKind.RemoveAttribute:
                     RemoveAttribute(op.Name);
@@ -773,7 +749,7 @@ public partial class YText : YArrayBase
         currPos.InsertNegatedAttributes(transaction, this, negatedAttributes);
     }
 
-    private void FormatText(Transaction transaction, ref ItemTextListPosition curPos, int length, IDictionary<string, object> attributes)
+    private void FormatText(Transaction transaction, ref ItemTextListPosition curPos, int length, Dictionary<string, object> attributes)
     {
         var doc = transaction.Doc;
         var ownClientId = doc.ClientId;
@@ -1057,7 +1033,68 @@ public partial class YText : YArrayBase
     }
 
     /// <summary>The value an embed or an embedded shared type stands for in a delta.</summary>
-    internal static object EmbedOf(IContent content) => content is ContentEmbed embed ? embed.Embed ?? Delta.NullEmbed : ((ContentType)content).Type;
+    internal static YValue EmbedOf(IContent content) => content is ContentEmbed embed ? YValue.FromStored(embed.Embed) : YValue.FromStored(((ContentType)content).Type);
+
+    /// <summary>The attributes as a delta carries them; a change (<see cref="ChangeKey"/>) as the object it is in Yjs.</summary>
+    internal static IReadOnlyDictionary<string, YValue> AttributeValues(Dictionary<string, object> attributes, bool skipNull)
+    {
+        var values = new AttributeSet(attributes.Count);
+        foreach (var kvp in attributes)
+        {
+            if (kvp.Value == null && skipNull)
+            {
+                continue;
+            }
+
+            values.Add(kvp.Key, kvp.Value is YChange change ? ChangeValue(change) : YValue.FromStored(kvp.Value));
+        }
+
+        return values;
+    }
+
+    private static YValue ChangeValue(YChange change)
+    {
+        var type = new KeyValuePair<string, YValue>("type", change.Kind == YChangeKind.Added ? "added" : "removed");
+        return change.User is { } user
+            ? YValue.Object(type, new KeyValuePair<string, YValue>("user", user))
+            : YValue.Object(type);
+    }
+
+    // The attributes of the operation being made, as the document stores them. The text's insert and format code changes the
+    // dictionary it is given and does not keep it, so one is reused: each operation is finished before the next converts.
+    private Dictionary<string, object> _storedAttributes;
+
+    /// <summary>The attributes of an operation of the caller's as the document stores them, in a dictionary the text may change; null for none.</summary>
+    private Dictionary<string, object> StoredAttributes(IReadOnlyDictionary<string, YValue> attributes)
+    {
+        if (attributes == null)
+        {
+            return null;
+        }
+
+        var stored = _storedAttributes ??= new Dictionary<string, object>();
+        stored.Clear();
+        if (attributes is Dictionary<string, YValue> dictionary)
+        {
+            // The struct enumerator: the interface's allocates one.
+            foreach (var kvp in dictionary)
+            {
+                stored[kvp.Key] = kvp.Value.Stored();
+            }
+        }
+        else
+        {
+            foreach (var kvp in attributes)
+            {
+                stored[kvp.Key] = kvp.Value.Stored();
+            }
+        }
+
+        return stored;
+    }
+
+    private static Dictionary<string, YValue> Copy(IReadOnlyDictionary<string, YValue> attributes) =>
+        attributes == null ? null : new Dictionary<string, YValue>(attributes);
 
     private static OrderedDictionary<string, object> Copy(OrderedDictionary<string, object> attributes) =>
         attributes?.Count > 0 ? new OrderedDictionary<string, object>(attributes) : null;

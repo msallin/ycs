@@ -231,28 +231,7 @@ public class EventTraceTests
                 sb.Append("\"<type>\"");
                 break;
             case Delta d:
-                var delta = new Dictionary<string, object>();
-                if (d.Insert != null)
-                {
-                    delta["insert"] = d.Insert;
-                }
-
-                if (d.Delete != null)
-                {
-                    delta["delete"] = d.Delete.Value;
-                }
-
-                if (d.Retain != null)
-                {
-                    delta["retain"] = d.Retain.Value;
-                }
-
-                if (d.Attributes != null)
-                {
-                    delta["attributes"] = d.Attributes;
-                }
-
-                Write(sb, delta);
+                Write(sb, d.ToPlain());
                 break;
             case IDictionary<string, object> map:
                 sb.Append('{');

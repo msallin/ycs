@@ -135,8 +135,10 @@ public class TraceReplayTests
         protected static string StateHash(YDoc doc) => CanonicalJson.Hash(doc.EncodeStateAsUpdate());
 
         /// <summary>The attributes at <paramref name="i"/> of <paramref name="op"/>; null when absent or null.</summary>
-        internal static IDictionary<string, object> AttrsOf(JsonElement op, int i) =>
-            i >= op.GetArrayLength() || op[i].ValueKind == JsonValueKind.Null ? null : (IDictionary<string, object>)CanonicalJson.FromJson(op[i]);
+        internal static IReadOnlyDictionary<string, YValue> AttrsOf(JsonElement op, int i) =>
+            i >= op.GetArrayLength() || op[i].ValueKind == JsonValueKind.Null
+                ? null
+                : ((IDictionary<string, object>)CanonicalJson.FromJson(op[i])).ToDictionary(kv => kv.Key, kv => YValue.FromObject(kv.Value));
 
         protected static List<object> KeysOf(YEvent e) =>
             e.Keys.OrderBy(kv => kv.Key, StringComparer.Ordinal)
@@ -261,7 +263,7 @@ public class TraceReplayTests
                 break;
             case "delete":
             case "tdelete":
-                t.Delete(op[at].GetInt32(), op[at + 1].GetInt32());
+                t.Remove(op[at].GetInt32(), op[at + 1].GetInt32());
                 break;
             case "format":
             case "tformat":
@@ -269,13 +271,13 @@ public class TraceReplayTests
                 break;
             case "embed":
             case "tembed":
-                t.InsertEmbed(op[at].GetInt32(), CanonicalJson.FromJson(op[at + 1]), Replay.AttrsOf(op, at + 2));
+                t.InsertEmbed(op[at].GetInt32(), YValue.FromObject(CanonicalJson.FromJson(op[at + 1])), Replay.AttrsOf(op, at + 2));
                 break;
             case "embedType":
                 t.InsertEmbed(op[at].GetInt32(), NewType(op[at + 1].GetString()), Replay.AttrsOf(op, at + 2));
                 break;
             case "setAttribute":
-                t.SetAttribute(op[at].GetString(), CanonicalJson.FromJson(op[at + 1]));
+                t.SetAttribute(op[at].GetString(), YValue.FromObject(CanonicalJson.FromJson(op[at + 1])));
                 break;
             case "removeAttribute":
                 t.RemoveAttribute(op[at].GetString());
@@ -562,6 +564,6 @@ public class TraceReplayTests
             return got;
         }
 
-        private static YText.YTextChangeAttributes ComputeYChange(YText.YTextChangeType type, ItemId id) => new() { Type = type, User = id.Client };
+        private static YChange ComputeYChange(YChangeKind kind, ItemId id) => new(kind, id.Client);
     }
 }

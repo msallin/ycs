@@ -60,7 +60,7 @@ public class YjsInteropTests
         Assert.AreEqual("plain bold tail", doc.GetText("text").ToString());
         var delta = doc.GetText("text").ToDelta();
         Assert.AreEqual(true, delta[1].Attributes["bold"], "formatting attribute lost");
-        Assert.IsTrue(delta.Any(d => d.Insert is IDictionary<string, object> embed && (string)embed["image"] == "x.png"),
+        Assert.IsTrue(delta.Any(d => d is Delta.Insert { Value.Kind: YValueKind.Object } && d.Inserted()["image"] == "x.png"),
             "embedded object lost");
     }
 

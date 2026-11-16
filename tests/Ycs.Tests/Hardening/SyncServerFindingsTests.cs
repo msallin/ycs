@@ -224,7 +224,7 @@ public class SyncServerFindingsTests
         var vector = typist.EncodeStateVector();
         for (var i = 0; i < 100; i++)
         {
-            typist.GetText("t").Delete(i, 1);
+            typist.GetText("t").Remove(i, 1);
         }
 
         var room = new YDoc(new YDocOptions { Limits = Small });

@@ -24,14 +24,14 @@ public class UndoRedoTests : YTestBase
 
         // Items that are added and deleted in the same transaction won't be undone.
         text0.Insert(0, "test");
-        text0.Delete(0, 4);
+        text0.Remove(0, 4);
         undoManager.Undo();
         Assert.AreEqual(string.Empty, text0.ToString());
 
         // Follow redone items.
         text0.Insert(0, "a");
         undoManager.StopCapturing();
-        text0.Delete(0, 1);
+        text0.Remove(0, 1);
         undoManager.StopCapturing();
         undoManager.Undo();
         Assert.AreEqual("a", text0.ToString());
@@ -46,7 +46,7 @@ public class UndoRedoTests : YTestBase
         undoManager.Redo();
         Assert.AreEqual("abcxyz", text0.ToString());
         Connector.SyncAll();
-        text1.Delete(0, 1);
+        text1.Remove(0, 1);
         Connector.SyncAll();
         undoManager.Undo();
         Assert.AreEqual("xyz", text0.ToString());
@@ -54,26 +54,26 @@ public class UndoRedoTests : YTestBase
         Assert.AreEqual("bcxyz", text0.ToString());
 
         // Test formats.
-        text0.Format(1, 3, new Dictionary<string, object> { { "bold", true } });
+        text0.Format(1, 3, new Dictionary<string, YValue> { { "bold", true } });
         var delta = text0.ToDelta();
         Assert.AreEqual(3, delta?.Count);
-        Assert.AreEqual("b", delta[0].Insert);
+        Assert.AreEqual("b", delta[0].Inserted());
         Assert.IsNull(delta[0].Attributes);
-        Assert.AreEqual("cxy", delta[1].Insert);
+        Assert.AreEqual("cxy", delta[1].Inserted());
         Assert.AreEqual(true, delta[1].Attributes["bold"]);
 
         undoManager.Undo();
         delta = text0.ToDelta();
         Assert.AreEqual(1, delta?.Count);
-        Assert.AreEqual("bcxyz", delta[0].Insert);
+        Assert.AreEqual("bcxyz", delta[0].Inserted());
         Assert.IsNull(delta[0].Attributes);
 
         undoManager.Redo();
         delta = text0.ToDelta();
         Assert.AreEqual(3, delta?.Count);
-        Assert.AreEqual("b", delta[0].Insert);
+        Assert.AreEqual("b", delta[0].Inserted());
         Assert.IsNull(delta[0].Attributes);
-        Assert.AreEqual("cxy", delta[1].Insert);
+        Assert.AreEqual("cxy", delta[1].Inserted());
         Assert.AreEqual(true, delta[1].Attributes["bold"]);
     }
 

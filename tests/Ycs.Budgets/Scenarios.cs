@@ -118,7 +118,7 @@ internal static class Scenarios
         new("text.insert-formatted-char-100k", 500, () =>
         {
             var (_, text) = LargeText();
-            var bold = new Dictionary<string, object> { ["bold"] = true };
+            var bold = new Dictionary<string, YValue> { ["bold"] = true };
             var caret = TextLength / 2;
             return _ => text.Insert(caret++, "x", bold);
         }),
@@ -174,7 +174,7 @@ internal static class Scenarios
             var (_, text) = LargeText();
             _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = int.MaxValue });
             var caret = TextLength / 2;
-            return _ => text.Delete(--caret, 1);
+            return _ => text.Remove(--caret, 1);
         }),
 
         new("array.push-100k-in-one-transaction", 3, () =>
@@ -253,11 +253,11 @@ internal static class Scenarios
             text.Insert(random.Next(text.Length + 1), run);
             if (random.Next(8) == 0 && text.Length > 10)
             {
-                text.Delete(random.Next(text.Length - 5), 1 + random.Next(4));
+                text.Remove(random.Next(text.Length - 5), 1 + random.Next(4));
             }
         }
 
-        text.Delete(TextLength, text.Length - TextLength);
+        text.Remove(TextLength, text.Length - TextLength);
         return (doc, text);
     }
 }

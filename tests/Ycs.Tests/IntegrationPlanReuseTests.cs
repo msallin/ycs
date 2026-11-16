@@ -95,8 +95,8 @@ public class IntegrationPlanReuseTests
         var updates = new System.Collections.Generic.List<byte[]>();
         source.Updated += (_, e) => updates.Add(e.Update.ToArray());
         text.Insert(0, "\ud83d\udc4d");
-        text.ApplyDelta([new Delta { Delete = 1 }]);
-        text.ApplyDelta([new Delta { Delete = 1 }]);
+        text.ApplyDelta([new Delta.Delete(1)]);
+        text.ApplyDelta([new Delta.Delete(1)]);
         var doc = new YDoc(new YDocOptions { Gc = false });
 
         doc.ApplyUpdate(updates[2]);

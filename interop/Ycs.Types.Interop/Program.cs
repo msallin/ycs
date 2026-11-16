@@ -15,10 +15,15 @@ var jsonOptions = new JsonSerializerOptions { WriteIndented = true, Encoder = Ja
 
 static object DeltaToJson(Delta d) => new
 {
-    insert = d.Insert,
-    retain = d.Retain,
-    delete = d.Delete,
-    attributes = d.Attributes
+    insert = d switch
+    {
+        Delta.Insert i => i.Value.ToObject(),
+        Delta.InsertItems items => items.Items.Select(v => v.ToObject()).ToList(),
+        _ => null,
+    },
+    retain = (d as Delta.Retain)?.Length,
+    delete = (d as Delta.Delete)?.Length,
+    attributes = d.Attributes?.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToObject()),
 };
 
 static string ActionToJson(KeyChangeAction a) => a.ToString().ToLowerInvariant();
@@ -62,9 +67,9 @@ arr.Delete(1, 1);
 
 // --- Text ---
 text.Insert(0, "hello");
-text.Format(0, 5, new Dictionary<string, object> { { "bold", true } });
+text.Format(0, 5, new Dictionary<string, YValue> { { "bold", true } });
 text.Insert(5, " world");
-text.Delete(0, 1);
+text.Remove(0, 1);
 
 var finalState = new
 {

@@ -224,11 +224,11 @@ internal static class UndoReplay
         switch (op[0].GetString())
         {
             case "tins":
-                t.Insert(op[1].GetInt32(), op[2].GetString(), op[3].ValueKind == JsonValueKind.Null ? null : new Dictionary<string, object> { ["b"] = true });
+                t.Insert(op[1].GetInt32(), op[2].GetString(), op[3].ValueKind == JsonValueKind.Null ? null : new Dictionary<string, YValue> { ["b"] = true });
                 break;
-            case "tdel": t.Delete(op[1].GetInt32(), op[2].GetInt32()); break;
-            case "tfmt": t.Format(op[1].GetInt32(), op[2].GetInt32(), new Dictionary<string, object> { ["b"] = Value(op[3]) }); break;
-            case "temb": t.InsertEmbed(op[1].GetInt32(), new Dictionary<string, object> { ["e"] = op[2].GetInt32() }); break;
+            case "tdel": t.Remove(op[1].GetInt32(), op[2].GetInt32()); break;
+            case "tfmt": t.Format(op[1].GetInt32(), op[2].GetInt32(), new Dictionary<string, YValue> { ["b"] = YValue.FromObject(Value(op[3])) }); break;
+            case "temb": t.InsertEmbed(op[1].GetInt32(), YValue.Object(new KeyValuePair<string, YValue>("e", op[2].GetInt32()))); break;
             case "mset": m.Set(op[1].GetString(), Value(op[2])); break;
             case "mdel": m.Delete(op[1].GetString()); break;
             case "mnest": { var n = new YMap(); m.Set(op[1].GetString(), n); n.Set("k", Value(op[2])); break; }
@@ -280,7 +280,7 @@ internal static class UndoReplay
             case "xfmt":
                 if (XmlAt(op[1].GetInt32()) is YXmlText ft && ft.Length > 0)
                 {
-                    ft.Format(0, Math.Min(op[2].GetInt32(), ft.Length), new Dictionary<string, object> { ["i"] = Value(op[3]) });
+                    ft.Format(0, Math.Min(op[2].GetInt32(), ft.Length), new Dictionary<string, YValue> { ["i"] = YValue.FromObject(Value(op[3])) });
                 }
 
                 break;

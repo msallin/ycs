@@ -76,28 +76,27 @@ internal readonly record struct TextDiff(int Start, int Removed, string Inserted
 
     /// <summary>
     /// Adds a Y.Text event's delta to <paramref name="changes"/>, one change per insert or delete. An embed or other
-    /// content that is not a string counts as one placeholder character, as it does in the Y.Text's positions; an embed
-    /// whose value is null (another peer's <c>{ insert: null }</c>) arrives as <see cref="Delta.NullEmbed"/>, which is
-    /// not a string and is not a missing insert, so it too counts as one placeholder.
+    /// content that is not a string (a null embed, another peer's <c>{ insert: null }</c>, included) counts as one
+    /// placeholder character, as it does in the Y.Text's positions.
     /// </summary>
     public static void FromDelta(IReadOnlyList<Delta> delta, List<TextDiff> changes)
     {
         var at = 0;
         foreach (var op in delta)
         {
-            if (op.Retain is { } retain)
+            switch (op)
             {
-                at += retain;
-            }
-            else if (op.Delete is { } delete)
-            {
-                changes.Add(new TextDiff(at, delete, string.Empty));
-            }
-            else if (op.Insert is not null)
-            {
-                var inserted = op.Insert as string ?? "\uFFFC";
-                changes.Add(new TextDiff(at, 0, inserted));
-                at += inserted.Length;
+                case Delta.Retain retain:
+                    at += retain.Length;
+                    break;
+                case Delta.Delete delete:
+                    changes.Add(new TextDiff(at, delete.Length, string.Empty));
+                    break;
+                case Delta.Insert insert:
+                    var inserted = insert.Value.TryGetString(out var text) ? text : "\uFFFC";
+                    changes.Add(new TextDiff(at, 0, inserted));
+                    at += inserted.Length;
+                    break;
             }
         }
     }

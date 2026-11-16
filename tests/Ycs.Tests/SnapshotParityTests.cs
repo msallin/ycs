@@ -259,6 +259,6 @@ public class SnapshotParityTests
 
         var delta = text.ToDelta(snap);
 
-        Assert.AreEqual(("c\ufffd", "c\ufffd\ufffd"), ((string)delta.Single().Insert, text.ToString()));
+        Assert.AreEqual(("c\ufffd", "c\ufffd\ufffd"), (delta.Single().Inserted().GetString(), text.ToString()));
     }
 }

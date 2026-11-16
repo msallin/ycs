@@ -749,7 +749,7 @@ namespace Ycs.Properties
                         var len = Clamp(s.Int("len"), target.Length - at);
                         if (text != null)
                         {
-                            text.Delete(at, len);
+                            text.Remove(at, len);
                         }
                         else if (target is YArray a)
                         {
@@ -776,7 +776,7 @@ namespace Ycs.Properties
                         return "skip";
                     }
 
-                    text.InsertEmbed(Clamp(s.Int("at"), text.Length), Val(s.Get("value")), AttrsOf(s.Get("attrs")));
+                    text.InsertEmbed(Clamp(s.Int("at"), text.Length), YValue.FromObject(Val(s.Get("value"))), AttrsOf(s.Get("attrs")));
                     return Missing.Value;
                 case "delta":
                     if (text == null)
@@ -875,7 +875,7 @@ namespace Ycs.Properties
                     }
                     else if (text != null)
                     {
-                        text.SetAttribute(s.Str("key"), Val(s.Get("value")));
+                        text.SetAttribute(s.Str("key"), YValue.FromObject(Val(s.Get("value"))));
                     }
                     else
                     {
@@ -1061,15 +1061,17 @@ namespace Ycs.Properties
 
         private static int Clamp(long i, int n) => (int)Math.Max(0, Math.Min(i, n));
 
-        private static IDictionary<string, object> AttrsOf(object a) => a == null ? null : (IDictionary<string, object>)Val(a);
+        private static IReadOnlyDictionary<string, YValue> AttrsOf(object a) =>
+            a == null ? null : ((IDictionary<string, object>)Val(a)).ToDictionary(kv => kv.Key, kv => YValue.FromObject(kv.Value));
 
         /// <summary>A script delta (docs/testing.md) as a Ycs delta.</summary>
-        private static List<Delta> DeltaOf(List<object> delta) => delta.Cast<Dictionary<string, object>>().Select(d => new Delta
+        private static List<Delta> DeltaOf(List<object> delta) => delta.Cast<Dictionary<string, object>>().Select(d =>
         {
-            Insert = d.Has("insert") ? Val(d.Get("insert")) : null,
-            Retain = d.Has("retain") ? (int)d.Int("retain") : null,
-            Delete = d.Has("delete") ? (int)d.Int("delete") : null,
-            Attributes = d.Has("attrs") ? AttrsOf(d.Get("attrs")) : null,
+            var attributes = d.Has("attrs") ? AttrsOf(d.Get("attrs")) : null;
+            return d.Has("insert") ? new Delta.Insert(YValue.FromObject(Val(d.Get("insert")))) { Attributes = attributes }
+                : d.Has("retain") ? new Delta.Retain((int)d.Int("retain")) { Attributes = attributes }
+                : d.Has("delete") ? new Delta.Delete((int)d.Int("delete")) { Attributes = attributes }
+                : (Delta)new Delta.Retain(0) { Attributes = attributes };
         }).ToList();
 
         /// <summary>A new text with its prelim content: "s" inserted, then the delta "dl" applied (both wait for the integration).</summary>
@@ -1445,9 +1447,6 @@ namespace Ycs.Properties
                     return Obj(("$t", "doc"), ("g", d.Guid));
                 case ItemId id:
                     return Obj(("client", id.Client), ("clock", id.Clock));
-                case YText.YTextChangeAttributes ychange:
-                    // Yjs' default computeYChange gives { type: 'added' | 'removed' }.
-                    return Obj(("type", ychange.Type == YText.YTextChangeType.Added ? "added" : "removed"));
                 case YType t:
                     return TypeView(t);
                 case IDictionary<string, object> map:
@@ -1469,6 +1468,9 @@ namespace Ycs.Properties
             }
         }
 
+        private static object AttrsView(IEnumerable<KeyValuePair<string, YValue>> attrs) =>
+            AttrsView(attrs?.Select(kv => KeyValuePair.Create(kv.Key, kv.Value.ToObject())));
+
         private static object AttrsView(IEnumerable<KeyValuePair<string, object>> attrs)
         {
             if (attrs == null)
@@ -1488,19 +1490,20 @@ namespace Ycs.Properties
         internal static List<object> DeltaView(IEnumerable<Delta> delta) => delta.Select(d =>
         {
             var o = new Dictionary<string, object>();
-            if (d.Insert != null)
+            switch (d)
             {
-                o["insert"] = View(d.Insert);
-            }
-
-            if (d.Retain.HasValue)
-            {
-                o["retain"] = (long)d.Retain.Value;
-            }
-
-            if (d.Delete.HasValue)
-            {
-                o["delete"] = (long)d.Delete.Value;
+                case Delta.Insert insert:
+                    o["insert"] = View(insert.Value.ToObject());
+                    break;
+                case Delta.InsertItems items:
+                    o["insert"] = items.Items.Select(item => View(item.ToObject())).ToList();
+                    break;
+                case Delta.Retain retain:
+                    o["retain"] = (long)retain.Length;
+                    break;
+                case Delta.Delete delete:
+                    o["delete"] = (long)delete.Length;
+                    break;
             }
 
             if (AttrsView(d.Attributes) is Dictionary<string, object> a)
@@ -1585,12 +1588,12 @@ namespace Ycs.Properties
                         long i = 0;
                         foreach (var d in ((YText)parent).ToDelta())
                         {
-                            if (ReferenceEquals(d.Insert, t))
+                            if (d is Delta.Insert { Value: var embedded } && embedded.TryGetShared(out var shared) && ReferenceEquals(shared, t))
                             {
                                 return i;
                             }
 
-                            i += d.Insert is string s ? s.Length : 1;
+                            i += d is Delta.Insert text && text.Value.TryGetString(out var s) ? s.Length : 1;
                         }
 
                         return null;

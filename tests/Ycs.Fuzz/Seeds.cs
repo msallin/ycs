@@ -120,13 +120,13 @@ internal static class Seeds
         var t = a.GetText("t");
         t.Insert(0, "hello world");
         t.Insert(5, ",");
-        t.Delete(0, 2);
-        t.Format(1, 4, new Dictionary<string, object> { ["bold"] = true });
-        t.InsertEmbed(3, new Dictionary<string, object> { ["image"] = "x.png" });
+        t.Remove(0, 2);
+        t.Format(1, 4, new Dictionary<string, YValue> { ["bold"] = true });
+        t.InsertEmbed(3, YValue.Object(new KeyValuePair<string, YValue>("image", "x.png")));
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         b.GetText("t").Insert(2, "\u00fc\U0001F600");
         t.Insert(1, "abc");
-        t.Delete(4, 3);
+        t.Remove(4, 3);
     }
 
     private static void MapEdits(YDoc a, YDoc b)

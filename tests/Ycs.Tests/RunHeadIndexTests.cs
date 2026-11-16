@@ -206,14 +206,14 @@ public class RunHeadIndexTests
             switch (random.Next(4))
             {
                 case 0:
-                    ta.Insert(random.Next(length + 1), "F", new Dictionary<string, object> { [random.Next(2) == 0 ? "b" : "i"] = true });
+                    ta.Insert(random.Next(length + 1), "F", new Dictionary<string, YValue> { [random.Next(2) == 0 ? "b" : "i"] = true });
                     break;
                 case 1:
                     var at = random.Next(length);
-                    ta.Format(at, Math.Min(1 + random.Next(6), length - at), new Dictionary<string, object> { ["b"] = random.Next(3) == 0 ? null : true });
+                    ta.Format(at, Math.Min(1 + random.Next(6), length - at), new Dictionary<string, YValue> { ["b"] = random.Next(3) == 0 ? YValue.Null : true });
                     break;
                 case 2:
-                    ta.Delete(random.Next(length), 1);
+                    ta.Remove(random.Next(length), 1);
                     break;
                 default:
                     ta.Insert(random.Next(length + 1), "p");
@@ -242,7 +242,7 @@ public class RunHeadIndexTests
                 withMarkers++;
             }
 
-            log.Append(string.Join("|", tb.ToDelta().Select(d => d.Insert + (d.Attributes == null ? "" : "{" + string.Join(",", d.Attributes.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Key + "=" + x.Value)) + "}"))));
+            log.Append(string.Join("|", tb.ToDelta().Select(d => d.Inserted() + (d.Attributes == null ? "" : "{" + string.Join(",", d.Attributes.OrderBy(x => x.Key, StringComparer.Ordinal).Select(x => x.Key + "=" + x.Value)) + "}"))));
             log.Append(" # ").Append(lookups).Append(" # ").Append(markers).Append('\n');
         }
 
@@ -265,7 +265,7 @@ public class RunHeadIndexTests
                 if (length > 0)
                 {
                     var at = random.Next(length);
-                    tb.Delete(at, Math.Min(1 + random.Next(4), length - at));
+                    tb.Remove(at, Math.Min(1 + random.Next(4), length - at));
                 }
 
                 break;
@@ -274,7 +274,7 @@ public class RunHeadIndexTests
                 Sync(b, a);
                 if (ta.Length > 0)
                 {
-                    ta.Delete(random.Next(ta.Length), 1);
+                    ta.Remove(random.Next(ta.Length), 1);
                 }
 
                 Sync(a, b);
@@ -443,7 +443,7 @@ public class RunHeadIndexTests
     {
         if (type is YText text)
         {
-            text.Delete(index, length);
+            text.Remove(index, length);
         }
         else
         {

@@ -61,7 +61,7 @@ public class DeepNestingTests
             _ = doc.GetText("t").ToDelta();
             doc.GetMap("m").Clear();
             doc.GetArray("a").Delete(0, doc.GetArray("a").Length);
-            doc.GetText("t").Delete(0, doc.GetText("t").Length);
+            doc.GetText("t").Remove(0, doc.GetText("t").Length);
             doc.GetXmlFragment("x").Delete(0, doc.GetXmlFragment("x").Length);
             _ = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
         });
@@ -154,7 +154,7 @@ public class DeepNestingTests
             _ = doc.GetText("t").ToDelta();
             encoded = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
             doc.GetMap("m").Clear();
-            doc.GetText("t").Delete(0, doc.GetText("t").Length);
+            doc.GetText("t").Remove(0, doc.GetText("t").Length);
         });
 
         Assert.IsNull(error, error?.ToString());
@@ -177,10 +177,10 @@ public class DeepNestingTests
                             doc.GetMap("m").Set("v", NestedValue(HostileDepth));
                             break;
                         case "format":
-                            doc.GetText("t").Insert(0, "abc", new Dictionary<string, object> { ["deep"] = NestedValue(HostileDepth) });
+                            doc.GetText("t").Insert(0, "abc", new Dictionary<string, YValue> { ["deep"] = NestedYValue(HostileDepth) });
                             break;
                         case "embed":
-                            doc.GetText("t").InsertEmbed(0, new Dictionary<string, object> { ["deep"] = NestedValue(HostileDepth) });
+                            doc.GetText("t").InsertEmbed(0, YValue.Object(new KeyValuePair<string, YValue>("deep", NestedYValue(HostileDepth))));
                             break;
                         default:
                             NestMaps(doc.GetMap("m"), HostileDepth);
@@ -221,6 +221,23 @@ public class DeepNestingTests
     }
 
     // Lists and dictionaries in turn, `depth` levels below the top.
+    // As NestedValue, built from the inside out: YValue.FromObject refuses a depth beyond the limits' default.
+    private static YValue NestedYValue(int depth)
+    {
+        if (depth == 0)
+        {
+            return YValue.Array();
+        }
+
+        var current = (depth - 1) % 2 == 0 ? YValue.Object() : YValue.Array();
+        for (var i = depth - 2; i >= 0; i--)
+        {
+            current = i % 2 == 0 ? YValue.Object(new KeyValuePair<string, YValue>("k", current)) : YValue.Array(current);
+        }
+
+        return YValue.Array(current);
+    }
+
     private static List<object> NestedValue(int depth)
     {
         var root = new List<object>();

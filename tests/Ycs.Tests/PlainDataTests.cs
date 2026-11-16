@@ -64,7 +64,7 @@ public class PlainDataTests
         var text = doc.GetText("t");
         text.Insert(0, "abc");
         var (first, second) = (doc.CreateSnapshot(), doc.CreateSnapshot());
-        text.Delete(1, 1);
+        text.Remove(1, 1);
         var third = doc.CreateSnapshot();
         var set = new HashSet<Snapshot> { first, second, third };
         var map = new Dictionary<Snapshot, int> { [first] = 1 };

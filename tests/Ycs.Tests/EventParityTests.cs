@@ -143,7 +143,7 @@ public class EventParityTests
         Assert.IsNotNull(evt);
         Assert.AreSame(evt.Changes.Delta, evt.Delta, "YEvent.Delta must default to Changes.Delta for non-YText events.");
         Assert.AreEqual(1, evt.Delta.Count);
-        CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, (evt.Delta[0].Insert as IList<object>).ToList());
+        CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, evt.Delta[0] is Delta.InsertItems items ? items.Items.Select(i => i.ToObject()).ToList() : null);
     }
 
     [TestMethod]
@@ -166,7 +166,7 @@ public class EventParityTests
         Assert.IsNotNull(evt);
         Assert.AreSame(evt.Changes.Delta, evt.Delta);
         Assert.AreEqual(1, evt.Delta.Count);
-        Assert.AreEqual("abc", evt.Delta[0].Insert);
+        Assert.AreEqual("abc", evt.Delta[0].Inserted());
         Assert.IsNull(evt.Delta[0].Attributes);
     }
 

@@ -38,7 +38,7 @@ public class HasPendingTests
         var updates = Updates(text =>
         {
             text.Insert(0, "ab");
-            text.Delete(0, 1);
+            text.Remove(0, 1);
         });
         var doc = new YDoc();
 

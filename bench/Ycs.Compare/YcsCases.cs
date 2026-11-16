@@ -107,7 +107,7 @@ internal static class YcsCases
                         var e = trace.Edits[i];
                         if (e.Delete > 0)
                         {
-                            text.Delete(e.Pos, e.Delete);
+                            text.Remove(e.Pos, e.Delete);
                         }
 
                         if (e.Insert.Length > 0)
@@ -141,7 +141,7 @@ internal static class YcsCases
             {
                 if (e.Delete > 0)
                 {
-                    texts[c].Delete(e.Pos, e.Delete);
+                    texts[c].Remove(e.Pos, e.Delete);
                 }
                 else
                 {
@@ -530,7 +530,7 @@ internal static class YcsCases
                     var e = trace.Edits[i];
                     if (e.Delete > 0)
                     {
-                        text.Delete(e.Pos, e.Delete);
+                        text.Remove(e.Pos, e.Delete);
                     }
 
                     if (e.Insert.Length > 0)

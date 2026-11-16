@@ -24,7 +24,7 @@ public class RunExtensionScenarioTests
             var doc = c.NewDoc(1, gc: true, gcFilter: item => { c.L($"gcFilter {item.Id.Clock}+{item.Length}"); return item.Id.Clock != 1; });
             var t = doc.GetText("t");
             c.LogUpdates(doc, "d");
-            doc.Transact(tr => { t.Insert(0, "a"); t.Insert(1, "b"); t.Delete(0, 2); });
+            doc.Transact(tr => { t.Insert(0, "a"); t.Insert(1, "b"); t.Remove(0, 2); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
         Add("s01b-gcfilter-cross-txn", c =>
@@ -33,7 +33,7 @@ public class RunExtensionScenarioTests
             var t = doc.GetText("t");
             c.LogUpdates(doc, "d");
             t.Insert(0, "a");
-            doc.Transact(tr => { t.Insert(1, "b"); t.Delete(0, 2); });
+            doc.Transact(tr => { t.Insert(1, "b"); t.Remove(0, 2); });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
         Add("s01c-gcfilter-array", c =>
@@ -141,7 +141,7 @@ public class RunExtensionScenarioTests
             {
                 t.Insert(2, "c"); t.Insert(3, "d"); t.Insert(4, "e");
                 t.Observe(c.TextObserver("t"));
-                t.Insert(5, "f"); t.Delete(3, 1);
+                t.Insert(5, "f"); t.Remove(3, 1);
             });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -248,7 +248,7 @@ public class RunExtensionScenarioTests
             c.L(ReferenceRun.Esc(t.ToString())); c.L(ReferenceRun.Dump(doc));
             doc.Transact(tr => { t.Insert(4, "a\uD83D"); t.Insert(6, "\uDE00b"); t.Observe(c.TextObserver("t")); });
             c.L(ReferenceRun.Esc(t.ToString())); c.L(ReferenceRun.Dump(doc));
-            doc.Transact(tr => { t.Insert(8, "😀"); t.Insert(10, "😀"); t.Delete(9, 2); });
+            doc.Transact(tr => { t.Insert(8, "😀"); t.Insert(10, "😀"); t.Remove(9, 2); });
             c.L(ReferenceRun.Esc(t.ToString()));
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -307,13 +307,13 @@ public class RunExtensionScenarioTests
             c.LogUpdates(doc, "d");
             t.Insert(0, "ab");
             var s1 = doc.CreateSnapshot();
-            Func<YText.YTextChangeType, ItemId, YText.YTextChangeAttributes> cy = (type, id) => { c.L($"ychange {type} {id.Client}:{id.Clock}"); return new YText.YTextChangeAttributes { Type = type, User = id.Clock }; };
+            Func<YChangeKind, ItemId, YChange> cy = (type, id) => { c.L($"ychange {type} {id.Client}:{id.Clock}"); return new YChange(type, id.Clock); };
             doc.Transact(tr =>
             {
                 t.Insert(2, "c"); t.Insert(3, "d");
                 var sm = doc.CreateSnapshot();
                 c.L("sm " + ReferenceRun.Hex(sm.Encode()));
-                t.Insert(4, "e"); t.Insert(5, "f"); t.Delete(1, 2);
+                t.Insert(4, "e"); t.Insert(5, "f"); t.Remove(1, 2);
                 var s2 = doc.CreateSnapshot();
                 c.L("s2 " + ReferenceRun.Hex(s2.Encode()) + " " + ReferenceRun.Hex(s2.Encode(UpdateFormat.V2)));
                 c.L("d(s2,s1) " + ReferenceRun.D(t.ToDelta(s2, s1, cy)));
@@ -358,9 +358,9 @@ public class RunExtensionScenarioTests
             c.LogUpdates(doc, "d");
             var xt = new YXmlText(); var el = new YXmlElement("p");
             f.Insert(0, Vals(el)); el.Insert(0, Vals(xt));
-            doc.Transact(tr => { xt.Insert(0, "a"); xt.Insert(1, "b"); xt.Insert(2, "c", new Dictionary<string, object> { ["bold"] = true }); xt.Insert(3, "d", new Dictionary<string, object> { ["bold"] = true }); xt.Insert(4, "e"); xt.Insert(5, "f"); });
+            doc.Transact(tr => { xt.Insert(0, "a"); xt.Insert(1, "b"); xt.Insert(2, "c", new Dictionary<string, YValue> { ["bold"] = true }); xt.Insert(3, "d", new Dictionary<string, YValue> { ["bold"] = true }); xt.Insert(4, "e"); xt.Insert(5, "f"); });
             c.L(f.ToString());
-            doc.Transact(tr => { xt.Insert(4, "x", new Dictionary<string, object> { ["bold"] = true }); xt.Insert(5, "y", new Dictionary<string, object> { ["bold"] = true }); f.ObserveDeep(c.DeepObserver("f")); });
+            doc.Transact(tr => { xt.Insert(4, "x", new Dictionary<string, YValue> { ["bold"] = true }); xt.Insert(5, "y", new Dictionary<string, YValue> { ["bold"] = true }); f.ObserveDeep(c.DeepObserver("f")); });
             c.L(f.ToString());
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -369,7 +369,7 @@ public class RunExtensionScenarioTests
             var doc = c.NewDoc(1); var t = doc.GetText("t");
             c.LogUpdates(doc, "d");
             t.Insert(0, "ab");
-            doc.Transact(tr => { t.Insert(2, "c"); t.Insert(3, "d"); t.Insert(4, "e"); t.Delete(3, 1); t.Insert(3, "D"); t.Insert(4, "E"); t.Delete(0, 3); t.Insert(t.Length, "z"); t.Insert(t.Length, "y"); t.Delete(t.Length - 1, 1); t.Insert(t.Length, "w"); });
+            doc.Transact(tr => { t.Insert(2, "c"); t.Insert(3, "d"); t.Insert(4, "e"); t.Remove(3, 1); t.Insert(3, "D"); t.Insert(4, "E"); t.Remove(0, 3); t.Insert(t.Length, "z"); t.Insert(t.Length, "y"); t.Remove(t.Length - 1, 1); t.Insert(t.Length, "w"); });
             c.L(t.ToString());
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -382,7 +382,7 @@ public class RunExtensionScenarioTests
             {
                 t.Insert(2, "c"); t.Insert(3, "d"); t.Insert(4, "e");
                 for (var i = 0; i <= t.Length; i++) { rs.Add(RelativePosition.FromIndex(t, i, 0)); rs.Add(RelativePosition.FromIndex(t, i, -1)); }
-                t.Insert(5, "f"); t.Delete(3, 1);
+                t.Insert(5, "f"); t.Remove(3, 1);
             });
             foreach (var r in rs) { var found = r.TryResolve(doc, out var abs); c.L(ReferenceRun.Hex(r.Encode()) + " -> " + (found ? abs.Index : null)); }
         });
@@ -466,10 +466,10 @@ public class RunExtensionScenarioTests
         {
             var doc = c.NewDoc(1); var t = doc.GetText("t");
             c.LogUpdates(doc, "d");
-            var bold = new Dictionary<string, object> { ["bold"] = true };
-            doc.Transact(tr => { t.Insert(0, "a"); t.Insert(1, "b"); t.Insert(2, "c", bold); t.Insert(3, "d", bold); t.Insert(4, "e"); t.Insert(5, "f", new Dictionary<string, object>()); t.Format(1, 3, new Dictionary<string, object> { ["i"] = 1 }); t.Insert(6, "g"); t.Insert(3, "X"); t.Insert(4, "Y"); });
+            var bold = new Dictionary<string, YValue> { ["bold"] = true };
+            doc.Transact(tr => { t.Insert(0, "a"); t.Insert(1, "b"); t.Insert(2, "c", bold); t.Insert(3, "d", bold); t.Insert(4, "e"); t.Insert(5, "f", new Dictionary<string, YValue>()); t.Format(1, 3, new Dictionary<string, YValue> { ["i"] = 1 }); t.Insert(6, "g"); t.Insert(3, "X"); t.Insert(4, "Y"); });
             c.L(ReferenceRun.D(t.ToDelta()));
-            doc.Transact(tr => { t.InsertEmbed(2, new Dictionary<string, object> { ["img"] = "u" }); t.Insert(3, "p"); t.Insert(4, "q"); t.ApplyDelta(new List<Delta> { new Delta { Retain = 1 }, new Delta { Insert = "r" }, new Delta { Insert = "s" }, new Delta { Retain = 2 }, new Delta { Insert = "t", Attributes = bold }, new Delta { Insert = "u", Attributes = bold }, new Delta { Delete = 1 }, new Delta { Insert = "v" } }); });
+            doc.Transact(tr => { t.InsertEmbed(2, YValue.FromObject(new Dictionary<string, object> { ["img"] = "u" })); t.Insert(3, "p"); t.Insert(4, "q"); t.ApplyDelta(new List<Delta> { new Delta.Retain(1), new Delta.Insert("r"), new Delta.Insert("s"), new Delta.Retain(2), new Delta.Insert("t") { Attributes = bold }, new Delta.Insert("u") { Attributes = bold }, new Delta.Delete(1), new Delta.Insert("v") }); });
             c.L(ReferenceRun.D(t.ToDelta()));
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
@@ -479,8 +479,8 @@ public class RunExtensionScenarioTests
             var doc = c.NewDoc(1); var t = doc.GetText("t");
             t.Insert(0, "ab");
             peer.ApplyUpdate(doc.EncodeStateAsUpdate());
-            for (var i = 0; i < 30; i++) pt.Insert(1, "p", i % 2 == 0 ? new Dictionary<string, object> { ["b"] = i } : null);
-            for (var i = 0; i < 30; i++) t.Insert(1, "q", i % 2 == 0 ? new Dictionary<string, object> { ["c"] = i } : null);
+            for (var i = 0; i < 30; i++) pt.Insert(1, "p", i % 2 == 0 ? new Dictionary<string, YValue> { ["b"] = i } : null);
+            for (var i = 0; i < 30; i++) t.Insert(1, "q", i % 2 == 0 ? new Dictionary<string, YValue> { ["c"] = i } : null);
             var remote = peer.EncodeStateAsUpdate(doc.EncodeStateVector());
             c.LogUpdates(doc, "d");
             try
@@ -517,8 +517,8 @@ public class RunExtensionScenarioTests
             var doc = c.NewDoc(1); var t = doc.GetText("t");
             c.LogUpdates(doc, "d");
             doc.Transact(tr => { t.Insert(0, "a"); t.Insert(1, "b"); t.Insert(2, "c"); });
-            doc.Transact(tr => { t.Insert(3, "d"); t.Delete(1, 3); t.Insert(1, "e"); t.Insert(2, "f"); });
-            doc.Transact(tr => { t.Delete(0, t.Length); t.Insert(0, "g"); t.Insert(1, "h"); });
+            doc.Transact(tr => { t.Insert(3, "d"); t.Remove(1, 3); t.Insert(1, "e"); t.Insert(2, "f"); });
+            doc.Transact(tr => { t.Remove(0, t.Length); t.Insert(0, "g"); t.Insert(1, "h"); });
             c.L(t.ToString());
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));
         });
