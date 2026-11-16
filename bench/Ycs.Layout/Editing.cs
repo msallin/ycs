@@ -407,7 +407,7 @@ internal static class Editing
             var str = structs[index];
             if (!str.Deleted && str.Id.Clock < clock)
             {
-                structs.InsertSplit(index + 1, ((Item)str).SplitItem(transaction, (int)(clock - str.Id.Clock)));
+                structs.InsertSplit(index + 1, str.SplitItem(transaction, (int)(clock - str.Id.Clock)));
                 index++;
             }
 
@@ -423,7 +423,7 @@ internal static class Editing
                 {
                     if (clockEnd < str.Id.Clock + str.Length)
                     {
-                        structs.InsertSplit(index, ((Item)str).SplitItem(transaction, (int)(clockEnd - str.Id.Clock)));
+                        structs.InsertSplit(index, str.SplitItem(transaction, (int)(clockEnd - str.Id.Clock)));
                     }
 
                     str.Delete(transaction);
@@ -440,14 +440,14 @@ internal static class Editing
     {
         doc.TryGetRoot(r.Root, out var type);
         var list = new List<Entry>();
-        for (AbstractStruct s = type._start; s != null; s = (s as Item)?.Right)
+        for (AbstractStruct s = type._start.ToStruct(); s != null; s = (s as Item)?.Right)
         {
             list.Add(new(null, s.Id.Client, s.Id.Clock, s.Length, s.Deleted));
         }
 
         foreach (var (key, last) in type._map.OrderBy(kv => kv.Key, StringComparer.Ordinal))
         {
-            for (AbstractStruct s = last; s != null; s = (s as Item)?.Left)
+            for (AbstractStruct s = last.ToStruct(); s != null; s = (s as Item)?.Left)
             {
                 list.Add(new(key, s.Id.Client, s.Id.Clock, s.Length, s.Deleted));
             }
