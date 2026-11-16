@@ -41,7 +41,7 @@ internal sealed class Session : IDisposable
     public bool IsClosed => CloseReason != SessionCloseReason.None;
 
     /// <summary>
-    /// The awareness client ids this session's messages added and did not remove: the room removes their states
+    /// The awareness client ids this session's messages set a state for and did not remove: the room removes their states
     /// when the session leaves. Only the room touches it, under its lock.
     /// </summary>
     internal HashSet<ulong> ControlledIds { get; } = [];

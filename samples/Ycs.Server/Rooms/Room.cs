@@ -78,8 +78,8 @@ internal sealed class Room
 
     /// <summary>
     /// Handles the awareness message after its outer type: a length-prefixed awareness update, applied with
-    /// y-protocols' rules and broadcast to every session, <paramref name="session"/> included. The ids it adds become
-    /// the session's, those it removes stop being. Throws what reading or applying throws; nothing changes then.
+    /// y-protocols' rules and broadcast to every session, <paramref name="session"/> included. The ids it sets a state
+    /// for become the session's, those it removes stop being. Throws what reading or applying throws; nothing changes then.
     /// </summary>
     internal void ReceiveAwareness(Session session, Stream reader)
     {
@@ -101,7 +101,11 @@ internal sealed class Room
             }
 
             var change = awareness.ApplyUpdate(update);
+
+            // Updated too, unlike y-websocket's server: a state set again after a removal or a timeout, or over
+            // another session's, is an update, and would outlive this session.
             session.ControlledIds.UnionWith(change.Added);
+            session.ControlledIds.UnionWith(change.Updated);
             session.ControlledIds.ExceptWith(change.Removed);
             Broadcast(change);
         }
