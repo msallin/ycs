@@ -40,6 +40,12 @@ internal sealed class Session : IDisposable
 
     public bool IsClosed => CloseReason != SessionCloseReason.None;
 
+    /// <summary>
+    /// The awareness client ids this session's messages added and did not remove: the room removes their states
+    /// when the session leaves. Only the room touches it, under its lock.
+    /// </summary>
+    internal HashSet<ulong> ControlledIds { get; } = [];
+
     /// <summary>Joins the room and queues sync step 1 with the room's state vector, as y-websocket's server does.</summary>
     public void Start()
     {
@@ -81,8 +87,10 @@ internal sealed class Session : IDisposable
                     room.ReceiveSync(this, reader);
                     break;
                 case MessageType.Awareness:
+                    room.ReceiveAwareness(this, reader);
+                    break;
                 case MessageType.QueryAwareness:
-                    ReceiveAwareness(type, reader);
+                    // y-websocket's server ignores it (its messageListener has no case for it); clients never send it.
                     break;
                 default:
                     Close(SessionCloseReason.ProtocolError);
@@ -110,11 +118,6 @@ internal sealed class Session : IDisposable
         {
             Close(SessionCloseReason.QueueFull);
         }
-    }
-
-    // Awareness messages are accepted and ignored until the room keeps awareness states.
-    private static void ReceiveAwareness(uint type, Stream reader)
-    {
     }
 
     private void Close(SessionCloseReason reason)

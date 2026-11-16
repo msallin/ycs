@@ -1,21 +1,28 @@
+using Ycs.Server.Awareness;
+
 namespace Ycs.Server.Rooms;
 
 /// <summary>
-/// One document and the sessions editing it. <see cref="YDoc"/> is not thread-safe: every read and write of
-/// <see cref="doc"/> and of <see cref="sessions"/> happens under <see cref="gate"/>, and nothing under it blocks or
-/// awaits (a session's queue is only ever written with <c>TryWrite</c>).
+/// One document, its awareness states and the sessions editing it. <see cref="YDoc"/> and
+/// <see cref="Awareness.Awareness"/> are not thread-safe: every read and write of <see cref="doc"/>,
+/// <see cref="awareness"/>, <see cref="sessions"/> and of each session's controlled ids happens under
+/// <see cref="gate"/>, and nothing under it blocks or awaits (a session's queue is only ever written with
+/// <c>TryWrite</c>). The lock is reentrant: a full queue closes its session, and that session leaves, from inside a
+/// fan-out.
 /// </summary>
 internal sealed class Room
 {
     private readonly Lock gate = new();
     private readonly YDoc doc = new();
+    private readonly Awareness.Awareness awareness;
 
     // Copy-on-write under the lock, so that a fan-out iterates a snapshot while a full queue removes its session.
     private Session[] sessions = [];
 
-    public Room(string name)
+    public Room(string name, TimeProvider? time = null)
     {
         Name = name;
+        awareness = new Awareness.Awareness(time ?? TimeProvider.System);
         doc.Update += OnUpdate;
     }
 
@@ -39,18 +46,76 @@ internal sealed class Room
             VarUint.Write(message, MessageType.Sync);
             SyncProtocol.WriteSyncStep1(message, doc);
             session.Enqueue(message.ToArray());
+
+            // As y-websocket's server: the states of everyone present, in one message, only if there are any.
+            if (awareness.ClientIds.Count > 0)
+            {
+                session.Enqueue(AwarenessMessage([.. awareness.ClientIds]));
+            }
         }
     }
 
+    /// <summary>
+    /// Removes the session and the awareness states it set, and tells the others that they are gone, as
+    /// y-websocket's server does on close.
+    /// </summary>
     internal void Leave(Session session)
     {
         lock (gate)
         {
             var i = Array.IndexOf(sessions, session);
-            if (i >= 0)
+            if (i < 0)
             {
-                sessions = [.. sessions.AsSpan(0, i), .. sessions.AsSpan(i + 1)];
+                return;
             }
+
+            sessions = [.. sessions.AsSpan(0, i), .. sessions.AsSpan(i + 1)];
+            var change = awareness.RemoveStates(session.ControlledIds);
+            session.ControlledIds.Clear();
+            Broadcast(change);
+        }
+    }
+
+    /// <summary>
+    /// Handles the awareness message after its outer type: a length-prefixed awareness update, applied with
+    /// y-protocols' rules and broadcast to every session, <paramref name="session"/> included. The ids it adds become
+    /// the session's, those it removes stop being. Throws what reading or applying throws; nothing changes then.
+    /// </summary>
+    internal void ReceiveAwareness(Session session, Stream reader)
+    {
+        var length = VarUint.Read(reader);
+        if (length > reader.Length - reader.Position)
+        {
+            throw new YUpdateException("The awareness message ends inside its update.");
+        }
+
+        var update = new byte[length];
+        reader.ReadExactly(update);
+
+        lock (gate)
+        {
+            // A session that left (closed from another thread) would set states nobody removes before they time out.
+            if (Array.IndexOf(sessions, session) < 0)
+            {
+                return;
+            }
+
+            var change = awareness.ApplyUpdate(update);
+            session.ControlledIds.UnionWith(change.Added);
+            session.ControlledIds.ExceptWith(change.Removed);
+            Broadcast(change);
+        }
+    }
+
+    /// <summary>
+    /// Removes the awareness states not renewed for 30 s and tells every session. Unlike a close, the removed ids
+    /// stay their sessions' controlled ids, as with y-protocols' timeout: a renewal brings the state back.
+    /// </summary>
+    internal void RemoveOutdatedAwareness()
+    {
+        lock (gate)
+        {
+            Broadcast(awareness.RemoveOutdated());
         }
     }
 
@@ -101,6 +166,44 @@ internal sealed class Room
                 return sessions.Length;
             }
         }
+    }
+
+    internal IReadOnlyCollection<ulong> AwarenessClientIds
+    {
+        get
+        {
+            lock (gate)
+            {
+                return [.. awareness.ClientIds];
+            }
+        }
+    }
+
+    // Under the lock.
+    private void Broadcast(AwarenessChange change)
+    {
+        if (change.IsEmpty)
+        {
+            return;
+        }
+
+        // One array for every session: readers must not modify it.
+        var bytes = AwarenessMessage(change.Broadcast());
+        foreach (var session in sessions)
+        {
+            session.Enqueue(bytes);
+        }
+    }
+
+    // Under the lock.
+    private byte[] AwarenessMessage(ulong[] clientIds)
+    {
+        var update = awareness.EncodeUpdate(clientIds);
+        var message = new MemoryStream();
+        VarUint.Write(message, MessageType.Awareness);
+        VarUint.Write(message, (uint)update.Length);
+        message.Write(update);
+        return message.ToArray();
     }
 
     // Runs under the lock: the document changes only there.

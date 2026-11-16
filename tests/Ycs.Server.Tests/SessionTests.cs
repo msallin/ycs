@@ -216,7 +216,7 @@ public class SessionTests
     [TestMethod]
     [DataRow(MessageType.Awareness)]
     [DataRow(MessageType.QueryAwareness)]
-    public void Receive_Awareness_IsAcceptedAndChangesNothing(uint type)
+    public void Receive_AwarenessWithoutEntries_IsAcceptedAndChangesNothing(uint type)
     {
         var room = new Room("r");
         var session = new Session(room);
@@ -224,6 +224,9 @@ public class SessionTests
         Messages.Drain(session);
         var stream = new MemoryStream();
         VarUint.Write(stream, type);
+
+        // An awareness update of one byte: zero entries.
+        stream.WriteByte(1);
         stream.WriteByte(0);
 
         session.Receive(stream.ToArray());
@@ -294,7 +297,7 @@ public class SessionTests
     [TestMethod]
     public void RoomRegistry_SameName_ReturnsTheSameRoom()
     {
-        var registry = new RoomRegistry();
+        var registry = new RoomRegistry(TimeProvider.System);
 
         var rooms = (registry.GetOrCreate("a"), registry.GetOrCreate("a"), registry.GetOrCreate("b"));
 
