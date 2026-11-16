@@ -7,10 +7,6 @@ internal sealed partial class StructStore
     /// <summary>Merges at the end of a transaction in Yjs' order, pair by pair (the tests' reference; see <see cref="DeleteSet.TryToMergeWithLefts(ClientStructs, int)"/>).</summary>
     internal bool PairwiseMergeForTests;
 
-    /// <summary>The struct lists by client, as the property tests read them (they reach no internal type).</summary>
-    internal IEnumerable<KeyValuePair<long, IReadOnlyList<AbstractStruct>>> StructListsForTests() =>
-        Clients.Select(kv => new KeyValuePair<long, IReadOnlyList<AbstractStruct>>(kv.Key, kv.Value.Select(s => s.ToStruct()).ToArray()));
-
     /// <summary>Recounts the struct lists after every transaction and throws on a difference (the tests switch it on).</summary>
     internal static bool CheckAfterTransactionsForTests;
 

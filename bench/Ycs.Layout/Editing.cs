@@ -7,7 +7,7 @@ namespace Ycs.Layout;
 /// Editing, today against the prototype (<see cref="Integrator"/>): the integration of a recorded sequence of updates'
 /// structs, and the application of their delete sets. Both sides get the same structs in the same order, decoded
 /// beforehand (ycs' <c>UpdateReader</c>; the prototype's staged form is converted from the same decode), and start from
-/// the same document. Today's side runs ycs' own <c>Item.ResolveReferences</c> and <c>Item.Integrate</c> (what
+/// the same document. Today's side runs ycs' own <c>ItemRef.Adopt</c> (what
 /// <c>IntegrationPlan.Execute</c> runs per struct) and a copy of <c>StructStore.ApplyDeleteSet</c>'s loop on ycs'
 /// primitives, inside one transaction whose cleanup is not timed. Before a time counts, the list (every struct's id,
 /// length and deleted flag in list order), the map entries' chains, the types' lengths and map counts and each client's
@@ -267,8 +267,7 @@ internal static class Editing
                 sw.Start();
                 foreach (var str in structs)
                 {
-                    (str as Item)?.ResolveReferences(tr, s);
-                    str.Integrate(tr, 0);
+                    ItemRef.Adopt(str, tr, 0, true);
                 }
 
                 sw.Stop();
@@ -314,8 +313,7 @@ internal static class Editing
             {
                 foreach (var str in structs)
                 {
-                    (str as Item)?.ResolveReferences(tr, doc.Store);
-                    str.Integrate(tr, 0);
+                    ItemRef.Adopt(str, tr, 0, true);
                 }
             }, local: false);
             ranges = deletes.Sum(d => d.Ranges.Length);

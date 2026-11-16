@@ -48,17 +48,6 @@ internal sealed class Skip : AbstractStruct
         return true;
     }
 
-    internal override void Delete(Transaction transaction)
-    {
-        // Do nothing.
-    }
-
-    internal override void Integrate(Transaction transaction, int offset)
-    {
-        // Skip structs cannot be integrated.
-        throw new NotSupportedException("Skip structs cannot be integrated.");
-    }
-
     internal override void Write(IUpdateEncoder encoder, int offset)
     {
         encoder.WriteInfo(StructSkipRefNumber);

@@ -31,10 +31,10 @@ public readonly partial struct ItemView : IEquatable<ItemView>
 {
     private readonly YDoc _doc;
     private readonly ID _id;
-    private readonly AbstractStruct _hint;
+    private readonly ItemRef _hint;
     private readonly bool _detached;
 
-    private ItemView(YDoc doc, ID id, AbstractStruct hint, bool detached)
+    private ItemView(YDoc doc, ID id, ItemRef hint, bool detached)
     {
         _doc = doc;
         _id = id;
@@ -43,16 +43,16 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     }
 
     /// <summary>The view of the struct <paramref name="str"/> of <paramref name="doc"/>'s store, which it names by its id.</summary>
-    internal static ItemView Of(YDoc doc, AbstractStruct str) => new(doc ?? throw new ArgumentNullException(nameof(doc)), str.Id, str, false);
+    internal static ItemView Of(YDoc doc, ItemRef str) => new(doc ?? throw new ArgumentNullException(nameof(doc)), str.Id, str, false);
 
     /// <summary>The view of the id <paramref name="id"/> of <paramref name="doc"/>, with no hint: the first read looks it up.</summary>
-    internal static ItemView At(YDoc doc, ID id) => new(doc ?? throw new ArgumentNullException(nameof(doc)), id, null, false);
+    internal static ItemView At(YDoc doc, ID id) => new(doc ?? throw new ArgumentNullException(nameof(doc)), id, default, false);
 
     /// <summary>
     /// The view of a decoded struct that is in no store, which it reads as it is. <paramref name="doc"/> only lets
     /// <see cref="Left"/> and <see cref="Right"/> name the store structs a planned item points at (null when there is none).
     /// </summary>
-    internal static ItemView Detached(YDoc doc, AbstractStruct decoded) => new(doc, decoded.Id, decoded, true);
+    internal static ItemView Detached(YDoc doc, AbstractStruct decoded) => new(doc, decoded.Id, ItemRef.Decoded(decoded), true);
 
     public bool IsDefault => _doc == null && !_detached;
 
@@ -67,12 +67,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         get
         {
             var s = Resolve(out _);
-            return s switch
-            {
-                Item item => (ItemKind)item.Content.Ref,
-                GC => ItemKind.GC,
-                _ => ItemKind.Skip,
-            };
+            return s.IsItem ? (ItemKind)s.Content.Ref : s.IsGC ? ItemKind.GC : ItemKind.Skip;
         }
     }
 
@@ -96,16 +91,17 @@ public readonly partial struct ItemView : IEquatable<ItemView>
 
     public bool Deleted => Resolve(out _).Deleted;
 
-    public bool Countable => Resolve(out _) is Item item && item.Countable;
+    public bool Countable => Resolve(out _).AsItem is { IsNull: false } item && item.Countable;
 
-    public bool Keep => Resolve(out _) is Item item && item.Keep;
+    public bool Keep => Resolve(out _).AsItem is { IsNull: false } item && item.Keep;
 
     /// <summary>What <c>GetContent()</c> gives from the view's offset on: a read-only slice, never a <c>Splice</c>.</summary>
     public IReadOnlyList<object> Content
     {
         get
         {
-            if (Resolve(out var o) is not Item item)
+            var item = Resolve(out var o);
+            if (!item.IsItem)
             {
                 return Array.Empty<object>();
             }
@@ -120,11 +116,11 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         get
         {
             var s = Resolve(out var o);
-            return o > 0 ? new ID(_id.Client, _id.Clock - 1) : (s as Item)?.LeftOrigin;
+            return o > 0 ? new ID(_id.Client, _id.Clock - 1) : s.AsItem is { IsNull: false } item ? item.LeftOrigin : null;
         }
     }
 
-    public ID? RightOrigin => (Resolve(out _) as Item)?.RightOrigin;
+    public ID? RightOrigin => Resolve(out _).AsItem is { IsNull: false } item ? item.RightOrigin : null;
 
     /// <summary>The view of (client, clock - 1) at an offset, else of S's left struct; null when there is none.</summary>
     public ItemView? Left
@@ -132,15 +128,15 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         get
         {
             var s = Resolve(out var o);
-            return o > 0 ? new ItemView(_doc, new ID(_id.Client, _id.Clock - 1), s, false) : Neighbour((s as Item)?.Left);
+            return o > 0 ? new ItemView(_doc, new ID(_id.Client, _id.Clock - 1), s, false) : Neighbour(s.AsItem is { IsNull: false } item ? item.Left : default);
         }
     }
 
-    public ItemView? Right => Neighbour((Resolve(out _) as Item)?.Right);
+    public ItemView? Right => Neighbour(Resolve(out _).AsItem is { IsNull: false } item ? item.Right : default);
 
-    public AbstractType Parent => (Resolve(out _) as Item)?.Parent as AbstractType;
+    public AbstractType Parent => (Resolve(out _).AsItem is { IsNull: false } item ? item.Parent : null) as AbstractType;
 
-    public string ParentSub => (Resolve(out _) as Item)?.ParentSub;
+    public string ParentSub => Resolve(out _).AsItem is { IsNull: false } item ? item.ParentSub : null;
 
     /// <summary>S's, moved by the offset as Yjs' <c>splitItem</c> moves it.</summary>
     public ID? Redone
@@ -148,12 +144,12 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         get
         {
             var s = Resolve(out var o);
-            return (s as Item)?.Redone is ID redone ? new ID(redone.Client, redone.Clock + o) : null;
+            return (s.AsItem is { IsNull: false } item ? item.Redone : null) is ID redone ? new ID(redone.Client, redone.Clock + o) : null;
         }
     }
 
     public bool Equals(ItemView other) =>
-        ReferenceEquals(_doc, other._doc) && _id.Equals(other._id) && _detached == other._detached && (!_detached || ReferenceEquals(_hint, other._hint));
+        ReferenceEquals(_doc, other._doc) && _id.Equals(other._id) && _detached == other._detached && (!_detached || _hint == other._hint);
 
     public override bool Equals(object obj) => obj is ItemView other && Equals(other);
 
@@ -167,10 +163,10 @@ public readonly partial struct ItemView : IEquatable<ItemView>
 
     private bool Checked() => !IsDefault ? true : throw new InvalidOperationException("The view is default(ItemView): it names no struct. Make one from a struct or an id.");
 
-    private ItemView? Neighbour(AbstractStruct s) => s == null ? null : _detached && _doc == null ? Detached(null, s) : new ItemView(_doc, s.Id, s, false);
+    private ItemView? Neighbour(ItemRef s) => s.IsNull ? null : _detached && _doc == null ? new ItemView(null, s.Id, s, true) : new ItemView(_doc, s.Id, s, false);
 
     /// <summary>The struct that holds the id now, and the offset of the id in it.</summary>
-    private AbstractStruct Resolve(out int offset)
+    private ItemRef Resolve(out int offset)
     {
         Checked();
         var hint = _hint;
@@ -180,7 +176,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
             return hint;
         }
 
-        if (hint != null && !IsOut(hint))
+        if (!hint.IsNull && !hint.IsDetached)
         {
             var o = _id.Clock - hint.Id.Clock;
             if (hint.Id.Client == _id.Client && (ulong)o < (ulong)hint.Length)
@@ -190,12 +186,10 @@ public readonly partial struct ItemView : IEquatable<ItemView>
             }
         }
 
-        var found = _doc.Store.Find(_id).ToStruct();
+        var found = _doc.Store.Find(_id);
         offset = (int)(_id.Clock - found.Id.Clock);
         return found;
     }
-
-    private static bool IsOut(AbstractStruct s) => s is Item item ? item.Detached : s is GC gc && gc.Detached;
 
     private sealed class Slice : IReadOnlyList<object>
     {

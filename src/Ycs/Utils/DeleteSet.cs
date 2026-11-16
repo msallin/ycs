@@ -276,7 +276,7 @@ internal class DeleteSet
                         break;
                     }
 
-                    if (str.IsItem && str.Deleted && !str.Keep && gcFilter(ItemView.Of(doc, str.ToStruct())))
+                    if (str.IsItem && str.Deleted && !str.Keep && gcFilter(ItemView.Of(doc, str)))
                     {
                         str.Gc(store, parentGCd: false);
                     }

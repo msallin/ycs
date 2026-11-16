@@ -177,17 +177,7 @@ internal partial class Item : AbstractStruct
     /// <summary>
     /// Computes the last content address of this Item.
     /// </summary>
-    public ID LastId => ItemRef.Of(this).LastId;
-
-    /// <summary>
-    /// Returns the next non-deleted item.
-    /// </summary>
-    public AbstractStruct Next => ItemRef.Of(this).Next.ToStruct();
-
-    /// <summary>
-    /// Returns the previous non-deleted item.
-    /// </summary>
-    public AbstractStruct Prev => ItemRef.Of(this).Prev.ToStruct();
+    public ID LastId => Length == 1 ? Id : new ID(Id.Client, Id.Clock + Length - 1);
 
     internal void SetStart(ID id) => Id = id;
 
@@ -205,10 +195,6 @@ internal partial class Item : AbstractStruct
     internal override bool CanMergeWith(AbstractStruct right) => false; // Yjs' Item#mergeWith needs this.right === right; a decoded item has no neighbours.
 
     internal override bool MergeWith(AbstractStruct right) => false;
-
-    internal override void Delete(Transaction transaction) => ItemRef.Of(this).Delete(transaction);
-
-    internal override void Integrate(Transaction transaction, int offset) => ItemRef.Of(this).Integrate(transaction, offset);
 
     // The parent of a decoded item is a root's name or the id of its type's item.
     internal override void Write(IUpdateEncoder encoder, int offset)
@@ -303,60 +289,4 @@ internal partial class Item : AbstractStruct
 
         return null;
     }
-
-    /// <summary>
-    /// Finds the items this item refers to, once they are all there (the second half of Yjs'
-    /// <c>Item.getMissing</c>): left and right are set, splitting items where needed, and the parent
-    /// is resolved to a type, or to null when this item is to be integrated as a GC struct.
-    /// </summary>
-    internal void ResolveReferences(Transaction transaction, StructStore store)
-    {
-        if (Parent is string rootName)
-        {
-            Parent = transaction.Doc.Get<AbstractType>(rootName);
-        }
-
-        if (LeftOrigin != null)
-        {
-            var left = store.GetItemCleanEnd(transaction, LeftOrigin.Value);
-            Left = left.ToStruct();
-            LeftOrigin = left.IsItem ? left.LastId : null;
-        }
-
-        if (RightOrigin != null)
-        {
-            var right = store.GetItemCleanStart(transaction, RightOrigin.Value);
-            Right = right.ToStruct();
-            RightOrigin = right.Id;
-        }
-
-        if (Left is GC || Right is GC)
-        {
-            Parent = null;
-        }
-        else if (Parent == null)
-        {
-            // Only set parent if this shouldn't be garbage collected; the left neighbour first, as Yjs.
-            if (Left is Item leftItem)
-            {
-                Parent = leftItem.Parent;
-                ParentSub = leftItem.ParentSub;
-            }
-            else if (Right is Item rightItem)
-            {
-                Parent = rightItem.Parent;
-                ParentSub = rightItem.ParentSub;
-            }
-        }
-        else if (Parent is ID pid)
-        {
-            var parentItem = store.Find(pid);
-            Parent = parentItem.IsGC ? null : ((parentItem.IsItem ? parentItem.Content : null) as ContentType)?.Type;
-        }
-    }
-
-    /// <summary>
-    /// Split 'leftItem' into two items.
-    /// </summary>
-    public Item SplitItem(Transaction transaction, int diff) => ItemRef.Of(this).SplitItem(transaction, diff).ToItem();
 }

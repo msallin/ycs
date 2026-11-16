@@ -52,28 +52,108 @@ internal readonly partial struct ItemRef
     /// </summary>
     public ID LastId => Length == 1 ? Id : new ID(Id.Client, Id.Clock + Length - 1);
 
-    // What every kind of struct does in its own way: an item here, the others in their class.
+    // Deleting a GC struct does nothing (it is deleted already).
     public void Delete(Transaction transaction)
     {
         if (IsItem)
         {
             DeleteItem(transaction);
         }
-        else
-        {
-            _struct.Delete(transaction);
-        }
     }
 
-    public void Integrate(Transaction transaction, int offset)
+    /// <summary>
+    /// Integrates this item, which is not in the store yet or is a store item put in again (Yjs' <c>Item#integrate</c>):
+    /// <paramref name="offset"/> is the part of its range the store holds already.
+    /// </summary>
+    public void Integrate(Transaction transaction, int offset) => IntegrateItem(transaction, offset);
+
+    /// <summary>
+    /// Where a decoded struct enters the store (the one place; <see cref="Of"/> and the object's own methods are not a way
+    /// in). <paramref name="decoded"/> is a struct of an update the integration plan has put in order, with everything
+    /// it refers to in the store or planned before it. An item's references are resolved first, whether or not it is
+    /// integrated, in the order of Yjs: the origins' structs are split where an origin points into one, and the parent
+    /// is resolved (to nothing when a neighbour is a GC struct or the parent type is collected: the item then enters as
+    /// a GC struct). Then, when <paramref name="integrate"/> is set, the struct is integrated from
+    /// <paramref name="offset"/>, which is the part of its range the store holds already (an item that is integrated
+    /// whole in the store is the same object; a GC struct is trimmed in place), and the reference to the store's
+    /// struct is returned. Without <paramref name="integrate"/> the struct stays outside the store (<c>default</c>).
+    /// A <see cref="Skip"/> struct is never adopted.
+    /// </summary>
+    public static ItemRef Adopt(AbstractStruct decoded, Transaction transaction, int offset, bool integrate)
     {
-        if (IsItem)
+        var adopted = Of(decoded);
+        if (adopted.IsItem)
         {
-            IntegrateItem(transaction, offset);
+            adopted.ResolveReferences(transaction, transaction.Doc.Store);
+        }
+
+        if (!integrate)
+        {
+            return default;
+        }
+
+        if (adopted.IsItem)
+        {
+            adopted.IntegrateItem(transaction, offset);
         }
         else
         {
-            _struct.Integrate(transaction, offset);
+            Debug.Assert(decoded is GC, "Only items and GC structs are adopted.");
+            ((GC)decoded).TrimStart(offset);
+            transaction.Doc.Store.AddStruct(adopted);
+        }
+
+        return adopted;
+    }
+
+    /// <summary>
+    /// Finds the structs a decoded item refers to, once they are all there (the second half of Yjs' <c>Item.getMissing</c>):
+    /// left and right are set, splitting store structs where needed, and the parent is resolved to a type, or to null when
+    /// the item is to be integrated as a GC struct.
+    /// </summary>
+    private void ResolveReferences(Transaction transaction, StructStore store)
+    {
+        if (Parent is string rootName)
+        {
+            Parent = transaction.Doc.Get<AbstractType>(rootName);
+        }
+
+        if (LeftOrigin != null)
+        {
+            var left = store.GetItemCleanEnd(transaction, LeftOrigin.Value);
+            Left = left;
+            LeftOrigin = left.IsItem ? left.LastId : null;
+        }
+
+        if (RightOrigin != null)
+        {
+            var right = store.GetItemCleanStart(transaction, RightOrigin.Value);
+            Right = right;
+            RightOrigin = right.Id;
+        }
+
+        if (Left.IsGC || Right.IsGC)
+        {
+            Parent = null;
+        }
+        else if (Parent == null)
+        {
+            // Only set parent if this shouldn't be garbage collected; the left neighbour first, as Yjs.
+            if (Left.IsItem)
+            {
+                Parent = Left.Parent;
+                ParentSub = Left.ParentSub;
+            }
+            else if (Right.IsItem)
+            {
+                Parent = Right.Parent;
+                ParentSub = Right.ParentSub;
+            }
+        }
+        else if (Parent is ID pid)
+        {
+            var parentItem = store.Find(pid);
+            Parent = parentItem.IsGC ? null : ((parentItem.IsItem ? parentItem.Content : null) as ContentType)?.Type;
         }
     }
 
@@ -419,7 +499,7 @@ internal readonly partial struct ItemRef
         else
         {
             // Parent is not defined. Integrate GC struct instead.
-            Of(new GC(Id, Length)).Integrate(transaction, 0);
+            transaction.Doc.Store.AddStruct(NewGC(Id, Length));
         }
     }
 
@@ -434,7 +514,7 @@ internal readonly partial struct ItemRef
 
         if (parentGCd)
         {
-            store.ReplaceStruct(this, Of(new GC(Id, Length)));
+            store.ReplaceStruct(this, NewGC(Id, Length));
         }
         else
         {
@@ -497,7 +577,7 @@ internal readonly partial struct ItemRef
             new ID(client, clock + diff),
             _struct,
             new ID(client, clock + diff - 1),
-            Right.ToStruct(),
+            Right._struct,
             RightOrigin,
             Parent,
             ParentSub,

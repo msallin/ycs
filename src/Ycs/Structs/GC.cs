@@ -39,20 +39,14 @@ internal partial class GC : AbstractStruct
         return true;
     }
 
-    internal override void Delete(Transaction transaction)
-    {
-        // Do nothing.
-    }
-
-    internal override void Integrate(Transaction transaction, int offset)
+    // The part the store holds already is cut off, as Yjs' GC#integrate does.
+    internal void TrimStart(int offset)
     {
         if (offset > 0)
         {
             Id = new ID(Id.Client, Id.Clock + offset);
             Length -= offset;
         }
-
-        transaction.Doc.Store.AddStruct(ItemRef.Of(this));
     }
 
     internal override void Write(IUpdateEncoder encoder, int offset)

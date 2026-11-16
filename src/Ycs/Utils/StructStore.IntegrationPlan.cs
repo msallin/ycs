@@ -77,12 +77,7 @@ internal sealed partial class StructStore
         {
             foreach (var (str, offset, integrate) in _steps)
             {
-                (str as Item)?.ResolveReferences(transaction, _store);
-
-                if (integrate)
-                {
-                    str.Integrate(transaction, offset);
-                }
+                ItemRef.Adopt(str, transaction, offset, integrate);
             }
         }
 
@@ -341,7 +336,7 @@ internal sealed partial class StructStore
 
         /// <summary>
         /// Rejects a type that would be nested deeper than <see cref="UpdateLimits.MaxDepth"/>. The depth of
-        /// the type an item lands in follows its references as <see cref="Item.ResolveReferences"/> will:
+        /// the type an item lands in follows its references as <see cref="ItemRef.Adopt"/> will:
         /// the given parent, else the parent of its left origin, else of its right origin. (When the
         /// other origin is a GC struct the item becomes one too; ignoring that only overestimates.)
         /// </summary>
@@ -891,7 +886,7 @@ internal sealed partial class StructStore
 
         /// <summary>
         /// The parent and key <paramref name="item"/> has once integrated: its own, else those of the item its origin
-        /// (or right origin) refers to, as <see cref="Item.ResolveReferences"/> takes them; (null, null) when it is
+        /// (or right origin) refers to, as <see cref="ItemRef.Adopt"/> takes them; (null, null) when it is
         /// integrated as a GC struct. The parent is a root's name, a root type, the <see cref="PlanItem"/> of the type's
         /// item, or a collected type (its item is gone, <see cref="AbstractType.ItemDeleted"/> and
         /// <see cref="AbstractType.ParentType"/> tell what its item did).

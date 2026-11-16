@@ -33,7 +33,7 @@ public sealed partial class YArray : YArrayBase
 
         // Bug fix: `_prelimContent` must be cleared *before* flushing it via Insert(), not after.
         // `Length` is overridden as `_prelimContent?.Count ?? base.Length` so it's readable before
-        // attach; but Item.Integrate() (Structs/Item.cs) does `parent.Length += item.Length` for
+        // attach; but ItemRef.Integrate() (Structs/ItemRef.Operations.cs) does `parent.Length += item.Length` for
         // every item it integrates -- and that `+=` reads `Parent.Length` through the very same
         // virtual getter. While `_prelimContent` was still non-null during the Insert() below, that
         // read returned the *stale prelim count* instead of the real, incrementally-accumulated

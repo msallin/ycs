@@ -326,7 +326,7 @@ public partial class UndoManager
                     for (int i = itemsToDelete.Count - 1; i >= 0; i--)
                     {
                         var item = itemsToDelete[i];
-                        if (_deleteFilter(ItemView.Of(transaction.Doc, item.ToItem())))
+                        if (_deleteFilter(ItemView.Of(transaction.Doc, item)))
                         {
                             item.Delete(transaction);
                             performedChange = true;

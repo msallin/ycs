@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// The conflict loop of <see cref="Item.Integrate"/>: n items without origins of one client after
+/// The conflict loop of <see cref="ItemRef.Integrate"/>: n items without origins of one client after
 /// n of another in the same text take n^2 steps (Yjs is quadratic too). It must not allocate per
 /// step, and <see cref="UpdateLimits.MaxIntegrationSteps"/> bounds it.
 /// </summary>

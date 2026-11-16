@@ -201,7 +201,7 @@ of a live type, the push hint, the clock order) are kept current by split and me
 
 * The decoded form stays objects (2.5, step 9): `IntegrationPlan` keys dictionaries by `Item` and mixes the store's
   items into them (`Target`, `KeyOf`, `LandsLast`, `DeletedTypes`: `ToStruct`/`ToItem` of a store lookup), the pending
-  structs' rest store holds `Skip` structs (`ToStruct` to test for them), `Item.ResolveReferences` links a decoded item
+  structs' rest store holds `Skip` structs (`ToStruct` to test for them), `ItemRef.Adopt` (which resolves references) links a decoded item
   to the store's (`ToStruct`). Step 7 must give the plan an id or a handle for the store's items there.
 * Casts that only fail on a GC struct the code cannot reach (no item's neighbour, run or redone copy is one) are gone;
   the next member read throws `NullReferenceException` where the cast threw `InvalidCastException`:

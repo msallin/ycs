@@ -20,12 +20,6 @@ public class ItemRefSignatureTests
     // filter (Predicate<ItemView>, Func<ItemView, bool>) to its call, and the hooks of the tests.
     private static readonly string[] Decoded =
     [
-        "YType.TypeMapEnumerate",
-        "YType.ItemForTests",
-        "YType.StartForTests",
-        "YType.get_ItemForTests",
-        "YType.get_StartForTests",
-        "YType.MapForTests",
         "Lease.*",
         "StructCursor.Next",
         "StructStaging.Stage",
@@ -49,7 +43,6 @@ public class ItemRefSignatureTests
         "StructStore.CheckPendingLimits",
         "StructStore.WriteRest",
         "StructStore.NoRefs",
-        "StructStore.StructListsForTests",
         "UpdateOperations*",
         "UpdateReader*",
         "DecodedUpdate*",

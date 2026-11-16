@@ -184,7 +184,7 @@ public partial class YXmlFragment : YArrayBase
         base.Integrate(doc, item);
 
         // Clear '_prelimContent' *before* flushing it: 'Length' falls back to the prelim count
-        // while it is non-null, and 'Item.Integrate' bumps 'Parent.Length' through that same
+        // while it is non-null, and 'ItemRef.Integrate' bumps 'Parent.Length' through that same
         // virtual getter, so a stale prelim count makes every integrated item count twice.
         // Same fix as YArray.Integrate.
         var prelimContent = _prelimContent;
