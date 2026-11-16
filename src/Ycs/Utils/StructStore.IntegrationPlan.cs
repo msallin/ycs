@@ -706,7 +706,7 @@ internal sealed partial class StructStore
                 {
                     if (values == null)
                     {
-                        // The planned items that are a key's value once the plan is carried out.
+                        // The planned items that become a key's value when they integrate, a later planned item replacing them or not.
                         values = new HashSet<Item>();
                         var chains = new KeyChains();
                         foreach (var (str, _, integrate) in _steps)
@@ -714,14 +714,10 @@ internal sealed partial class StructStore
                             if (integrate && str is Item item)
                             {
                                 LandsLast(doc, item, chains);
-                            }
-                        }
-
-                        foreach (var chain in chains.Keys.Values)
-                        {
-                            if (!chains.Deleted.Contains(chain.Value))
-                            {
-                                values.Add(chain.Value);
+                                if (!chains.Deleted.Contains(item) && item.Content is not ContentDeleted && KeyOf(item).Key != null)
+                                {
+                                    values.Add(item);
+                                }
                             }
                         }
                     }

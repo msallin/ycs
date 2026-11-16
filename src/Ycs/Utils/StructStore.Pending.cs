@@ -273,14 +273,16 @@ internal sealed partial class StructStore
         /// <summary>Adds the ranges <see cref="TakeApplicable"/> will take once <paramref name="plan"/> is carried out, as (client, clock, end).</summary>
         public void AddApplicableRanges(IntegrationPlan plan, List<(long Client, long Clock, long End)> ranges)
         {
-            foreach (var (client, entry) in _clients)
+            if (ApplicableClients(plan, null) is not { } applicable)
             {
-                if (entry.MinClock < plan.GetState(client))
+                return;
+            }
+
+            foreach (var client in applicable)
+            {
+                foreach (var range in _clients[client].Ranges)
                 {
-                    foreach (var range in entry.Ranges)
-                    {
-                        ranges.Add((client, range.Clock, range.Clock + range.Length));
-                    }
+                    ranges.Add((client, range.Clock, range.Clock + range.Length));
                 }
             }
         }
@@ -288,23 +290,12 @@ internal sealed partial class StructStore
         /// <summary>Removes and returns the ranges of the clients whose state reached one of them, or null.</summary>
         public DeleteSet TakeApplicable(StructStore store)
         {
-            List<long> applicable = null;
-            foreach (var (client, entry) in _clients)
-            {
-                if (entry.MinClock < store.GetState(client))
-                {
-                    (applicable ??= new List<long>()).Add(client);
-                }
-            }
-
+            var applicable = ApplicableClients(null, store);
             if (applicable == null)
             {
                 return null;
             }
 
-            // In the order Yjs reads its pending deletions back (writeDeleteSet writes the clients from the highest id
-            // down): it decides the order of the transaction's delete set, and so of the garbage collection filter's calls.
-            applicable.Sort(static (a, b) => b.CompareTo(a));
             var ds = new DeleteSet();
             foreach (var client in applicable)
             {
@@ -314,6 +305,26 @@ internal sealed partial class StructStore
             }
 
             return ds;
+        }
+
+        /// <summary>
+        /// The clients whose state (the plan's, or the store's when there is no plan) reached one of their ranges, in the order Yjs reads its pending
+        /// deletions back (writeDeleteSet writes the clients from the highest id down): it decides the order of the
+        /// transaction's delete set, and so of the garbage collection filter's calls. Null when there are none.
+        /// </summary>
+        private List<long> ApplicableClients(IntegrationPlan plan, StructStore store)
+        {
+            List<long> applicable = null;
+            foreach (var (client, entry) in _clients)
+            {
+                if (entry.MinClock < (plan?.GetState(client) ?? store.GetState(client)))
+                {
+                    (applicable ??= new List<long>()).Add(client);
+                }
+            }
+
+            applicable?.Sort(static (a, b) => b.CompareTo(a));
+            return applicable;
         }
 
         private static long HeaderSize(long client) => VarUintSize(client) + 1;
