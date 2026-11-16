@@ -1,193 +1,71 @@
 Ycs
 -------
 
-A `.NET` implementation of the [Yjs](https://github.com/yjs/yjs) CRDT framework: host Yjs documents
-in a .NET application and synchronize them with Yjs running anywhere else.
+Ycs is a .NET implementation of [Yjs](https://github.com/yjs/yjs), the CRDT for shared editing. A Ycs document and a
+Yjs document exchange the same bytes, so a .NET server, desktop app or Blazor WebAssembly page can edit the same
+text, map or XML tree as Yjs clients in browsers, and every copy converges without a central lock. Ycs is pure C#:
+no native library and no reflection, so it runs under Native AOT and in WebAssembly.
 
-This is a modernized fork of [yjs/ycs](https://github.com/yjs/ycs) (dormant since 2023). It builds on
-three open upstream pull requests — #12 (v1 update format), #13 (parity with Yjs 13.6: XML types,
-`updates.js`, snapshots, relative positions) and #14 (an RLE encoder fix) — and then:
+This is a modernized fork of [yjs/ycs](https://github.com/yjs/ycs), at parity with Yjs 13.6.
 
-* targets **.NET 11 only**, with nullable reference types (partly annotated), implicit usings and
-  file-scoped namespaces;
-* has **no reflection, no `dynamic` and no third-party dependency**, is marked
-  `IsAotCompatible`/`IsTrimmable` with zero trim/AOT warnings, and ships a Native AOT sample
-  (`samples/Ycs.AotSample`, about 2 MB) that CI publishes and runs;
-* encodes and decodes with byte buffers and spans instead of `MemoryStream`s
-  (`ApplyUpdate(ReadOnlySpan<byte>)`, `EncodeStateAsUpdate(IBufferWriter<byte>)`), and uses v1 as the
-  default format, as Yjs does — see [`docs/api.md`](docs/api.md) for every API change and how the API
-  compares to Yjs and [YDotNet](https://github.com/y-crdt/ydotnet);
-* fixes divergences from Yjs found by differential testing (below).
+Documentation: [msallin.github.io/ycs](https://msallin.github.io/ycs/) (the same pages are in [`docs/`](docs/index.md)).
 
-#### Why only .NET 11
+## Install
 
-The previous builds targeted `netstandard2.0`, which has no `Span<T>`-based `Encoding`,
-`BinaryPrimitives` overloads, `ArgumentNullException.ThrowIfNull`, `Convert.ToHexString`,
-`RandomNumberGenerator.GetInt32` or trimming/AOT annotations, and needed `#if` branches and a
-System.Text.Json package to make up for it. Dropping it removes those branches and lets the
-encoding layer use spans throughout. If you need .NET Framework, Unity or older runtimes, use
-upstream ycs.
+Ycs is not on NuGet. It needs the .NET 11 SDK. Clone it (or add it as a git submodule) and reference the project:
 
-#### Verified against Yjs 13.6.32 and 13.6.33 (and v14: 14.0.0-16 beta, `@y/y` 14.0.0-rc.30)
-
-* `tests/Ycs.Tests` (364 tests) pins updates written by real Yjs as base64 and checks byte-identical
-  re-encoding, and `TextDifferentialTests` replays 40 seeded random concurrent editing sessions on
-  2–4 replicas that were run in Yjs 13.6.33 (`interop/differential/gen.mjs`), asserting the same final
-  text and byte-identical v1 re-encoding.
-* `tests/Ycs.Corpus` (486 tests) replays a recorded corpus of Yjs 13.6.32 sessions
-  ([`interop/corpus/`](interop/corpus/README.md)).
-* `interop/run.sh` and `interop/corpus/roundtrip.sh` run Ycs and Yjs against each other live
-  (Node needed).
-* Yjs v14 (`@y/y`, wire-compatible with v13, one type `Y.Node`, 53-bit client ids): `V14InteropTests`
-  reads documents v14 wrote as Yjs 13 does and re-encodes them byte for byte, and `interop/v14/roundtrip.sh`
-  checks that v14 converges with Ycs' answers. The parity target stays Yjs 13.6.32; no v14 API is ported.
-
-#### Untrusted input
-
-Updates from peers can be malformed or hostile: applying, merging or diffing them throws only
-`YUpdateException`, leaves the document unchanged, and is bounded in time, memory and stack depth
-(clocks up to 2^31 - 1, nesting up to 256 levels, structs per update and pending data up to
-`YDocOptions.Limits`, which an application raises for a stored state it trusts).
-`TryApplyUpdate` returns false instead. See [`docs/api.md`](docs/api.md#untrusted-input).
-
-#### Thread safety
-
-As in Yjs, a `YDoc` is not thread-safe: the caller must make sure that no two threads use the same
-document (or its shared types) at the same time, e.g. with one lock or one channel per document.
-Observers run synchronously on the thread that made the change.
-
-### Shared types
-
-`Y.Map`, `Y.Array`, `Y.Text`, `Y.XmlFragment`, `Y.XmlElement`, `Y.XmlText`, `Y.XmlHook` — the full
-set, including nested types, embeds, text formatting attributes and subdocuments. Documents produced
-by `y-prosemirror`, `y-quill`, Tiptap and BlockNote decode.
-
-DOM bindings (`toDOM`) are deliberately not ported — there is no DOM to bind to. The traversal API
-they exist for is: `YXmlFragment.QuerySelector` / `QuerySelectorAll` and `YXmlTreeWalker`.
-
-### Wire formats
-
-| | Yjs | Ycs |
-|---|---|---|
-| v1 (default; what `y-protocols` and every provider speaks) | `Y.encodeStateAsUpdate` / `Y.applyUpdate` | `EncodeStateAsUpdate` / `ApplyUpdate` (or `…V1`) |
-| v2 (denser) | `Y.encodeStateAsUpdateV2` / `Y.applyUpdateV2` | `EncodeStateAsUpdateV2` / `ApplyUpdateV2` |
-
-`ApplyUpdate`, `EncodeStateAsUpdate` and `EncodeStateVector` without a suffix use v1, as in Yjs.
-`SyncProtocol` speaks v1 by default, matching `y-protocols/sync`; pass `v2: true` on both ends for
-the v2 encoding. `YDoc` raises `Update` (v1) and `UpdateV2` for the two formats.
-
-### Update manipulation (`Ycs.UpdateOperations`)
-
-`MergeUpdates`, `DiffUpdate`, `EncodeStateVectorFromUpdate`, `ParseUpdateMeta`, `DecodeUpdate`,
-`ConvertUpdateFormatV1ToV2` / `V2ToV1`, `DescribeUpdate` — each with a `…V2` sibling. These are what
-persistence providers are built on: `MergeUpdates` compacts a log without instantiating a document,
-`DiffUpdate` sends a peer only what it is missing.
-
-`ObfuscateUpdate` is **not** implemented (it needs mutable access to every content type, for the
-least useful entry in that list).
-
-### Versioning and presence
-
-`Snapshot` (`EncodeSnapshot` / `DecodeSnapshot` / `EqualSnapshots` / `SnapshotContainsUpdate` /
-`YDoc.CreateDocFromSnapshot`), `RelativePosition` and `AbsolutePosition` (binary and JSON forms, both
-`assoc` directions) and `PermanentUserData` are all present and byte-compatible. Note Yjs' rule:
-snapshots are only meaningful on a document created with `Gc = false`.
-
-### Not supported
-
-* `ObfuscateUpdate`, and the DOM bindings (`toDOM`) of the XML types.
-* `undefined` is read as `null` (and written back as `null`); JavaScript objects with integer-like
-  keys are written in insertion order, not in JavaScript's key order.
-* Integers beyond ±(2^53 - 1) are rejected (no exact JavaScript number); use `BigInteger`.
-
-Changes in this fork
--------
-
-The commit history is meant to be read: each commit is one step, and each bug fix says what Yjs
-does. In short:
-
-**Divergences from Yjs fixed here** (each with a test)
-* Search markers were never created (`FindMarker` bailed out when none existed), so every index
-  lookup in a text or array walked from the start; enabling them needed four alignments with Yjs
-  (no markers for XML fragments, markers disabled once a text has formatting, markers moved on
-  merge, markers only where Yjs' `findPosition` uses them).
-* A `Y.Text` holding an embedded shared type was indexed wrongly.
-* State vectors and delete sets were written in dictionary order instead of highest client first.
-* While one struct waited for a missing dependency, nothing else integrated; and pending structs
-  kept a stale root placeholder, losing content when the root was realized in between. Pending
-  structs are now kept as an encoded update, as in Yjs 13.6.
-* The 'any' encoding now follows lib0's number rules (an integral `double` is a var-int, exact
-  floats are float32, JavaScript's canonical NaN), so values written by Ycs have Yjs' bytes.
-* The shared types and their events, checked against 1,425 traces recorded from Yjs 13.6.32: a
-  text event's delta repeated earlier inserts and kept the 13.4 formatting logic, `Push` was an
-  insert at the end (different bytes), a shared type could not be a text embed, `ToDelta` opened a
-  transaction and misreported `computeYChange`, the XML string forms used .NET formatting, and
-  `Get`, `Insert`, `Slice` and `Delete` threw where Yjs does not, and the reverse.
-
-**Performance** (the automerge-paper editing trace, 260k edits, `bench/Ycs.Benchmarks`,
-median of 5 runs on the same machine, before = upstream PRs merged, after = this branch)
-
-| | before | after |
-| --- | --- | --- |
-| replay the trace locally, one transaction per edit | 11 786 ms | 658 ms |
-| apply the 260k v1 updates to a fresh document | 398 ms, 860 MiB | 371 ms, 921 MiB |
-| encode the final document, v1, 10× | 14.2 ms, 26.2 MiB | 7.6 ms, 14.0 MiB |
-| encode the final document, v2, 10× | 12.0 ms, 31.3 MiB | 9.3 ms, 15.2 MiB |
-| decode the final document, v1, 10× | 217 ms, 87.7 MiB | 65 ms, 36.6 MiB |
-| decode the final document, v2, 10× | 258 ms, 89.6 MiB | 68 ms, 38.6 MiB |
-
-The same benchmark on 2026-11-15 (a shared machine, load average 2 to 5), the commit before branch `perf-r1`
-(38fcba1) and after it, median of 5 runs, two interleaved rounds (the range is both rounds' medians):
-
-| | 38fcba1 | perf-r1 |
-| --- | --- | --- |
-| replay the trace locally, one transaction per edit | 387–416 ms, 100.0 MiB | 368–369 ms, 58.0 MiB |
-| apply the 260k v1 updates to a fresh document | 242–282 ms, 67.4 MiB | 253–254 ms, 55.0 MiB |
-| encode the final document, v1, 10× | 5.4–6.2 ms, 2.8 MiB | 5.2–5.3 ms, 2.8 MiB |
-| encode the final document, v2, 10× | 7.4–7.8 ms, 1.5 MiB | 7.3–8.6 ms, 1.5 MiB |
-| decode the final document, v1, 10× | 71–109 ms, 39.5 MiB | 57–59 ms, 32.0 MiB |
-| decode the final document, v2, 10× | 70–100 ms, 41.5 MiB | 60 ms, 34.0 MiB |
-
-Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
-`dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`; `-- sizes` prints what one item holds
-by kind, `-- loop <trace.json.gz> <phase> <n>` repeats one operation (for a profiler).
-
-A comparison with YDotNet (yrs) on the same workloads, with Native AOT, wasm and hostile-input findings, is in [`bench/Ycs.Compare`](bench/Ycs.Compare/README.md).
-
-**From the upstream pull requests** (#12, #13 by Yuriy Habarov; #14 by Kieren Johnstone): the v1
-format, the XML types, `UpdateOperations`, `PermanentUserData`, snapshots and relative positions,
-a CSPRNG client id, delete-set coalescing, the v2 JSON encoding, the `IntDiffOptRleEncoder` sign fix
-and many smaller fixes listed in those pull requests.
-
-Running the checks
--------
-
-```bash
-dotnet test tests/Ycs.Tests      # unit, interop fixtures and differential tests; no Node needed
-dotnet test tests/Ycs.Corpus     # the recorded Yjs corpus; no Node needed
-dotnet test tests/Ycs.Fuzz -c Release     # damaged updates must fail cleanly
-dotnet test tests/Ycs.Budgets -c Release  # allocation and time budgets per operation
-dotnet publish samples/Ycs.AotSample -c Release -o out/aot && ./out/aot/Ycs.AotSample
-dotnet publish samples/Ycs.WasmSample -c Release -o out/wasm && node out/wasm/wwwroot/main.mjs
-./interop/run.sh                 # live round-trips against yjs 13.6.32 and 14 beta (Node)
-./interop/corpus/roundtrip.sh    # Ycs encodings of the corpus read back by Yjs (Node)
-(cd interop/differential && npm ci && node gen.mjs > ../../tests/Ycs.Tests/Fixtures/text-differential.json)
+```xml
+<ProjectReference Include="path/to/ycs/src/Ycs/Ycs.csproj" />
 ```
 
-[`docs/testing.md`](docs/testing.md) says what each of these guards, how to run a fuzz soak, how
-to accept a public API change and how to update the budgets.
+Or build a package for a local feed: `dotnet pack src/Ycs -c Release -o ./packages` (package `Ycs`, version 0.0.1).
 
-Demo
--------
+## Example
 
-`samples/Ycs.Server` is a Yjs sync server (y-protocols over WebSocket and SignalR) with one Ycs
-document per room, built as a test bed: [`docs/plan-server.md`](docs/plan-server.md).
+```csharp
+using Ycs;
 
-Run it with `dotnet run --project samples/Ycs.Server` and open `http://localhost:5000/` (the port is in the
-server's output): a CodeMirror 6 Markdown editor on a `Y.Text` named `content`, with the other editors' cursors and
-names, a status line, a link to the room (the URL fragment) and a button to go offline and come back. The page is
-`samples/Ycs.Server/wwwroot`; its bundle is committed, and
-[`samples/Ycs.Server/demo`](samples/Ycs.Server/demo/README.md) rebuilds it.
-`interop/demo/check.sh` drives two browsers through it (Playwright).
+var alice = new YDoc();
+var bob = new YDoc();
 
-![Two browsers editing one room](interop/demo/screenshot.png)
+// Each local change raises Update with the bytes to send to the other replicas.
+alice.Update += (_, e) => { if (e.origin != bob) bob.ApplyUpdate(e.data, alice); };
+bob.Update += (_, e) => { if (e.origin != alice) alice.ApplyUpdate(e.data, bob); };
+
+alice.GetText("content").Insert(0, "Hello");
+bob.GetText("content").Insert(5, ", world");
+
+Console.WriteLine(alice.GetText("content")); // Hello, world
+Console.WriteLine(bob.GetText("content"));   // Hello, world
+```
+
+## At a glance
+
+| | |
+| --- | --- |
+| Shared types | `YText`, `YMap`, `YArray`, `YXmlFragment`, `YXmlElement`, `YXmlText`, `YXmlHook`, subdocuments |
+| Also | undo and redo, snapshots, relative positions, merging and diffing updates without a document |
+| Wire formats | Yjs update formats v1 (the default) and v2, y-protocols sync; the same bytes as Yjs |
+| Tested against | Yjs 13.6.32 and 13.6.33; Yjs 14.0.0-16 and `@y/y` 14.0.0-rc.30 |
+| Untrusted input | a malformed or hostile update throws `YUpdateException` and leaves the document unchanged; its cost is bounded by `UpdateLimits` |
+| Threads | a document is not thread-safe, as in Yjs: one lock or one channel per document |
+| Runtime | .NET 11; Native AOT and trimming without warnings; Blazor WebAssembly |
+| Speed | the automerge-paper trace (260k edits) replays in about 0.4 s |
+
+## Documentation
+
+- [Getting started](docs/getting-started.md): documents, shared types, syncing, events, undo, saving.
+- [Networking](docs/networking.md): the y-protocols sync, the sample sync server, .NET and browser clients.
+- [Compatibility](docs/compatibility.md): Yjs versions, wire formats, what is not supported, performance.
+- [Untrusted input and threads](docs/untrusted-input.md): limits, errors, thread safety.
+- [API reference](docs/api.md): the API compared with Yjs and YDotNet, and every contract in detail.
+
+## Contributing
+
+`dotnet test tests/Ycs.Tests` runs the main suite without Node. [`docs/testing.md`](docs/testing.md) says what each
+suite checks and how to run the interop checks against Yjs. The design notes and walkthroughs are in
+[`docs/`](docs/).
+
+## License
+
+MIT, see [LICENSE](LICENSE).

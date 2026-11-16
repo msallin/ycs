@@ -1,0 +1,17 @@
+title: Ycs
+description: Yjs, the CRDT for shared editing, in C#.
+theme: jekyll-theme-minimal
+
+# Links between the .md files become links between the pages.
+relative_links:
+  enabled: true
+
+# The working documents of the code (design notes, plans, reviews, walkthroughs, test notes) stay on GitHub only.
+exclude:
+  - design-*.md
+  - plan-*.md
+  - review-*.md
+  - walkthrough-*.md
+  - findings-*.md
+  - testing.md
+  - ycs.gif
