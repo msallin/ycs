@@ -541,7 +541,7 @@ pages on first use, per-page free lists with reuse at the batch end and page rel
 **Step 9, decoding into staging tables** (2.5), and `UpdateOperations` on them.
 
 * *Files*: `UpdateDecoderV1/V2.cs`, `LazyStructReader.cs`, `UpdateReader.cs`, `UpdateOperations.cs`, the integration
-  plan in `StructStore.cs`; `DecodedStruct` read from a staging table.
+  plan in `StructStore.IntegrationPlan.cs`; `DecodedStruct` read from a staging table.
 * *Proof*: the corpus byte for byte, the fuzzer, the update-operation differentials against Yjs; the load budgets
   tighten. Sabotage: a `Skip` read as a GC struct in a merge.
 * *Effect*: est. a load allocates about what the document holds (the trace: about 1 MiB instead of 3.2); `apply-state`
