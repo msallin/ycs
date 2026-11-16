@@ -30,6 +30,11 @@ jobs:
       - name: Sync server
         run: dotnet test tests/Ycs.Server.Tests -c Release --no-build
 
+      - name: Sync server against y-websocket clients
+        run: |
+          (cd interop/server && npm ci)
+          bash interop/server/smoke.sh
+
       - name: Fuzz the decoders
         run: dotnet test tests/Ycs.Fuzz -c Release --no-build
 
