@@ -15,7 +15,7 @@ public class StagingTableTests
 
     private static int AddItem(StagingTable table, StagedKind kind, int length)
     {
-        var i = table.Add(kind, length, new ID(9, 0));
+        var i = table.Add(kind, length, new ItemId(9, 0));
         return i;
     }
 
@@ -41,13 +41,13 @@ public class StagingTableTests
     {
         var table = new StagingTable();
         table.BeginClient(7, 100);
-        var i = table.Add(StagedKind.String, 3, new ID(7, 99), new ID(5, 2));
+        var i = table.Add(StagedKind.String, 3, new ItemId(7, 99), new ItemId(5, 2));
         "abc".AsSpan().CopyTo(table.Chars(i));
         table.SetParentSub(i, "k");
 
         var read = (table.IdOf(i), table.At(i).Length, table.At(i).Kind, table.At(i).Countable, new string(table.Chars(i)), table.LeftOrigin(i), table.RightOrigin(i), table.ParentSub(i), table.At(i).ParentKind);
 
-        Assert.AreEqual((new ID(7, 100), 3, StagedKind.String, true, "abc", (ID?)new ID(7, 99), (ID?)new ID(5, 2), "k", StagedParent.None), read);
+        Assert.AreEqual((new ItemId(7, 100), 3, StagedKind.String, true, "abc", (ItemId?)new ItemId(7, 99), (ItemId?)new ItemId(5, 2), "k", StagedParent.None), read);
         AssertSound(table);
     }
 
@@ -73,9 +73,9 @@ public class StagingTableTests
     {
         var table = new StagingTable();
         table.BeginClient(1, 0);
-        var a = table.Add(StagedKind.String, 2, new ID(1, 0));
-        var b = table.Add(StagedKind.Any, 2, new ID(1, 1));
-        var c = table.Add(StagedKind.String, 3, new ID(1, 2));
+        var a = table.Add(StagedKind.String, 2, new ItemId(1, 0));
+        var b = table.Add(StagedKind.Any, 2, new ItemId(1, 1));
+        var c = table.Add(StagedKind.String, 3, new ItemId(1, 2));
         table.Chars(a).Fill('a');
         table.Chars(c).Fill('c');
         table.Values(b).Fill(5);
@@ -91,11 +91,11 @@ public class StagingTableTests
         table.BeginClient(3, 10);
         var gc = table.Add(StagedKind.GC, 4);
         var skip = table.Add(StagedKind.Skip, 6);
-        var deleted = table.Add(StagedKind.Deleted, 2, new ID(3, 9));
+        var deleted = table.Add(StagedKind.Deleted, 2, new ItemId(3, 9));
 
         var read = (table.IdOf(gc), table.At(gc).Kind, table.IdOf(skip), table.At(skip).Kind, table.IdOf(deleted), table.At(deleted).Kind, table.At(deleted).Countable, table.At(skip).Countable);
 
-        Assert.AreEqual((new ID(3, 10), StagedKind.GC, new ID(3, 14), StagedKind.Skip, new ID(3, 20), StagedKind.Deleted, false, false), read);
+        Assert.AreEqual((new ItemId(3, 10), StagedKind.GC, new ItemId(3, 14), StagedKind.Skip, new ItemId(3, 20), StagedKind.Deleted, false, false), read);
         AssertSound(table);
     }
 
@@ -106,9 +106,9 @@ public class StagingTableTests
         table.BeginClient(1, 0);
         var root = AddRootItem(table, StagedKind.Deleted, 1);
         var nested = table.Add(StagedKind.Deleted, 1);
-        table.SetParentId(nested, new ID(8, 4));
+        table.SetParentId(nested, new ItemId(8, 4));
 
-        Assert.AreEqual((StagedParent.Root, "root", StagedParent.Id, new ID(8, 4)), (table.At(root).ParentKind, table.ParentName(root), table.At(nested).ParentKind, table.ParentId(nested)));
+        Assert.AreEqual((StagedParent.Root, "root", StagedParent.Id, new ItemId(8, 4)), (table.At(root).ParentKind, table.ParentName(root), table.At(nested).ParentKind, table.ParentId(nested)));
         AssertSound(table);
     }
 
@@ -138,7 +138,7 @@ public class StagingTableTests
         table.BeginClient(1, 0);
         var element = AddRootItem(table, StagedKind.Type, 1);
         table.SetType(element, 3, "div");
-        var map = table.Add(StagedKind.Type, 1, new ID(1, 0));
+        var map = table.Add(StagedKind.Type, 1, new ItemId(1, 0));
         table.SetType(map, 1, null);
 
         Assert.AreEqual((3, "div", 1, (string?)null), (table.At(element).TypeRef, table.TypeName(element), table.At(map).TypeRef, table.TypeName(map)));
@@ -158,7 +158,7 @@ public class StagingTableTests
         var a = table.FindClient(5);
         var b = table.FindClient(2);
 
-        Assert.AreEqual(((0, 2), (2, 1), 5L, 2L, new ID(5, 2), new ID(2, 40)), (table.RangeOf(a), table.RangeOf(b), table.ClientAt(a), table.ClientAt(b), table.IdOf(1), table.IdOf(2)));
+        Assert.AreEqual(((0, 2), (2, 1), 5L, 2L, new ItemId(5, 2), new ItemId(2, 40)), (table.RangeOf(a), table.RangeOf(b), table.ClientAt(a), table.ClientAt(b), table.IdOf(1), table.IdOf(2)));
         AssertSound(table);
     }
 
@@ -202,7 +202,7 @@ public class StagingTableTests
             table.BeginClient(c * 3, 0);
             for (var k = 0; k < 50; k++)
             {
-                var i = table.Add(StagedKind.String, 4, new ID(c * 3, 0));
+                var i = table.Add(StagedKind.String, 4, new ItemId(c * 3, 0));
                 table.Chars(i).Fill((char)('a' + k % 26));
             }
         }
@@ -287,7 +287,7 @@ public class StagingTableTests
         table.BeginClient(1, 50);
         var j = AddRootItem(table, StagedKind.Any, 2);
 
-        Assert.AreEqual((new ID(1, 50), 0, null), (table.IdOf(j), j, table.Values(j)[0]));
+        Assert.AreEqual((new ItemId(1, 50), 0, null), (table.IdOf(j), j, table.Values(j)[0]));
         AssertSound(table);
     }
 
@@ -312,7 +312,7 @@ public class StagingTableTests
     {
         var table = new StagingTable();
         table.BeginClient(1, 0);
-        table.Add(StagedKind.String, 2, new ID(1, 0));
+        table.Add(StagedKind.String, 2, new ItemId(1, 0));
         ref readonly var kept = ref table.At(0);
         var chars = table.Chars(0);
         chars.Fill('q');
@@ -338,7 +338,7 @@ public class StagingTableTests
     {
         var table = new StagingTable();
         table.BeginClient(1, 0);
-        var s = table.Add(StagedKind.String, 2, new ID(1, 0));
+        var s = table.Add(StagedKind.String, 2, new ItemId(1, 0));
         table.Chars(s).Fill('a');
         var a = AddRootItem(table, StagedKind.Any, 2);
         table.Values(a).Fill(1);

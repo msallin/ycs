@@ -263,7 +263,7 @@ public class YTestBase
 
                 // Checks for abstract struct.
                 if (!s1.IsSameKind(s2) ||
-                    !ID.Equals(s1.Id, s2.Id) ||
+                    s1.Id != s2.Id ||
                     s1.Deleted != s2.Deleted ||
                     s1.Length != s2.Length)
                 {
@@ -273,10 +273,10 @@ public class YTestBase
                 if (s1.IsItem)
                 {
                     if (!s2.IsItem ||
-                        !((s1.Left.IsNull && s2.Left.IsNull) || (!s1.Left.IsNull && !s2.Left.IsNull && ID.Equals(LastIdOfItem(s1.Left), LastIdOfItem(s2.Left)))) ||
+                        !((s1.Left.IsNull && s2.Left.IsNull) || (!s1.Left.IsNull && !s2.Left.IsNull && LastIdOfItem(s1.Left) == LastIdOfItem(s2.Left))) ||
                         !CompareItemIds(s1.Right.AsItem, s2.Right.AsItem) ||
-                        !ID.Equals(s1.LeftOrigin, s2.LeftOrigin) ||
-                        !ID.Equals(s1.RightOrigin, s2.RightOrigin) ||
+                        s1.LeftOrigin != s2.LeftOrigin ||
+                        s1.RightOrigin != s2.RightOrigin ||
                         !string.Equals(s1.ParentSub, s2.ParentSub))
                     {
                         Assert.Fail("Items don't match");
@@ -292,7 +292,7 @@ public class YTestBase
         }
     }
 
-    private static ID? LastIdOfItem(ItemRef reference) => reference.IsItem ? reference.LastId : null;
+    private static ItemId? LastIdOfItem(ItemRef reference) => reference.IsItem ? reference.LastId : null;
 
     internal void CompareDS(DeleteSet ds1, DeleteSet ds2)
     {
@@ -320,7 +320,7 @@ public class YTestBase
 
     internal static bool CompareItemIds(ItemRef a, ItemRef b)
     {
-        var result = a == b || (!a.IsNull && !b.IsNull && ID.Equals(a.Id, b.Id));
+        var result = a == b || (!a.IsNull && !b.IsNull && a.Id == b.Id);
         Assert.IsTrue(result);
         return result;
     }

@@ -6,7 +6,7 @@ namespace Ycs.Budgets;
 /// when a change makes a scenario cheaper, lower its number here (the test prints the measured
 /// values and a suggested budget). Times are loose ceilings (about 10x today's on a developer
 /// machine) that only catch an algorithmic regression, not noise.
-/// Measured with -c Release on .NET 11.0.0, x64. An item is 128 bytes (24 less than with ID? fields), which
+/// Measured with -c Release on .NET 11.0.0, x64. An item is 128 bytes (24 less than with ItemId? fields), which
 /// most of the lowered numbers below are.
 /// </summary>
 internal static class Budgets

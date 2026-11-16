@@ -4,7 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+#nullable enable
 
 namespace Ycs;
 
@@ -47,12 +47,12 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// Yjs parity: <c>equalSnapshots(snap1, snap2)</c>. Null-safe wrapper around
     /// <see cref="Equals(Snapshot)"/> (which requires a non-null receiver).
     /// </summary>
-    public static bool EqualSnapshots(Snapshot snap1, Snapshot snap2)
+    public static bool EqualSnapshots(Snapshot? snap1, Snapshot? snap2)
     {
         return ReferenceEquals(snap1, snap2) || (snap1 != null && snap1.Equals(snap2));
     }
 
-    public YDoc RestoreDocument(YDoc originDoc, YDocOptions opts = null)
+    public YDoc RestoreDocument(YDoc originDoc, YDocOptions? opts = null)
     {
         if (originDoc.Gc)
         {
@@ -143,7 +143,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
         return encoder.ToArray();
     }
 
-    public bool Equals(Snapshot other)
+    public bool Equals(Snapshot? other)
     {
         if (other == null)
         {
@@ -252,18 +252,18 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// Yjs parity: <c>snapshotContainsUpdate(snapshot, update)</c> - checks an original ('v1')
     /// update against this snapshot.
     /// </summary>
-    public bool SnapshotContainsUpdate(byte[] update, UpdateLimits limits = null) => SnapshotContainsUpdateCore(update, isV1: true, limits);
+    public bool SnapshotContainsUpdate(byte[] update, UpdateLimits? limits = null) => SnapshotContainsUpdateCore(update, isV1: true, limits);
 
     /// <summary>
     /// Yjs parity: <c>snapshotContainsUpdateV2(snapshot, update)</c>.
     /// </summary>
-    public bool SnapshotContainsUpdateV2(byte[] update, UpdateLimits limits = null) => SnapshotContainsUpdateCore(update, isV1: false, limits);
+    public bool SnapshotContainsUpdateV2(byte[] update, UpdateLimits? limits = null) => SnapshotContainsUpdateCore(update, isV1: false, limits);
 
     /// <summary>
     /// Unlike Yjs' version, which reads the struct headers lazily and stops at the first client the
     /// snapshot does not cover, this reads all structs first.
     /// </summary>
-    private bool SnapshotContainsUpdateCore(byte[] update, bool isV1, UpdateLimits limits)
+    private bool SnapshotContainsUpdateCore(byte[] update, bool isV1, UpdateLimits? limits)
     {
         ArgumentNullException.ThrowIfNull(update);
         return YUpdateException.Decode(() => ContainsUpdate(update, isV1, (limits ?? UpdateLimits.Default).MaxStructsPerUpdate));

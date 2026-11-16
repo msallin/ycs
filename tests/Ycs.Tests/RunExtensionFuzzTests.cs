@@ -172,7 +172,7 @@ public class RunExtensionFuzzTests
 
             var s = snapshots[rng.Int(snapshots.Count)];
             var prev = rng.Chance(0.5) ? snapshots[rng.Int(snapshots.Count)] : null;
-            Func<YText.YTextChangeType, ID, YText.YTextChangeAttributes> cy = rng.Chance(0.5)
+            Func<YText.YTextChangeType, ItemId, YText.YTextChangeAttributes> cy = rng.Chance(0.5)
                 ? null
                 : (type, id) =>
                 {

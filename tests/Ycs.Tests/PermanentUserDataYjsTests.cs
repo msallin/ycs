@@ -40,7 +40,7 @@ public class PermanentUserDataYjsTests
         pud.SetUserMapping(doc, 1, "alice");
         text.Delete(0, 1);
 
-        Assert.AreEqual(("alice", "alice"), (pud.GetUserByClientId(1), pud.GetUserByDeletedId(new ID(1, 1))));
+        Assert.AreEqual(("alice", "alice"), (pud.GetUserByClientId(1), pud.GetUserByDeletedId(new ItemId(1, 1))));
     }
 
     [TestMethod]
