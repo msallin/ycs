@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -127,55 +128,12 @@ public class SyncServerFindingsTests
         var room = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 32 } });
         room.ApplyUpdateV1(deep);
 
-        var e = Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(missing));
+        var dropped = new List<PendingDrop>();
+        room.PendingDropped += (_, drop) => dropped.Add(drop);
 
-        Assert.AreEqual((true, false, 1L), (e.PartlyApplied, room.HasPending, room.Store.GetState(7)));
-    }
+        room.ApplyUpdateV1(missing);
 
-    private static void WriteVarUint(System.IO.Stream stream, ulong value)
-    {
-        while (value > 0x7F)
-        {
-            stream.WriteByte((byte)(0x80 | (value & 0x7F)));
-            value >>= 7;
-        }
-
-        stream.WriteByte((byte)value);
-    }
-
-    // Client 2 inserts "z" with origin (a, 4) and right origin (a, 1): Yjs never writes an item whose right origin
-    // precedes its origin, and gives the two texts of a document that receives it and of one that joins it.
-    private static byte[] ZBetweenEAndB(long a)
-    {
-        var crafted = new System.IO.MemoryStream();
-        foreach (var value in new ulong[] { 1, 1, 2, 0 })
-        {
-            WriteVarUint(crafted, value);
-        }
-
-        crafted.WriteByte(0xC4);
-        foreach (var value in new ulong[] { (ulong)a, 4, (ulong)a, 1, 1 })
-        {
-            WriteVarUint(crafted, value);
-        }
-
-        crafted.Write("z\0"u8);
-        return crafted.ToArray();
-    }
-
-    [TestMethod]
-    public void ApplyUpdate_ItemWhoseRightOriginPrecedesItsOrigin_IsRefusedAndAJoinerSeesTheSameText()
-    {
-        var a = new YDoc(new YDocOptions { ClientId = 1L << 40 });
-        a.GetText("text").Insert(0, "abcdef");
-        var room = new YDoc();
-        room.ApplyUpdateV1(a.EncodeStateAsUpdateV1());
-
-        var e = Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(ZBetweenEAndB(1L << 40)));
-        var joiner = new YDoc();
-        joiner.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
-
-        Assert.AreEqual((false, "abcdef", "abcdef"), (e.PartlyApplied, room.GetText("text").ToString(), joiner.GetText("text").ToString()));
+        Assert.AreEqual((1, 7L, false, 1L), (dropped.Count, dropped[0].Clients[0], room.HasPending, room.Store.GetState(7)));
     }
 
     [TestMethod]
@@ -217,11 +175,14 @@ public class SyncServerFindingsTests
         room.ApplyUpdateV1(behind);
         room.ApplyUpdateV1(first);
 
-        var e = Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(second));
+        var dropped = 0;
+        room.PendingDropped += (_, _) => dropped++;
+
+        room.ApplyUpdateV1(second);
         var joiner = new YDoc();
         joiner.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
 
-        Assert.AreEqual((true, 1L, 1L, false), (e.PartlyApplied, room.Store.GetState(7), joiner.Store.GetState(7), room.HasPending));
+        Assert.AreEqual((1, 1L, 1L, false), (dropped, room.Store.GetState(7), joiner.Store.GetState(7), room.HasPending));
     }
 
     [TestMethod]
@@ -245,5 +206,56 @@ public class SyncServerFindingsTests
         Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(first));
 
         Assert.AreEqual((before, false), (Convert.ToHexString(room.EncodeStateAsUpdateV1()), room.HasPending));
+    }
+
+    // An honest client's step 2 carries back the deletions of unknown structs it was sent along with the waiting structs.
+    [TestMethod]
+    public void ApplyUpdate_WaitingStructsAndDeletionsOverTheLimitSentBack_AreAccepted()
+    {
+        var b = Waiting(7, 150);
+        var c = Waiting(8, 150);
+        var e = Waiting(9, 290);
+        var typist = new YDoc(new YDocOptions { ClientId = 10 });
+        for (var i = 0; i < 200; i++)
+        {
+            typist.GetText("t").Insert(0, "x");
+        }
+
+        var vector = typist.EncodeStateVectorV1();
+        for (var i = 0; i < 100; i++)
+        {
+            typist.GetText("t").Delete(i, 1);
+        }
+
+        var room = new YDoc(new YDocOptions { Limits = Small });
+        room.ApplyUpdateV1(b.Waiting);
+        room.ApplyUpdateV1(c.Waiting);
+        room.ApplyUpdateV1(typist.EncodeStateAsUpdateV1(vector));
+        room.ApplyUpdateV1(UpdateOperations.MergeUpdates([b.Missing, e.Waiting]));
+        var client = new YDoc(new YDocOptions { ClientId = 20 });
+        client.ApplyUpdateV1(room.EncodeStateAsUpdateV1());
+        client.GetText("other").Insert(0, "offline");
+
+        var accepted = room.TryApplyUpdate(client.EncodeStateAsUpdateV1(room.EncodeStateVectorV1()));
+
+        Assert.AreEqual((true, "offline"), (accepted, room.GetText("other").ToString()));
+    }
+
+    // A forged struct under the honest client's next ids, waiting for a client nobody sends: when the honest update
+    // arrives, the forged one is dropped (known, with references that are missing), and the sender is not blamed.
+    [TestMethod]
+    public void ApplyUpdate_HonestUpdateRetriesAForgedStructUnderItsIds_StandsAndReportsTheDrop()
+    {
+        var honest = new YDoc(new YDocOptions { ClientId = 1 });
+        honest.GetText("text").Insert(0, "abc");
+        var room = new YDoc();
+        room.ApplyUpdateV1(honest.EncodeStateAsUpdateV1());
+        room.ApplyUpdateV1(Convert.FromHexString("01010105846300015800"));
+        var dropped = new List<PendingDrop>();
+        room.PendingDropped += (_, drop) => dropped.Add(drop);
+
+        room.ApplyUpdateV1(Edit(honest, d => d.GetText("text").Insert(3, "def")));
+
+        Assert.AreEqual(("abcdef", false, 1), (room.GetText("text").ToString(), room.HasPending, dropped.Count));
     }
 }

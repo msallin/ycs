@@ -109,12 +109,13 @@ before anything changes:
   so no clock arithmetic overflows;
 * no struct of length 0, no client listed twice, no reference to a later struct of the item's own
   client, no unknown content or type;
-* no item whose right origin precedes its origin within one item of their client (Yjs never writes one, and it
-  accepts it: the item lands where a document that holds the whole state in one update would not place it,
-  so a document and a client that joins it disagree for good). A deliberate divergence: the update is
-  rejected, the document unchanged. Only that case is told from the honest ones (an item between two typed backwards has
-  a right origin of a lower clock than its origin, in two items); a crafted update with the origins in two items
-  that way is applied, as Yjs does;
+* no item whose right origin precedes its origin is refused: **not checked, as in Yjs.** Yjs never writes one and applies
+  a crafted one, where the item lands between the halves of a struct split at the right origin; a client that reads
+  the whole state in one update places it elsewhere, so a document and a client that joins it show different texts.
+  A check on the struct that holds both origins is bypassed by the merge of two structs (the document's own state
+  then writes them as one, and every fresh document refuses it) and by an item integrated from an offset, so such a check
+  would make the state unloadable. A check on document order would be needed; until then the divergence stays
+  (`docs/findings-server.md`, 4);
 * no struct that waits for structs the document lacks while the document has a struct under its id already (a part
   of an item is there, so everything the item refers to was). Yjs keeps it waiting, and the structs of its client that
   follow with it, also once the other struct under that id integrated; a client that joins reads the document's
@@ -157,7 +158,8 @@ before anything changes:
   rejected (a duplicate is merged away first, so an update that only carries again what waits, as a client's
   state sent back, is accepted even where what waits is over a limit). An update that lets pending structs integrate may add
   up to the limits on top of what waits, which is then read again and integrated, wholly or in part;
-  so what waits, and what that re-read decodes, never exceeds twice the limits.
+  so what waits, and what that re-read decodes, never exceeds twice the limits. A peer can hold what waits at
+  that bound for good; deletions that wait count once, a range that what waits covers already adds nothing;
 
 What the defaults allow, measured (`dotnet run -c Release --project bench/Ycs.Benchmarks -- limits`;
 .NET 11, x64; the updates are valid ones made through the API, so an honest update of that many
@@ -197,12 +199,15 @@ waited for retries them in its own transaction, after it was carried out, as Yjs
 again and planned and checked as an update of their own (nesting, garbage collection). When that
 plan fails, which happens before anything of them changes the document, they are dropped, and the
 update stands: the document is as if they had never arrived (deletions that waited with them keep
-waiting), and `ApplyUpdate` throws `YUpdateException` with `PartlyApplied` set (whether or not structs of the
-update itself were among them, those that waited for the dropped ones), so that a server knows that what it admitted
-to wait, and handed to joining clients as waiting structs, is gone: clients with other limits integrate it. They are not kept: kept, every later update that satisfies them would retry and
+waiting). If structs of the update itself waited for the dropped ones, they are dropped with them and
+`ApplyUpdate` throws `YUpdateException` with `PartlyApplied` set: the update was cut short. Otherwise the update stood
+whole, and `ApplyUpdate` returns normally (it must not blame the sender: whoever forged the waiting structs is not the
+peer whose update let them retry); `YDoc.PendingDropped` is raised, inside the transaction, with the number of structs
+and the clients they were of, so that a server knows that what it admitted to wait, and handed to joining clients as
+waiting structs, is gone: clients with other limits integrate it. They are not kept: kept, every later update that satisfies them would retry and
 fail again, and a fresh document could not apply the document's state, which includes what is
 pending. The conflict budget counts the retry's steps too; running out there is `PartlyApplied` (below):
-what the retry integrated stays, the rest of what waited is dropped. So whatever `ApplyUpdate` throws,
+what the retry integrated stays, the rest of what waited is dropped. So whatever `ApplyUpdate` throws, or reports,
 the document holds a causally complete part of what it was given, whose `EncodeStateAsUpdate` (v1 or
 v2) applies to a fresh document, with the same state vector when nothing is pending
 (`tests/Ycs.Fuzz` checks this after every input, with the representation invariants of its item lists).

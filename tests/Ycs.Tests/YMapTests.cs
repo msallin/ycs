@@ -298,7 +298,7 @@ public class YMapTests : YTestBase
         map1.Set("map", _map1);
 
         int calls = 0;
-        ID? dmapId = null;
+        ItemId? dmapId = null;
 
         map1.DeepEventHandler += (s, e) =>
         {
@@ -328,9 +328,9 @@ public class YMapTests : YTestBase
         var dmap3 = _map3.Get("deepmap") as YMap;
 
         Assert.IsTrue(calls > 0);
-        Assert.IsTrue(ID.Equals(dmap1.OwnerIdForTests, dmap2.OwnerIdForTests));
-        Assert.IsTrue(ID.Equals(dmap1.OwnerIdForTests, dmap3.OwnerIdForTests));
-        Assert.IsTrue(ID.Equals(dmap1.OwnerIdForTests, dmapId));
+        Assert.IsTrue(dmap1.OwnerIdForTests == dmap2.OwnerIdForTests);
+        Assert.IsTrue(dmap1.OwnerIdForTests == dmap3.OwnerIdForTests);
+        Assert.IsTrue(dmap1.OwnerIdForTests == dmapId);
 
         CompareUsers();
     }

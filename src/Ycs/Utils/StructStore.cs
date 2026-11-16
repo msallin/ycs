@@ -370,7 +370,8 @@ internal sealed partial class StructStore
     /// <br/>
     /// When pending structs are retried and their plan fails a check (nesting, garbage collection), they are
     /// dropped and the update stands; it is applied in part (<see cref="YUpdateException.PartlyApplied"/>) only
-    /// when structs of its own were among them. See docs/api.md, "Atomicity".
+    /// when structs of its own waited for them, otherwise <see cref="YDoc.PendingDropped"/> reports the drop.
+    /// See docs/api.md, "Atomicity".
     /// </summary>
     /// <param name="retrying">For the pending structs themselves, which were admitted to pending when they arrived.</param>
     internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, UpdateLimits limits, bool retrying = false)
@@ -453,10 +454,11 @@ internal sealed partial class StructStore
             var update = Pending.Merge();
             var count = Pending.Structs;
             Pending = null;
+
+            // Their values were read under the limits of the updates that brought them.
+            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, count, maxDepth: int.MaxValue);
             try
             {
-                // Their values were read under the limits of the updates that brought them.
-                using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, count, maxDepth: int.MaxValue);
                 ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, limits, retrying: true);
             }
             catch (YUpdateException e) when (!e.PartlyApplied)
@@ -464,19 +466,21 @@ internal sealed partial class StructStore
                 // Their plan failed a check before it changed anything (a nested retry that failed was dropped by
                 // the nested call): this update has been carried out, and what waited is dropped, which leaves the
                 // document causally complete. Kept, it would fail every later update's retry again, and a fresh
-                // document could not apply this one's state, of which pending structs are part. The caller is told
-                // (PartlyApplied): what was dropped was admitted when it arrived, and clients that were sent it as
-                // waiting structs may integrate it, under other limits.
-                throw new YUpdateException(
-                    restUpdate != null
-                        ? "Structs that waited for this update, with structs of this update that waited for them, cannot be " +
-                          $"integrated ({e.Message}). They were dropped; the rest of the update was applied."
-                        : $"Structs that waited for this update cannot be integrated ({e.Message}). They were dropped; " +
-                          "the update was applied.",
-                    e)
+                // document could not apply this one's state, of which pending structs are part.
+                if (restUpdate != null)
                 {
-                    PartlyApplied = true,
-                };
+                    // Structs of this update waited for them and are dropped with them: it is cut short.
+                    throw new YUpdateException(
+                        "Structs that waited for this update, with structs of this update that waited for them, cannot be " +
+                        "integrated. They were dropped; the rest of the update was applied.", e)
+                    {
+                        PartlyApplied = true,
+                    };
+                }
+
+                // The update stood whole; what somebody else sent earlier is gone, which the document reports:
+                // clients that were sent it as waiting structs may integrate it, under other limits.
+                transaction.Doc.InvokeOnPendingDropped(new PendingDrop(count, lease.Structs.Keys.ToArray()));
             }
         }
     }

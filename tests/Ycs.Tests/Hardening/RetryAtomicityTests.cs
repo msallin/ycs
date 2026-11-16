@@ -6,7 +6,7 @@ namespace Ycs;
 
 /// <summary>
 /// An update that lets pending structs integrate retries them in its transaction, after it was carried out; what
-/// the retry's plan rejects (nesting, garbage collection) is dropped and the update stands (reported as partly applied), and the conflict budget
+/// the retry's plan rejects (nesting, garbage collection) is dropped and the update stands (reported by PendingDropped), and the conflict budget
 /// running out in the retry keeps what was integrated. Either way the document stays a complete Yjs document: its
 /// state applies to a fresh document, which has the same content and state vector.
 /// </summary>
@@ -22,11 +22,13 @@ public class RetryAtomicityTests
         var doc = new YDoc(new YDocOptions { ClientId = 9, Limits = Shallow });
         doc.ApplyUpdateV1(deep);
         var pendingBefore = doc.HasPending;
+        var dropped = new List<PendingDrop>();
+        doc.PendingDropped += (_, drop) => dropped.Add(drop);
 
-        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(trigger));
+        doc.ApplyUpdateV1(trigger);
 
         Assert.IsTrue(pendingBefore);
-        Assert.IsTrue(e.PartlyApplied);
+        Assert.AreEqual(1, dropped.Count);
         Assert.AreEqual("[\"x\"]", Json(doc.GetArray("a")));
         Assert.IsFalse(doc.HasPending);
         AssertComplete(doc);
@@ -55,7 +57,7 @@ public class RetryAtomicityTests
         var (trigger, deep) = DeepAfterTrigger();
         var doc = new YDoc(new YDocOptions { ClientId = 9, Limits = Shallow });
         doc.ApplyUpdateV1(deep);
-        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(trigger));
+        doc.ApplyUpdateV1(trigger);
         var state = doc.EncodeStateAsUpdateV1();
 
         // Now nothing waits: the same structs are planned with the update and rejected before anything changes.
@@ -78,11 +80,13 @@ public class RetryAtomicityTests
         var doc = new YDoc(new YDocOptions { ClientId = 9 });
         doc.ApplyUpdateV1(SplitValueInDeletedMap());
         var pendingBefore = doc.HasPending;
+        var dropped = new List<PendingDrop>();
+        doc.PendingDropped += (_, drop) => dropped.Add(drop);
 
-        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdateV1(XOfClient5()));
+        doc.ApplyUpdateV1(XOfClient5());
 
         Assert.IsTrue(pendingBefore);
-        Assert.IsTrue(e.PartlyApplied);
+        Assert.AreEqual(1, dropped.Count);
         Assert.AreEqual("[\"x\"]", Json(doc.GetArray("a")));
         // The structs are dropped; their deletions keep waiting (for structs that may be sent again).
         Assert.IsNull(doc.Store.Pending);

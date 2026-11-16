@@ -10,7 +10,7 @@ namespace Ycs;
 public class ItemRefTests
 {
     private static Item NewItem(long client, long clock, string text) =>
-        new(new ID(client, clock), null, null, null, null, null, null, new ContentString(text));
+        new(new ItemId(client, clock), null, null, null, null, null, null, new ContentString(text));
 
     [TestMethod]
     public void Default_IsNull_EqualsTheReferenceToNull()
@@ -61,16 +61,16 @@ public class ItemRefTests
         reference.ParentSub = "k";
 
         Assert.AreEqual(
-            (new ID(1, 1), 2, new ID(1, 2), true, false, true, (ID?)new ID(1, 0), true, "k", true),
+            (new ItemId(1, 1), 2, new ItemId(1, 2), true, false, true, (ItemId?)new ItemId(1, 0), true, "k", true),
             (reference.Id, reference.Length, reference.LastId, reference.IsItem, reference.IsGC, item.Left == left, item.LeftOrigin, item.Keep, item.ParentSub, reference.ToItem() == item));
     }
 
     [TestMethod]
     public void Members_GcStruct_ReadTheStructAndThrowForAnItemsMember()
     {
-        var reference = ItemRef.Of(new GC(new ID(2, 5), 3));
+        var reference = ItemRef.Of(new GC(new ItemId(2, 5), 3));
 
-        Assert.AreEqual((true, false, true, new ID(2, 5), 3), (reference.IsGC, reference.IsItem, reference.Deleted, reference.Id, reference.Length));
+        Assert.AreEqual((true, false, true, new ItemId(2, 5), 3), (reference.IsGC, reference.IsItem, reference.Deleted, reference.Id, reference.Length));
         Assert.ThrowsExactly<NullReferenceException>(() => reference.Right);
     }
 
@@ -78,8 +78,8 @@ public class ItemRefTests
     public void IsSameKind_ItemAndGcStruct_ComparesTheKinds()
     {
         var item = ItemRef.Of(NewItem(1, 0, "a"));
-        var gc = ItemRef.Of(new GC(new ID(1, 1), 1));
+        var gc = ItemRef.Of(new GC(new ItemId(1, 1), 1));
 
-        Assert.IsTrue((item.IsSameKind(ItemRef.Of(NewItem(1, 1, "b"))), item.IsSameKind(gc), gc.IsSameKind(ItemRef.Of(new GC(new ID(1, 2), 1)))) == (true, false, true));
+        Assert.IsTrue((item.IsSameKind(ItemRef.Of(NewItem(1, 1, "b"))), item.IsSameKind(gc), gc.IsSameKind(ItemRef.Of(new GC(new ItemId(1, 2), 1)))) == (true, false, true));
     }
 }

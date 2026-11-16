@@ -242,11 +242,6 @@ internal sealed partial class StructStore
                         else if (offset < stackHead.Length)
                         {
                             // All fine, apply the stackhead.
-                            if (stackHead is Item { LeftOrigin: { } leftOrigin, RightOrigin: { } rightOrigin } ordered)
-                            {
-                                CheckOriginsOrder(ordered, leftOrigin, rightOrigin);
-                            }
-
                             if (stackHead is Item { Content: ContentType } typeItem)
                             {
                                 CheckNesting(typeItem);
@@ -342,48 +337,6 @@ internal sealed partial class StructStore
             }
 
             _stack.Clear();
-        }
-
-        /// <summary>
-        /// Rejects an item whose right origin precedes its origin within one item of their client: the clocks of
-        /// an item run left to right (a GC struct covers any order: its items are gone), so no item has such origins (Yjs never writes one). Integrated, the item would
-        /// land between the two halves of a struct that splits at the right origin, which a client that reads the
-        /// whole state in one update, and so does not split there, places elsewhere. Origins in different
-        /// structs are not told apart from the honest ones (an item between two typed backwards: the right origin has
-        /// the lower clock).
-        /// </summary>
-        private void CheckOriginsOrder(Item item, ID leftOrigin, ID rightOrigin)
-        {
-            if (leftOrigin.Client != rightOrigin.Client || rightOrigin.Clock >= leftOrigin.Clock)
-            {
-                return;
-            }
-
-            long start, end;
-            if (rightOrigin.Clock < _store.GetState(rightOrigin.Client))
-            {
-                var found = _store.Find(rightOrigin);
-                if (!found.IsItem)
-                {
-                    return;
-                }
-
-                (start, end) = (found.Id.Clock, found.Id.Clock + found.Length);
-            }
-            else if (FindPlanned(rightOrigin) is Item planned)
-            {
-                (start, end) = (planned.Id.Clock, planned.Id.Clock + planned.Length);
-            }
-            else
-            {
-                return;
-            }
-
-            if (leftOrigin.Clock < end && leftOrigin.Clock >= start)
-            {
-                throw new YUpdateException(
-                    $"The item {item.Id.Client}:{item.Id.Clock} has a right origin that precedes its origin, in one struct. The document is unchanged.");
-            }
         }
 
         /// <summary>

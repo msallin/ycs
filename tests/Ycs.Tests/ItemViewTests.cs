@@ -23,7 +23,7 @@ public class ItemViewTests
         var text = doc.GetText("t");
         var views = new List<ItemView>();
         var clock = 0;
-        using var subscription = text.Observe((_, _) => views.Add(ItemView.Of(doc, doc.Store.Find(new ID(1, clock)).ToStruct())));
+        using var subscription = text.Observe((_, _) => views.Add(ItemView.Of(doc, doc.Store.Find(new ItemId(1, clock)).ToStruct())));
         foreach (var part in parts)
         {
             text.Insert(text.Length, part);
@@ -65,7 +65,7 @@ public class ItemViewTests
         var b = AppendObserved(doc, "a", "b", "c")[1];
 
         Assert.AreEqual(
-            (new ID(1, 0), null, null, new ID(1, 0), new ID(1, 2), 2),
+            (new ItemId(1, 0), null, null, new ItemId(1, 0), new ItemId(1, 2), 2),
             (b.LeftOrigin, b.RightOrigin, b.Right, b.Left?.Id, b.LastId, b.Length));
     }
 
@@ -87,11 +87,11 @@ public class ItemViewTests
         var text = doc.GetText("t");
         text.Insert(0, "abc");
         var whole = ItemView.Of(doc, text.StartForTests);
-        var right = ItemView.At(doc, new ID(1, 2));
+        var right = ItemView.At(doc, new ItemId(1, 2));
 
         text.Insert(1, "X");
 
-        Assert.AreEqual(("a", "c", new ID(1, 2)), (Text(whole.Content), Text(right.Content), right.Id));
+        Assert.AreEqual(("a", "c", new ItemId(1, 2)), (Text(whole.Content), Text(right.Content), right.Id));
     }
 
     [TestMethod]
@@ -121,14 +121,14 @@ public class ItemViewTests
     public void Read_GcStructMergedIntoItsLeft_ReadsTheStructThatHoldsItsIdFromTheOffset()
     {
         var doc = NewDoc();
-        var (left, right) = (new GC(new ID(1, 0), 3), new GC(new ID(1, 3), 2));
+        var (left, right) = (new GC(new ItemId(1, 0), 3), new GC(new ItemId(1, 3), 2));
         doc.Store.AddStruct(ItemRef.Of(left));
         doc.Store.AddStruct(ItemRef.Of(right));
         var view = ItemView.Of(doc, right);
 
         DeleteSet.TryToMergeWithLefts(doc.Store.Clients[1], 1);
 
-        Assert.AreEqual((2, ItemKind.GC, new ID(1, 4), true), (view.Length, view.Kind, view.LastId, right.Detached));
+        Assert.AreEqual((2, ItemKind.GC, new ItemId(1, 4), true), (view.Length, view.Kind, view.LastId, right.Detached));
     }
 
     [TestMethod]
@@ -136,18 +136,18 @@ public class ItemViewTests
     {
         var doc = NewDoc();
         var (array, _) = MapWithThreeValues(doc);
-        var child = (Item)doc.Store.Find(new ID(1, 1)).ToStruct();
+        var child = (Item)doc.Store.Find(new ItemId(1, 1)).ToStruct();
 
         array.Delete(0);
 
-        Assert.AreEqual((true, false), (child.Detached, doc.Store.Find(new ID(1, 1)).ToStruct() is Item));
+        Assert.AreEqual((true, false), (child.Detached, doc.Store.Find(new ItemId(1, 1)).ToStruct() is Item));
     }
 
     [TestMethod]
     public void Flag_GcStructMergedIntoItsLeft_IsSetOnTheRightPartOnly()
     {
         var doc = NewDoc();
-        var (left, right) = (new GC(new ID(1, 0), 3), new GC(new ID(1, 3), 2));
+        var (left, right) = (new GC(new ItemId(1, 0), 3), new GC(new ItemId(1, 3), 2));
         doc.Store.AddStruct(ItemRef.Of(left));
         doc.Store.AddStruct(ItemRef.Of(right));
 
@@ -162,7 +162,7 @@ public class ItemViewTests
         var doc = NewDoc();
         var text = doc.GetText("t");
         var parts = new List<Item>();
-        using var subscription = text.Observe((_, _) => parts.Add((Item)doc.Store.Find(new ID(1, parts.Count)).ToStruct()));
+        using var subscription = text.Observe((_, _) => parts.Add((Item)doc.Store.Find(new ItemId(1, parts.Count)).ToStruct()));
         text.Insert(0, "a");
         text.Insert(1, "b");
 
@@ -204,8 +204,8 @@ public class ItemViewTests
         var text = doc.GetText("t");
         text.Insert(0, "abc");
         var made = ItemView.Of(doc, text.StartForTests);
-        var found = ItemView.At(doc, new ID(1, 0));
-        var other = ItemView.At(doc, new ID(1, 1));
+        var found = ItemView.At(doc, new ItemId(1, 0));
+        var other = ItemView.At(doc, new ItemId(1, 1));
 
         Assert.AreEqual(
             (true, true, false, true, false, false, new HashSet<ItemView> { made, found, other }.Count),
@@ -220,7 +220,7 @@ public class ItemViewTests
         a.GetText("t").Insert(0, "x");
         b.GetText("t").Insert(0, "x");
 
-        Assert.AreEqual((false, true), (ItemView.At(a, new ID(1, 0)) == ItemView.At(b, new ID(1, 0)), default(ItemView) == default));
+        Assert.AreEqual((false, true), (ItemView.At(a, new ItemId(1, 0)) == ItemView.At(b, new ItemId(1, 0)), default(ItemView) == default));
     }
 
     [TestMethod]
@@ -228,21 +228,21 @@ public class ItemViewTests
     {
         var doc = NewDoc();
         doc.GetText("t").Insert(0, "x");
-        var decoded = new Item(new ID(1, 0), null, null, null, null, "t", null, new ContentString("yz"));
+        var decoded = new Item(new ItemId(1, 0), null, null, null, null, "t", null, new ContentString("yz"));
         var view = ItemView.Detached(doc, decoded);
 
         Assert.AreEqual(
             (ItemKind.String, 2, "yz", true, false, false, true),
-            (view.Kind, view.Length, Text(view.Content), view.IsDetached, view == ItemView.At(doc, new ID(1, 0)), view == ItemView.Detached(doc, new Item(new ID(1, 0), null, null, null, null, "t", null, new ContentString("yz"))), view == ItemView.Detached(doc, decoded)));
+            (view.Kind, view.Length, Text(view.Content), view.IsDetached, view == ItemView.At(doc, new ItemId(1, 0)), view == ItemView.Detached(doc, new Item(new ItemId(1, 0), null, null, null, null, "t", null, new ContentString("yz"))), view == ItemView.Detached(doc, decoded)));
     }
 
     [TestMethod]
     public void Read_DetachedViewWithNoDocument_NamesNoStoreStruct()
     {
-        var decoded = new Item(new ID(2, 4), null, new ID(2, 3), null, null, "t", null, new ContentString("q"));
+        var decoded = new Item(new ItemId(2, 4), null, new ItemId(2, 3), null, null, "t", null, new ContentString("q"));
         var view = ItemView.Detached(null, decoded);
 
-        Assert.AreEqual((false, (ID?)new ID(2, 3), (ItemView?)null, (ItemView?)null, "t", null), (view.IsDefault, view.LeftOrigin, view.Left, view.Right, "t", view.Parent as object));
+        Assert.AreEqual((false, (ItemId?)new ItemId(2, 3), (ItemView?)null, (ItemView?)null, "t", null), (view.IsDefault, view.LeftOrigin, view.Left, view.Right, "t", view.Parent as object));
     }
 
     [TestMethod]
@@ -252,19 +252,19 @@ public class ItemViewTests
         var text = doc.GetText("t");
         text.Insert(0, "ab");
         var left = text.StartForTests;
-        var decoded = new Item(new ID(2, 0), left, new ID(1, 1), null, null, text, null, new ContentString("c"));
+        var decoded = new Item(new ItemId(2, 0), left, new ItemId(1, 1), null, null, text, null, new ContentString("c"));
 
         var view = ItemView.Detached(doc, decoded);
 
-        Assert.AreEqual((new ID(1, 0), 2, text), (view.Left.Value.Id, view.Left.Value.Length, view.Parent));
+        Assert.AreEqual((new ItemId(1, 0), 2, text), (view.Left.Value.Id, view.Left.Value.Length, view.Parent));
     }
 
     [TestMethod]
     public void Read_DetachedSkip_IsASkip()
     {
-        var view = ItemView.Detached(null, new Skip(new ID(3, 7), 5));
+        var view = ItemView.Detached(null, new Skip(new ItemId(3, 7), 5));
 
-        Assert.AreEqual((ItemKind.Skip, 5, true, 0, new ID(3, 11)), (view.Kind, view.Length, view.Deleted, view.Content.Count, view.LastId));
+        Assert.AreEqual((ItemKind.Skip, 5, true, 0, new ItemId(3, 11)), (view.Kind, view.Length, view.Deleted, view.Content.Count, view.LastId));
     }
 
     [TestMethod]
@@ -273,8 +273,8 @@ public class ItemViewTests
         var doc = NewDoc();
         var text = doc.GetText("t");
         text.Insert(0, "abc");
-        text.StartForTests.Redone = new ID(9, 10);
-        var view = ItemView.At(doc, new ID(1, 2));
+        text.StartForTests.Redone = new ItemId(9, 10);
+        var view = ItemView.At(doc, new ItemId(1, 2));
 
         Assert.AreEqual((9L, 12L), (view.Redone.Value.Client, view.Redone.Value.Clock));
     }

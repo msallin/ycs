@@ -62,10 +62,10 @@ public class HostileYcsTests
     }
 
     // Nested types deeper than MaxDepth, waiting for a struct of their client: when it arrives, the document takes it,
-    // drops the nested types and says so (PartlyApplied, so TryApplyUpdate returns false), as every client that joined
+    // drops the nested types and says so (PendingDropped; the update itself stands), as every client that joined
     // meanwhile got them as waiting structs and, with other limits (Yjs has none), integrates them.
     [TestMethod]
-    public void ApplyUpdate_WaitingTypesDeeperThanTheLimitResolved_AreRefusedOrKept()
+    public void ApplyUpdate_WaitingTypesDeeperThanTheLimitResolved_AreReportedAsDropped()
     {
         var forger = new YDoc(new YDocOptions { ClientId = 7 });
         var missing = HostileUpdates.Edit(forger, d => d.GetArray("array").Insert(0, [1]));
@@ -82,8 +82,11 @@ public class HostileYcsTests
         var room = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 32 } });
         room.ApplyUpdateV1(deep);
 
+        var dropped = 0;
+        room.PendingDropped += (_, _) => dropped++;
+
         var accepted = room.TryApplyUpdate(missing);
 
-        Assert.IsTrue(!accepted || (!room.HasPending && Convert.ToHexString(room.EncodeStateVectorV1()) == Convert.ToHexString(forger.EncodeStateVectorV1())));
+        Assert.AreEqual((true, 1, false, "010701"), (accepted, dropped, room.HasPending, Convert.ToHexString(room.EncodeStateVectorV1())));
     }
 }

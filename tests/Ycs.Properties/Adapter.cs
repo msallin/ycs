@@ -305,10 +305,10 @@ namespace Ycs.Properties
             }
 
             var v2 = s.Str("via") == "v2";
-            var m1 = new MemoryStream();
-            SyncProtocol.WriteSyncStep1(m1, to.Doc, v2);
-            var step1 = m1.ToArray();
-            var m2 = new MemoryStream();
+            var m1 = new System.Buffers.ArrayBufferWriter<byte>();
+            SyncProtocol.WriteSyncStep1(m1, to.Doc);
+            var step1 = m1.WrittenSpan.ToArray();
+            byte[] step2;
             if (s.Bool("diff"))
             {
                 // Step 2 from DiffUpdate of the whole state instead of EncodeStateAsUpdate(sv), framed by hand.
@@ -317,17 +317,20 @@ namespace Ycs.Properties
                 var sv = new byte[ReadVarUint(reader)];
                 reader.ReadExactly(sv);
                 var update = v2 ? UpdateOperations.DiffUpdateV2(from.Doc.EncodeStateAsUpdateV2(), sv) : UpdateOperations.DiffUpdate(from.Doc.EncodeStateAsUpdateV1(), sv);
+                var m2 = new MemoryStream();
                 m2.WriteByte(1);
                 WriteVarUint(m2, update.Length);
                 m2.Write(update);
+                step2 = m2.ToArray();
             }
             else
             {
-                SyncProtocol.ReadSyncMessage(new MemoryStream(step1), m2, from.Doc, Net, v2);
+                var m2 = new System.Buffers.ArrayBufferWriter<byte>();
+                SyncProtocol.ReadSyncMessage(step1, m2, from.Doc, Net, v2);
+                step2 = m2.WrittenSpan.ToArray();
             }
 
-            var step2 = m2.ToArray();
-            SyncProtocol.ReadSyncMessage(new MemoryStream(step2), new MemoryStream(), to.Doc, Net, v2);
+            SyncProtocol.ReadSyncMessage(step2, new System.Buffers.ArrayBufferWriter<byte>(), to.Doc, Net, v2);
             return Obj(("s1", B64(step1)), ("s2", B64(step2)));
         }
 
@@ -357,7 +360,7 @@ namespace Ycs.Properties
         }
 
         /// <summary>
-        /// Violations of "a rejected update leaves the document as it was (unless it says it was applied in part), and only YUpdateException rejects one",
+        /// Violations of "a rejected update leaves the document as it was, and only YUpdateException rejects one",
         /// seen by raw steps (the structure-aware fuzzer checks this list; it is not part of the observation).
         /// </summary>
         internal readonly List<string> RejectionViolations = new();
@@ -393,7 +396,7 @@ namespace Ycs.Properties
                 {
                     RejectionViolations.Add($"threw {e.GetType().Name}: {e.Message}");
                 }
-                else if (before != after && e is not YUpdateException { PartlyApplied: true })
+                else if (before != after)
                 {
                     RejectionViolations.Add($"rejected ({e.Message}) but the document changed");
                 }
@@ -1411,7 +1414,7 @@ namespace Ycs.Properties
                     return Obj(("$b", ScriptRun.B64(bytes)));
                 case YDoc d:
                     return Obj(("$t", "doc"), ("g", d.Guid));
-                case ID id:
+                case ItemId id:
                     return Obj(("client", id.Client), ("clock", id.Clock));
                 case YText.YTextChangeAttributes ychange:
                     // Yjs' default computeYChange gives { type: 'added' | 'removed' }.
@@ -1684,13 +1687,13 @@ namespace Ycs.Properties
         private static extern void DumpOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store, StringBuilder sb, bool markers, Func<object, string> parentText, Func<string, IReadOnlyList<object>, string> contentText);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "NestedListsForTests")]
-        private static extern IEnumerable<(ID Item, YArrayBase List)> NestedListsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
+        private static extern IEnumerable<(ItemId Item, YArrayBase List)> NestedListsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "MapIdsForTests")]
-        private static extern IEnumerable<KeyValuePair<string, ID>> MapIdsOf(AbstractType type);
+        private static extern IEnumerable<KeyValuePair<string, ItemId>> MapIdsOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_OwnerIdForTests")]
-        private static extern ID? OwnerIdOf(AbstractType type);
+        private static extern ItemId? OwnerIdOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "InDeletedTypeForTests")]
         private static extern bool InDeletedTypeOf(AbstractType type);
@@ -1699,7 +1702,7 @@ namespace Ycs.Properties
         private static extern (int Length, string Text) CountedOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "ListForTests")]
-        private static extern List<(long Client, long Clock, int Length, ID? LeftOrigin, ID? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListOf(AbstractType type);
+        private static extern List<(long Client, long Clock, int Length, ItemId? LeftOrigin, ItemId? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DescribeSearchMarkers")]
         private static extern string DescribeSearchMarkers(YArrayBase type);
@@ -1742,7 +1745,7 @@ namespace Ycs.Properties
         private static extern ref int LiteralWalkStepsForTests(YDoc doc);
 
         [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "MarkerLookupsForTests")]
-        private static extern ref List<(ID Item, int Index)> MarkerLookups(YDoc doc);
+        private static extern ref List<(ItemId Item, int Index)> MarkerLookups(YDoc doc);
 
         /// <summary>The marker lookups since the last call, as "client:clock@index" (with the script option "walk"), and forgets them.</summary>
         public string TakeMarkerLookups()
@@ -1758,7 +1761,7 @@ namespace Ycs.Properties
             return text;
         }
 
-        private static string IdOf(ID? id) => id is ID i ? $"{i.Client}:{i.Clock}" : "-";
+        private static string IdOf(ItemId? id) => id is ItemId i ? $"{i.Client}:{i.Clock}" : "-";
 
         private string TypeName(AbstractType t)
         {
@@ -1887,8 +1890,8 @@ namespace Ycs.Properties
                 r.Client,
                 r.Clock,
                 r.Length,
-                r.LeftOrigin is ID o ? (o.Client, o.Clock) : null,
-                r.RightOrigin is ID ro ? (ro.Client, ro.Clock) : null,
+                r.LeftOrigin is ItemId o ? (o.Client, o.Clock) : null,
+                r.RightOrigin is ItemId ro ? (ro.Client, ro.Clock) : null,
                 r.Deleted,
                 r.Kind,
                 r.LinkedBack,
