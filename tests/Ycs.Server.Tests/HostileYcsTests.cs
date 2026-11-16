@@ -23,11 +23,9 @@ public class HostileYcsTests
         return (missing, waiting);
     }
 
-    // What waits may reach twice MaxPendingStructs (an update that lets 150 integrate brings 290 new); then every
-    // update that carries what waits again, as a client's step 2 after it received the room's state, is refused,
-    // although it adds nothing that waits.
+    // What waits may reach twice MaxPendingStructs (an update that lets 150 integrate brings 290 new); an update that
+    // carries what waits again, as a client's step 2 after it received the room's state, adds nothing and is accepted.
     [TestMethod]
-    [Ignore("ycs: an update whose waiting structs are all duplicates is refused once what waits exceeds the limit")]
     public void ApplyUpdate_WaitingStructsOverTheLimitSentBack_AreAccepted()
     {
         var b = Waiting(7, 150);
@@ -63,11 +61,10 @@ public class HostileYcsTests
         Assert.IsTrue(accepted);
     }
 
-    // Nested types deeper than MaxDepth, waiting for a struct of their client: when it arrives, the document takes it
-    // and drops the nested types without an error (no PartlyApplied, nothing left waiting), while every client that
-    // joined meanwhile got them as waiting structs and, with other limits (Yjs has none), integrates them.
+    // Nested types deeper than MaxDepth, waiting for a struct of their client: when it arrives, the document takes it,
+    // drops the nested types and says so (PartlyApplied, so TryApplyUpdate returns false), as every client that joined
+    // meanwhile got them as waiting structs and, with other limits (Yjs has none), integrates them.
     [TestMethod]
-    [Ignore("ycs: nested types beyond MaxDepth that waited are dropped without an error when what they wait for arrives")]
     public void ApplyUpdate_WaitingTypesDeeperThanTheLimitResolved_AreRefusedOrKept()
     {
         var forger = new YDoc(new YDocOptions { ClientId = 7 });

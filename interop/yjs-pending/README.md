@@ -2,8 +2,8 @@ Complete updates left pending by Yjs 13
 =======================================
 
 The sync server's convergence driver found it: applied in some orders, a complete set of updates leaves part of
-itself pending in Yjs 13.6.33 for good, while the creation order gives the full state. Ycs does the same, byte for
-byte. `tests/Ycs.Tests/PendingRetryParityTests.cs` pins that parity.
+itself pending in Yjs 13.6.33 for good, while the creation order gives the full state. Ycs completes in every order
+(see [Ycs](#ycs)); `tests/Ycs.Tests/PendingRetryTests.cs` checks that on the fixtures written here.
 
 ```
 npm ci
@@ -71,7 +71,7 @@ is unrelated to this behaviour.
 
 ## What un-sticks it
 
-These are in the fixture as `healing`, observed in Yjs and asserted for Ycs:
+These are in the fixture as `healing`, observed in Yjs (Ycs does not stick, so they are not asserted for it):
 
 | applied afterwards | minimal | driver's case |
 | --- | --- | --- |
@@ -118,17 +118,14 @@ applies all updates of a session to a fresh doc.
 
 The creation order never sticks. Another seed of the narrow kind with 2 clients gave 14 of 60,000 in 13 and 284 in 14.
 The fixture keeps every broad session, the first 200 narrow ones, and every session where either version stuck:
-544 sessions, 6,380 runs, 2 of them stuck in Yjs 13. For every run, Ycs reaches what Yjs 13 reaches: whether
-something is pending, and the v2 encoding of the state with the pending update.
+544 sessions, 6,380 runs, 2 of them stuck in Yjs 13. In every run Ycs ends with nothing pending and the session's
+full state.
 
 ## Ycs
 
-Ycs ports this logic as it is in Yjs: the retry check is in `src/Ycs/Utils/StructStore.cs` (`ApplyUpdate`, lines
-513 to 520), the recorded clocks at lines 904 and 920, and the walk that records nothing at line 925
-(`IntegrationPlan`). On both scenarios, in both orders, and after each healing
-update, Ycs matches Yjs: the same pending flag, state vector, v2 encoding (pending included) and content.
-
-Completing the document is correct; sticking is a bug. Convergence matters more than byte parity on a bug, and the
-fix only adds retries. So Ycs should take the one line (before line 925, as in Yjs before its line 325)
-once its internals are open again. The parity test then becomes a named divergence for the stuck orders. Until then,
-the test pins the parity.
+Ycs records the state of the client a struct waits for when the walk follows that client's structs in the same update
+(`IntegrationPlan.Plan` in `src/Ycs/Utils/StructStore.IntegrationPlan.cs`), as Yjs does at its line 322 when the walk
+stops there. So a pending struct is retried when its own dependency arrives, and every order of a complete set
+completes: the stuck orders of both scenarios, all 6,380 runs of the fixture, and 65,280 further random orders of its
+sessions (Yjs 13.6.32's own shuffled traces stick twice; `PendingTraceTests` checks that Ycs ends complete there). A
+deliberate divergence from Yjs, which fixes yjs/yjs#824's first case.
