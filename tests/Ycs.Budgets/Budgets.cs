@@ -23,7 +23,7 @@ internal static class Budgets
         ["text.to-string-after-edit-100k"] = new(230784, 15000),       // 200 680 B, 800 µs (an insert, then the string built again)
         ["position.relative-from-index-deep-100k"] = new(96, 5000),    // 80 B, 330 µs (walks the list from the start, as Yjs does)
         ["position.absolute-from-relative-deep-100k"] = new(40, 5000), // 32 B, 320 µs (walks the list to the start, as Yjs does)
-        ["map.set-existing-key"] = new(620, 50),                       // 537 B, 1 µs (was 588 B: a HashSet for the changed key, a new list for the deletion, per set; the shadow slab adds a slot per set)
+        ["map.set-existing-key"] = new(640, 50),                       // 537 B, 1 µs (was 588 B: a HashSet for the changed key, a new list for the deletion, per set; the shadow slab adds a slot and its owner entry per set)
         ["text.insert-formatted-char-100k"] = new(360, 2500),          // 308 B, 210 µs (finds the position without search markers, as Yjs does; was 508 B)
         ["text.event-delta-read-100k"] = new(1136, 6000),              // 988 B, 580 µs (the delta walks the whole text, as Yjs' does; the shadow slab reuses the slots of merged-away items)
         ["undo.undo-redo-typing-100k"] = new(3400, 50),                // 2 984 B, 2 µs

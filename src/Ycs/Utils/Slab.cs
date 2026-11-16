@@ -65,6 +65,13 @@ internal sealed class Slab
 
     // Pages are released as a whole: the list holds null for a released one, and its index is on _released.
     private readonly List<Page?> _pages = [];
+
+    // The pages' arrays by page number, for the reads: two indexes reach a slot. Published whenever a page is made, grown,
+    // gets its object pages or is released.
+    private Slot[]?[] _slotPages = new Slot[]?[4];
+    private object?[]?[] _refPages = new object?[]?[4];
+    private object?[]?[] _keyPages = new object?[]?[4];
+    private object?[]?[] _ownerPages = new object?[]?[4];
     private readonly Stack<int> _released = [];
 
     // Pages that may have room, most recently opened last; an entry for a released or full page is dropped when met.
@@ -106,7 +113,7 @@ internal sealed class Slab
         {
             if (page.Used == page.Slots.Length)
             {
-                Grow(page);
+                Grow(page, number);
             }
 
             index = page.Used++;
@@ -127,19 +134,19 @@ internal sealed class Slab
     /// struct (a negative or released one throws all the same, from the array).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ref readonly Slot Read(int handle) => ref _pages[handle >> PageBits]!.Slots[handle & (PageSlots - 1)];
+    public ref readonly Slot Read(int handle) => ref _slotPages[handle >> PageBits]![handle & (PageSlots - 1)];
 
     /// <summary><see cref="GetRef"/> of a live handle, unchecked as <see cref="Read"/>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public object? ReadRef(int handle) => _pages[handle >> PageBits]!.Refs?[handle & (PageSlots - 1)];
+    public object? ReadRef(int handle) => _refPages[handle >> PageBits]?[handle & (PageSlots - 1)];
 
     /// <summary><see cref="GetKey"/> of a live handle, unchecked as <see cref="Read"/>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public object? ReadKey(int handle) => _pages[handle >> PageBits]!.Keys?[handle & (PageSlots - 1)];
+    public object? ReadKey(int handle) => _keyPages[handle >> PageBits]?[handle & (PageSlots - 1)];
 
     /// <summary>The struct that owns a live slot (the object a handle resolves to).</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public object ReadOwner(int handle) => _pages[handle >> PageBits]!.Owners[handle & (PageSlots - 1)]!;
+    public object ReadOwner(int handle) => _ownerPages[handle >> PageBits]![handle & (PageSlots - 1)]!;
 
     public void SetOwner(int handle, object? owner)
     {
@@ -155,6 +162,7 @@ internal sealed class Slab
         if (value != null || page.Refs != null)
         {
             (page.Refs ??= new object?[page.Slots.Length])[IndexOf(handle)] = value;
+            Publish(PageOf(handle), page);
         }
     }
 
@@ -167,6 +175,7 @@ internal sealed class Slab
         if (value != null || page.Keys != null)
         {
             (page.Keys ??= new object?[page.Slots.Length])[IndexOf(handle)] = value;
+            Publish(PageOf(handle), page);
         }
     }
 
@@ -235,6 +244,7 @@ internal sealed class Slab
             if (page.Live == 0 && number != 0)
             {
                 _pages[number] = null;
+                Publish(number, null);
                 _released.Push(number);
             }
             else if (!page.Open)
@@ -400,11 +410,29 @@ internal sealed class Slab
 
         var fresh = new Page(number == 0 ? _firstSlots : PageSlots) { Open = true };
         _pages[number] = fresh;
+        Publish(number, fresh);
         _open.Push(number);
         return fresh;
     }
 
-    private static void Grow(Page page)
+    private void Publish(int number, Page? page)
+    {
+        if (number >= _slotPages.Length)
+        {
+            var size = Math.Max(number + 1, _slotPages.Length * 2);
+            Array.Resize(ref _slotPages, size);
+            Array.Resize(ref _refPages, size);
+            Array.Resize(ref _keyPages, size);
+            Array.Resize(ref _ownerPages, size);
+        }
+
+        _slotPages[number] = page?.Slots;
+        _refPages[number] = page?.Refs;
+        _keyPages[number] = page?.Keys;
+        _ownerPages[number] = page?.Owners;
+    }
+
+    private void Grow(Page page, int number)
     {
         var old = page.Slots;
         var slots = new Slot[Math.Min(old.Length * 2, PageSlots)];
@@ -421,6 +449,7 @@ internal sealed class Slab
             Array.Resize(ref page.Keys, slots.Length);
         }
 
+        Publish(number, page);
         PoisonOld(old);
     }
 
