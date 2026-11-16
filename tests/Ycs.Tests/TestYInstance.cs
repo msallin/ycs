@@ -4,6 +4,8 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
+using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.IO;
 
@@ -27,11 +29,9 @@ public class TestYInstance : YDoc
         {
             if (e.origin != _tc)
             {
-                using (var stream = new MemoryStream())
-                {
-                    SyncProtocol.WriteUpdate(stream, e.data);
-                    BroadcastMessage(this, stream.ToArray());
-                }
+                var message = new ArrayBufferWriter<byte>();
+                SyncProtocol.WriteUpdate(message, e.data);
+                BroadcastMessage(this, message.WrittenSpan.ToArray());
             }
         };
 
@@ -58,21 +58,21 @@ public class TestYInstance : YDoc
         {
             _tc._onlineConns.Add(this);
 
-            using (var stream = new MemoryStream())
             {
-                SyncProtocol.WriteSyncStep1(stream, this, v2: true);
+                var stream = new ArrayBufferWriter<byte>();
+                SyncProtocol.WriteSyncStep1(stream, this);
 
                 // Publish SyncStep1
-                BroadcastMessage(this, stream.ToArray());
+                BroadcastMessage(this, stream.WrittenSpan.ToArray());
 
                 foreach (var remoteYInstance in _tc._onlineConns)
                 {
                     if (remoteYInstance != this)
                     {
-                        stream.SetLength(0);
-                        SyncProtocol.WriteSyncStep1(stream, remoteYInstance, v2: true);
+                        stream.Clear();
+                        SyncProtocol.WriteSyncStep1(stream, remoteYInstance);
 
-                        Receive(stream.ToArray(), remoteYInstance);
+                        Receive(stream.WrittenSpan.ToArray(), remoteYInstance);
                     }
                 }
             }

@@ -5,6 +5,7 @@
 // ------------------------------------------------------------------------------
 
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -39,17 +40,14 @@ public class TestConnector
         // Debug.WriteLine($"MSG {sender.ClientId} -> {receiver.ClientId}, len {m.Length}:");
         // Debug.WriteLine(string.Join(",", m));
 
-        using (var writer = new MemoryStream())
         {
-            using (var reader = new MemoryStream(m))
-            {
-                SyncProtocol.ReadSyncMessage(reader, writer, receiver, receiver._tc, v2: true);
-            }
+            var writer = new ArrayBufferWriter<byte>();
+            SyncProtocol.ReadSyncMessage(m, writer, receiver, receiver._tc, v2: true);
 
-            if (writer.Length > 0)
+            if (writer.WrittenCount > 0)
             {
                 // Send reply message.
-                var replyMessage = writer.ToArray();
+                var replyMessage = writer.WrittenSpan.ToArray();
                 // Debug.WriteLine($"REPLY {receiver.ClientId} -> {sender.ClientId}, len {replyMessage.Length}:");
                 // Debug.WriteLine(string.Join(",", replyMessage));
                 sender.Receive(replyMessage, receiver);

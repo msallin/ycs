@@ -1,184 +1,221 @@
-// ------------------------------------------------------------------------------
-//  <copyright company="Microsoft Corporation">
-//      Copyright (c) Microsoft Corporation.  All rights reserved.
-//  </copyright>
-// ------------------------------------------------------------------------------
+#nullable enable
+
+using System.Buffers;
 
 namespace Ycs;
 
+/// <summary>The type of a y-protocols 'sync' message, the first variable-length integer of one.</summary>
+public enum SyncMessageType : uint
+{
+    /// <summary>A state vector; the answer is a <see cref="SyncStep2"/>.</summary>
+    SyncStep1 = 0,
+
+    /// <summary>The updates the sender of a <see cref="SyncStep1"/> lacks.</summary>
+    SyncStep2 = 1,
+
+    /// <summary>One update of the document.</summary>
+    Update = 2,
+}
+
 /// <summary>
-/// The y-protocols 'sync' message format. Defaults to the original ('v1') update
-/// encoding, which is what y-websocket and every other JS provider puts on the wire;
-/// pass <c>v2: true</c> to use the denser v2 encoding on both ends instead.
+/// The y-protocols 'sync' message format, which y-websocket and every other Yjs provider puts on the wire: a
+/// <see cref="SyncMessageType"/> as a variable-length integer, then the payload as a length-prefixed byte array.
+/// The messages carry updates in the original ('v1') encoding; <c>v2: true</c> uses the denser v2 encoding, which
+/// both ends must then agree on. The writers append to a buffer writer and keep nothing; a reader takes one whole
+/// message, and bytes after it are ignored. A message that is malformed throws <see cref="YUpdateException"/>.
 /// </summary>
 public static class SyncProtocol
 {
-    public const uint MessageYjsSyncStep1 = 0;
-    public const uint MessageYjsSyncStep2 = 1;
-    public const uint MessageYjsUpdate = 2;
+    private const int MaxVarUintBytes = 5;
 
-    private static void WriteVarUint(Stream stream, uint num)
+    /// <summary>Appends sync step 1: the document's state vector, which asks the peer for what the document lacks.</summary>
+    public static void WriteSyncStep1(IBufferWriter<byte> destination, YDoc doc)
     {
-        Span<byte> buffer = stackalloc byte[5];
-        var i = 0;
-        while (num > 0x7F)
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(doc);
+        using var payload = new Payload();
+        doc.EncodeStateVector(payload);
+        WriteMessage(destination, SyncMessageType.SyncStep1, payload.Written);
+    }
+
+    /// <summary>Appends sync step 2: what a peer with <paramref name="encodedStateVector"/> lacks of the document.</summary>
+    public static void WriteSyncStep2(IBufferWriter<byte> destination, YDoc doc, ReadOnlySpan<byte> encodedStateVector, bool v2 = false)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(doc);
+        using var payload = new Payload();
+        if (v2)
         {
-            buffer[i++] = (byte)(0x80 | (num & 0x7F));
-            num >>= 7;
+            doc.EncodeStateAsUpdateV2(payload, encodedStateVector);
+        }
+        else
+        {
+            doc.EncodeStateAsUpdateV1(payload, encodedStateVector);
         }
 
-        buffer[i++] = (byte)num;
-        stream.Write(buffer[..i]);
+        WriteMessage(destination, SyncMessageType.SyncStep2, payload.Written);
     }
 
-    private static void WriteVarUint8Array(Stream stream, ReadOnlySpan<byte> data)
+    /// <summary>Appends an update message; <paramref name="update"/> is in the encoding the peer reads.</summary>
+    public static void WriteUpdate(IBufferWriter<byte> destination, ReadOnlySpan<byte> update)
     {
-        WriteVarUint(stream, (uint)data.Length);
-        stream.Write(data);
+        ArgumentNullException.ThrowIfNull(destination);
+        WriteMessage(destination, SyncMessageType.Update, update);
     }
 
-    private static uint ReadVarUint(Stream stream)
+    /// <summary>
+    /// Handles one sync message and returns its type: a step 1 appends the answer (a step 2) to
+    /// <paramref name="reply"/>; a step 2 or an update is applied to <paramref name="doc"/> with
+    /// <paramref name="origin"/> as the transaction origin, and writes nothing.
+    /// </summary>
+    /// <exception cref="YUpdateException">
+    /// The message is truncated or of an unknown type, or its update is malformed or beyond a limit of the
+    /// document (<see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/>; the document is then as
+    /// it was). An exception of an observer propagates as it is.
+    /// </exception>
+    public static SyncMessageType ReadSyncMessage(ReadOnlySpan<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
     {
-        ulong num = 0;
+        ArgumentNullException.ThrowIfNull(reply);
+        ArgumentNullException.ThrowIfNull(doc);
+        var position = 0;
+        var type = ReadVarUint(message, ref position);
+        var length = ReadVarUint(message, ref position);
+        if (length > (uint)(message.Length - position))
+        {
+            throw new YUpdateException("The message ends inside a byte array.");
+        }
+
+        var payload = message.Slice(position, (int)length);
+        switch (type)
+        {
+            case (uint)SyncMessageType.SyncStep1:
+                WriteSyncStep2(reply, doc, payload, v2);
+                break;
+            case (uint)SyncMessageType.SyncStep2:
+            case (uint)SyncMessageType.Update:
+                if (v2)
+                {
+                    doc.ApplyUpdateV2(payload, origin);
+                }
+                else
+                {
+                    doc.ApplyUpdateV1(payload, origin);
+                }
+
+                break;
+            default:
+                throw new YUpdateException($"Unknown sync message type: {type}.");
+        }
+
+        return (SyncMessageType)type;
+    }
+
+    /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, bool)"/>
+    public static SyncMessageType ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
+    {
+        if (message.IsSingleSegment)
+        {
+            return ReadSyncMessage(message.FirstSpan, reply, doc, origin, v2);
+        }
+
+        // A message of several segments is copied once, to one array, as the length comes from the peer: the
+        // copy is bounded by the message the caller already holds.
+        var length = checked((int)message.Length);
+        var rented = ArrayPool<byte>.Shared.Rent(length);
+        try
+        {
+            message.CopyTo(rented);
+            return ReadSyncMessage(rented.AsSpan(0, length), reply, doc, origin, v2);
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(rented);
+        }
+    }
+
+    private static void WriteMessage(IBufferWriter<byte> destination, SyncMessageType type, ReadOnlySpan<byte> payload)
+    {
+        var header = destination.GetSpan(2 * MaxVarUintBytes);
+        var count = WriteVarUint(header, (uint)type);
+        count += WriteVarUint(header[count..], (uint)payload.Length);
+        destination.Advance(count);
+        destination.Write(payload);
+    }
+
+    private static int WriteVarUint(Span<byte> destination, uint value)
+    {
+        var i = 0;
+        while (value > 0x7F)
+        {
+            destination[i++] = (byte)(0x80 | (value & 0x7F));
+            value >>= 7;
+        }
+
+        destination[i++] = (byte)value;
+        return i;
+    }
+
+    private static uint ReadVarUint(ReadOnlySpan<byte> source, ref int position)
+    {
+        ulong value = 0;
         for (var shift = 0; shift <= 35; shift += 7)
         {
-            var r = stream.ReadByte();
-            if (r < 0)
+            if (position >= source.Length)
             {
                 throw new YUpdateException("The message ended early.");
             }
 
-            num |= (ulong)(r & 0x7F) << shift;
-            if (r < 0x80)
+            var b = source[position++];
+            value |= (ulong)(b & 0x7F) << shift;
+            if (b < 0x80)
             {
-                return num <= uint.MaxValue ? (uint)num : throw new YUpdateException("A variable-length integer is out of range.");
+                return value <= uint.MaxValue ? (uint)value : throw new YUpdateException("A variable-length integer is out of range.");
             }
         }
 
         throw new YUpdateException("A variable-length integer is out of range.");
     }
 
-    /// <summary>
-    /// The length comes from the peer, so the buffer grows with the bytes that actually arrive instead
-    /// of being allocated up front.
-    /// </summary>
-    private static byte[] ReadVarUint8Array(Stream stream)
+    // The length of a payload precedes it and is known only once it is encoded, so it is encoded here first.
+    private sealed class Payload : IBufferWriter<byte>, IDisposable
     {
-        var length = ReadVarUint(stream);
-        const int Chunk = 64 * 1024;
-        if (length <= Chunk)
+        private byte[] _buffer = ArrayPool<byte>.Shared.Rent(256);
+        private int _count;
+
+        public ReadOnlySpan<byte> Written => _buffer.AsSpan(0, _count);
+
+        public void Advance(int count) => _count += count;
+
+        public Memory<byte> GetMemory(int sizeHint = 0)
         {
-            var small = new byte[length];
-            ReadExactly(stream, small);
-            return small;
+            Grow(sizeHint);
+            return _buffer.AsMemory(_count);
         }
 
-        var buffer = new MemoryStream();
-        var chunk = new byte[Chunk];
-        for (long remaining = length; remaining > 0;)
+        public Span<byte> GetSpan(int sizeHint = 0)
         {
-            var part = chunk.AsSpan(0, (int)Math.Min(Chunk, remaining));
-            ReadExactly(stream, part);
-            buffer.Write(part);
-            remaining -= part.Length;
+            Grow(sizeHint);
+            return _buffer.AsSpan(_count);
         }
 
-        return buffer.ToArray();
-    }
-
-    private static void ReadExactly(Stream stream, Span<byte> destination)
-    {
-        try
+        public void Dispose()
         {
-            stream.ReadExactly(destination);
+            ArrayPool<byte>.Shared.Return(_buffer);
+            _buffer = [];
         }
-        catch (EndOfStreamException e)
+
+        private void Grow(int sizeHint)
         {
-            throw new YUpdateException("The message ended early.", e);
-        }
-    }
-
-    public static void WriteSyncStep1(Stream stream, YDoc doc, bool v2 = false)
-    {
-        WriteVarUint(stream, MessageYjsSyncStep1);
-        var sv = v2 ? doc.EncodeStateVectorV2() : doc.EncodeStateVectorV1();
-        WriteVarUint8Array(stream, sv);
-    }
-
-    public static void WriteSyncStep2(Stream stream, YDoc doc, byte[] encodedStateVector, bool v2 = false)
-    {
-        WriteVarUint(stream, MessageYjsSyncStep2);
-        var update = v2 ? doc.EncodeStateAsUpdateV2(encodedStateVector) : doc.EncodeStateAsUpdateV1(encodedStateVector);
-        WriteVarUint8Array(stream, update);
-    }
-
-    public static void ReadSyncStep1(Stream reader, Stream writer, YDoc doc, bool v2 = false)
-    {
-        var encodedStateVector = ReadVarUint8Array(reader);
-        WriteSyncStep2(writer, doc, encodedStateVector, v2);
-    }
-
-    /// <summary>
-    /// Reads an update and applies it. As in y-protocols, with an <paramref name="errorHandler"/> an
-    /// exception of the read or the apply (a <see cref="YUpdateException"/> for a malformed update, or one an
-    /// observer threw) goes to the handler and the call returns; without one it propagates (y-protocols logs it).
-    /// </summary>
-    public static void ReadSyncStep2(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception>? errorHandler = null)
-    {
-        try
-        {
-            var update = ReadVarUint8Array(stream);
-            if (v2)
+            var needed = _count + Math.Max(sizeHint, 1);
+            if (needed <= _buffer.Length)
             {
-                doc.ApplyUpdateV2(update, transactionOrigin);
+                return;
             }
-            else
-            {
-                doc.ApplyUpdateV1(update, transactionOrigin);
-            }
+
+            var larger = ArrayPool<byte>.Shared.Rent(Math.Max(needed, _buffer.Length * 2));
+            _buffer.AsSpan(0, _count).CopyTo(larger);
+            ArrayPool<byte>.Shared.Return(_buffer);
+            _buffer = larger;
         }
-        catch (Exception e) when (errorHandler != null)
-        {
-            errorHandler(e);
-        }
-    }
-
-    public static void WriteUpdate(Stream stream, byte[] update)
-    {
-        WriteVarUint(stream, MessageYjsUpdate);
-        WriteVarUint8Array(stream, update);
-    }
-
-    /// <inheritdoc cref="ReadSyncStep2"/>
-    public static void ReadUpdate(Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception>? errorHandler = null)
-    {
-        ReadSyncStep2(stream, doc, transactionOrigin, v2, errorHandler);
-    }
-
-    /// <summary>
-    /// Reads one sync message and handles it; returns its type. <paramref name="errorHandler"/> receives what
-    /// reading and applying an update threw (see <see cref="ReadSyncStep2"/>); an unknown message type or a
-    /// malformed step 1 throws <see cref="YUpdateException"/>, as in y-protocols.
-    /// </summary>
-    public static uint ReadSyncMessage(Stream reader, Stream writer, YDoc doc, object transactionOrigin, bool v2 = false, Action<Exception>? errorHandler = null)
-    {
-        var messageType = ReadVarUint(reader);
-
-        switch (messageType)
-        {
-            case MessageYjsSyncStep1:
-                ReadSyncStep1(reader, writer, doc, v2);
-                break;
-            case MessageYjsSyncStep2:
-                ReadSyncStep2(reader, doc, transactionOrigin, v2, errorHandler);
-                break;
-            case MessageYjsUpdate:
-                ReadUpdate(reader, doc, transactionOrigin, v2, errorHandler);
-                break;
-            default:
-                throw new YUpdateException($"Unknown sync message type: {messageType}.");
-        }
-
-        return messageType;
     }
 }

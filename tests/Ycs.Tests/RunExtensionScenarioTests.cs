@@ -215,7 +215,7 @@ public class RunExtensionScenarioTests
                 var w = new System.Buffers.ArrayBufferWriter<byte>(); doc.EncodeStateAsUpdateV1(w); c.L("w " + ReferenceRun.Hex(w.WrittenSpan.ToArray()));
                 a.Push(Vals(4)); t.Insert(4, "e"); t.Insert(5, "f");
                 c.State(doc, "mid2");
-                using var ms = new MemoryStream(); SyncProtocol.WriteSyncStep2(ms, doc, sv0); c.L("sync2 " + ReferenceRun.Hex(ms.ToArray()));
+                var ms = new System.Buffers.ArrayBufferWriter<byte>(); SyncProtocol.WriteSyncStep2(ms, doc, sv0); c.L("sync2 " + ReferenceRun.Hex(ms.WrittenSpan.ToArray()));
                 t.Insert(6, "g");
             });
             c.State(doc, "end"); c.L(ReferenceRun.Dump(doc));

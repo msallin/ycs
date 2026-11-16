@@ -305,10 +305,10 @@ namespace Ycs.Properties
             }
 
             var v2 = s.Str("via") == "v2";
-            var m1 = new MemoryStream();
-            SyncProtocol.WriteSyncStep1(m1, to.Doc, v2);
-            var step1 = m1.ToArray();
-            var m2 = new MemoryStream();
+            var m1 = new System.Buffers.ArrayBufferWriter<byte>();
+            SyncProtocol.WriteSyncStep1(m1, to.Doc);
+            var step1 = m1.WrittenSpan.ToArray();
+            byte[] step2;
             if (s.Bool("diff"))
             {
                 // Step 2 from DiffUpdate of the whole state instead of EncodeStateAsUpdate(sv), framed by hand.
@@ -317,17 +317,20 @@ namespace Ycs.Properties
                 var sv = new byte[ReadVarUint(reader)];
                 reader.ReadExactly(sv);
                 var update = v2 ? UpdateOperations.DiffUpdateV2(from.Doc.EncodeStateAsUpdateV2(), sv) : UpdateOperations.DiffUpdate(from.Doc.EncodeStateAsUpdateV1(), sv);
+                var m2 = new MemoryStream();
                 m2.WriteByte(1);
                 WriteVarUint(m2, update.Length);
                 m2.Write(update);
+                step2 = m2.ToArray();
             }
             else
             {
-                SyncProtocol.ReadSyncMessage(new MemoryStream(step1), m2, from.Doc, Net, v2);
+                var m2 = new System.Buffers.ArrayBufferWriter<byte>();
+                SyncProtocol.ReadSyncMessage(step1, m2, from.Doc, Net, v2);
+                step2 = m2.WrittenSpan.ToArray();
             }
 
-            var step2 = m2.ToArray();
-            SyncProtocol.ReadSyncMessage(new MemoryStream(step2), new MemoryStream(), to.Doc, Net, v2);
+            SyncProtocol.ReadSyncMessage(step2, new System.Buffers.ArrayBufferWriter<byte>(), to.Doc, Net, v2);
             return Obj(("s1", B64(step1)), ("s2", B64(step2)));
         }
 

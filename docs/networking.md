@@ -21,6 +21,7 @@ other lacks). After that, every local change goes out as an *update* message. y-
 front of each message: `0` for sync, `1` for awareness (who is online, where their cursor is).
 
 ```csharp
+using System.Buffers;
 using Ycs;
 
 // y-websocket frames: the first byte is the message type (0 = sync), then the sync message.
@@ -28,33 +29,32 @@ const byte MessageSync = 0;
 
 static byte[] Step1(YDoc doc)
 {
-    var message = new MemoryStream();
-    message.WriteByte(MessageSync);
+    var message = new ArrayBufferWriter<byte>();
+    message.Write([MessageSync]);
     SyncProtocol.WriteSyncStep1(message, doc);
-    return message.ToArray();
+    return message.WrittenSpan.ToArray();
 }
 
 static byte[] UpdateMessage(byte[] update)
 {
-    var message = new MemoryStream();
-    message.WriteByte(MessageSync);
+    var message = new ArrayBufferWriter<byte>();
+    message.Write([MessageSync]);
     SyncProtocol.WriteUpdate(message, update);
-    return message.ToArray();
+    return message.WrittenSpan.ToArray();
 }
 
 // Handles one received frame; returns the answer to send back, or null.
 static byte[] Receive(YDoc doc, byte[] frame, object origin)
 {
-    var input = new MemoryStream(frame);
-    if (input.ReadByte() != MessageSync)
+    if (frame.Length == 0 || frame[0] != MessageSync)
     {
         return null; // awareness and other message types are not handled here
     }
 
-    var reply = new MemoryStream();
-    reply.WriteByte(MessageSync);
-    SyncProtocol.ReadSyncMessage(input, reply, doc, origin);
-    return reply.Length > 1 ? reply.ToArray() : null;
+    var reply = new ArrayBufferWriter<byte>();
+    reply.Write([MessageSync]);
+    SyncProtocol.ReadSyncMessage(frame.AsSpan(1), reply, doc, origin);
+    return reply.WrittenCount > 1 ? reply.WrittenSpan.ToArray() : null;
 }
 
 var server = new YDoc();
@@ -73,9 +73,14 @@ client.GetText("content").Insert(0, "Live: ");
 Console.WriteLine(server.GetText("content").ToString() == client.GetText("content").ToString()); // True
 ```
 
+- The writers (`WriteSyncStep1`, `WriteSyncStep2`, `WriteUpdate`) append to any `IBufferWriter<byte>`; the readers take
+  a whole message as a `ReadOnlySpan<byte>` or a `ReadOnlySequence<byte>` and write the answer to a step 1 to `reply`.
+  Bytes after the message are ignored; `ReadSyncMessage` returns its `SyncMessageType`. Nothing is allocated per
+  message beyond pooled buffers and the update's own decoding.
 - `SyncProtocol` uses the v1 update format, as y-protocols does. Pass `v2: true` on both ends for v2.
-- `ReadSyncMessage` takes an optional `errorHandler`: with one, a malformed update goes to it and the call returns;
-  without one, `YUpdateException` propagates. An unknown message type always throws.
+- A malformed message throws `YUpdateException`, an unknown message type and a truncated one included. y-protocols'
+  `readSyncStep2` passes the error of the apply to a handler and carries on; here the exception propagates and the
+  document is as it was, so drop the message (and, from an untrusted peer, the peer), or catch it where you read.
 - Awareness is not in the library. The sync server has a port of y-protocols' awareness
   (`samples/Ycs.Server/Awareness`), byte-compatible with it, that you can copy.
 

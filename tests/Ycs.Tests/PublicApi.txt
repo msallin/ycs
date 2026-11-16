@@ -156,17 +156,16 @@ sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
     static readonly Snapshot Empty
 class Ycs.StackItem
     System.Collections.Generic.IDictionary<string, object> Meta { get; }
+enum Ycs.SyncMessageType : uint
+    SyncStep1 = 0
+    SyncStep2 = 1
+    Update = 2
 static class Ycs.SyncProtocol
-    const uint MessageYjsSyncStep1 = 0
-    const uint MessageYjsSyncStep2 = 1
-    const uint MessageYjsUpdate = 2
-    static uint ReadSyncMessage(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception>? errorHandler = null)
-    static void ReadSyncStep1(System.IO.Stream reader, System.IO.Stream writer, YDoc doc, bool v2 = false)
-    static void ReadSyncStep2(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception>? errorHandler = null)
-    static void ReadUpdate(System.IO.Stream stream, YDoc doc, object transactionOrigin, bool v2 = false, System.Action<System.Exception>? errorHandler = null)
-    static void WriteSyncStep1(System.IO.Stream stream, YDoc doc, bool v2 = false)
-    static void WriteSyncStep2(System.IO.Stream stream, YDoc doc, byte[] encodedStateVector, bool v2 = false)
-    static void WriteUpdate(System.IO.Stream stream, byte[] update)
+    static SyncMessageType ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
+    static SyncMessageType ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, bool v2 = false)
+    static void WriteSyncStep1(System.Buffers.IBufferWriter<byte> destination, YDoc doc)
+    static void WriteSyncStep2(System.Buffers.IBufferWriter<byte> destination, YDoc doc, System.ReadOnlySpan<byte> encodedStateVector, bool v2 = false)
+    static void WriteUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update)
 class Ycs.Transaction
     System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.IList<YEvent>> ChangedParentTypes { get; }
     System.Collections.Generic.IDictionary<AbstractType, System.Collections.Generic.ISet<string>> Changed { get; }

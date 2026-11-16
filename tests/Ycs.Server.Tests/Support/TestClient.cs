@@ -52,12 +52,9 @@ internal sealed class TestClient
             count++;
             var reader = new MemoryStream(message);
             Assert.AreEqual(MessageType.Sync, VarUint.Read(reader));
-            var reply = new MemoryStream();
-            VarUint.Write(reply, MessageType.Sync);
-            SyncProtocol.ReadSyncMessage(reader, reply, Doc, this);
-            if (reply.Length > 1)
+            if (Messages.HandleSync(reader, Doc, this) is { } answer)
             {
-                session.Receive(reply.ToArray());
+                session.Receive(answer);
             }
         }
 

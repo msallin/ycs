@@ -227,7 +227,7 @@ internal sealed class HostileRoom
                         return ([], "");
                     }
 
-                    return ([HostileMessages.Sync(rng.Chance(0.2) ? SyncProtocol.MessageYjsSyncStep2 : SyncProtocol.MessageYjsUpdate, update)], "valid update");
+                    return ([HostileMessages.Sync(rng.Chance(0.2) ? (uint)SyncMessageType.SyncStep2 : (uint)SyncMessageType.Update, update)], "valid update");
                 }
 
             case < 26 when h.Held.Count > 0:
@@ -239,7 +239,7 @@ internal sealed class HostileRoom
                         h.Held.RemoveAt(i);
                     }
 
-                    return ([HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, update)], "held update, out of order");
+                    return ([HostileMessages.Sync((uint)SyncMessageType.Update, update)], "held update, out of order");
                 }
 
             case < 45:
@@ -266,15 +266,15 @@ internal sealed class HostileRoom
                         _ => rng.Between(1, 900),
                     };
                     var update = HostileUpdates.Delete(client, rng.Int(200), rng.Between(1, 50));
-                    return ([HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, update)], $"delete of {client}'s range, maybe unknown");
+                    return ([HostileMessages.Sync((uint)SyncMessageType.Update, update)], $"delete of {client}'s range, maybe unknown");
                 }
 
             case < 62:
                 {
                     var vector = rng.Chance(0.5) ? h.Forger.EncodeStateVectorV1() : rng.Bytes(rng.Int(24));
                     return rng.Chance(0.5)
-                        ? ([HostileMessages.Sync(SyncProtocol.MessageYjsSyncStep1, vector)], "step 1")
-                        : ([HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, vector)], "state vector as an update");
+                        ? ([HostileMessages.Sync((uint)SyncMessageType.SyncStep1, vector)], "step 1")
+                        : ([HostileMessages.Sync((uint)SyncMessageType.Update, vector)], "state vector as an update");
                 }
 
             case < 66:
@@ -325,7 +325,7 @@ internal sealed class HostileRoom
                         }));
                     }
 
-                    return ([.. updates.Select(u => HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, u))], $"{updates.Count} updates waiting");
+                    return ([.. updates.Select(u => HostileMessages.Sync((uint)SyncMessageType.Update, u))], $"{updates.Count} updates waiting");
                 }
 
             case 0:
@@ -341,7 +341,7 @@ internal sealed class HostileRoom
                             text.Insert(at, "x");
                         }
                     });
-                    return ([HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, update)], $"{n} structs");
+                    return ([HostileMessages.Sync((uint)SyncMessageType.Update, update)], $"{n} structs");
                 }
 
             case 1:
@@ -365,7 +365,7 @@ internal sealed class HostileRoom
                             d.GetText("text").Insert(at, "b");
                         }
                     });
-                    return ([HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, forward), HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, backward)], $"conflict {n} x {m}");
+                    return ([HostileMessages.Sync((uint)SyncMessageType.Update, forward), HostileMessages.Sync((uint)SyncMessageType.Update, backward)], $"conflict {n} x {m}");
                 }
 
             case 2:
@@ -398,14 +398,14 @@ internal sealed class HostileRoom
                             d.GetArray("array").Insert(0, [value]);
                         }
                     });
-                    return ([HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, update)], $"{(asTypes ? "types" : "values")} {depth} deep");
+                    return ([HostileMessages.Sync((uint)SyncMessageType.Update, update)], $"{(asTypes ? "types" : "values")} {depth} deep");
                 }
 
             default:
                 {
                     var length = rng.Between(1_000, 20_000);
                     var update = HostileUpdates.Edit(h.Forger, d => d.GetText("text").Insert(0, rng.Text(length, hostile: true)));
-                    return ([HostileMessages.Sync(SyncProtocol.MessageYjsUpdate, update)], $"string of {length}");
+                    return ([HostileMessages.Sync((uint)SyncMessageType.Update, update)], $"string of {length}");
                 }
         }
     }

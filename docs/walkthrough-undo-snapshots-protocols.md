@@ -237,8 +237,8 @@ Severity classes: wrong document / wrong bytes / wrong event or order / exceptio
 ### 15. Sync protocol — exception
 
 - `readSyncStep2` / `readUpdate` in y-protocols catch the error of `applyUpdate`, pass it to
-  `errorHandler` and log it; the message loop continues. Ycs lets `YUpdateException` propagate. By reading.
-  Document it, or add the handler parameter.
+  `errorHandler` and log it; the message loop continues. Ycs lets `YUpdateException` propagate, with no handler
+  parameter (documented in `docs/networking.md`).
 
 ### 16. Decoding is more lenient or stricter than lib0 in places — cosmetic to low
 

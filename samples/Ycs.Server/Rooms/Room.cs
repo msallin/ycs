@@ -1,3 +1,4 @@
+using System.Buffers;
 using Ycs.Server.Awareness;
 
 namespace Ycs.Server.Rooms;
@@ -71,10 +72,10 @@ internal sealed class Room
             try
             {
                 sessions = [.. sessions, session];
-                var message = new MemoryStream();
-                VarUint.Write(message, MessageType.Sync);
+                var message = new ArrayBufferWriter<byte>();
+                message.Write([(byte)MessageType.Sync]);
                 SyncProtocol.WriteSyncStep1(message, doc);
-                Send(session, message.ToArray());
+                Send(session, message.WrittenSpan.ToArray());
 
                 // As y-websocket's server: the states of everyone present, in one message, only if there are any.
                 if (awareness.ClientIds.Count > 0)
@@ -209,27 +210,27 @@ internal sealed class Room
     /// session gets the next only once it has taken the last (a y-websocket client sends one per connection, and one
     /// per resync interval if it has one).
     /// </summary>
-    internal void ReceiveSync(Session session, Stream reader)
+    internal void ReceiveSync(Session session, ReadOnlySpan<byte> message)
     {
         lock (gate)
         {
             try
             {
-                if (session.ReplyUnread && PeekVarUint(reader) == SyncProtocol.MessageYjsSyncStep1)
+                if (session.ReplyUnread && VarUint.Peek(message) == (uint)SyncMessageType.SyncStep1)
                 {
                     throw new YUpdateException("A step 1 arrived before the answer to the last one was sent.");
                 }
 
-                var reply = new MemoryStream();
-                VarUint.Write(reply, MessageType.Sync);
+                var reply = new ArrayBufferWriter<byte>();
+                reply.Write([(byte)MessageType.Sync]);
 
                 // Structs and deletions waiting for this session's structs integrate in its transaction, so the update
                 // then holds more than the session sent; without anything pending it holds only what the session sent.
                 updateReachesOrigin = doc.HasPending;
-                SyncProtocol.ReadSyncMessage(reader, reply, doc, session);
+                SyncProtocol.ReadSyncMessage(message, reply, doc, session);
 
                 // Only a step 1 writes a reply; the outer type alone is one byte.
-                if (reply.Length > 1 && !session.TryEnqueueReply(reply.ToArray()))
+                if (reply.WrittenCount > 1 && !session.TryEnqueueReply(reply.WrittenSpan.ToArray()))
                 {
                     overflowing.Add(session);
                 }
@@ -239,14 +240,6 @@ internal sealed class Room
                 CloseOverflowing();
             }
         }
-    }
-
-    private static uint PeekVarUint(Stream reader)
-    {
-        var position = reader.Position;
-        var value = VarUint.Read(reader);
-        reader.Position = position;
-        return value;
     }
 
     /// <summary>A copy of the document's state, for tests and diagnostics.</summary>
@@ -351,12 +344,12 @@ internal sealed class Room
     // Runs under the lock: the document changes only there.
     private void OnUpdate(object? sender, (byte[] Data, object Origin, Transaction Transaction) e)
     {
-        var message = new MemoryStream();
-        VarUint.Write(message, MessageType.Sync);
+        var message = new ArrayBufferWriter<byte>(e.Data.Length + 16);
+        message.Write([(byte)MessageType.Sync]);
         SyncProtocol.WriteUpdate(message, e.Data);
 
         // One array for every session: readers must not modify it.
-        var bytes = message.ToArray();
+        var bytes = message.WrittenSpan.ToArray();
         foreach (var session in sessions)
         {
             if (updateReachesOrigin || !ReferenceEquals(session, e.Origin))
