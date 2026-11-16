@@ -120,6 +120,17 @@ readonly struct Ycs.ItemView : System.IEquatable<ItemView>
     static bool op_Equality(ItemView left, ItemView right)
     static bool op_Inequality(ItemView left, ItemView right)
     string ParentSub { get; }
+readonly struct Ycs.PendingDrop : System.IEquatable<PendingDrop>
+    PendingDrop(long Structs, System.Collections.Generic.IReadOnlyList<long> Clients)
+    System.Collections.Generic.IReadOnlyList<long> Clients { get; init; }
+    bool Equals(PendingDrop other)
+    long Structs { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(PendingDrop left, PendingDrop right)
+    static bool op_Inequality(PendingDrop left, PendingDrop right)
+    void Deconstruct(out long Structs, out System.Collections.Generic.IReadOnlyList<long> Clients)
 sealed class Ycs.PermanentUserData
     PermanentUserData(YDoc doc, YMap storeType = null)
     YDoc Doc { get; }
@@ -316,6 +327,7 @@ class Ycs.YDoc
     byte[] EncodeStateVectorV2()
     event System.EventHandler BeforeAllTransactions
     event System.EventHandler Destroyed
+    event System.EventHandler<PendingDrop> PendingDropped
     event System.EventHandler<System.Collections.Generic.IList<Transaction>> AfterAllTransactions
     event System.EventHandler<System.ValueTuple<System.Collections.Generic.ISet<YDoc>, System.Collections.Generic.ISet<YDoc>, System.Collections.Generic.ISet<YDoc>>> SubdocsChanged
     event System.EventHandler<System.ValueTuple<byte[], object, Transaction>> Update

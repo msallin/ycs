@@ -652,10 +652,10 @@ shared with other work (load averages from 2 to 90); each row is from the quiete
   state) and the `gc-bomb` (2^21 pending structs in 24 bytes) are accepted; ycs rejects both at its default
   `UpdateLimits` (an application raises them for trusted input). The peak resident sets include the inputs every
   child generates (about 265 MiB).
-  Beyond the table, ycs rejects two crafted updates that Yjs 13.6.32 accepts, because a document that applied them and
-  a client that joins it disagree for good (`docs/api.md`, "Atomicity"): an item whose right origin precedes its origin
-  within one item of their client, and a struct that waits for structs the document lacks while it already has a struct
-  under the same id (found by a sync server's tests; no honest client writes either).
+  Beyond the table, ycs rejects a crafted update that Yjs 13.6.32 accepts, because a document that applied it and
+  a client that joins it disagree for good (`docs/api.md`, "Atomicity"): a struct that waits for structs the document
+  lacks while it already has a struct under the same id (found by a sync server's tests; no honest client writes one).
+  An item whose right origin precedes its origin is accepted, as in Yjs (a check was tried and dropped: `docs/findings-server.md`, 4).
 * **API differences that matter:** YDotNet needs a transaction object for every call and throws if a root type is
   fetched while one is open; its `Input`/`Output` resources have finalizers. **Number types do not round-trip:**
   `Input.Long` is written as a bigint (a Yjs peer reads a JavaScript `bigint`, ycs a `BigInteger`), and a Yjs or ycs
