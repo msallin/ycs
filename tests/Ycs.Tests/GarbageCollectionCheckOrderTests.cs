@@ -49,11 +49,11 @@ public class GarbageCollectionCheckOrderTests
         doc.ApplyUpdate(Convert.FromHexString("0303F8FAFFFF07002101016D016D0128000C06016B037D477D4775027D017701782201016D016D02013103226A22030A000004C40C070C070364656604000C0003646566020C06070101610104000C050378C3A9010C010602"));
 
         // The check rejects the structs that waited (their plan, once the ranges are applied in order, splits a value), the update
-        // stands and what waited is dropped: the document stays one another can be synced from.
-        doc.ApplyUpdate(Convert.FromHexString("02040C0007010178062101016D016B0204000C000378C3A9870C0006020B0000052801016D016B027B3FF80000000000007B3FF8000000000000020B02050104010C010302"));
+        // stands and what waited is dropped (reported as partly applied): the document stays one another can be synced from.
+        var e = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(Convert.FromHexString("02040C0007010178062101016D016B0204000C000378C3A9870C0006020B0000052801016D016B027B3FF80000000000007B3FF8000000000000020B02050104010C010302")));
 
         var fresh = new YDoc();
         fresh.ApplyUpdate(doc.EncodeStateAsUpdate());
-        Assert.IsNull(doc.Store.Pending);
+        Assert.AreEqual((true, null), (e.PartlyApplied, doc.Store.Pending));
     }
 }

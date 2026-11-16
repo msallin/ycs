@@ -194,9 +194,9 @@ waited for retries them in its own transaction, after it was carried out, as Yjs
 again and planned and checked as an update of their own (nesting, garbage collection). When that
 plan fails, which happens before anything of them changes the document, they are dropped, and the
 update stands: the document is as if they had never arrived (deletions that waited with them keep
-waiting), and `ApplyUpdate` returns normally, unless structs of the update itself were among them
-(structs that waited for the dropped ones), which makes it throw `YUpdateException` with
-`PartlyApplied` set. They are not kept: kept, every later update that satisfies them would retry and
+waiting), and `ApplyUpdate` throws `YUpdateException` with `PartlyApplied` set (whether or not structs of the
+update itself were among them, those that waited for the dropped ones), so that a server knows that what it admitted
+to wait, and handed to joining clients as waiting structs, is gone: clients with other limits integrate it. They are not kept: kept, every later update that satisfies them would retry and
 fail again, and a fresh document could not apply the document's state, which includes what is
 pending. The conflict budget counts the retry's steps too; running out there is `PartlyApplied` (below):
 what the retry integrated stays, the rest of what waited is dropped. So whatever `ApplyUpdate` throws,

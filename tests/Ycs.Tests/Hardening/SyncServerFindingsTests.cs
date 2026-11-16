@@ -105,4 +105,30 @@ public class SyncServerFindingsTests
 
         Assert.AreEqual((false, before), (accepted, Convert.ToHexString(room.EncodeStateAsUpdateV1())));
     }
+
+    // Nested types deeper than MaxDepth, waiting for a struct of their client: when it arrives, the types are dropped
+    // (kept, they would fail every later retry), which the caller is told, as every client that joined meanwhile got
+    // them as waiting structs and, with other limits (Yjs has none), integrates them.
+    [TestMethod]
+    public void ApplyUpdate_WaitingTypesDeeperThanTheLimitResolved_ReportsThatTheyWereDropped()
+    {
+        var forger = new YDoc(new YDocOptions { ClientId = 7 });
+        var missing = Edit(forger, d => d.GetArray("array").Insert(0, [1]));
+        var deep = Edit(forger, d =>
+        {
+            var array = d.GetArray("array");
+            for (var i = 0; i < 40; i++)
+            {
+                var inner = new YArray();
+                array.Insert(0, [inner]);
+                array = inner;
+            }
+        });
+        var room = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 32 } });
+        room.ApplyUpdateV1(deep);
+
+        var e = Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdateV1(missing));
+
+        Assert.AreEqual((true, false, 1L), (e.PartlyApplied, room.HasPending, room.Store.GetState(7)));
+    }
 }

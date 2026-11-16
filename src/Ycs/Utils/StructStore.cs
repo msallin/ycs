@@ -464,16 +464,19 @@ internal sealed partial class StructStore
                 // Their plan failed a check before it changed anything (a nested retry that failed was dropped by
                 // the nested call): this update has been carried out, and what waited is dropped, which leaves the
                 // document causally complete. Kept, it would fail every later update's retry again, and a fresh
-                // document could not apply this one's state, of which pending structs are part.
-                if (restUpdate != null)
+                // document could not apply this one's state, of which pending structs are part. The caller is told
+                // (PartlyApplied): what was dropped was admitted when it arrived, and clients that were sent it as
+                // waiting structs may integrate it, under other limits.
+                throw new YUpdateException(
+                    restUpdate != null
+                        ? "Structs that waited for this update, with structs of this update that waited for them, cannot be " +
+                          $"integrated ({e.Message}). They were dropped; the rest of the update was applied."
+                        : $"Structs that waited for this update cannot be integrated ({e.Message}). They were dropped; " +
+                          "the update was applied.",
+                    e)
                 {
-                    throw new YUpdateException(
-                        "Structs that waited for this update, with structs of this update that waited for them, cannot be " +
-                        $"integrated ({e.Message}). They were dropped; the rest of the update was applied.", e)
-                    {
-                        PartlyApplied = true,
-                    };
-                }
+                    PartlyApplied = true,
+                };
             }
         }
     }
