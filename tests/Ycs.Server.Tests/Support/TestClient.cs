@@ -11,11 +11,11 @@ internal sealed class TestClient
     public TestClient(long clientId)
     {
         Doc = new YDoc(new YDocOptions { ClientId = clientId });
-        Doc.Update += (_, e) =>
+        Doc.Updated += (_, e) =>
         {
-            if (!ReferenceEquals(e.origin, this) && Session is { IsClosed: false })
+            if (!ReferenceEquals(e.Origin, this) && Session is { IsClosed: false })
             {
-                Session.Receive(Messages.Update(e.data));
+                Session.Receive(Messages.Update(e.Update.ToArray()));
             }
         };
     }

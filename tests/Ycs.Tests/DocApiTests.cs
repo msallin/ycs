@@ -64,7 +64,7 @@ public class DocApiTests
         var doc = new YDoc();
         var text = doc.GetText("text");
         var calls = 0;
-        var subscription = text.Observe((_, _) => calls++);
+        var subscription = text.Observe(_ => calls++);
 
         text.Insert(0, "a");
         subscription.Dispose();

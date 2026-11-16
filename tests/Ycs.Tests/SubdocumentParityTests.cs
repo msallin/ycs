@@ -205,7 +205,7 @@ public class SubdocumentParityTests
             ("a:B|B|;d:A|A|;a:B|B|", 5L, "A", false, false, "B", "AQEFACkBAW0BYQFBdgAA"),
             (string.Join(";", events), b.ClientId, replacement.Guid, ReferenceEquals(replacement, a), replacement.ShouldLoad, string.Join(",", a.GetSubdocGuids()), S(doc.EncodeStateAsUpdate())));
 
-        static string Describe((ISet<YDoc> Loaded, ISet<YDoc> Added, ISet<YDoc> Removed) e) =>
+        static string Describe(SubdocsEventArgs e) =>
             $"{string.Join(",", e.Added.Select(d => d.Guid))}|{string.Join(",", e.Removed.Select(d => d.Guid))}|{string.Join(",", e.Loaded.Select(d => d.Guid))}";
     }
 

@@ -80,13 +80,13 @@ public class MapCountTests
             var index = i;
             docs[i] = new YDoc(new YDocOptions { ClientId = i + 1, Gc = gc });
             inboxes[i] = new List<byte[]>();
-            docs[i].Update += (_, e) =>
+            docs[i].Updated += (_, e) =>
             {
                 for (var j = 0; j < docs.Length; j++)
                 {
                     if (j != index)
                     {
-                        inboxes[j].Add(e.data);
+                        inboxes[j].Add(e.Update.ToArray());
                     }
                 }
             };

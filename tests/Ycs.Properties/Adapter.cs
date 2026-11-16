@@ -536,8 +536,8 @@ namespace Ycs.Properties
                 }
 
                 var t = Replica.Root(name);
-                t.Observe((_, e) => Event("obs:" + name, [e.Event], e.Transaction));
-                t.ObserveDeep((_, e) => Event("deep:" + name, e.Events, e.Transaction));
+                ObserveAny(t, e => Event("obs:" + name, [e], e.Transaction));
+                t.ObserveDeep((deepEvents, deepTransaction) => Event("deep:" + name, deepEvents, deepTransaction));
             }
 
             if (!quiet)
@@ -552,18 +552,20 @@ namespace Ycs.Properties
                         .ToList())));
             }
 
-            doc.Update += (_, e) =>
+            doc.Updated += (_, e) =>
             {
                 run.FixClientIds();
-                Push(Obj(("w", "u1"), ("u", ScriptRun.B64(e.Item1)), ("origin", run.OriginLabel(e.Item2)), ("local", e.Item3.Local)));
-                _pendingV1 = e.Item3.Local ? e.Item1 : null;
+                var update = e.Update.ToArray();
+                Push(Obj(("w", "u1"), ("u", ScriptRun.B64(update)), ("origin", run.OriginLabel(e.Origin)), ("local", e.Transaction.Local)));
+                _pendingV1 = e.Transaction.Local ? update : null;
             };
-            doc.UpdateV2 += (_, e) =>
+            doc.UpdatedV2 += (_, e) =>
             {
-                Push(Obj(("w", "u2"), ("u", ScriptRun.B64(e.Item1)), ("origin", run.OriginLabel(e.Item2)), ("local", e.Item3.Local)));
-                if (e.Item3.Local)
+                var update = e.Update.ToArray();
+                Push(Obj(("w", "u2"), ("u", ScriptRun.B64(update)), ("origin", run.OriginLabel(e.Origin)), ("local", e.Transaction.Local)));
+                if (e.Transaction.Local)
                 {
-                    Log.Add((_pendingV1, e.Item1));
+                    Log.Add((_pendingV1, update));
                 }
 
                 _pendingV1 = null;
@@ -576,6 +578,15 @@ namespace Ycs.Properties
         }
 
         private static List<object> Guids(IEnumerable<YDoc> docs) => docs.Select(d => d.Guid).Order(StringComparer.Ordinal).Cast<object>().ToList();
+
+        private static IDisposable ObserveAny(YType type, Action<YEvent> handler) => type switch
+        {
+            YArray array => array.Observe(handler),
+            YMap map => map.Observe(handler),
+            YText text => text.Observe(handler),
+            YXmlFragment fragment => fragment.Observe(handler),
+            _ => throw new ArgumentException("not a shared type", nameof(type)),
+        };
 
         internal void Push(Dictionary<string, object> record)
         {
@@ -592,16 +603,16 @@ namespace Ycs.Properties
         private Dictionary<string, object> EventView(YEvent e)
         {
             var k = Replica.KindOf(e.Target);
-            var o = Obj(("t", Replica.PathOf(e.Target)), ("k", k), ("p", e.Path.Select(p => p is int i ? (long)i : p).ToList()));
+            var o = Obj(("t", Replica.PathOf(e.Target)), ("k", k), ("p", e.Path.Select(p => p.Key ?? (object)(long)p.Index).ToList()));
             var keys = e.Changes.Keys.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToList();
             if (keys.Count > 0)
             {
                 var kd = new Dictionary<string, object>();
                 foreach (var (key, ch) in keys)
                 {
-                    kd[key] = ch.Action == ChangeAction.Add
+                    kd[key] = ch.Action == KeyChangeAction.Add
                         ? Obj(("action", "add"))
-                        : Obj(("action", ch.Action == ChangeAction.Update ? "update" : "delete"), ("old", Replica.View(ch.OldValue)));
+                        : Obj(("action", ch.Action == KeyChangeAction.Update ? "update" : "delete"), ("old", Replica.View(ch.OldValue)));
                 }
 
                 o["keys"] = kd;
@@ -890,8 +901,8 @@ namespace Ycs.Properties
                 case "observe":
                     {
                         var label = "o:" + string.Join("/", s.List("path").Select(p => p is JsonNumber n ? n.Text : (string)p));
-                        target.Observe((_, e) => Event(label, [e.Event], e.Transaction));
-                        target.ObserveDeep((_, e) => Event("deep" + label, e.Events, e.Transaction));
+                        ObserveAny(target, e => Event(label, [e], e.Transaction));
+                        target.ObserveDeep((deepEvents, deepTransaction) => Event("deep" + label, deepEvents, deepTransaction));
                         return Missing.Value;
                     }
                 case "react":
@@ -949,13 +960,13 @@ namespace Ycs.Properties
                                 Doc.AfterTransactionCleanup += (_, tr) => Fire(tr.Local);
                                 break;
                             case "update":
-                                Doc.Update += (_, e) => Fire(e.Item3.Local);
+                                Doc.Updated += (_, e) => Fire(e.Transaction.Local);
                                 break;
                             case "after":
                                 Doc.AfterTransaction += (_, tr) => Fire(tr.Local);
                                 break;
                             default:
-                                target.Observe((_, e) => Fire(e.Transaction.Local));
+                                ObserveAny(target, e => Fire(e.Transaction.Local));
                                 break;
                         }
 
@@ -1257,7 +1268,7 @@ namespace Ycs.Properties
         /// <summary>Raised with (v1 update, local) for every transaction that changed something.</summary>
         public event Action<byte[], bool> UpdateV1
         {
-            add => Doc.Update += (_, e) => value(e.Item1, e.Item3.Local);
+            add => Doc.Updated += (_, e) => value(e.Update.ToArray(), e.Transaction.Local);
             remove => throw new NotSupportedException();
         }
 

@@ -10,20 +10,6 @@ readonly struct Ycs.AbsolutePosition : System.IEquatable<AbsolutePosition>
     static bool op_Equality(AbsolutePosition left, AbsolutePosition right)
     static bool op_Inequality(AbsolutePosition left, AbsolutePosition right)
     void Deconstruct(out YType Type, out int Index, out int Assoc)
-enum Ycs.ChangeAction : int
-    Add = 0
-    Delete = 2
-    Update = 1
-class Ycs.ChangeKey
-    ChangeAction Action
-    ChangeKey()
-    object OldValue
-class Ycs.ChangesCollection
-    ChangesCollection()
-    System.Collections.Generic.IDictionary<string, ChangeKey> Keys
-    System.Collections.Generic.IList<Delta> Delta
-    System.Collections.Generic.ISet<ItemView> Added
-    System.Collections.Generic.ISet<ItemView> Deleted
 sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
     DecodedStruct <Clone>$()
     DecodedStruct(ItemId Id, int Length, ItemKind Kind, ItemId? LeftOrigin, ItemId? RightOrigin, string? ParentName, ItemId? ParentId, string? ParentSub, System.Collections.Generic.IReadOnlyList<object?> Content, string? Text, string? FormatKey, object? FormatValue, int TypeRef, string? TypeName, string? DocGuid)
@@ -110,6 +96,33 @@ readonly struct Ycs.ItemView : System.IEquatable<ItemView>
     static bool op_Equality(ItemView left, ItemView right)
     static bool op_Inequality(ItemView left, ItemView right)
     string ParentSub { get; }
+readonly struct Ycs.KeyChange : System.IEquatable<KeyChange>
+    KeyChange(KeyChangeAction Action, object? OldValue)
+    KeyChangeAction Action { get; init; }
+    bool Equals(KeyChange other)
+    object? OldValue { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(KeyChange left, KeyChange right)
+    static bool op_Inequality(KeyChange left, KeyChange right)
+    void Deconstruct(out KeyChangeAction Action, out object? OldValue)
+enum Ycs.KeyChangeAction : int
+    Add = 0
+    Delete = 2
+    Update = 1
+readonly struct Ycs.PathSegment : System.IEquatable<PathSegment>
+    PathSegment(string? Key, int Index)
+    bool Equals(PathSegment other)
+    bool IsKey { get; }
+    int Index { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(PathSegment left, PathSegment right)
+    static bool op_Inequality(PathSegment left, PathSegment right)
+    string? Key { get; init; }
+    void Deconstruct(out string? Key, out int Index)
 readonly struct Ycs.PendingDrop : System.IEquatable<PendingDrop>
     PendingDrop(long Structs, System.Collections.Generic.IReadOnlyList<long> Clients)
     System.Collections.Generic.IReadOnlyList<long> Clients { get; init; }
@@ -163,6 +176,18 @@ sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
     static readonly Snapshot Empty
 sealed class Ycs.StackItem
     System.Collections.Generic.IDictionary<string, object> Meta { get; }
+readonly struct Ycs.SubdocsEventArgs : System.IEquatable<SubdocsEventArgs>
+    SubdocsEventArgs(System.Collections.Generic.IReadOnlySet<YDoc> Loaded, System.Collections.Generic.IReadOnlySet<YDoc> Added, System.Collections.Generic.IReadOnlySet<YDoc> Removed)
+    System.Collections.Generic.IReadOnlySet<YDoc> Added { get; init; }
+    System.Collections.Generic.IReadOnlySet<YDoc> Loaded { get; init; }
+    System.Collections.Generic.IReadOnlySet<YDoc> Removed { get; init; }
+    bool Equals(SubdocsEventArgs other)
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(SubdocsEventArgs left, SubdocsEventArgs right)
+    static bool op_Inequality(SubdocsEventArgs left, SubdocsEventArgs right)
+    void Deconstruct(out System.Collections.Generic.IReadOnlySet<YDoc> Loaded, out System.Collections.Generic.IReadOnlySet<YDoc> Added, out System.Collections.Generic.IReadOnlySet<YDoc> Removed)
 enum Ycs.SyncMessageType : uint
     SyncStep1 = 0
     SyncStep2 = 1
@@ -231,6 +256,18 @@ sealed class Ycs.UndoManagerOptions
     YDoc Doc { get; set; }
     bool IgnoreRemoteMapChanges { get; set; }
     int CaptureTimeout { get; set; }
+readonly struct Ycs.UpdateEventArgs : System.IEquatable<UpdateEventArgs>
+    System.ReadOnlyMemory<byte> Update { get; init; }
+    Transaction Transaction { get; init; }
+    UpdateEventArgs(System.ReadOnlyMemory<byte> Update, object? Origin, Transaction Transaction)
+    bool Equals(UpdateEventArgs other)
+    object? Origin { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(UpdateEventArgs left, UpdateEventArgs right)
+    static bool op_Inequality(UpdateEventArgs left, UpdateEventArgs right)
+    void Deconstruct(out System.ReadOnlyMemory<byte> Update, out object? Origin, out Transaction Transaction)
 sealed class Ycs.UpdateLimits : System.IEquatable<UpdateLimits>
     UpdateLimits <Clone>$()
     UpdateLimits()
@@ -272,6 +309,7 @@ sealed class Ycs.YArray : YArrayBase
     System.Collections.Generic.IReadOnlyList<object> Slice(int start = 0)
     System.Collections.Generic.IReadOnlyList<object> Slice(int start, int end)
     System.Collections.Generic.List<TResult> Map<TResult>(System.Func<object, int, YArray, TResult> f)
+    System.IDisposable Observe(System.Action<YArrayEvent> handler)
     YArray Clone()
     YArray()
     YArray(System.Collections.Generic.IEnumerable<object> prelimContent = null)
@@ -289,10 +327,12 @@ sealed class Ycs.YArray : YArrayBase
 abstract class Ycs.YArrayBase : YType, System.Collections.Generic.IEnumerable<object>, System.Collections.IEnumerable
     System.Collections.Generic.IEnumerator<object> GetEnumerator()
     System.Collections.Generic.IList<object> ToArraySnapshot(Snapshot snapshot)
-class Ycs.YArrayEvent : YEvent
-class Ycs.YDeepEventArgs
-    System.Collections.Generic.IList<YEvent> Events { get; }
-    Transaction Transaction { get; }
+sealed class Ycs.YArrayEvent : YEvent
+sealed class Ycs.YChanges
+    System.Collections.Generic.IReadOnlyDictionary<string, KeyChange> Keys { get; }
+    System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
+    System.Collections.Generic.IReadOnlySet<ItemView> Added { get; }
+    System.Collections.Generic.IReadOnlySet<ItemView> Deleted { get; }
 class Ycs.YDoc
     Snapshot CreateSnapshot()
     System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
@@ -321,14 +361,14 @@ class Ycs.YDoc
     event System.EventHandler BeforeAllTransactions
     event System.EventHandler Destroyed
     event System.EventHandler<PendingDrop> PendingDropped
-    event System.EventHandler<System.Collections.Generic.IList<Transaction>> AfterAllTransactions
-    event System.EventHandler<System.ValueTuple<System.Collections.Generic.ISet<YDoc>, System.Collections.Generic.ISet<YDoc>, System.Collections.Generic.ISet<YDoc>>> SubdocsChanged
-    event System.EventHandler<System.ValueTuple<byte[], object, Transaction>> Update
-    event System.EventHandler<System.ValueTuple<byte[], object, Transaction>> UpdateV2
+    event System.EventHandler<SubdocsEventArgs> SubdocsChanged
+    event System.EventHandler<System.Collections.Generic.IReadOnlyList<Transaction>> AfterAllTransactions
     event System.EventHandler<Transaction> AfterTransaction
     event System.EventHandler<Transaction> AfterTransactionCleanup
     event System.EventHandler<Transaction> BeforeObserverCalls
     event System.EventHandler<Transaction> BeforeTransaction
+    event System.EventHandler<UpdateEventArgs> Updated
+    event System.EventHandler<UpdateEventArgs> UpdatedV2
     long ClientId { get; }
     object Meta { get; }
     string CollectionId { get; }
@@ -358,24 +398,22 @@ class Ycs.YDocOptions
     object Meta { get; set; }
     string CollectionId { get; set; }
     string Guid { get; set; }
-class Ycs.YEvent
-    System.Collections.Generic.IDictionary<string, ChangeKey> Keys { get; }
-    System.Collections.Generic.IReadOnlyCollection<object> Path { get; }
-    Transaction Transaction { get; set; }
-    YType CurrentTarget { get; set; }
-    YType Target { get; set; }
+abstract class Ycs.YEvent
+    System.Collections.Generic.IReadOnlyDictionary<string, KeyChange> Keys { get; }
+    System.Collections.Generic.IReadOnlyList<PathSegment> Path { get; }
+    Transaction Transaction { get; }
+    YType CurrentTarget { get; }
+    YType Target { get; }
     bool Adds(ItemView view)
     bool Deletes(ItemView view)
-    virtual ChangesCollection Changes { get; }
-    virtual System.Collections.Generic.IList<Delta> Delta { get; }
-class Ycs.YEventArgs
-    Transaction Transaction { get; }
-    YEvent Event { get; }
+    virtual System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
+    virtual YChanges Changes { get; }
 class Ycs.YMap : YType, System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>>, System.Collections.IEnumerable
     System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> Entries()
     System.Collections.Generic.IEnumerable<object> Values()
     System.Collections.Generic.IEnumerable<string> Keys()
     System.Collections.Generic.IEnumerator<System.Collections.Generic.KeyValuePair<string, object>> GetEnumerator()
+    System.IDisposable Observe(System.Action<YMapEvent> handler)
     YMap Clone()
     YMap()
     YMap(System.Collections.Generic.IDictionary<string, object> entries)
@@ -390,11 +428,12 @@ class Ycs.YMap : YType, System.Collections.Generic.IEnumerable<System.Collection
     void Delete(string key)
     void ForEach(System.Action<object, string, YMap> f)
     void Set(string key, object value)
-class Ycs.YMapEvent : YEvent
-    readonly System.Collections.Generic.ISet<string> KeysChanged
+sealed class Ycs.YMapEvent : YEvent
+    System.Collections.Generic.IReadOnlySet<string> KeysChanged { get; }
 class Ycs.YText : YArrayBase
     System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, object>> GetAttributes()
     System.Collections.Generic.IList<Delta> ToDelta(Snapshot snapshot = null, Snapshot prevSnapshot = null, System.Func<YText.YTextChangeType, ItemId, YText.YTextChangeAttributes> computeYChange = null)
+    System.IDisposable Observe(System.Action<YTextEvent> handler)
     YText Clone()
     YText()
     YText(string str)
@@ -419,24 +458,19 @@ class Ycs.YText.YTextChangeAttributes
 enum Ycs.YText.YTextChangeType : int
     Added = 0
     Removed = 1
-class Ycs.YTextEvent : YEvent
-    System.Collections.Generic.ISet<string> KeysChanged { get; }
+sealed class Ycs.YTextEvent : YEvent
+    System.Collections.Generic.IReadOnlySet<string> KeysChanged { get; }
     bool ChildListChanged { get; }
-    override ChangesCollection Changes { get; }
-    override System.Collections.Generic.IList<Delta> Delta { get; }
+    override System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
+    override YChanges Changes { get; }
 abstract class Ycs.YType
     System.Collections.Generic.IDictionary<string, object> GetAllSnapshot(Snapshot snapshot)
-    System.IDisposable Observe(System.EventHandler<YEventArgs> handler)
-    System.IDisposable ObserveDeep(System.EventHandler<YDeepEventArgs> handler)
+    System.IDisposable ObserveDeep(System.Action<System.Collections.Generic.IReadOnlyList<YEvent>, Transaction> handler)
     YDoc Doc { get; }
     YType Parent { get; }
     abstract object ToJson()
-    event System.EventHandler<YDeepEventArgs> DeepEventHandler
-    event System.EventHandler<YEventArgs> EventHandler
     object GetSnapshot(string key, Snapshot snapshot)
     virtual int Length { get; }
-    void Unobserve(System.EventHandler<YEventArgs> handler)
-    void UnobserveDeep(System.EventHandler<YDeepEventArgs> handler)
 sealed class Ycs.YUpdateException : System.FormatException
     YUpdateException()
     YUpdateException(string message)
@@ -522,14 +556,15 @@ sealed class Ycs.YXmlElement : YXmlFragment
     string NodeName { get; }
     void RemoveAttribute(string attributeName)
     void SetAttribute(string attributeName, object attributeValue)
-class Ycs.YXmlEvent : YEvent
-    System.Collections.Generic.ISet<string> AttributesChanged { get; }
+sealed class Ycs.YXmlEvent : YEvent
+    System.Collections.Generic.IReadOnlySet<string> AttributesChanged { get; }
     bool ChildListChanged { get; }
 class Ycs.YXmlFragment : YArrayBase
     System.Collections.Generic.IEnumerable<YXmlElement> QuerySelectorAll(string query)
     System.Collections.Generic.IList<object> ToArray()
     System.Collections.Generic.IReadOnlyList<object> Slice(int start = 0)
     System.Collections.Generic.IReadOnlyList<object> Slice(int start, int end)
+    System.IDisposable Observe(System.Action<YXmlEvent> handler)
     YXmlElement QuerySelector(string query)
     YXmlFragment Clone()
     YXmlFragment()

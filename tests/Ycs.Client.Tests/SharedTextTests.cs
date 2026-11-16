@@ -60,7 +60,7 @@ public class SharedTextTests
     {
         var other = new YDoc();
         var updates = new List<byte[]>();
-        other.Update += (_, e) => updates.Add(e.data);
+        other.Updated += (_, e) => updates.Add(e.Update.ToArray());
         var text = other.GetText(SharedText.Name);
         text.Insert(0, "a\r\nb");
         text.InsertEmbed(1, new Dictionary<string, object> { ["image"] = "x" });
@@ -185,11 +185,11 @@ public class SharedTextTests
         {
             var doc = new YDoc();
             Text = new SharedText(doc);
-            doc.Update += (_, e) =>
+            doc.Updated += (_, e) =>
             {
-                if (e.origin != remote)
+                if (e.Origin != remote)
                 {
-                    Sent.Add(e.data);
+                    Sent.Add(e.Update.ToArray());
                 }
             };
             Text.RemoteChange += (diff, changes) =>

@@ -72,7 +72,7 @@ public class PermanentUserDataYjsTests
         pud.SetUserMapping(doc, 1, "alice");
         var ds = (YArray)((YMap)doc.GetMap("users").Get("alice")).Get("ds");
         var dsLengthAtUpdates = new List<int>();
-        doc.Update += (_, _) => dsLengthAtUpdates.Add(ds.Length);
+        doc.Updated += (_, _) => dsLengthAtUpdates.Add(ds.Length);
 
         text.Delete(0, 1);
 

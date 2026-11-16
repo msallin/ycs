@@ -264,7 +264,7 @@ public class YXmlTests
         var el = doc.GetXmlElement("el");
 
         YXmlEvent captured = null;
-        el.EventHandler += (s, e) => captured = e.Event as YXmlEvent;
+        el.Observe(e => captured = e as YXmlEvent);
 
         el.SetAttribute("a", "1");
         Assert.IsNotNull(captured);

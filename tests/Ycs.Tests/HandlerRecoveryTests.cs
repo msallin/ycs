@@ -37,8 +37,8 @@ public class HandlerRecoveryTests
             case "BeforeAllTransactions": doc.BeforeAllTransactions += (_, _) => Throw(); break;
             case "BeforeTransaction": doc.BeforeTransaction += (_, _) => Throw(); break;
             case "AfterTransactionCleanup": doc.AfterTransactionCleanup += (_, _) => Throw(); break;
-            case "Update": doc.Update += (_, _) => Throw(); break;
-            case "UpdateV2": doc.UpdateV2 += (_, _) => Throw(); break;
+            case "Update": doc.Updated += (_, _) => Throw(); break;
+            case "UpdateV2": doc.UpdatedV2 += (_, _) => Throw(); break;
             case "SubdocsChanged": doc.SubdocsChanged += (_, _) => Throw(); break;
             default: throw new ArgumentException(evt);
         }
@@ -75,9 +75,9 @@ public class HandlerRecoveryTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         ThrowOnce(doc, evt);
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         var observerCalls = 0;
-        doc.GetText("t").EventHandler += (_, _) => observerCalls++;
+        doc.GetText("t").Observe(_ => observerCalls++);
         var peer = new YDoc(new YDocOptions { ClientId = 2 });
         var reference = new YDoc(new YDocOptions { ClientId = 1 });
 
@@ -122,7 +122,7 @@ public class HandlerRecoveryTests
         ThrowOnce(doc, "BeforeTransaction");
         var log = new List<string>();
         doc.AfterTransaction += (_, tr) => log.Add($"afterTransaction {tr.Origin}");
-        doc.Update += (_, _) => log.Add("update");
+        doc.Updated += (_, _) => log.Add("update");
         doc.AfterAllTransactions += (_, _) => log.Add("afterAllTransactions");
         var ran = false;
 
@@ -182,7 +182,7 @@ public class HandlerRecoveryTests
         var text = doc.GetText("t");
         var map = doc.GetMap("m");
         var seen = 0;
-        doc.Update += (_, _) =>
+        doc.Updated += (_, _) =>
         {
             if (seen++ == throwingUpdate)
             {
@@ -190,16 +190,16 @@ public class HandlerRecoveryTests
             }
         };
         var delivered = 0;
-        doc.Update += (_, _) => delivered++;
+        doc.Updated += (_, _) => delivered++;
         var mapObserved = 0;
-        map.EventHandler += (_, _) => mapObserved++;
-        text.EventHandler += (_, _) =>
+        map.Observe(_ => mapObserved++);
+        text.Observe(_ =>
         {
             if (!map.ContainsKey("k"))
             {
                 map.Set("k", 1);
             }
-        };
+        });
         var afterAll = 0;
         doc.AfterAllTransactions += (_, _) => afterAll++;
 
@@ -222,10 +222,10 @@ public class HandlerRecoveryTests
             throw new InvalidOperationException(what);
         }
 
-        doc.GetText("t").EventHandler += (_, _) => Throw("observer");
+        doc.GetText("t").Observe(_ => Throw("observer"));
         doc.AfterTransactionCleanup += (_, _) => Throw("afterTransactionCleanup");
-        doc.Update += (_, _) => log.Add("update");
-        doc.UpdateV2 += (_, _) => Throw("updateV2");
+        doc.Updated += (_, _) => log.Add("update");
+        doc.UpdatedV2 += (_, _) => Throw("updateV2");
         doc.SubdocsChanged += (_, _) => Throw("subdocs");
         doc.AfterAllTransactions += (_, _) => log.Add("afterAllTransactions");
 
@@ -244,7 +244,7 @@ public class HandlerRecoveryTests
     public void AfterAllTransactions_ThrowsAfterAnUpdateHandlerThrew_ItsExceptionEscapesAsTheLast()
     {
         var doc = new YDoc();
-        doc.Update += (_, _) => throw new InvalidOperationException("update");
+        doc.Updated += (_, _) => throw new InvalidOperationException("update");
         doc.AfterAllTransactions += (_, _) => throw new InvalidOperationException("afterAllTransactions");
 
         var escaped = Assert.ThrowsExactly<InvalidOperationException>(() => doc.GetText("t").Insert(0, "a")).Message;
@@ -258,7 +258,7 @@ public class HandlerRecoveryTests
         var doc = new YDoc();
         ThrowOnce(doc, "Update");
         var second = 0;
-        doc.Update += (_, _) => second++;
+        doc.Updated += (_, _) => second++;
 
         Assert.ThrowsExactly<InvalidOperationException>(() => doc.GetText("t").Insert(0, "a"));
         doc.GetText("t").Insert(1, "b");
@@ -291,13 +291,13 @@ public class HandlerRecoveryTests
     {
         var remote = new YDoc(new YDocOptions { ClientId = 2 });
         var remoteUpdates = new List<byte[]>();
-        remote.Update += (_, e) => remoteUpdates.Add(e.data);
+        remote.Updated += (_, e) => remoteUpdates.Add(e.Update.ToArray());
         remote.GetText("t").Insert(0, "a");
         remote.GetText("t").Insert(1, "b");
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         ThrowOnce(doc, evt);
         var announced = 0;
-        doc.Update += (_, _) => announced++;
+        doc.Updated += (_, _) => announced++;
 
         var escaped = Assert.ThrowsExactly<InvalidOperationException>(() => doc.ApplyUpdate(remoteUpdates[0])).Message;
         doc.ApplyUpdate(remoteUpdates[1]);
@@ -334,7 +334,7 @@ public class HandlerRecoveryTests
         var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
         ThrowOnce(doc, evt);
         var announced = 0;
-        doc.Update += (_, _) => announced++;
+        doc.Updated += (_, _) => announced++;
 
         Assert.ThrowsExactly<InvalidOperationException>(() => text.Insert(0, "a"));
         text.Insert(text.Length, "b");

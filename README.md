@@ -28,9 +28,9 @@ using Ycs;
 var alice = new YDoc();
 var bob = new YDoc();
 
-// Each local change raises Update with the bytes to send to the other replicas.
-alice.Update += (_, e) => { if (e.origin != bob) bob.ApplyUpdate(e.data, alice); };
-bob.Update += (_, e) => { if (e.origin != alice) alice.ApplyUpdate(e.data, bob); };
+// Each local change raises Updated with the bytes to send to the other replicas.
+alice.Updated += (_, e) => { if (e.Origin != bob) bob.ApplyUpdate(e.Update.ToArray(), alice); };
+bob.Updated += (_, e) => { if (e.Origin != alice) alice.ApplyUpdate(e.Update.ToArray(), bob); };
 
 alice.GetText("content").Insert(0, "Hello");
 bob.GetText("content").Insert(5, ", world");

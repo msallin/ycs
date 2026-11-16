@@ -27,7 +27,7 @@ public class EventGatingTests
         var doc = new YDoc();
         var text = doc.GetText("text");
         YEvent seen = null;
-        text.EventHandler += (_, e) => seen = e.Event;
+        text.Observe(e => seen = e);
 
         var changedParentTypes = InsertCapturingChangedParentTypes(doc, text);
 
@@ -41,8 +41,8 @@ public class EventGatingTests
         var map = doc.GetMap("map");
         var text = new YText();
         map.Set("text", text);
-        IList<YEvent> seen = null;
-        map.DeepEventHandler += (_, e) => seen = e.Events;
+        IReadOnlyList<YEvent> seen = null;
+        map.ObserveDeep((deepEvents, _) => seen = deepEvents);
 
         var changedParentTypes = InsertCapturingChangedParentTypes(doc, text);
 
@@ -156,7 +156,7 @@ public class EventGatingTests
         var doc = new YDoc();
         var text = doc.GetText("text");
         YTextEvent seen = null;
-        text.EventHandler += (_, e) => seen = (YTextEvent)e.Event;
+        text.Observe(e => seen = (YTextEvent)e);
 
         doc.Transact(_ =>
         {
@@ -173,7 +173,7 @@ public class EventGatingTests
     private static Dictionary<YType, IList<YEvent>> InsertCapturingChangedParentTypes(YDoc doc, YText text)
     {
         Dictionary<YType, IList<YEvent>> captured = null;
-        doc.Update += (_, e) => captured = new Dictionary<YType, IList<YEvent>>(e.transaction.ChangedParentTypes);
+        doc.Updated += (_, e) => captured = new Dictionary<YType, IList<YEvent>>(e.Transaction.ChangedParentTypes);
 
         text.Insert(0, "a");
 

@@ -15,7 +15,7 @@ namespace Ycs;
 /// <summary>
 /// Event that describes the changes on a YText type.
 /// </summary>
-public class YTextEvent : YEvent
+public sealed class YTextEvent : YEvent
 {
     private enum ChangeType
     {
@@ -25,9 +25,9 @@ public class YTextEvent : YEvent
     }
 
     private readonly ISet<string> _subs;
-    private ISet<string> _keysChanged;
-    private IList<Delta> _delta = null;
-    private ChangesCollection _changes;
+    private IReadOnlySet<string> _keysChanged;
+    private List<Delta> _delta = null;
+    private YChanges _changes;
 
     internal YTextEvent(YText arr, Transaction transaction, ISet<string> subs)
         : base(arr, transaction)
@@ -38,7 +38,7 @@ public class YTextEvent : YEvent
     /// <summary>
     /// Gets the changed attribute names.
     /// </summary>
-    public ISet<string> KeysChanged => _keysChanged ??= ChangedKeys.WithoutChildList(_subs);
+    public IReadOnlySet<string> KeysChanged => _keysChanged ??= ChangedKeys.WithoutChildList(_subs);
 
     /// <summary>
     /// Gets whether the children keys changed.
@@ -49,20 +49,14 @@ public class YTextEvent : YEvent
     /// Yjs' <c>YTextEvent#changes</c>: the <see cref="Keys"/> and the text <see cref="Delta"/>; no
     /// added or deleted items.
     /// </summary>
-    public override ChangesCollection Changes => _changes ??= new ChangesCollection
-    {
-        Keys = Keys,
-        Delta = Delta,
-        Added = new HashSet<ItemView>(),
-        Deleted = new HashSet<ItemView>(),
-    };
+    public override YChanges Changes => _changes ??= new YChanges(new HashSet<ItemView>(), new HashSet<ItemView>(), Delta, Keys);
 
     /// <summary>
     /// Compute the changes in the delta format. Overrides <see cref="YEvent.Delta"/> — for
     /// YText this is a Quill-style attribute-aware delta, not the plain insert/retain/delete
     /// shape used by <see cref="YEvent.Changes"/>.Delta, exactly as Yjs does.
     /// </summary>
-    public override IList<Delta> Delta
+    public override IReadOnlyList<Delta> Delta
     {
         get
         {

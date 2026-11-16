@@ -34,9 +34,9 @@ using Ycs;
 var alice = new YDoc();
 var bob = new YDoc();
 
-// Each local change raises Update with the bytes to send to the other replicas.
-alice.Update += (_, e) => { if (e.origin != bob) bob.ApplyUpdate(e.data, alice); };
-bob.Update += (_, e) => { if (e.origin != alice) alice.ApplyUpdate(e.data, bob); };
+// Each local change raises Updated with the bytes to send to the other replicas.
+alice.Updated += (_, e) => { if (e.Origin != bob) bob.ApplyUpdate(e.Update.ToArray(), alice); };
+bob.Updated += (_, e) => { if (e.Origin != alice) alice.ApplyUpdate(e.Update.ToArray(), bob); };
 
 alice.GetText("content").Insert(0, "Hello");
 bob.GetText("content").Insert(5, ", world");
@@ -116,9 +116,9 @@ This is what the y-protocols sync does on every connect ([Networking](networking
 var doc = new YDoc();
 var text = doc.GetText("content");
 
-using var subscription = text.Observe((_, e) =>
+using var subscription = text.Observe(e =>
 {
-    foreach (var d in e.Event.Delta)
+    foreach (var d in e.Delta)
     {
         Console.WriteLine($"retain {d.Retain} insert {d.Insert} delete {d.Delete}");
     }
@@ -127,7 +127,7 @@ using var subscription = text.Observe((_, e) =>
 text.Insert(0, "abc");
 // retain  insert abc delete
 
-// One transaction: one event, one Update, one undo step. The origin is passed to every handler.
+// One transaction: one event, one Updated, one undo step. The origin is passed to every handler.
 doc.Transact(tr =>
 {
     text.Delete(0, 1);
@@ -140,7 +140,9 @@ doc.Transact(tr =>
 
 - Every change runs in a transaction; without `Transact`, each call is its own.
 - Observers run synchronously, on the thread that made the change, after the transaction.
-- `Observe` and `ObserveDeep` (the type and everything nested in it) return an `IDisposable` that unsubscribes.
+- `Observe` (typed by the shared type: `Action<YArrayEvent>`, `YMapEvent`, `YTextEvent`, `YXmlEvent`) and `ObserveDeep` (the type and
+  everything nested in it) return an `IDisposable` that unsubscribes. The document raises `Updated`, `UpdatedV2` and the
+  other transaction events as .NET events.
 - An event and its transaction are valid only during the handler: compute what you need there and keep that.
 
 ## Undo

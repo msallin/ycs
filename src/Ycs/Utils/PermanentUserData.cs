@@ -43,16 +43,16 @@ public sealed class PermanentUserData
         YUsers = storeType;
         doc.AfterAllTransactions += Flush;
 
-        storeType.EventHandler += (s, e) =>
+        storeType.Observe(e =>
         {
-            foreach (var userDescription in ((YMapEvent)e.Event).KeysChanged)
+            foreach (var userDescription in e.KeysChanged)
             {
                 if (UserOf(storeType, userDescription) is YMap user)
                 {
                     InitUser(user, userDescription);
                 }
             }
-        };
+        });
 
         foreach (var kvp in storeType)
         {
@@ -68,9 +68,9 @@ public sealed class PermanentUserData
         var ds = (YArray)user.Get("ds");
         var ids = (YArray)user.Get("ids");
 
-        ds.EventHandler += (s, e) =>
+        ds.Observe(e =>
         {
-            foreach (var item in e.Event.Changes.Added)
+            foreach (var item in e.Changes.Added)
             {
                 foreach (var content in item.Content)
                 {
@@ -81,20 +81,20 @@ public sealed class PermanentUserData
                     }
                 }
             }
-        };
+        });
 
         Dss[userDescription] = new DeleteSet(ds.OfType<byte[]>().Select(TryDecodeDeleteSet).Where(d => d != null).ToList());
 
-        ids.EventHandler += (s, e) =>
+        ids.Observe(e =>
         {
-            foreach (var item in e.Event.Changes.Added)
+            foreach (var item in e.Changes.Added)
             {
                 foreach (var content in item.Content)
                 {
                     AddClientId(content, userDescription);
                 }
             }
-        };
+        });
 
         foreach (var id in ids)
         {
@@ -144,7 +144,7 @@ public sealed class PermanentUserData
 
         // When another peer replaces this user's entry, the client ids and deletions known so far are
         // copied into the new one.
-        users.EventHandler += (s, e) => _deferred.Add(() =>
+        users.Observe(e => _deferred.Add(() =>
         {
             var overwrite = UserOf(users, userDescription);
             if (overwrite == null || ReferenceEquals(overwrite, user))
@@ -165,7 +165,7 @@ public sealed class PermanentUserData
             {
                 ArrayOf(user, "ds")?.Add(new object[] { EncodeDeleteSet(known) });
             }
-        });
+        }));
 
         if (doc != Doc)
         {
@@ -185,7 +185,7 @@ public sealed class PermanentUserData
         };
     }
 
-    private void Flush(object sender, IList<Transaction> transactions)
+    private void Flush(object sender, IReadOnlyList<Transaction> transactions)
     {
         if (_deferred.Count == 0)
         {

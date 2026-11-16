@@ -87,11 +87,11 @@ internal static class Editing
         for (var c = 0; c < docs.Length; c++)
         {
             docs[c] = new YDoc(new YDocOptions { ClientId = c + 1 });
-            docs[c].Update += (_, e) =>
+            docs[c].Updated += (_, e) =>
             {
-                if (e.transaction.Local)
+                if (e.Transaction.Local)
                 {
-                    updates.Add(e.data);
+                    updates.Add(e.Update.ToArray());
                 }
             };
         }
@@ -132,7 +132,7 @@ internal static class Editing
     {
         var doc = new YDoc(new YDocOptions { ClientId = Inputs.ClientId });
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         edit(doc);
         return new(name, root, kind, null, [.. updates], Content(doc, root, kind));
     }

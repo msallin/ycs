@@ -324,7 +324,7 @@ public class CodecReuseTests
     {
         var update = SampleDoc(1).EncodeStateAsUpdateV1();
         var doc = new YDoc();
-        doc.GetText("text").EventHandler += (_, _) => throw new InvalidOperationException("observer");
+        doc.GetText("text").Observe(_ => throw new InvalidOperationException("observer"));
         var outstanding = BufferPool<byte>.OutstandingOnCurrentThread;
 
         Assert.ThrowsExactly<InvalidOperationException>(() => doc.ApplyUpdate(update.AsSpan()));
@@ -353,14 +353,14 @@ public class CodecReuseTests
         var doc = new YDoc();
         var text = doc.GetText("text");
         var applied = false;
-        text.EventHandler += (_, _) =>
+        text.Observe(_ =>
         {
             if (!applied)
             {
                 applied = true;
                 doc.ApplyUpdate(second);
             }
-        };
+        });
 
         doc.ApplyUpdate(first);
 
@@ -377,8 +377,8 @@ public class CodecReuseTests
     {
         var source = new YDoc(new YDocOptions { ClientId = 1 });
         var updates = new List<byte[]>();
-        source.Update += (_, e) => updates.Add(e.data);
-        source.UpdateV2 += (_, e) => updates.Add(e.data);
+        source.Updated += (_, e) => updates.Add(e.Update.ToArray());
+        source.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         var text = source.GetText("text");
         text.Insert(0, "abc");
         text.Insert(3, "def");
@@ -428,18 +428,18 @@ public class CodecReuseTests
         var doc = new YDoc(new YDocOptions { ClientId = 7 });
         var received = new List<byte[]>();
         var encodedInTheHandler = new List<byte[]>();
-        EventHandler<(byte[] data, object origin, Transaction transaction)> handler = (_, e) =>
+        EventHandler<UpdateEventArgs> handler = (_, e) =>
         {
-            received.Add(e.data);
+            received.Add(e.Update.ToArray());
             encodedInTheHandler.Add(v2 ? doc.EncodeStateAsUpdateV2() : doc.EncodeStateAsUpdateV1());
         };
         if (v2)
         {
-            doc.UpdateV2 += handler;
+            doc.UpdatedV2 += handler;
         }
         else
         {
-            doc.Update += handler;
+            doc.Updated += handler;
         }
 
         var outstanding = BufferPool<byte>.OutstandingOnCurrentThread;

@@ -28,11 +28,11 @@ internal sealed class SignalRClient : IAsyncDisposable
     private SignalRClient(long clientId)
     {
         Doc = new YDoc(new YDocOptions { ClientId = clientId });
-        Doc.Update += (_, e) =>
+        Doc.Updated += (_, e) =>
         {
-            if (!ReferenceEquals(e.origin, this))
+            if (!ReferenceEquals(e.Origin, this))
             {
-                Send(Messages.Update(e.data));
+                Send(Messages.Update(e.Update.ToArray()));
             }
         };
     }

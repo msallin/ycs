@@ -83,7 +83,7 @@ public class HasPendingTests
     {
         var doc = new YDoc();
         var updates = new List<byte[]>();
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         edit(doc.GetText("text"));
         return updates;
     }

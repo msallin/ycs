@@ -46,11 +46,11 @@ public class YTextTests : YTestBase
         Init(users: 2);
         var text0 = Texts[Users[0]];
 
-        IList<Delta> delta = null;
-        text0.EventHandler += (s, e) =>
+        IReadOnlyList<Delta> delta = null;
+        text0.Observe(e =>
         {
-            delta = (e.Event as YTextEvent).Delta;
-        };
+            delta = e.Delta;
+        });
 
         // Does not throw when deleting zero elements with position 0.
         text0.Delete(0, 0);
@@ -86,11 +86,11 @@ public class YTextTests : YTestBase
         Init(users: 2);
         var text0 = Texts[Users[0]];
 
-        IList<Delta> delta = null;
-        text0.EventHandler += (s, e) =>
+        IReadOnlyList<Delta> delta = null;
+        text0.Observe(e =>
         {
-            delta = (e.Event as YTextEvent).Delta;
-        };
+            delta = e.Delta;
+        });
 
         text0.Insert(0, "abc", new Dictionary<string, object> { { "bold", true } });
         Assert.AreEqual("abc", text0.ToString());
@@ -524,12 +524,12 @@ public class YTextTests : YTestBase
         Init(users: 1);
         var text0 = Texts[Users[0]];
 
-        text0.EventHandler += (sender, args) =>
+        text0.Observe(args =>
         {
-            Assert.IsTrue(args?.Event?.Changes?.Keys?.ContainsKey("test") ?? false);
-            Assert.AreEqual(ChangeAction.Add, args.Event.Changes.Keys["test"].Action);
-            Assert.IsNull(args.Event.Changes.Keys["test"].OldValue);
-        };
+            Assert.IsTrue(args?.Changes?.Keys?.ContainsKey("test") ?? false);
+            Assert.AreEqual(KeyChangeAction.Add, args.Changes.Keys["test"].Action);
+            Assert.IsNull(args.Changes.Keys["test"].OldValue);
+        });
 
         text0.SetAttribute("test", 42);
         Assert.AreEqual(42, text0.GetAttribute("test"));

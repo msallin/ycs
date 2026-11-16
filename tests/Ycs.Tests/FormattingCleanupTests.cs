@@ -116,7 +116,7 @@ public class FormattingCleanupTests
         });
         target.ApplyUpdate(source.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
         byte[] update = null;
-        source.Update += (_, e) => update = e.data;
+        source.Updated += (_, e) => update = e.Update.ToArray();
         source.Transact(_ => texts.ForEach(text => text.Format(0, 2, new Dictionary<string, object> { ["italic"] = true })));
 
         var stopwatch = Stopwatch.StartNew();

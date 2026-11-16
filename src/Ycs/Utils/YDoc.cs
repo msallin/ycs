@@ -271,9 +271,9 @@ public partial class YDoc
     /// <summary>The root type named <paramref name="name"/>, if it was defined (without defining it).</summary>
     internal bool TryGetRoot(string name, out AbstractType type) => _share.TryGetValue(name, out type);
 
-    internal void InvokeSubdocsChanged(ISet<YDoc> loaded, ISet<YDoc> added, ISet<YDoc> removed)
+    internal void InvokeSubdocsChanged(IReadOnlySet<YDoc> loaded, IReadOnlySet<YDoc> added, IReadOnlySet<YDoc> removed)
     {
-        SubdocsChanged?.Invoke(this, (loaded, added, removed));
+        SubdocsChanged?.Invoke(this, new SubdocsEventArgs(loaded, added, removed));
     }
 
     internal bool HasBeforeObserverCallsListeners => BeforeObserverCalls != null;
@@ -286,7 +286,7 @@ public partial class YDoc
         BeforeObserverCalls?.Invoke(this, transaction);
     }
 
-    internal void InvokeAfterAllTransactions(IList<Transaction> transactions)
+    internal void InvokeAfterAllTransactions(IReadOnlyList<Transaction> transactions)
     {
         AfterAllTransactions?.Invoke(this, transactions);
     }
@@ -320,7 +320,7 @@ public partial class YDoc
 
     internal void InvokeUpdateV1(Transaction transaction)
     {
-        var handler = Update;
+        var handler = Updated;
         if (handler != null)
         {
             // The encoder goes back before the handler runs, which may encode updates itself.
@@ -340,14 +340,14 @@ public partial class YDoc
 
             if (update != null)
             {
-                handler.Invoke(this, (update, transaction.Origin, transaction));
+                handler.Invoke(this, new UpdateEventArgs(update, transaction.Origin, transaction));
             }
         }
     }
 
     internal void InvokeUpdateV2(Transaction transaction)
     {
-        var handler = UpdateV2;
+        var handler = UpdatedV2;
         if (handler != null)
         {
             // The encoder goes back before the handler runs, which may encode updates itself.
@@ -367,7 +367,7 @@ public partial class YDoc
 
             if (update != null)
             {
-                handler.Invoke(this, (update, transaction.Origin, transaction));
+                handler.Invoke(this, new UpdateEventArgs(update, transaction.Origin, transaction));
             }
         }
     }

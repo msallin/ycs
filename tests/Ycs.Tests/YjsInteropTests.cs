@@ -181,7 +181,7 @@ public class YjsInteropTests
         // struct lands in the real Y.Text (and encoding the transaction does not hit a stale placeholder).
         var doc = new YDoc();
         var updates = 0;
-        doc.Update += (_, _) => updates++;
+        doc.Updated += (_, _) => updates++;
         doc.ApplyUpdate(Convert.FromBase64String("AQEBAQQBBHRleHQBYgA="));
         var text = doc.GetText("text");
         doc.ApplyUpdate(Convert.FromBase64String("AQEBAAQBBW90aGVyAWEA"));

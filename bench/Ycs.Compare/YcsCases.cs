@@ -48,7 +48,7 @@ internal static class YcsCases
         var text = doc.GetText("text");
         var chars = Inputs.TypingOf(n);
         long seen = 0;
-        text.Observe((_, _) => seen++);
+        text.Observe(_ => seen++);
         return new Prepared(
             () => doc.Transact(_ =>
             {
@@ -493,7 +493,7 @@ internal static class YcsCases
         var text = doc.GetText("text");
         var chars = Inputs.Typing;
         long seen = 0;
-        text.Observe((_, e) => seen += readDelta ? ((YTextEvent)e.Event).Delta.Count : 1);
+        text.Observe(e => seen += readDelta ? e.Delta.Count : 1);
         return new Prepared(
             () =>
             {
@@ -514,7 +514,7 @@ internal static class YcsCases
         var doc = NewDoc();
         var text = doc.GetText("text");
         var updates = new List<byte[]>(trace.Transactions);
-        doc.Update += (_, e) => updates.Add(e.data);
+        doc.Updated += (_, e) => updates.Add(e.Update.ToArray());
         byte[] half = null;
         for (var t = 0; t < trace.Transactions; t++)
         {

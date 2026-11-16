@@ -80,7 +80,7 @@ internal readonly record struct TextDiff(int Start, int Removed, string Inserted
     /// whose value is null (another peer's <c>{ insert: null }</c>) arrives as <see cref="Delta.NullEmbed"/>, which is
     /// not a string and is not a missing insert, so it too counts as one placeholder.
     /// </summary>
-    public static void FromDelta(IList<Delta> delta, List<TextDiff> changes)
+    public static void FromDelta(IReadOnlyList<Delta> delta, List<TextDiff> changes)
     {
         var at = 0;
         foreach (var op in delta)

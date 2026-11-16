@@ -93,7 +93,7 @@ internal sealed class ReferenceRun
 
     public static string Hex(byte[] bytes) => bytes.Length <= 48 ? Convert.ToHexString(bytes) : bytes.Length + ":" + Convert.ToHexString(SHA1.HashData(bytes), 0, 8);
 
-    public static string D(IList<Delta> delta)
+    public static string D(IEnumerable<Delta> delta)
     {
         var sb = new StringBuilder("[");
         foreach (var d in delta)
@@ -206,26 +206,25 @@ internal sealed class ReferenceRun
 
     public void LogUpdates(YDoc doc, string label, List<byte[]> sink = null)
     {
-        doc.Update += (_, e) =>
+        doc.Updated += (_, e) =>
         {
-            L($"{label} update {Hex(e.Item1)} local={e.Item3.Local}");
-            sink?.Add(e.Item1);
+            L($"{label} update {Hex(e.Update.ToArray())} local={e.Transaction.Local}");
+            sink?.Add(e.Update.ToArray());
         };
-        doc.UpdateV2 += (_, e) => L($"{label} updateV2 {Hex(e.Item1)}");
+        doc.UpdatedV2 += (_, e) => L($"{label} updateV2 {Hex(e.Update.ToArray())}");
     }
 
     public static string Items(IEnumerable<ItemView> items) =>
         string.Join(",", items.Select(i => i.Id.Client + ":" + i.Id.Clock + "+" + i.Length).OrderBy(x => x, StringComparer.Ordinal));
 
-    public EventHandler<YEventArgs> TextObserver(string label) => (_, e) =>
+    public Action<YTextEvent> TextObserver(string label) => ev =>
     {
-        var ev = e.Event;
         L($"{label} delta={D(ev.Delta)} added={Items(ev.Changes.Added)} deleted={Items(ev.Changes.Deleted)}");
     };
 
-    public EventHandler<YDeepEventArgs> DeepObserver(string label) => (_, e) =>
+    public Action<IReadOnlyList<YEvent>, Transaction> DeepObserver(string label) => (events, _) =>
     {
-        foreach (var ev in e.Events)
+        foreach (var ev in events)
         {
             L($"{label} deep path=[{string.Join("/", ev.Path)}] delta={D(ev.Delta)} keys={string.Join(",", ev.Keys.Keys.OrderBy(k => k, StringComparer.Ordinal))}");
         }

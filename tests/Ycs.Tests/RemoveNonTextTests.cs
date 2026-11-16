@@ -56,7 +56,7 @@ public class RemoveNonTextTests
         text.Insert(0, "plain");
         text.Delete(1, 1);
         var updates = 0;
-        doc.Update += (_, _) => updates++;
+        doc.Updated += (_, _) => updates++;
 
         var removed = text.RemoveNonText();
 

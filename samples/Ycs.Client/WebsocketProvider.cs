@@ -49,7 +49,7 @@ internal sealed class WebsocketProvider : IAsyncDisposable
         Url = new Uri(serverUrl.AbsoluteUri.TrimEnd('/') + "/" + Uri.EscapeDataString(room));
         Doc = doc;
         awareness = new ClientAwareness((ulong)doc.ClientId, this.time);
-        doc.Update += OnUpdate;
+        doc.Updated += OnUpdate;
         timer = this.time.CreateTimer(static provider => ((WebsocketProvider)provider!).Check(), this, CheckEvery, CheckEvery);
     }
 
@@ -119,7 +119,7 @@ internal sealed class WebsocketProvider : IAsyncDisposable
             }
 
             disposed = true;
-            Doc.Update -= OnUpdate;
+            Doc.Updated -= OnUpdate;
             if (connection is { } open)
             {
                 if (awareness.LocalState is not null)
@@ -383,11 +383,11 @@ internal sealed class WebsocketProvider : IAsyncDisposable
     }
 
     // Raised inside the transaction that made the update, whose author holds the gate.
-    private void OnUpdate(object? sender, (byte[] data, object origin, Transaction transaction) e)
+    private void OnUpdate(object? sender, UpdateEventArgs e)
     {
-        if (!ReferenceEquals(e.origin, this))
+        if (!ReferenceEquals(e.Origin, this))
         {
-            connection?.Send(Wire.Update(e.data));
+            connection?.Send(Wire.Update(e.Update.ToArray()));
         }
     }
 

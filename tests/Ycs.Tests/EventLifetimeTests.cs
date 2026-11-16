@@ -20,7 +20,7 @@ public class EventLifetimeTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         YTextEvent kept = null;
-        text.EventHandler += (_, e) => kept ??= (YTextEvent)e.Event;
+        text.Observe(e => kept ??= (YTextEvent)e);
         text.Insert(0, "a");
         text.Insert(1, "b");
 
@@ -36,7 +36,7 @@ public class EventLifetimeTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         YEvent kept = null;
-        text.EventHandler += (_, e) => kept = e.Event;
+        text.Observe(e => kept = e);
         text.Insert(0, "a");
         var transactions = 0;
         doc.BeforeTransaction += (_, _) => transactions++;
@@ -52,11 +52,11 @@ public class EventLifetimeTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var kept = new List<YTextEvent>();
-        text.EventHandler += (_, e) =>
+        text.Observe(e =>
         {
-            _ = e.Event.Delta;
-            kept.Add((YTextEvent)e.Event);
-        };
+            _ = e.Delta;
+            kept.Add((YTextEvent)e);
+        });
         text.Insert(0, "ab");
         text.Format(0, 1, new Dictionary<string, object> { ["bold"] = true });
 
@@ -69,7 +69,7 @@ public class EventLifetimeTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var kept = new List<YTextEvent>();
-        text.EventHandler += (_, e) => kept.Add((YTextEvent)e.Event);
+        text.Observe(e => kept.Add((YTextEvent)e));
         text.SetAttribute("lang", "en");
         doc.Transact(_ =>
         {
@@ -89,8 +89,8 @@ public class EventLifetimeTests
         var map = doc.GetMap("m");
         var inner = new YArray();
         map.Set("a", inner);
-        IList<YEvent> kept = null;
-        map.DeepEventHandler += (_, e) => kept = e.Events;
+        IReadOnlyList<YEvent> kept = null;
+        map.ObserveDeep((deepEvents, _) => kept = deepEvents);
         inner.Add(new object[] { 1 });
         doc.GetText("other").Insert(0, "x");
 
@@ -120,17 +120,17 @@ public class EventLifetimeTests
         YEvent textEvent = null;
         YEvent mapEvent = null;
         string outerDeltaInTheNestedHandler = null;
-        text.EventHandler += (_, e) =>
+        text.Observe(e =>
         {
-            textEvent = e.Event;
+            textEvent = e;
             doc.Transact(_ => map.Set("k", 1));
-        };
-        map.EventHandler += (_, e) =>
+        });
+        map.Observe(e =>
         {
-            mapEvent = e.Event;
+            mapEvent = e;
             outerDeltaInTheNestedHandler = (string)textEvent.Delta[0].Insert;
-            _ = e.Event.Keys;
-        };
+            _ = e.Keys;
+        });
 
         text.Insert(0, "a");
         doc.GetText("other").Insert(0, "x");
@@ -146,7 +146,7 @@ public class EventLifetimeTests
         var doc = new YDoc();
         var text = doc.GetText("t");
         var kept = new List<YEvent>();
-        text.EventHandler += (_, e) => kept.Add(e.Event);
+        text.Observe(e => kept.Add(e));
         text.Insert(0, "a");
         var first = kept[0];
         Transaction reusing = null;

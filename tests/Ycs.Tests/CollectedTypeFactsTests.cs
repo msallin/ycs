@@ -72,7 +72,7 @@ public class CollectedTypeFactsTests
     {
         var (doc, array, outer, _) = Collected();
         var events = 0;
-        array.DeepEventHandler += (_, _) => events++;
+        array.ObserveDeep((_, _) => events++);
 
         outer.Set("z", 1);
 
@@ -206,7 +206,7 @@ public class CollectedTypeFactsTests
         m.Set("mid", mid);
         mid.Set("arr", arr);
         YEvent held = null;
-        m.DeepEventHandler += (_, e) => held ??= e.Events.FirstOrDefault(ev => ReferenceEquals(ev.Target, arr));
+        m.ObserveDeep((deepEvents, _) => held ??= deepEvents.FirstOrDefault(ev => ReferenceEquals(ev.Target, arr)));
         arr.Push(new object[] { 1 });
         m.Delete("mid");
 

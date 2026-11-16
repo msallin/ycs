@@ -147,7 +147,7 @@ public class TraceReplayTests
         {
             var d = new Dictionary<string, object>
             {
-                ["path"] = e.Path.ToList(),
+                ["path"] = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(),
                 ["keys"] = KeysOf(e),
                 ["delta"] = e.Changes.Delta,
                 ["added"] = e.Changes.Added.Count,
@@ -163,10 +163,10 @@ public class TraceReplayTests
 
         protected void ObserveType(YType t, int id)
         {
-            t.Observe((_, e) => Log.Add(new List<object> { "obs", id, Describe(e.Event) }));
+            t.ObserveAny(e => Log.Add(new List<object> { "obs", id, Describe(e) }));
             if (id % 3 == 0)
             {
-                t.ObserveDeep((_, e) => Log.Add(new List<object> { "deep", id, e.Events.Select(Describe).ToList() }));
+                t.ObserveDeep((deepEvents, _) => Log.Add(new List<object> { "deep", id, deepEvents.Select(Describe).ToList() }));
             }
         }
     }
@@ -197,7 +197,7 @@ public class TraceReplayTests
             return base.Run(trace);
         }
 
-        private void ObserveText() => _text.Observe((_, e) => Log.Add(DescribeText((YTextEvent)e.Event)));
+        private void ObserveText() => _text.Observe(e => Log.Add(DescribeText((YTextEvent)e)));
 
         private Dictionary<string, object> DescribeText(YTextEvent e)
         {

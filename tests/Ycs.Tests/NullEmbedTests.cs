@@ -30,7 +30,7 @@ public class NullEmbedTests
     {
         var doc = new YDoc();
         object insert = null;
-        doc.GetText("t").EventHandler += (_, e) => insert = e.Event.Delta[0].Insert;
+        doc.GetText("t").Observe(e => insert = e.Delta[0].Insert);
 
         doc.ApplyUpdate(NullEmbedUpdate);
 

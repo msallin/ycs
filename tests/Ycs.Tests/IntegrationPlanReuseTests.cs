@@ -59,7 +59,7 @@ public class IntegrationPlanReuseTests
         doc.ApplyUpdateV1(second);
         var events = 0;
         var transactions = 0;
-        doc.GetText("text").Observe((_, _) => events++);
+        doc.GetText("text").Observe(_ => events++);
         doc.AfterTransaction += (_, _) => transactions++;
 
         doc.ApplyUpdateV1(first);
@@ -93,7 +93,7 @@ public class IntegrationPlanReuseTests
         var source = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
         var text = source.GetText("t");
         var updates = new System.Collections.Generic.List<byte[]>();
-        source.Update += (_, e) => updates.Add(e.data);
+        source.Updated += (_, e) => updates.Add(e.Update.ToArray());
         text.Insert(0, "\ud83d\udc4d");
         text.ApplyDelta([new Delta { Delete = 1 }]);
         text.ApplyDelta([new Delta { Delete = 1 }]);

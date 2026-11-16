@@ -49,11 +49,11 @@ public class TextDifferentialTests
         foreach (var doc in docs)
         {
             doc.GetText("text");
-            doc.Update += (_, e) =>
+            doc.Updated += (_, e) =>
             {
-                if (!ReferenceEquals(e.origin, remote))
+                if (!ReferenceEquals(e.Origin, remote))
                 {
-                    log.Add(e.data);
+                    log.Add(e.Update.ToArray());
                 }
             };
         }

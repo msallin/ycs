@@ -10,30 +10,6 @@ using System.Runtime.ExceptionServices;
 
 namespace Ycs;
 
-public class YEventArgs
-{
-    internal YEventArgs(YEvent evt, Transaction transaction)
-    {
-        Event = evt;
-        Transaction = transaction;
-    }
-
-    public YEvent Event { get; }
-    public Transaction Transaction { get; }
-}
-
-public class YDeepEventArgs
-{
-    internal YDeepEventArgs(IList<YEvent> events, Transaction transaction)
-    {
-        Events = events;
-        Transaction = transaction;
-    }
-
-    public IList<YEvent> Events { get; }
-    public Transaction Transaction { get; }
-}
-
 public abstract partial class YType
 {
     // The item the type is in. Once the type is collected (Collect), nothing but the XML siblings' links (NextSibling,
@@ -187,6 +163,11 @@ public abstract partial class YType
         return result;
     }
 
+    // The observers of this type's own events (the leaf types' typed Observe wraps each handler) and of the events of
+    // it and its descendants.
+    private Action<YEvent> _observers;
+    private Action<IReadOnlyList<YEvent>, Transaction> _deepObservers;
+
     private sealed class Subscription(Action unsubscribe) : IDisposable
     {
         private Action _unsubscribe = unsubscribe;
@@ -207,14 +188,14 @@ public abstract partial class YType
     /// </summary>
     internal bool IsObserved(Transaction transaction)
     {
-        if (EventHandler != null || transaction.Doc.HasTransactionListeners)
+        if (_observers != null || transaction.Doc.HasTransactionListeners)
         {
             return true;
         }
 
         for (var type = this; type != null; type = type.ParentType)
         {
-            if (type.DeepEventHandler != null)
+            if (type._deepObservers != null)
             {
                 return true;
             }
@@ -271,33 +252,33 @@ public abstract partial class YType
         return n;
     }
 
-    internal bool HasDeepObservers => DeepEventHandler != null;
+    internal bool HasDeepObservers => _deepObservers != null;
 
     internal void InvokeEventHandlers(YEvent evt, Transaction transaction)
     {
-        var handler = EventHandler;
+        var handler = _observers;
         if (handler != null && !transaction._buildingSkippedEvents)
         {
-            CallAll(handler, this, new YEventArgs(evt, transaction));
+            CallAll(handler, evt);
         }
     }
 
     internal void CallDeepEventHandlerListeners(IList<YEvent> events, Transaction transaction)
     {
-        var handler = DeepEventHandler;
+        var handler = _deepObservers;
         if (handler != null)
         {
-            CallAll(handler, this, new YDeepEventArgs(events, transaction));
+            CallAll(handler, (IReadOnlyList<YEvent>)events, transaction);
         }
     }
 
     // Yjs' callEventHandlerListeners (lib0 callAll): every handler runs even if one before threw, and
     // the exception thrown last propagates afterwards.
-    private static void CallAll<TArgs>(EventHandler<TArgs> handler, object sender, TArgs args)
+    private static void CallAll(Action<YEvent> handler, YEvent evt)
     {
         if (handler.HasSingleTarget)
         {
-            handler(sender, args);
+            handler(evt);
             return;
         }
 
@@ -306,7 +287,31 @@ public abstract partial class YType
         {
             try
             {
-                h(sender, args);
+                h(evt);
+            }
+            catch (Exception e)
+            {
+                error = ExceptionDispatchInfo.Capture(e);
+            }
+        }
+
+        error?.Throw();
+    }
+
+    private static void CallAll(Action<IReadOnlyList<YEvent>, Transaction> handler, IReadOnlyList<YEvent> events, Transaction transaction)
+    {
+        if (handler.HasSingleTarget)
+        {
+            handler(events, transaction);
+            return;
+        }
+
+        ExceptionDispatchInfo error = null;
+        foreach (var h in Delegate.EnumerateInvocationList(handler))
+        {
+            try
+            {
+                h(events, transaction);
             }
             catch (Exception e)
             {

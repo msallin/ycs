@@ -26,14 +26,14 @@ internal sealed class SharedText
         this.doc = doc;
         text = doc.GetText(Name);
         Text = text.ToString();
-        text.EventHandler += (_, e) =>
+        text.Observe(e =>
         {
             // The delta is computed now: ycs reuses the event once the handler returns.
             if (e.Transaction.Origin != typing)
             {
-                TextDiff.FromDelta(e.Event.Delta, unshown);
+                TextDiff.FromDelta(e.Delta, unshown);
             }
-        };
+        });
     }
 
     /// <summary>

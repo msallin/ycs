@@ -36,7 +36,7 @@ public class UpdateOperationsTests
         public Func<byte[], UpdateMeta> ParseUpdateMeta;
         public Func<byte[], byte[], byte[]> DiffUpdate;
         public Func<byte[], DecodedUpdate> DecodeUpdate;
-        public Action<YDoc, EventHandler<(byte[] data, object origin, Transaction transaction)>> Subscribe;
+        public Action<YDoc, EventHandler<UpdateEventArgs>> Subscribe;
     }
 
     private static Enc EncV1 => new Enc
@@ -50,7 +50,7 @@ public class UpdateOperationsTests
         ParseUpdateMeta = u => UpdateOperations.ParseUpdateMeta(u),
         DiffUpdate = (u, sv) => UpdateOperations.DiffUpdate(u, sv),
         DecodeUpdate = u => UpdateOperations.DecodeUpdate(u),
-        Subscribe = (doc, handler) => doc.Update += handler,
+        Subscribe = (doc, handler) => doc.Updated += handler,
     };
 
     private static Enc EncV2 => new Enc
@@ -64,7 +64,7 @@ public class UpdateOperationsTests
         ParseUpdateMeta = u => UpdateOperations.ParseUpdateMetaV2(u),
         DiffUpdate = (u, sv) => UpdateOperations.DiffUpdateV2(u, sv),
         DecodeUpdate = u => UpdateOperations.DecodeUpdateV2(u),
-        Subscribe = (doc, handler) => doc.UpdateV2 += handler,
+        Subscribe = (doc, handler) => doc.UpdatedV2 += handler,
     };
 
     private static IEnumerable<Enc> Encoders => new[] { EncV1, EncV2 };
@@ -155,7 +155,7 @@ public class UpdateOperationsTests
         var doc = new YDoc(new YDocOptions { Gc = false });
         var updates = new List<byte[]>();
 
-        enc.Subscribe(doc, (s, e) => updates.Add(e.data));
+        enc.Subscribe(doc, (s, e) => updates.Add(e.Update.ToArray()));
 
         ops(doc.GetArray("array"));
 

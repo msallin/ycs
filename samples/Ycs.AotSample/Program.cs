@@ -15,9 +15,20 @@ doc.ApplyUpdateV1(Convert.FromBase64String(YjsUpdateV1));
 var text = doc.GetText("text");
 Check(text.ToString() == "plain bold tail", $"unexpected text '{text}'");
 
+// Events: a typed observer, a deep observer and the update event, as the generic wrapper of Observe must work without reflection.
+var observed = 0;
+var deepObserved = 0;
+ReadOnlyMemory<byte> kept = default;
+using var subscription = text.Observe(e => observed += e.Delta.Count);
+using var deepSubscription = doc.GetMap("map").ObserveDeep((events, _) => deepObserved += events[0].Path.Count + events[0].Keys.Count);
+doc.Updated += (_, e) => kept = e.Update;
+
 text.Insert(0, "AOT ");
 text.Format(0, 3, new Dictionary<string, object> { ["italic"] = true, ["size"] = 1.5 });
 doc.GetMap("map").Set("added", new Dictionary<string, object> { ["n"] = 42, ["list"] = new object?[] { "x", 2.5, null } });
+
+doc.GetMap("map").Set("observed", 1);
+Check(observed > 0 && deepObserved == 2 && !kept.IsEmpty, $"events: observed {observed}, deep {deepObserved}, update {kept.Length} bytes");
 
 foreach (var v2 in new[] { false, true })
 {

@@ -10,9 +10,6 @@ namespace Ycs;
 
 public abstract partial class YType
 {
-    public event EventHandler<YEventArgs> EventHandler;
-    public event EventHandler<YDeepEventArgs> DeepEventHandler;
-
     public YDoc Doc { get; private protected set; }
     public YType Parent => ParentType;
 
@@ -22,54 +19,27 @@ public abstract partial class YType
     public abstract object ToJson();
 
     /// <summary>
-    /// Observe all events that are created on this type (Yjs' <c>observe(f)</c>). Disposing the
-    /// result unsubscribes, which is handy for lambdas; <c>+=</c>/<c>-=</c> on <see cref="EventHandler"/>
-    /// and <see cref="Unobserve"/> work as well.
+    /// Observe all events that are created by this type and its children (Yjs' <c>observeDeep(f)</c>): the
+    /// events of one transaction, those of the outer types first. Disposing the result unsubscribes.
     /// </summary>
-    public IDisposable Observe(EventHandler<YEventArgs> handler)
+    public IDisposable ObserveDeep(Action<IReadOnlyList<YEvent>, Transaction> handler)
     {
-        EventHandler += handler;
-        return new Subscription(() => EventHandler -= handler);
+        ArgumentNullException.ThrowIfNull(handler);
+        _deepObservers += handler;
+        return new Subscription(() => _deepObservers -= handler);
     }
 
     /// <summary>
-    /// Unregister an observer function previously registered with <see cref="Observe"/> (or <c>+=</c>).
+    /// Registers <paramref name="handler"/> for the events of this type (Yjs' <c>observe(f)</c>); the leaf types
+    /// expose it as <c>Observe</c> with their own event type. Disposing the result unsubscribes.
     /// </summary>
-    /// <remarks>As Yjs' <c>unobserve</c>: a handler registered more than once is removed every time.</remarks>
-    public void Unobserve(EventHandler<YEventArgs> handler)
+    private protected IDisposable AddObserver<TEvent>(Action<TEvent> handler)
+        where TEvent : YEvent
     {
-        EventHandler<YEventArgs> before;
-        do
-        {
-            before = EventHandler;
-            EventHandler -= handler;
-        }
-        while (!ReferenceEquals(before, EventHandler));
-    }
-
-    /// <summary>
-    /// Observe all events that are created by this type and its children (Yjs' <c>observeDeep(f)</c>).
-    /// Disposing the result unsubscribes.
-    /// </summary>
-    public IDisposable ObserveDeep(EventHandler<YDeepEventArgs> handler)
-    {
-        DeepEventHandler += handler;
-        return new Subscription(() => DeepEventHandler -= handler);
-    }
-
-    /// <summary>
-    /// Unregister a deep observer function previously registered with <see cref="ObserveDeep"/> (or <c>+=</c>).
-    /// </summary>
-    /// <remarks>As Yjs' <c>unobserveDeep</c>: a handler registered more than once is removed every time.</remarks>
-    public void UnobserveDeep(EventHandler<YDeepEventArgs> handler)
-    {
-        EventHandler<YDeepEventArgs> before;
-        do
-        {
-            before = DeepEventHandler;
-            DeepEventHandler -= handler;
-        }
-        while (!ReferenceEquals(before, DeepEventHandler));
+        ArgumentNullException.ThrowIfNull(handler);
+        Action<YEvent> observer = e => handler((TEvent)e);
+        _observers += observer;
+        return new Subscription(() => _observers -= observer);
     }
 
     private protected void TypeMapDelete(Transaction transaction, string key)

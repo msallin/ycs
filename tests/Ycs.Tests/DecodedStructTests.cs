@@ -65,7 +65,7 @@ public class DecodedStructTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var updates = new List<byte[]>();
-        doc.UpdateV2 += (_, e) => updates.Add(e.data);
+        doc.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
             doc.GetArray("a").Insert(0, new List<object> { i });
@@ -275,7 +275,7 @@ public class DecodedStructTests
 
         var gapped = new YDoc(new YDocOptions { ClientId = 1 });
         var updates = new List<byte[]>();
-        gapped.UpdateV2 += (_, e) => updates.Add(e.data);
+        gapped.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
         for (var i = 0; i < 4; i++)
         {
             gapped.GetArray("a").Insert(0, new List<object> { i });

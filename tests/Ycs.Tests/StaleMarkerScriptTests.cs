@@ -89,11 +89,11 @@ public class StaleMarkerScriptTests
         var pt = Root(peer);
         if (script.GetProperty("obs").GetBoolean())
         {
-            t.EventHandler += (_, _) => { };
+            t.ObserveAny(_ => { });
         }
 
         JsonElement? armed = null;
-        doc.GetMap("m").EventHandler += (_, _) =>
+        doc.GetMap("m").Observe(_ =>
         {
             if (armed is JsonElement ops)
             {
@@ -103,7 +103,7 @@ public class StaleMarkerScriptTests
                     Run(op);
                 }
             }
-        };
+        });
 
         var steps = script.GetProperty("steps");
         var expected = script.GetProperty("out");

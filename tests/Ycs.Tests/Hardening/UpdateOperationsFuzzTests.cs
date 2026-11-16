@@ -27,7 +27,7 @@ public class UpdateOperationsFuzzTests
         var seeds = new List<(byte[], byte[])>();
         var a = new YDoc(new YDocOptions { ClientId = 1 });
         var b = new YDoc(new YDocOptions { ClientId = 2 });
-        a.Update += (_, e) => seeds.Add((e.data, UpdateOperations.ConvertUpdateFormatV1ToV2(e.data)));
+        a.Updated += (_, e) => seeds.Add((e.Update.ToArray(), UpdateOperations.ConvertUpdateFormatV1ToV2(e.Update.ToArray())));
 
         a.GetText("t").Insert(0, "hello world");
         a.GetText("t").Format(0, 5, new Dictionary<string, object> { ["bold"] = true });

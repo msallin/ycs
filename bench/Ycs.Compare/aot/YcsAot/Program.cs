@@ -7,7 +7,7 @@ var update = a.EncodeStateAsUpdateV1();
 
 var b = new YDoc(new YDocOptions { ClientId = 2 });
 var events = 0;
-b.GetText("text").Observe((_, _) => events++);
+b.GetText("text").Observe(_ => events++);
 b.ApplyUpdate(update);
 var text = b.GetText("text").ToString();
 Console.WriteLine($"{text} {b.GetMap("map").Get("n")} events={events} v1={update.Length}");

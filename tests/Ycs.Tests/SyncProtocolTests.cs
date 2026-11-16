@@ -130,7 +130,7 @@ public class SyncProtocolTests
         var source = new YDoc(new YDocOptions { ClientId = 1 });
         source.GetText("t").Insert(0, "ok");
         var doc = new YDoc();
-        doc.GetText("t").EventHandler += (_, _) => throw new InvalidOperationException("observer");
+        doc.GetText("t").Observe(_ => throw new InvalidOperationException("observer"));
 
         var error = Assert.ThrowsExactly<InvalidOperationException>(() =>
             SyncProtocol.ReadSyncMessage(UpdateMessage(source.EncodeStateAsUpdate()), new ArrayBufferWriter<byte>(), doc, "peer"));
