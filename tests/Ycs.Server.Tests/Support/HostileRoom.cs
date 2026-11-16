@@ -495,23 +495,28 @@ internal sealed class HostileRoom
             }
         }
 
+        CheckAwareness();
+        if (selfInconsistent)
+        {
+            return;
+        }
+
         var vector = Vector(Room.EncodeStateVector());
         foreach (var peer in honest.Where(p => p.Connected).Append(listener))
         {
-            if (Vector(peer.Doc.EncodeStateVectorV1()) != vector)
+            if (Vector(peer.Doc.EncodeStateVectorV1()) != vector && !RoomDiffersFromItsState(vector))
             {
                 throw Fail($"the state vector of {peer.ClientId}, {Vector(peer.Doc.EncodeStateVectorV1())}, is not the room's, {vector}");
             }
         }
 
-        CheckAwareness();
-        if (!full)
+        if (!full || selfInconsistent)
         {
             return;
         }
 
         var expected = Signature(listener.Doc);
-        if (selfInconsistent || SelfInconsistent(listener.Doc, expected))
+        if (SelfInconsistent(listener.Doc, expected))
         {
             return;
         }
@@ -591,6 +596,22 @@ internal sealed class HostileRoom
         var copy = new YDoc();
         copy.ApplyUpdateV1(doc.EncodeStateAsUpdateV1(), null, UpdateLimits.Unlimited);
         selfInconsistent = Signature(copy) != signature;
+        if (selfInconsistent)
+        {
+            Stats.SelfInconsistent();
+        }
+
+        return selfInconsistent;
+    }
+
+    // Two structs under one id, the first waiting for a client nobody sends (a hostile update: no client reuses an
+    // id), keep the structs behind them waiting in the room, which a client reads from the room's state as not
+    // waiting, in Yjs as in Ycs (HostileSyncTests): from then on the joiners are ahead of the room.
+    private bool RoomDiffersFromItsState(string vector)
+    {
+        var copy = new YDoc();
+        copy.ApplyUpdateV1(Room.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
+        selfInconsistent = Vector(copy.EncodeStateVectorV1()) != vector;
         if (selfInconsistent)
         {
             Stats.SelfInconsistent();

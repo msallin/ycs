@@ -156,4 +156,67 @@ public class HostileSyncTests
         copy.ApplyUpdateV1(room.EncodeStateAsUpdate(), null, UpdateLimits.Unlimited);
         Assert.AreEqual((SessionCloseReason.None, structs), (client.Session!.CloseReason, copy.GetText("text").Length));
     }
+
+    // Two structs under one id, the first waiting for a client nobody sends: Yjs 13.6.32 keeps it waiting, and the
+    // structs behind it, also once the second one is integrated; a client that joins reads them from the room's
+    // state, where they no longer wait, and is ahead of the room for good. Only a crafted update reuses an id.
+    [TestMethod]
+    public void Receive_TwoStructsUnderOneId_AJoinerIsAheadOfTheRoom()
+    {
+        var room = new Room("r");
+        var a = new TestClient(HonestA);
+        a.Connect(room);
+        a.Insert(0, "ab");
+        TestClient.PumpAll(a);
+        var unknown = new YDoc(new YDocOptions { ClientId = 999 });
+        unknown.ApplyUpdateV1(a.Doc.EncodeStateAsUpdateV1());
+        unknown.GetText("text").Insert(1, "z");
+        var waiting = new YDoc(new YDocOptions { ClientId = 7 });
+        waiting.ApplyUpdateV1(unknown.EncodeStateAsUpdateV1());
+        var first = HostileUpdates.Edit(waiting, d => d.GetText("text").Insert(1, "u"));
+        var behind = HostileUpdates.Edit(waiting, d => d.GetMap("map").Set("k", 1));
+        var integrating = new YDoc(new YDocOptions { ClientId = 7 });
+        integrating.ApplyUpdateV1(a.Doc.EncodeStateAsUpdateV1());
+        var second = HostileUpdates.Edit(integrating, d => d.GetText("text").Insert(1, "u"));
+        var hostile = Join(room);
+        hostile.Receive(Messages.Update(behind));
+        hostile.Receive(Messages.Update(first));
+        hostile.Receive(Messages.Update(second));
+
+        var joiner = new TestClient(HonestB);
+        joiner.Connect(room);
+        TestClient.PumpAll(a, joiner);
+
+        Assert.AreEqual((1UL, 2UL), (Clock(room.EncodeStateVector(), 7), Clock(joiner.Doc.EncodeStateVectorV1(), 7)));
+    }
+
+    private static ulong Clock(byte[] vector, ulong client)
+    {
+        var reader = new MemoryStream(vector);
+        var count = VarUint.Read(reader);
+        for (var i = 0; i < count; i++)
+        {
+            var (id, clock) = (ReadVarUint64(reader), ReadVarUint64(reader));
+            if (id == client)
+            {
+                return clock;
+            }
+        }
+
+        return 0;
+    }
+
+    private static ulong ReadVarUint64(Stream stream)
+    {
+        ulong value = 0;
+        for (var shift = 0; ; shift += 7)
+        {
+            var b = stream.ReadByte();
+            value |= (ulong)(b & 0x7F) << shift;
+            if (b < 0x80)
+            {
+                return value;
+            }
+        }
+    }
 }
