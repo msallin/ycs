@@ -142,7 +142,7 @@ public class ContentType : IContentEx
                     continue;
                 }
 
-                frame.Type._start = null;
+                frame.Type._start = default;
                 (frame.Type as YArrayBase)?.ForgetPushHint();
                 frame.Type._map.Clear();
                 frame.Type._mapCount = 0;

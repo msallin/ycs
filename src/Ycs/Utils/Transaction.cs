@@ -317,7 +317,7 @@ public partial class Transaction
     internal void AddChangedTypeToTransaction(AbstractType type, string parentSub)
     {
         var item = type._item;
-        if (item == null || (_beforeState.TryGetValue(item.Id.Client, out var clock) && item.Id.Clock < clock && !item.Deleted))
+        if (item.IsNull || (_beforeState.TryGetValue(item.Id.Client, out var clock) && item.Id.Clock < clock && !item.Deleted))
         {
             // Most changed types are lists, which share one read-only set (ChangedKeys.ChildList).
             _changed.TryGetValue(type, out var set);
@@ -341,7 +341,7 @@ public partial class Transaction
         foreach (var kvp in transaction._changed)
         {
             var type = kvp.Key;
-            if ((type._item == null || !type._item.Deleted) && !HasOwnEvent(transaction, type) && type.IsObserved(transaction))
+            if ((type._item.IsNull || !type._item.Deleted) && !HasOwnEvent(transaction, type) && type.IsObserved(transaction))
             {
                 (skipped ??= new()).Add(kvp);
             }
@@ -541,7 +541,7 @@ public partial class Transaction
                 foreach (var kvp in transaction._changed)
                 {
                     var itemType = kvp.Key;
-                    if (itemType._item == null || !itemType._item.Deleted)
+                    if (itemType._item.IsNull || !itemType._item.Deleted)
                     {
                         try
                         {
@@ -579,7 +579,7 @@ public partial class Transaction
                     var events = kvp.Value;
 
                     // We need to think about the possibility that the user transforms the YDoc in the event.
-                    if (type.HasDeepObservers && (type._item == null || !type._item.Deleted))
+                    if (type.HasDeepObservers && (type._item.IsNull || !type._item.Deleted))
                     {
                         // As Yjs: the events whose target was deleted meanwhile are left out (the
                         // observer is still called when none is left).
@@ -588,7 +588,7 @@ public partial class Transaction
                         {
                             if (!events[i].Target._item.IsNull && events[i].Target._item.Deleted)
                             {
-                                delivered = events.Where(static e => e.Target._item == null || !e.Target._item.Deleted).ToList();
+                                delivered = events.Where(static e => e.Target._item.IsNull || !e.Target._item.Deleted).ToList();
                                 break;
                             }
                         }

@@ -1659,11 +1659,11 @@ namespace Ycs.Properties
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "StructListsForTests")]
         private static extern IEnumerable<KeyValuePair<long, IReadOnlyList<AbstractStruct>>> ClientsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
 
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_map")]
-        private static extern ref Dictionary<string, Item> MapOf(AbstractType type);
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "MapForTests")]
+        private static extern IEnumerable<KeyValuePair<string, Item>> MapOf(AbstractType type);
 
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_item")]
-        private static extern ref Item ItemOf(AbstractType type);
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_ItemForTests")]
+        private static extern Item ItemOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DescribeSearchMarkers")]
         private static extern string DescribeSearchMarkers(YArrayBase type);
@@ -1864,8 +1864,8 @@ namespace Ycs.Properties
 
         // ---- the item lists (for ItemListInvariants and the naive recomputations)
 
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "_start")]
-        private static extern ref Item StartOf(AbstractType type);
+        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_StartForTests")]
+        private static extern Item StartOf(AbstractType type);
 
         [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Content")]
         [return: UnsafeAccessorType("Ycs.IContentEx, Ycs")]

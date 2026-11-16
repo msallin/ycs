@@ -359,7 +359,7 @@ public partial class YDoc
         if (!_share.TryGetValue(name, out var type))
         {
             type = new T();
-            type.Integrate(this, null);
+            type.Integrate(this, default);
             _share[name] = type;
         }
 
@@ -390,7 +390,7 @@ public partial class YDoc
                 t.Length = type.Length;
 
                 _share[name] = t;
-                t.Integrate(this, null);
+                t.Integrate(this, default);
                 return t;
             }
             else

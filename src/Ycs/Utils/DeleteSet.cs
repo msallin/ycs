@@ -395,9 +395,9 @@ internal class DeleteSet
         if (right.IsItem && right.ParentSub != null)
         {
             var parent = (AbstractType)right.Parent;
-            if (parent._map.TryGetValue(right.ParentSub, out var value) && value == right.ToStruct())
+            if (parent._map.TryGetValue(right.ParentSub, out var value) && value == right)
             {
-                parent._map[right.ParentSub] = left.ToItem();
+                parent._map[right.ParentSub] = left;
             }
         }
     }

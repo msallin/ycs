@@ -40,6 +40,13 @@ public partial class AbstractType
     internal ItemRef _start;
     internal Dictionary<string, ItemRef> _map = new Dictionary<string, ItemRef>();
 
+    // The fields as objects, for the property tests (they reach no internal type).
+    internal Item StartForTests => _start.ToItem();
+
+    internal Item ItemForTests => _item.ToItem();
+
+    internal IEnumerable<KeyValuePair<string, Item>> MapForTests() => _map.Select(kv => new KeyValuePair<string, Item>(kv.Key, kv.Value.ToItem()));
+
     // How many keys of _map have a value that is not deleted, kept by Item.Integrate and Item.Delete.
     internal int _mapCount;
 

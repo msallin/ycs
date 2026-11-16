@@ -45,7 +45,7 @@ public partial class GC : AbstractStruct
             Length -= offset;
         }
 
-        transaction.Doc.Store.AddStruct(this);
+        transaction.Doc.Store.AddStruct(ItemRef.Of(this));
     }
 
     internal override void Write(IUpdateEncoder encoder, int offset)

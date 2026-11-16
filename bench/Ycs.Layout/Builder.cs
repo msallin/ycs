@@ -29,7 +29,7 @@ internal static class Builder
             foreach (var s in list)
             {
                 var h = store.NewSlot();
-                handles[s] = h;
+                handles[s.ToStruct()] = h;
                 order.Add(Clock(s.Id.Clock), h);
             }
         }
@@ -131,7 +131,7 @@ internal static class Builder
         foreach (var (t, i) in types)
         {
             var e = store.Types[i];
-            e.Start = Handle(t._start);
+            e.Start = Handle(t._start.ToStruct());
             e.Length = t.Length;
             e.MapCount = t._mapCount;
             if (t._map.Count > 0)
@@ -139,11 +139,11 @@ internal static class Builder
                 e.Map = new Dictionary<string, int>(t._map.Count);
                 foreach (var (k, v) in t._map)
                 {
-                    e.Map[k] = Handle(v);
+                    e.Map[k] = Handle(v.ToStruct());
                 }
             }
 
-            if (t._item == null)
+            if (t._item.IsNull)
             {
                 e.RootName = t.FindRootTypeKey();
             }

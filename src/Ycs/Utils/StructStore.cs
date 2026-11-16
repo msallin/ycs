@@ -1017,7 +1017,7 @@ internal sealed partial class StructStore
                 {
                     // Item was the last item on clientsStructRefs and the field was already cleared. Add item to restStructs and continue.
                     var single = new ClientStructs(1);
-                    single.Add(item);
+                    single.Add(ItemRef.Of(item));
                     Rest.Clients[client] = single;
                 }
 

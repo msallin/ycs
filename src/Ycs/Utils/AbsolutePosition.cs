@@ -71,8 +71,8 @@ public class AbsolutePosition
             }
 
             var res = followUndoneDeletions ? store.FollowRedone(rightId.Value) : GetItemWithOffset(store, rightId.Value);
-            var right = res.item.ToStruct() as Item;
-            if (right == null)
+            var right = res.item.AsItem;
+            if (right.IsNull)
             {
                 return null;
             }
@@ -80,19 +80,19 @@ public class AbsolutePosition
             type = right.Parent as AbstractType;
             Debug.Assert(type != null);
 
-            if (type._item == null || !type._item.Deleted)
+            if (type._item.IsNull || !type._item.Deleted)
             {
                 // Adjust position based on the left assotiation, if necessary.
                 index = (right.Deleted || !right.Countable) ? 0 : (res.diff + (assoc >= 0 ? 0 : 1));
-                var n = right.Left as Item;
-                while (n != null)
+                var n = right.Left.AsItem;
+                while (!n.IsNull)
                 {
                     if (!n.Deleted && n.Countable)
                     {
                         index += n.Length;
                     }
 
-                    n = n.Left as Item;
+                    n = n.Left.AsItem;
                 }
             }
         }
@@ -112,8 +112,8 @@ public class AbsolutePosition
                 }
 
                 var res = followUndoneDeletions ? store.FollowRedone(typeId.Value) : GetItemWithOffset(store, typeId.Value);
-                var item = res.item.ToStruct() as Item;
-                if (item != null && item.Content is ContentType)
+                var item = res.item.AsItem;
+                if (!item.IsNull && item.Content is ContentType)
                 {
                     type = (item.Content as ContentType).Type;
                 }

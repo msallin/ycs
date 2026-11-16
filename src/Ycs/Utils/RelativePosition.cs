@@ -48,7 +48,7 @@ public partial class RelativePosition : IEquatable<RelativePosition>
         Item = item;
         Assoc = assoc;
 
-        if (type._item == null)
+        if (type._item.IsNull)
         {
             TName = type.FindRootTypeKey();
         }

@@ -158,9 +158,4 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     public override int GetHashCode() => RuntimeHelpers.GetHashCode(_struct);
 
     public override string ToString() => _struct is null ? "null" : $"{(_struct is GC ? "GC" : "Item")} {_struct.Id.Client}:{_struct.Id.Clock} ({_struct.Length})";
-
-    // While the library moves onto references (layout step 4); removed when it is done.
-    public static implicit operator ItemRef(AbstractStruct str) => new(str);
-
-    public static implicit operator AbstractStruct(ItemRef reference) => reference._struct;
 }

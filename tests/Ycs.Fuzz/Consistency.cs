@@ -90,7 +90,7 @@ internal static class Consistency
 
             var ids = new List<(long Client, long Clock, long End)>();
             AbstractStruct? previous = null;
-            for (AbstractStruct? s = type._start; s != null; s = (s as Item)?.Right)
+            for (AbstractStruct? s = type._start.ToStruct(); s != null; s = (s as Item)?.Right)
             {
                 if (s is not Item item)
                 {

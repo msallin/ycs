@@ -6,6 +6,8 @@
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
     <Nullable>enable</Nullable>
+    <!-- An ItemRef compared with null binds to the lifted operator and is always false: compare with IsNull. -->
+    <WarningsAsErrors>$(WarningsAsErrors);CS8073</WarningsAsErrors>
     <Version>0.0.1</Version>
     <Description>.NET implementation of the Yjs CRDT framework.</Description>
     <Copyright>Copyright (c) 2021</Copyright>

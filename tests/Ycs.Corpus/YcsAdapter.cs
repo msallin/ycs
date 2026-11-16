@@ -189,7 +189,7 @@ internal sealed class CorpusDoc
     {
         var runs = new List<ItemRun>();
         AbstractStruct previous = null;
-        AbstractStruct s = type._start;
+        AbstractStruct s = type._start.ToStruct();
         while (s != null)
         {
             if (s is not Item item)
