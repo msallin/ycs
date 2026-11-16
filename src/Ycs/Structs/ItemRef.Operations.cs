@@ -81,9 +81,10 @@ internal readonly partial struct ItemRef
 
     public bool MergeWith(ItemRef right) => IsItem ? MergeItemWith(right) : _struct.MergeWith(right._struct);
 
+    // An item whose parent is not a type is a decoded one (the rest store holds them); it writes itself.
     public void Write(IUpdateEncoder encoder, int offset)
     {
-        if (IsItem)
+        if (IsItem && ItemObject.Parent is AbstractType)
         {
             WriteItem(encoder, offset);
         }
@@ -452,58 +453,24 @@ internal readonly partial struct ItemRef
 
     private void WriteItem(IUpdateEncoder encoder, int offset)
     {
-        var origin = offset > 0 ? new ID(Id.Client, Id.Clock + offset - 1) : LeftOrigin;
-        var rightOrigin = RightOrigin;
-        var parentSub = ParentSub;
-        var info = (Content.Ref & Bits.Bits5) |
-            (origin == null ? 0 : Bit.Bit8) |
-            (rightOrigin == null ? 0 : Bit.Bit7) |
-            (parentSub == null ? 0 : Bit.Bit6);
-        encoder.WriteInfo((byte)info);
-
-        if (origin != null)
-        {
-            encoder.WriteLeftId(origin.Value);
-        }
-
-        if (rightOrigin != null)
-        {
-            encoder.WriteRightId(rightOrigin.Value);
-        }
-
-        if (origin == null && rightOrigin == null)
+        string root = null;
+        ID parentId = default;
+        if (offset == 0 && LeftOrigin == null && RightOrigin == null)
         {
             switch (Parent)
             {
-                case string yKey:
-                    // Not integrated (pending, or read by UpdateOperations): a root type by name.
-                    encoder.WriteParentInfo(true);
-                    encoder.WriteString(yKey);
-                    break;
-                case ID parentId:
-                    // Not integrated: the id of the parent type's item.
-                    encoder.WriteParentInfo(false);
-                    encoder.WriteLeftId(parentId);
-                    break;
-                case AbstractType { _item.IsNull: true } root:
-                    encoder.WriteParentInfo(true);
-                    encoder.WriteString(root.FindRootTypeKey());
+                case AbstractType { _item.IsNull: true } rootType:
+                    root = rootType.FindRootTypeKey();
                     break;
                 case AbstractType type:
-                    encoder.WriteParentInfo(false);
-                    encoder.WriteLeftId(type._item.Id);
+                    parentId = type._item.Id;
                     break;
                 default:
                     throw new InvalidOperationException("An item without origins has no parent.");
             }
-
-            if (parentSub != null)
-            {
-                encoder.WriteString(parentSub);
-            }
         }
 
-        Content.Write(encoder, offset);
+        Item.WriteItem(encoder, offset, Id, LeftOrigin, RightOrigin, ParentSub, Content, root, parentId);
     }
 
     /// <summary>

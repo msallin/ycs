@@ -192,16 +192,84 @@ public partial class Item : AbstractStruct
         _info |= InfoEnum.Deleted;
     }
 
-    // The algorithms are ItemRef's (ItemRef.Operations.cs).
-    internal override bool CanMergeWith(AbstractStruct right) => ItemRef.Of(this).CanMergeWith(ItemRef.Of(right));
+    // An item of the store is ItemRef's (ItemRef.Operations.cs). A decoded item (MergeUpdates, DiffUpdate, the conversions,
+    // the rest store) never enters the store's walks: Write and the merge rules below run on its own fields.
+    internal override bool CanMergeWith(AbstractStruct right) => false; // Yjs' Item#mergeWith needs this.right === right; a decoded item has no neighbours.
 
-    internal override bool MergeWith(AbstractStruct right) => ItemRef.Of(this).MergeWith(ItemRef.Of(right));
+    internal override bool MergeWith(AbstractStruct right) => false;
 
     internal override void Delete(Transaction transaction) => ItemRef.Of(this).Delete(transaction);
 
     internal override void Integrate(Transaction transaction, int offset) => ItemRef.Of(this).Integrate(transaction, offset);
 
-    internal override void Write(IUpdateEncoder encoder, int offset) => ItemRef.Of(this).Write(encoder, offset);
+    // The parent of a decoded item is a root's name or the id of its type's item.
+    internal override void Write(IUpdateEncoder encoder, int offset)
+    {
+        string root = null;
+        ID parentId = default;
+        if (LeftOrigin == null && RightOrigin == null && offset == 0)
+        {
+            switch (Parent)
+            {
+                case string name:
+                    root = name;
+                    break;
+                case ID id:
+                    parentId = id;
+                    break;
+                default:
+                    throw new InvalidOperationException("An item without origins has no parent.");
+            }
+        }
+
+        WriteItem(encoder, offset, Id, LeftOrigin, RightOrigin, ParentSub, Content, root, parentId);
+    }
+
+    /// <summary>
+    /// The item's encoding (Yjs' <c>Item#write</c>) from plain values. The parent is written only when neither origin
+    /// is (<paramref name="offset"/> 0 and no origins): then <paramref name="parentRoot"/> names a root type, or, when
+    /// it is null, <paramref name="parentId"/> is the id of the type's item.
+    /// </summary>
+    internal static void WriteItem(IUpdateEncoder encoder, int offset, ID id, ID? leftOrigin, ID? rightOrigin, string parentSub, IContentEx content, string parentRoot, ID parentId)
+    {
+        var origin = offset > 0 ? new ID(id.Client, id.Clock + offset - 1) : leftOrigin;
+        var info = (content.Ref & Bits.Bits5) |
+            (origin == null ? 0 : Bit.Bit8) |
+            (rightOrigin == null ? 0 : Bit.Bit7) |
+            (parentSub == null ? 0 : Bit.Bit6);
+        encoder.WriteInfo((byte)info);
+
+        if (origin != null)
+        {
+            encoder.WriteLeftId(origin.Value);
+        }
+
+        if (rightOrigin != null)
+        {
+            encoder.WriteRightId(rightOrigin.Value);
+        }
+
+        if (origin == null && rightOrigin == null)
+        {
+            if (parentRoot != null)
+            {
+                encoder.WriteParentInfo(true);
+                encoder.WriteString(parentRoot);
+            }
+            else
+            {
+                encoder.WriteParentInfo(false);
+                encoder.WriteLeftId(parentId);
+            }
+
+            if (parentSub != null)
+            {
+                encoder.WriteString(parentSub);
+            }
+        }
+
+        content.Write(encoder, offset);
+    }
 
     /// <summary>
     /// The client of a struct this item refers to that <paramref name="getState"/> does not cover
