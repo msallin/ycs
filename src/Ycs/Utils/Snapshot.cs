@@ -197,6 +197,33 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
         return true;
     }
 
+    public override bool Equals(object? obj) => obj is Snapshot other && Equals(other);
+
+    // Order-independent over the clients, as Equals; order-dependent within a client's ranges.
+    public override int GetHashCode()
+    {
+        var hash = 0;
+        foreach (var kvp in StateVector)
+        {
+            hash += HashCode.Combine(kvp.Key, kvp.Value);
+        }
+
+        foreach (var kvp in DeleteSet.Clients)
+        {
+            var client = new HashCode();
+            client.Add(kvp.Key);
+            foreach (var item in kvp.Value)
+            {
+                client.Add(item.Clock);
+                client.Add(item.Length);
+            }
+
+            hash += client.ToHashCode();
+        }
+
+        return hash;
+    }
+
     public byte[] EncodeSnapshotV2()
     {
         var encoder = new DSEncoderV2();

@@ -81,6 +81,11 @@ public partial class RelativePosition : IEquatable<RelativePosition>
             && Assoc == other.Assoc;
     }
 
+    public override bool Equals(object? obj) => obj is RelativePosition other && Equals(other);
+
+    // Assoc is a mutable field: do not change it while the position is a key of a hash table.
+    public override int GetHashCode() => HashCode.Combine(TName, Item, TypeId, Assoc);
+
     /// <summary>
     /// Create a relative position based on an absolute position.
     /// </summary>
