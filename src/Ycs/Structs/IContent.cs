@@ -6,7 +6,7 @@
 
 namespace Ycs;
 
-public interface IContent
+internal interface IContent
 {
     bool Countable { get; }
     int Length { get; }

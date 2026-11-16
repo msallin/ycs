@@ -1,0 +1,114 @@
+@implements IAsyncDisposable
+
+<p class="status">
+    <span class="state">@StatusText</span> &middot; room <strong>@_room</strong>
+    @if (_own is not null)
+    {
+        <span class="user own" style="border-color: @_own.Colour">@_own.Name (you)</span>
+    }
+    @foreach (var user in _others)
+    {
+        <span class="user" style="border-color: @user.Colour">@user.Name</span>
+    }
+</p>
+<textarea @ref="_area" spellcheck="false" readonly="@(!_everSynced)" aria-label="Text"></textarea>
+
+@code {
+    private ElementReference _area;
+    private DotNetObjectReference<RoomPage>? _self;
+    private WebsocketProvider? _provider;
+    private SharedText? _text;
+    private string _room = string.Empty;
+    private PresenceUser? _own;
+    private IReadOnlyList<PresenceUser> _others = [];
+
+    // The textarea stays read-only until the first sync: typed into an empty text, an edit would land before the
+    // room's text instead of where the user meant it.
+    private bool _everSynced;
+
+    [Inject]
+    private IJSRuntime Js { get; set; } = default!;
+
+    private IJSInProcessRuntime JsSync => (IJSInProcessRuntime)Js;
+
+    private string StatusText => _provider switch
+    {
+        { Status: ConnectionStatus.Connected, Synced: true } => "Connected",
+        { Status: ConnectionStatus.Connected } or { Status: ConnectionStatus.Connecting } => "Connecting...",
+        _ => "Offline",
+    };
+
+    /// <summary>
+    /// The user changed the textarea: <paramref name="removed"/> code units at <paramref name="start"/> of the text
+    /// shown before are replaced by <paramref name="inserted"/>. Called synchronously from its input event.
+    /// </summary>
+    [JSInvokable]
+    public void OnInput(int start, int removed, string inserted)
+    {
+        if (_provider is null || _text is null)
+        {
+            return;
+        }
+
+        lock (_provider.Gate)
+        {
+            _text.Edit(new TextDiff(start, removed, inserted));
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_provider is not null)
+        {
+            await _provider.DisposeAsync();
+        }
+
+        _self?.Dispose();
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        var location = JsSync.Invoke<PageLocation>("ycsRoom.start");
+        _room = location.Room;
+        var doc = new YDoc();
+        var provider = new WebsocketProvider(new Uri(location.Server), _room, doc);
+        var text = new SharedText(doc);
+        (_provider, _text) = (provider, text);
+        _self = DotNetObjectReference.Create(this);
+        JsSync.InvokeVoid("ycsRoom.attach", _area, _self);
+
+        provider.StatusChanged += () =>
+        {
+            _everSynced |= provider.Synced;
+            StateHasChanged();
+        };
+        provider.Received += text.Show;
+        provider.AwarenessChanged += () =>
+        {
+            _others = Presence.Users(provider.RemoteStates);
+            StateHasChanged();
+        };
+        text.RemoteChange += (diff, changes) =>
+        {
+            var selection = JsSync.Invoke<TextSelection>("ycsRoom.selection");
+            var (start, end) = TextDiff.MoveSelection(selection.Start, selection.End, changes);
+            JsSync.InvokeVoid("ycsRoom.replace", diff.Start, diff.Removed, diff.Inserted, start, end);
+        };
+
+        var state = Presence.GuestState();
+        _own = Presence.Parse(provider.ClientId, state);
+        provider.SetLocalState(state);
+        provider.Connect();
+        StateHasChanged();
+    }
+
+    // What ycsRoom.start answers: the room's name and the server's URL.
+    private sealed record PageLocation(string Room, string Server);
+
+    private sealed record TextSelection(int Start, int End);
+}

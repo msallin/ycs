@@ -7,5 +7,9 @@ namespace Ycs;
 public static class StoreChecks
 {
     [AssemblyInitialize]
-    public static void RecountAfterEveryTransaction(TestContext context) => StructStore.CheckAfterTransactionsForTests = true;
+    public static void RecountAfterEveryTransaction(TestContext context)
+    {
+        StructStore.CheckAfterTransactionsForTests = true;
+        UpdateReader.StageForTests = true;
+    }
 }

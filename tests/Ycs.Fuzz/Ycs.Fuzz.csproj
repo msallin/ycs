@@ -28,4 +28,8 @@
     <None Include="..\..\interop\corpus\cases\*.json" Link="cases\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Include="..\Ycs.Tests\Support\StagingDifferential.cs" Link="Shared\StagingDifferential.cs" />
+  </ItemGroup>
+
 </Project>

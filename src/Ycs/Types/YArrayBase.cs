@@ -314,7 +314,7 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
                 _searchMarkers.UpdateMarkerChanges(transaction, index, content.Count);
             }
 
-            InsertGenericsAfter(transaction, null, content);
+            InsertGenericsAfterReturningLast(transaction, default, content);
             return;
         }
 
@@ -431,9 +431,6 @@ public abstract partial class YArrayBase : AbstractType, IEnumerable<object>
 
     private static int SpliceStart(List<object> list, int index) =>
         index < 0 ? Math.Max(list.Count + index, 0) : Math.Min(index, list.Count);
-
-    protected void InsertGenericsAfter(Transaction transaction, Item referenceItem, ICollection<object> content) =>
-        InsertGenericsAfterReturningLast(transaction, ItemRef.Of(referenceItem), content);
 
     /// <returns>The last item inserted, or <paramref name="referenceItem"/> when there was no content.</returns>
     private protected ItemRef InsertGenericsAfterReturningLast(Transaction transaction, ItemRef referenceItem, ICollection<object> content)

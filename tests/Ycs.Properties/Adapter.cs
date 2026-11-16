@@ -506,7 +506,7 @@ namespace Ycs.Properties
             _run = run;
             Index = index;
             // "gcf": a garbage collection filter that keeps every item whose clock is a multiple of it, and records each call.
-            Predicate<Item> gcFilter = null;
+            Predicate<ItemView> gcFilter = null;
             if (spec.Has("gcf"))
             {
                 var keepEvery = spec.Int("gcf");
@@ -1194,7 +1194,7 @@ namespace Ycs.Properties
         internal readonly YDoc Doc;
         private readonly List<(string Name, string Kind)> _roots;
 
-        public Replica(long? clientId, bool gc, IEnumerable<(string Name, string Kind)> roots, Predicate<Item> gcFilter = null)
+        public Replica(long? clientId, bool gc, IEnumerable<(string Name, string Kind)> roots, Predicate<ItemView> gcFilter = null)
         {
             var options = new YDocOptions { Gc = gc, ClientId = clientId };
             if (gcFilter != null)

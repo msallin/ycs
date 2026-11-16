@@ -6,7 +6,7 @@
 
 namespace Ycs;
 
-public class ContentBinary : IContentEx
+internal class ContentBinary : IContentEx
 {
     internal const int _ref = 3;
 

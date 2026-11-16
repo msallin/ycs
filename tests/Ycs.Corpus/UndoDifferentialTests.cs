@@ -93,7 +93,7 @@ internal static class UndoReplay
             IgnoreRemoteMapChanges = config.GetProperty("ignoreRemoteMapChanges").GetBoolean(),
             DeleteFilter = config.GetProperty("deleteFilter").GetInt32() switch
             {
-                1 => item => item.Content is not ContentType,
+                1 => item => item.Kind != ItemKind.Type,
                 2 => item => item.ParentSub != "y",
                 _ => null,
             },

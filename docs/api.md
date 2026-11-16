@@ -66,6 +66,30 @@ boundary; they would make Ycs harder to use without making it safer, so Ycs keep
 | `YArray.Get`/`YXmlFragment.Get` of a negative index threw `ArgumentOutOfRangeException`, and so did `YArray.Get` when the search marker it found lay beyond the index (an observer of another type reading during a remote transaction's cleanup, while the list's markers are stale) | returns null (Yjs: `undefined`), in both cases, also where the index is within the length | Yjs' `typeListGet` |
 | `YXmlElement.ToString` wrote values with .NET formatting and the current culture (`True`, `1,5`); `GetAttributes(snapshot)` dropped null values | values as JavaScript's `String(value)` (`true`, `1.5`, `null`, `[object Object]`); null values kept | Yjs' `toString`, `typeMapGetAllSnapshot` |
 | `Unobserve`/`UnobserveDeep` of a handler registered twice removed one registration | every registration of it, as Yjs' `removeEventHandlerListener` (`-=` on the events still removes one; an unknown handler is ignored, where Yjs logs an error) | Yjs' `unobserve` |
+| `Item`, `AbstractStruct`, `GC`, `Skip`, `IContent` and the `Content*` classes were public, and `Item.Left`/`Right`/`Next`/`Prev`, `Marker` and `SplitItem` with them; events, filters and `DecodeUpdate` handed them out | internal. `ItemView` (a `readonly struct`: the document and an id) and `ItemKind` are public; `DecodedStruct` (a record) describes a struct of a decoded update. See [Migrating from the struct classes](#migrating-from-the-struct-classes) | the classes are the storage layout: a caller could mutate the list behind the store's back (`SplitItem`, `Marker`), and every layout change (the slab of `docs/design-item-layout.md`) would have been a break. A view names a position by its id, valid as long as the document, across splits, merges and collection |
+
+## Migrating from the struct classes
+
+An `ItemView` reads the struct that holds its id now, as if split at the id (`docs/design-item-layout.md`, 3.2): `Id`,
+`Length`, `LastId`, `Deleted`, `Countable`, `Keep`, `LeftOrigin`, `RightOrigin`, `Redone`, `Parent`, `ParentSub`; `Kind` (an `ItemKind`: `String`, `Any`, `Json`, `Binary`, `Embed`,
+`Format`, `Type`, `Doc`, `Deleted`, `GC`, `Skip`) replaces the `is` tests, `Content` is what `GetContent()` gave, `Left`
+and `Right` are `ItemView?`. `default(ItemView)` names nothing: every member throws `InvalidOperationException`. A
+view is valid as long as the document. Inside a transaction and its observers it reads what the struct reads; after
+the cleanup's merges it reads the struct that holds its id then, so for items a, b, c merged into one `Changes.Added`
+read afterwards gives "abc", "bc", "c" where Yjs' orphaned items give "abc", "b", "c".
+
+| Old | New |
+| --- | --- |
+| `ChangesCollection.Added`, `.Deleted`: `ISet<Item>` | `ISet<ItemView>`; a lambda that read `Id`, `Length`, `Deleted`, `Content` keeps its body (`Content` is the `IReadOnlyList<object>` of `GetContent()`) |
+| `YEvent.Adds(AbstractStruct)`, `Deletes(AbstractStruct)` | `Adds(ItemView)`, `Deletes(ItemView)` |
+| `YDocOptions.GcFilter`, `YDoc.GcFilter`: `Predicate<Item>` | `Predicate<ItemView>`; `item.Content is ContentType` becomes `item.Kind == ItemKind.Type`, `item.Parent`, `ParentSub`, `Keep` as before |
+| `UndoManagerOptions.DeleteFilter`: `Func<Item, bool>` | `Func<ItemView, bool>` |
+| `DecodedUpdate.Structs`: `IReadOnlyList<AbstractStruct>` | `IReadOnlyList<DecodedStruct>`, detached from any store: `Id`, `Length`, `Kind`, `LeftOrigin`, `RightOrigin`, `ParentName` (a root type's name) or `ParentId`, `ParentSub`, and by kind `Content`, `Text`, `FormatKey`, `FormatValue`, `TypeRef`, `TypeName`, `DocGuid` |
+| `s is Skip`, `s is GC`, `s is Item` on a struct | `Kind == ItemKind.Skip`, `Kind == ItemKind.GC`, any other kind |
+| `item.Left as Item`, `item.Right as Item` | `view.Left`, `view.Right` (`ItemView?`) |
+| `item.Parent as ID?` of a decoded struct | `DecodedStruct.ParentId` (`ParentName` for a root type) |
+| `Item.Next`, `Item.Prev`, `Item.Marker`, `Item.SplitItem` | none: internal state, and a mutation that bypasses the store and the merge rules |
+| `AbstractType.TypeMapEnumerate`, `YArrayBase.InsertGenericsAfter` (`protected`) | none; a subclass of `YMap`, `YArray` or `YText` outside the assembly never had a use for them (`YArrayBase.InsertGenericsAfter` took only `null` from `Insert` at 0) |
 
 ## Proposed, not done
 
@@ -80,14 +104,11 @@ for a discussion with the maintainers:
   would cost nothing per position, but `Assoc` is a settable field, `CompareRelativePositions` and
   `AbsolutePosition.TryCreateFromRelativePosition` accept `null`, and callers keep positions in
   collections by reference, so it is a breaking change.
-- `Item`, `AbstractStruct`, `GC`, `Skip` and the content classes are public but are
-  implementation details of the CRDT; YDotNet exposes none of that.
 - `YMap.Get` and `TryGet` return `object`. Typed accessors (`TryGet<T>(key, out T value)`) would
   remove casts without introducing YDotNet's `Output` wrapper.
 - Nullable annotations cover the encoding layer only; the public types are not annotated yet.
 - Clocks up to 2^53 - 1, as Yjs reads them (Ycs rejects clocks beyond 2^31 - 1, see below). `ID.Clock` is a
-  `long` already; what is `int` is a struct's and a content's `Length` (public on `AbstractStruct`, `Item`,
-  `IContent`) and the offsets derived from clocks (nine `(int)` narrowings in `StructStore`, `EncodingUtils`,
+  `long` already; what is `int` is a struct's and a content's `Length` (public on `ItemView` and `DecodedStruct`) and the offsets derived from clocks (nine `(int)` narrowings in `StructStore`, `EncodingUtils`,
   `AbsolutePosition`; `SplitItem`, `Integrate`, `Write` and `Splice` take an `int` offset). Moving them to `long`
   changes the public API, adds 4 bytes to every struct, and needs every narrowing checked; a GC or deleted run longer
   than 2^31 - 1 clocks is the only content that would need it (strings and lists cannot be that long).

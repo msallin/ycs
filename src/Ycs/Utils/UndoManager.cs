@@ -41,7 +41,7 @@ public sealed class UndoManagerOptions
     public Func<Transaction, bool> CaptureTransaction { get; set; }
 
     /// <summary>An item for which this returns false is not deleted by an undo or redo. Default: every item.</summary>
-    public Func<Item, bool> DeleteFilter { get; set; }
+    public Func<ItemView, bool> DeleteFilter { get; set; }
 
     /// <summary>
     /// The origins (or origin types, compared exactly) whose transactions are captured. Default: <c>{ null }</c>.
@@ -106,7 +106,7 @@ public class UndoManager
 
     // Each entry is an AbstractType (its subtree is tracked) or a YDoc (the whole document is).
     private readonly List<object> _scope = new List<object>();
-    private readonly Func<Item, bool> _deleteFilter;
+    private readonly Func<ItemView, bool> _deleteFilter;
     private readonly Func<Transaction, bool> _captureTransaction;
     private readonly ISet<object> _trackedOrigins;
     private readonly YDoc _doc;
@@ -542,7 +542,7 @@ public class UndoManager
                     for (int i = itemsToDelete.Count - 1; i >= 0; i--)
                     {
                         var item = itemsToDelete[i];
-                        if (_deleteFilter(item.ToItem()))
+                        if (_deleteFilter(ItemView.Of(transaction.Doc, item.ToItem())))
                         {
                             item.Delete(transaction);
                             performedChange = true;
@@ -649,7 +649,7 @@ public class UndoManager
             while (!left.IsNull)
             {
                 var leftTrace = left;
-                while (!leftTrace.IsNull && ((AbstractType)leftTrace.Parent)._item != parentItem)
+                while (!leftTrace.IsNull && leftTrace.Parent != parentType)
                 {
                     leftTrace = leftTrace.Redone == null ? default : store.GetItemCleanStart(transaction, leftTrace.Redone.Value);
                 }
@@ -666,7 +666,7 @@ public class UndoManager
             while (!right.IsNull)
             {
                 var rightTrace = right;
-                while (!rightTrace.IsNull && ((AbstractType)rightTrace.Parent)._item != parentItem)
+                while (!rightTrace.IsNull && rightTrace.Parent != parentType)
                 {
                     rightTrace = rightTrace.Redone == null ? default : store.GetItemCleanStart(transaction, rightTrace.Redone.Value);
                 }
@@ -709,7 +709,7 @@ public class UndoManager
             }
 
             // A left neighbour in another parent would give the copy an origin that misleads remote peers.
-            if (!left.IsNull && ((AbstractType)left.Parent)._item != parentItem)
+            if (!left.IsNull && left.Parent != parentType)
             {
                 left = parentType._map.GetValueOrDefault(item.ParentSub);
             }
@@ -725,14 +725,12 @@ public class UndoManager
 
     private static bool IsParentOf(AbstractType parent, ItemRef child)
     {
-        while (!child.IsNull)
+        for (var type = child.IsNull ? null : child.Parent as AbstractType; type != null; type = type.ParentType)
         {
-            if (child.Parent == parent)
+            if (type == parent)
             {
                 return true;
             }
-
-            child = ((AbstractType)child.Parent)._item;
         }
 
         return false;

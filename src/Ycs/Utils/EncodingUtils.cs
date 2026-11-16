@@ -267,16 +267,17 @@ internal static class EncodingUtils
     /// <see cref="ReadClientStructRefs(IUpdateDecoder)"/> into the empty <paramref name="clientRefs"/>,
     /// with an empty <paramref name="seenClients"/> to find a client listed twice, and the lists taken
     /// from <paramref name="spareLists"/> while it has any. On an exception, the lists taken are in
-    /// <paramref name="clientRefs"/>.
+    /// <paramref name="clientRefs"/>. An empty <paramref name="staging"/> is filled with the same structs.
     /// </summary>
     public static void ReadClientStructRefs(
         IUpdateDecoder decoder,
         Dictionary<long, List<AbstractStruct>> clientRefs,
         HashSet<long> seenClients,
-        Stack<List<AbstractStruct>> spareLists)
+        Stack<List<AbstractStruct>> spareLists,
+        StagingTable staging = null)
     {
         Debug.Assert(clientRefs.Count == 0);
-        var cursor = new StructCursor(decoder, seenClients);
+        var cursor = new StructCursor(decoder, seenClients, staging);
         List<AbstractStruct> refs = null;
 
         while (cursor.Next() is { } str)
@@ -308,6 +309,7 @@ internal static class EncodingUtils
         private readonly IUpdateDecoder _decoder;
         private readonly long _sections;
         private readonly HashSet<long> _clients;
+        private readonly StagingTable _staging;
         private long _section;
         private long _structsLeft;
         private long _structCount;
@@ -315,9 +317,14 @@ internal static class EncodingUtils
         private long _clock;
 
         /// <param name="seenClients">An empty set to find a client listed twice; one is created when needed if null.</param>
-        public StructCursor(IUpdateDecoder decoder, HashSet<long> seenClients = null)
+        /// <param name="staging">
+        /// An empty table that shadows the structs read: one client range per section, one staged struct per object.
+        /// The cursor only appends; the table's owner resets it.
+        /// </param>
+        public StructCursor(IUpdateDecoder decoder, HashSet<long> seenClients = null, StagingTable staging = null)
         {
             _decoder = decoder;
+            _staging = staging;
             _sections = decoder.Reader.ReadVarUint();
             _clients = _sections > 1 ? seenClients ?? new HashSet<long>() : null;
         }
@@ -338,6 +345,11 @@ internal static class EncodingUtils
 
             _structsLeft--;
             var str = ReadStruct(_decoder, _client, _clock);
+            if (_staging != null)
+            {
+                StructStaging.Stage(_staging, str);
+            }
+
             _clock += str.Length;
             return str;
         }
@@ -359,6 +371,11 @@ internal static class EncodingUtils
             }
 
             _structCount += numberOfStructs;
+            if (numberOfStructs > 0)
+            {
+                _staging?.BeginClient(client, clock);
+            }
+
             _structsLeft = numberOfStructs;
             _client = client;
             _clock = clock;

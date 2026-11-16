@@ -10,8 +10,8 @@ namespace Ycs;
 
 public class ChangesCollection
 {
-    public ISet<Item> Added;
-    public ISet<Item> Deleted;
+    public ISet<ItemView> Added;
+    public ISet<ItemView> Deleted;
     public IList<Delta> Delta;
     public IDictionary<string, ChangeKey> Keys;
 }
@@ -213,7 +213,7 @@ public partial class YEvent
     /// In contrast to <c>change.deleted</c>, this method also returns true if the struct was
     /// added and then deleted.
     /// </summary>
-    public bool Deletes(AbstractStruct str) => Deletes(ItemRef.Of(str));
+    public bool Deletes(ItemView view) => Transaction.DeleteSet.IsDeleted(view.Id);
 
     internal bool Deletes(ItemRef str)
     {
@@ -226,7 +226,7 @@ public partial class YEvent
     /// In contrast to <c>change.added</c>, this method also returns true if the struct was
     /// added and then deleted.
     /// </summary>
-    public bool Adds(AbstractStruct str) => Adds(ItemRef.Of(str));
+    public bool Adds(ItemView view) => !Transaction.BeforeState.TryGetValue(view.Id.Client, out var clock) || view.Id.Clock >= clock;
 
     internal bool Adds(ItemRef str)
     {
@@ -320,8 +320,8 @@ public partial class YEvent
         if (_changes == null)
         {
             var target = Target;
-            var added = new HashSet<Item>();
-            var deleted = new HashSet<Item>();
+            var added = new HashSet<ItemView>();
+            var deleted = new HashSet<ItemView>();
             var delta = new List<Delta>();
 
             var changes = new ChangesCollection
@@ -362,7 +362,7 @@ public partial class YEvent
                             }
 
                             lastOp.Delete += item.Length;
-                            deleted.Add(item.ToItem());
+                            deleted.Add(ItemView.Of(Target.Doc, item.ToItem()));
                         }
                         else
                         {
@@ -380,7 +380,7 @@ public partial class YEvent
                             }
 
                             (lastOp.Insert as List<object>).AddRange(item.Content.GetContent());
-                            added.Add(item.ToItem());
+                            added.Add(ItemView.Of(Target.Doc, item.ToItem()));
                         }
                         else
                         {
@@ -421,7 +421,7 @@ public partial class YEvent
         get
         {
             var length = 0;
-            for (var child = Target; !child._item.IsNull && child != CurrentTarget; child = child._item.Parent as AbstractType)
+            for (var child = Target; !child.IsRoot && child != CurrentTarget; child = child.ParentType)
             {
                 length++;
             }
@@ -434,19 +434,20 @@ public partial class YEvent
     {
         var path = new Stack<object>();
 
-        while (!child._item.IsNull && child != parent)
+        while (!child.IsRoot && child != parent)
         {
-            if (child._item.ParentSub != null)
+            if (child.ItemParentSub != null)
             {
                 // Parent is map-ish.
-                path.Push(child._item.ParentSub);
+                path.Push(child.ItemParentSub);
             }
             else
             {
                 // Parent is array-ish.
                 int i = 0;
-                var c = (child._item.Parent as AbstractType)._start;
-                while (c != child._item && !c.IsNull)
+                var id = child.ItemId;
+                var c = child.ParentType._start;
+                while (!c.IsNull && !c.Id.Equals(id))
                 {
                     var cItem = c.AsItem;
                     if (!cItem.IsNull && !cItem.Deleted && cItem.Countable)
@@ -460,7 +461,7 @@ public partial class YEvent
                 path.Push(i);
             }
 
-            child = child._item.Parent as AbstractType;
+            child = child.ParentType;
         }
 
         return path;

@@ -15,7 +15,7 @@ workloads measured, and at most about 400 bytes more than today on the smallest 
 marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s), and the leaf order of step 3, which took
 back the 15-19% steps 1 and 2 cost on the two split-heavy workloads and made the walks' lookups logarithmic, and the
 internal reference layer `ItemRef` of step 4, which enumerated the public boundaries and the holders across free points
-(1.4). Step 5 gave those holders ids (1.5), and the public API breaks once, in step 6.
+(1.4). Step 5 gave those holders ids (1.5), and step 6 broke the public API once (1.6).
 
 ## 1. What is built
 
@@ -288,6 +288,15 @@ slot answers it (a live slot that starts at the id).
   to 2.7): `apply-updates/ycs` 222.1 / 218.5 ms, `trace-replay` 198.4 / 196.4 ms, `text-append-1txn-observed-25k` 32.3 /
   31.8 ms; allocations and held memory equal to the byte. Noise, so not in the bench README.
 
+### 1.6 Step 6: the public API break
+
+`Item`, `AbstractStruct`, `GC`, `Skip`, `IContent` and the `Content*` classes are internal. `ItemView`, `ItemKind` and
+`DecodedStruct` are public (3.2, 3.3); an event's `Adds`/`Deletes`, `ChangesCollection.Added`/`Deleted`, `GcFilter` and
+`DeleteFilter` use views; `DecodedUpdate.Structs` lists `DecodedStruct`s, and the store integrates `DecodedUpdate.Raw`.
+`GcFilter` receives a store view for a struct in the store, a detached view for a planned one (`IntegrationPlan`).
+`TypeMapEnumerate` is `private protected`; `InsertGenericsAfter` is gone (its one caller passed null). Migration:
+`docs/api.md`.
+
 ## 2. The layout still to build
 
 ### 2.1 A slot
@@ -375,6 +384,22 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
 * **Type table**: an entry is never reused; a collected type's `AbstractType` gets index -1, and its search markers
   are cleared at collection (`_start` and the markers are, since step 5: `ContentType.cs`), so a user-held collected `YArray` writes no
   marker flag through a handle that now names another type's item (H5).
+* **A collected type keeps its item's facts** (7.0e). The struct that held a collected type can merge away and its slot
+  be reused while user code holds the type (or, for a subdocument, the `YDoc`); a handle read after that names another
+  struct. So the facts that survive are copied at collection, before the struct is replaced, and read from the copy:
+
+  | holder | read after collection | kept as |
+  | --- | --- | --- |
+  | `AbstractType._item` | `Parent`, `IsRoot`; the item's id (relative positions, `WriteItem`'s parent id, `YEvent.Path`); whether it is deleted (`Transaction`, `CanExtendRun`, `Integrate`); its key (`YEvent.Path`); its keep (`KeepItemAndParents`, which continues at `ParentType`); the scope walk of `UndoManager` (`ParentType`) | `_collectedParent`, `_collectedId`, `_collectedParentSub`, `_collectedKeep`; deleted is always true |
+  | `YDoc._item` (a subdocument) | the parent document (`Load`, `Destroy`) | `_collectedParentDoc` |
+
+  Whatever sets `_item` again (`AbstractType.Integrate`, `YDoc.SetItem` from `ContentDoc.Integrate`) clears the facts: a
+  document inserted again belongs to the item integrated last. The rule: code that may meet a collected type asks
+  `IsRoot`, `ParentType`, `ItemId`, `ItemParentSub`, `ItemDeleted` or `ItemKeep`, never `_item`. A test switch
+  (`AbstractType.PoisonCollectedHandleForTests`, `YCS_POISON=1` for `Ycs.Tests`) replaces the handle after collection
+  with an unrelated live item, as a reused slot would; the suite passes with it on. What still reads a collected type's
+  `_item`, and is owed before 7.6 (the plan): the XML siblings (`NextSibling`, `PrevSibling`, `InsertAfter`) and
+  `StructStore.IntegrationPlan`'s keys (7.0c).
 
 ### 2.5 Decoding, and the operations without a document
 
@@ -462,7 +487,7 @@ reviewed alone. Effects: *measured* where a source is named, otherwise estimates
 | 4a | `ItemRef` in the store core: built (1.4) | none beyond noise, but observed typing in one transaction +5-7 % (measured) | low |
 | 4b | `ItemRef` in the types, undo, events: built (1.4) | (with 4a) | low |
 | 5 | ids wherever a struct is held across a free point: built (1.5) | none beyond noise (measured) | low-medium |
-| 6 | the public API break | none inside; a view read costs a hint check | medium |
+| 6 | the public API break: built (1.6) | none inside; a view read costs a hint check | medium |
 | 7 | the slab, content still as objects | about half of the memory saving; no `Item` allocation per edit (est.) | high |
 | 8 | inline content and the arenas | the rest of the saving; no allocation per edit (est.) | medium-high |
 | 9 | the decoder and the update operations on staging tables | a load allocates about what it holds (est.) | medium |

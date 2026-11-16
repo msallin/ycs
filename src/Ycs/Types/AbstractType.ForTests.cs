@@ -7,7 +7,7 @@ namespace Ycs;
 public partial class AbstractType
 {
     /// <summary>The id of the item that holds this type, or null for a root or a detached type.</summary>
-    internal ID? OwnerIdForTests => _item.IsNull ? null : _item.Id;
+    internal ID? OwnerIdForTests => IsRoot ? null : ItemId;
 
     /// <summary>The key and the item id of every entry of the type's map.</summary>
     internal IEnumerable<KeyValuePair<string, ID>> MapIdsForTests() => _map.Select(kv => new KeyValuePair<string, ID>(kv.Key, kv.Value.Id));
@@ -15,9 +15,9 @@ public partial class AbstractType
     /// <summary>Whether this type, or the type that holds it, or the one above, is deleted.</summary>
     internal bool InDeletedTypeForTests()
     {
-        for (var item = _item; !item.IsNull; item = ((AbstractType)item.Parent)._item)
+        for (var type = this; !type.IsRoot; type = type.ParentType)
         {
-            if (item.Deleted)
+            if (type.ItemDeleted)
             {
                 return true;
             }

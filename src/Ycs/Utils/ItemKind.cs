@@ -4,7 +4,7 @@ namespace Ycs;
 /// What a struct is, as Yjs' filters test with <c>instanceof</c>: an item by its content, a GC struct, a Skip. The
 /// values are the reference numbers of the update format, so that a mapping needs no table.
 /// </summary>
-internal enum ItemKind
+public enum ItemKind
 {
     GC = 0,
     Deleted = 1,

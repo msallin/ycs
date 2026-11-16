@@ -21,9 +21,10 @@ internal sealed class LazyStructReader
     private EncodingUtils.StructCursor _cursor;
     private readonly bool _filterSkips;
 
-    public LazyStructReader(IUpdateDecoder decoder, bool filterSkips)
+    /// <param name="staging">An empty table the structs read are also staged into, Skips included; null for none.</param>
+    public LazyStructReader(IUpdateDecoder decoder, bool filterSkips, StagingTable staging = null)
     {
-        _cursor = new EncodingUtils.StructCursor(decoder);
+        _cursor = new EncodingUtils.StructCursor(decoder, staging: staging);
         _filterSkips = filterSkips;
         Curr = null;
 

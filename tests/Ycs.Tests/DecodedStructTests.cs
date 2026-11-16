@@ -73,7 +73,7 @@ public class DecodedStructTests
 
         var gapped = UpdateOperations.MergeUpdatesV2(new[] { updates[0], updates[2] });
 
-        var structs = UpdateOperations.DecodeUpdateV2(gapped).DecodedStructs;
+        var structs = UpdateOperations.DecodeUpdateV2(gapped).Structs;
 
         Assert.AreEqual((ItemKind.Skip, 1), structs.Where(s => s.Kind == ItemKind.Skip).Select(s => (s.Kind, s.Length)).Single());
     }
@@ -91,7 +91,7 @@ public class DecodedStructTests
             {
             }
 
-            foreach (var s in decoded?.DecodedStructs ?? [])
+            foreach (var s in decoded?.Structs ?? [])
             {
                 yield return s;
             }
@@ -116,11 +116,11 @@ public class DecodedStructTests
                     continue;
                 }
 
-                var detached = decoded.DecodedStructs;
+                var detached = decoded.Structs;
                 Assert.HasCount(decoded.Structs.Count, detached);
                 for (var i = 0; i < detached.Count; i++)
                 {
-                    AssertEqual(decoded.Structs[i], detached[i]);
+                    AssertEqual(decoded.Raw[i], detached[i]);
                 }
 
                 updates++;
@@ -179,7 +179,7 @@ public class DecodedStructTests
         Assert.AreEqual(d.Kind == ItemKind.Doc ? ((ContentDoc)content).Doc.Guid : null, d.DocGuid);
     }
 
-    private static List<byte[]> CorpusUpdates()
+    internal static List<byte[]> CorpusUpdates()
     {
         var dir = new DirectoryInfo(AppContext.BaseDirectory);
         while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, "interop", "corpus", "cases")))
@@ -204,7 +204,7 @@ public class DecodedStructTests
         return result;
     }
 
-    private static List<byte[]> RichUpdates()
+    internal static List<byte[]> RichUpdates()
     {
         var result = new List<byte[]>();
         foreach (var gc in new[] { true, false })
@@ -248,7 +248,7 @@ public class DecodedStructTests
         return result;
     }
 
-    private static byte[] Damage(byte[] update, Random random)
+    internal static byte[] Damage(byte[] update, Random random)
     {
         var bytes = update.ToList();
         for (var n = 1 + random.Next(3); n > 0 && bytes.Count > 0; n--)

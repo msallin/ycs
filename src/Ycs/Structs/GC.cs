@@ -6,7 +6,7 @@
 
 namespace Ycs;
 
-public partial class GC : AbstractStruct
+internal partial class GC : AbstractStruct
 {
     internal const byte StructGCRefNumber = 0;
 

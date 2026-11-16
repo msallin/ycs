@@ -275,7 +275,7 @@ public class UndoRedoTests : YTestBase
     {
         Init(users: 3);
         var array0 = Arrays[Users[0]];
-        var undoManager = new UndoManager(array0, new UndoManagerOptions { DeleteFilter = it => !(it is Item item) || (item.Content is ContentType ct && ct.Type._map.Count == 0) });
+        var undoManager = new UndoManager(array0, new UndoManagerOptions { DeleteFilter = it => it.Kind == ItemKind.Type && it.Content[0] is AbstractType t && t._map.Count == 0 });
         var map0 = new YMap();
         map0.Set("hi", 1);
         var map1 = new YMap();

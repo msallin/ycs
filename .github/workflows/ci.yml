@@ -27,6 +27,21 @@ jobs:
       - name: Yjs corpus
         run: dotnet test tests/Ycs.Corpus -c Release --no-build
 
+      - name: Sync server
+        run: dotnet test tests/Ycs.Server.Tests -c Release --no-build
+
+      - name: Sync client (the Blazor client's provider)
+        run: dotnet test tests/Ycs.Client.Tests -c Release --no-build
+
+      - name: Sync server against y-websocket and SignalR clients
+        run: |
+          (cd interop/server && npm ci)
+          (cd interop/signalr && npm ci)
+          bash interop/server/smoke.sh
+          bash interop/server/converge.sh
+          bash interop/signalr/smoke.sh
+          cmp interop/signalr/provider.mjs samples/Ycs.Server/demo/src/signalr-provider.mjs
+
       - name: Fuzz the decoders
         run: dotnet test tests/Ycs.Fuzz -c Release --no-build
 
@@ -46,6 +61,9 @@ jobs:
           dotnet publish samples/Ycs.AotSample -c Release -o out/aot
           ./out/aot/Ycs.AotSample
 
+      - name: Blazor client publishes without trim warnings
+        run: dotnet publish samples/Ycs.Blazor -c Release -o out/blazor
+
       - name: Browser-wasm sample (no workload)
         run: |
           dotnet publish samples/Ycs.WasmSample -c Release -o out/wasm
@@ -61,3 +79,28 @@ jobs:
         run: |
           (cd interop/corpus && npm ci)
           bash interop/corpus/roundtrip.sh
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Chromium
+        run: |
+          (cd interop/demo && npm ci)
+          (cd interop/blazor && npm ci)
+          (cd interop/demo && npx playwright-core install --with-deps --only-shell chromium)
+
+      - name: Demo page in the browser (WebSocket, SignalR, mixed)
+        run: bash interop/demo/check.sh
+
+      - name: Blazor client and a y-websocket client in one room
+        run: bash interop/blazor/run.sh

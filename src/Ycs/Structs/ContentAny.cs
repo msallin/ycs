@@ -11,7 +11,7 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-public class ContentAny : IContentEx
+internal class ContentAny : IContentEx
 {
     internal const int _ref = 8;
 
