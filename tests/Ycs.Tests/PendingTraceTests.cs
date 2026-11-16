@@ -64,7 +64,7 @@ public class PendingTraceTests
     }
 
     // Object keys sorted: Yjs and Ycs list a map's keys in different orders.
-    private static string Canonical(string json) => Write(JsonDocument.Parse(json).RootElement);
+    private static string Canonical(string json) => Write(JsonElement.Parse(json));
 
     private static string Write(JsonElement e) => e.ValueKind switch
     {

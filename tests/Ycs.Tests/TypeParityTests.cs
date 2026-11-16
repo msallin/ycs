@@ -33,7 +33,6 @@ public class TypeParityTests
         Assert.IsTrue(map.ContainsKey("a"));
         Assert.IsFalse(map.ContainsKey("missing"));
         Assert.AreEqual(2, map.Count);
-        Assert.AreEqual(map.Count, map.Count);
 
         map.Clear();
 

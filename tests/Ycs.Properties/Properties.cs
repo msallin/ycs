@@ -1457,8 +1457,8 @@ internal static class Properties
         }
 
         /// <summary>A value with nested shared types reduced to their kind (their content changes without events of this root).</summary>
-        private static object Shallow(object v) => v is Dictionary<string, object> d && d.ContainsKey("$t")
-            ? Obj(("$t", d["$t"]), ("n", d.Get("n") ?? Json.Missing.Value))
+        private static object Shallow(object v) => v is Dictionary<string, object> d && d.TryGetValue("$t", out var kind)
+            ? Obj(("$t", kind), ("n", d.Get("n") ?? Json.Missing.Value))
             : v;
 
         public string Render() => Kind switch

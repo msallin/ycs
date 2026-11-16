@@ -71,7 +71,7 @@ public class YDocTests : YTestBase
             docA.Load();
             subdocs["a"] = docA;
             CollectionAssert.AreEqual(new[] { "a" }, events[0]);
-            CollectionAssert.AreEqual(new object[] { }, events[1]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[1]);
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
             events = null;
 
@@ -82,24 +82,24 @@ public class YDocTests : YTestBase
             (subdocs["a"].ToObject() as YDoc).Destroy();
             CollectionAssert.AreEqual(new[] { "a" }, events[0]);
             CollectionAssert.AreEqual(new[] { "a" }, events[1]);
-            CollectionAssert.AreEqual(new object[] { }, events[2]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[2]);
             events = null;
 
             (subdocs["a"].ToObject() as YDoc).Load();
-            CollectionAssert.AreEqual(new object[] { }, events[0]);
-            CollectionAssert.AreEqual(new object[] { }, events[1]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[0]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[1]);
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
             events = null;
 
             subdocs["b"] = new YDoc(new YDocOptions { Guid = "a", ShouldLoad = false });
             CollectionAssert.AreEqual(new[] { "a" }, events[0]);
-            CollectionAssert.AreEqual(new object[] { }, events[1]);
-            CollectionAssert.AreEqual(new object[] { }, events[2]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[1]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[2]);
             events = null;
 
             (subdocs["b"].ToObject() as YDoc).Load();
-            CollectionAssert.AreEqual(new object[] { }, events[0]);
-            CollectionAssert.AreEqual(new object[] { }, events[1]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[0]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[1]);
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
             events = null;
 
@@ -107,7 +107,7 @@ public class YDocTests : YTestBase
             docC.Load();
             subdocs["c"] = docC;
             CollectionAssert.AreEqual(new[] { "c" }, events[0]);
-            CollectionAssert.AreEqual(new object[] { }, events[1]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[1]);
             CollectionAssert.AreEqual(new[] { "c" }, events[2]);
             events = null;
 
@@ -132,13 +132,13 @@ public class YDocTests : YTestBase
 
             doc2.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
             CollectionAssert.AreEqual(new[] { "a", "a", "c" }, events[0]);
-            CollectionAssert.AreEqual(new object[] { }, events[1]);
-            CollectionAssert.AreEqual(new object[] { }, events[2]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[1]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[2]);
             events = null;
 
             (doc2.GetMap("mysubdocs")["a"].ToObject() as YDoc).Load();
-            CollectionAssert.AreEqual(new object[] { }, events[0]);
-            CollectionAssert.AreEqual(new object[] { }, events[1]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[0]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[1]);
             CollectionAssert.AreEqual(new[] { "a" }, events[2]);
             events = null;
 
@@ -147,9 +147,9 @@ public class YDocTests : YTestBase
             CollectionAssert.AreEqual(new[] { "a", "c" }, guids);
 
             doc2.GetMap("mysubdocs").Remove("a");
-            CollectionAssert.AreEqual(new object[] { }, events[0]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[0]);
             CollectionAssert.AreEqual(new[] { "a" }, events[1]);
-            CollectionAssert.AreEqual(new object[] { }, events[2]);
+            CollectionAssert.AreEqual(System.Array.Empty<object>(), events[2]);
             events = null;
 
             guids = doc2.GetSubdocGuids().ToList();

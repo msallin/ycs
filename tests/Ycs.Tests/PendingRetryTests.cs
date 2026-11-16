@@ -18,7 +18,7 @@ namespace Ycs;
 public class PendingRetryTests
 {
     private static readonly Lazy<JsonElement> Scenarios = new(() =>
-        JsonDocument.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "pending-retry.json"))).RootElement);
+        JsonElement.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "pending-retry.json"))));
 
     private static readonly Lazy<JsonElement> Random = new(() =>
     {
@@ -84,7 +84,7 @@ public class PendingRetryTests
             Canonical(YJson.Stringify(doc.GetArray("array").ToJson())), Canonical(YJson.Stringify(doc.GetMap("map").ToJson())));
 
     // Object keys sorted: Yjs and Ycs list a map's keys in different orders.
-    private static string Canonical(string json) => Write(JsonDocument.Parse(json).RootElement);
+    private static string Canonical(string json) => Write(JsonElement.Parse(json));
 
     private static string Write(JsonElement e) => e.ValueKind switch
     {

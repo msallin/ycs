@@ -37,7 +37,7 @@ public class YTextTests : YTestBase
         text.Remove(1, 1);
         Assert.AreEqual("aXb", text.ToString());
         Assert.AreEqual(3, text.Length);
-        Assert.IsFalse(text.ToDelta().Any(d => d.Inserted() is YType), "the embedded type should be deleted");
+        Assert.IsFalse(text.ToDelta().Any(d => d.Inserted().ToObject() is YType), "the embedded type should be deleted");
     }
 
     [TestMethod]
@@ -532,7 +532,7 @@ public class YTextTests : YTestBase
 
                 var prevText = ytext.ToString();
                 ytext.Insert(insertPos, text);
-                Assert.AreEqual(prevText.Substring(0, insertPos) + text + prevText.Substring(insertPos), ytext.ToString());
+                Assert.AreEqual(string.Concat(prevText.AsSpan(0, insertPos), text, prevText.AsSpan(insertPos)), ytext.ToString());
             },
 
             // Delete text
@@ -545,7 +545,7 @@ public class YTextTests : YTestBase
 
                 var prevText = ytext.ToString();
                 ytext.Remove(insertPos, overwrite);
-                Assert.AreEqual(prevText.Substring(0, insertPos) + prevText.Substring(insertPos + overwrite), ytext.ToString());
+                Assert.AreEqual(string.Concat(prevText.AsSpan(0, insertPos), prevText.AsSpan(insertPos + overwrite)), ytext.ToString());
             }
         }, users, iterations);
     }

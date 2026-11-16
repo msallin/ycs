@@ -442,7 +442,7 @@ public class HardeningTests
     public void TryApplyUpdate_Malformed_ReturnsFalse()
     {
         var doc = new YDoc();
-        Assert.IsFalse(doc.TryApplyUpdate(ValidA[..^2]));
+        Assert.IsFalse(doc.TryApplyUpdate(ValidA.AsSpan(..^2)));
         Assert.IsFalse(doc.TryApplyUpdate(ValidA, format: UpdateFormat.V2));
         Assert.IsTrue(doc.TryApplyUpdate(ValidA));
         Assert.AreEqual("a", doc.GetText("").ToString());
