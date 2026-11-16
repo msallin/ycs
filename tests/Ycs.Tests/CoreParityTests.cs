@@ -280,7 +280,7 @@ public class CoreParityTests
     public void ToDelta_SnapshotNewerThanTheDocument_SkipsWhatTheDocumentDoesNotHave()
     {
         // The snapshot deletes "hello" and clocks of a client 6 this document has never seen.
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.ApplyUpdate(B("AQEFAAQBAXQLaGVsbG8gd29ybGQA"));
         var snapshot = Snapshot.Decode(B("AgYBAAEFAQAFAgYDBQs="));
 

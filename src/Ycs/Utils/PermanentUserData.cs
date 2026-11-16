@@ -4,7 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
-#nullable disable // Not annotated for nullable reference types yet.
+#nullable enable
 
 namespace Ycs;
 
@@ -24,7 +24,8 @@ public sealed class PermanentUserData
 {
     public YDoc Doc { get; }
 
-    public YMap YUsers { get; }
+    /// <summary>The map in the document that holds the users: each description maps to its client ids and deletions.</summary>
+    public YMap Users { get; }
 
     /// <summary>Client id to user description; Yjs' <c>clients</c>.</summary>
     internal readonly Dictionary<long, string> Clients = new Dictionary<long, string>();
@@ -35,12 +36,12 @@ public sealed class PermanentUserData
     // The writes Yjs runs in a later task, in order; Flush runs them after the current batch.
     private readonly List<Action> _deferred = new List<Action>();
 
-    public PermanentUserData(YDoc doc, YMap storeType = null)
+    public PermanentUserData(YDoc doc, YMap? store = null)
     {
         ArgumentNullException.ThrowIfNull(doc);
-        storeType ??= doc.GetMap("users");
+        var storeType = store ?? doc.GetMap("users");
         Doc = doc;
-        YUsers = storeType;
+        Users = storeType;
         doc.AfterAllTransactions += Flush;
 
         storeType.Observe(e =>
@@ -112,80 +113,75 @@ public sealed class PermanentUserData
     }
 
     /// <summary>The user map of <paramref name="userDescription"/>, or null when there is none of the expected shape.</summary>
-    private static YMap UserOf(YMap users, string userDescription) =>
+    private static YMap? UserOf(YMap users, string userDescription) =>
         users.ContainsKey(userDescription) && users.Get(userDescription) is YMap user && ArrayOf(user, "ids") != null && ArrayOf(user, "ds") != null
             ? user
             : null;
 
-    private static YArray ArrayOf(YMap user, string key) => user.ContainsKey(key) ? user.Get(key) as YArray : null;
+    private static YArray? ArrayOf(YMap user, string key) => user.ContainsKey(key) ? user.Get(key) as YArray : null;
 
     /// <summary>
     /// Yjs parity: <c>setUserMapping(doc, clientid, userDescription, { filter })</c>: records that
-    /// <paramref name="clientId"/> belongs to <paramref name="userDescription"/>, and from now on every local
-    /// transaction of <paramref name="doc"/> that deletes something (and passes <paramref name="filter"/>)
+    /// <paramref name="clientId"/> belongs to <paramref name="user"/>, and from now on every local
+    /// transaction of <see cref="Doc"/> that deletes something (and passes <paramref name="filter"/>)
     /// adds its deletions to that user.
     /// </summary>
-    public void SetUserMapping(YDoc doc, long clientId, string userDescription, Func<Transaction, bool> filter = null)
+    public void SetUserMapping(long clientId, string user, Func<Transaction, bool>? filter = null)
     {
-        ArgumentNullException.ThrowIfNull(doc);
-        filter ??= _ => true;
+        ArgumentNullException.ThrowIfNull(user);
+        var userDescription = user;
+        filter ??= static _ => true;
 
-        var users = YUsers;
-        var user = UserOf(users, userDescription);
-        if (user == null)
+        var users = Users;
+        var userMap = UserOf(users, userDescription);
+        if (userMap == null)
         {
-            user = new YMap();
-            user.Set("ids", new YArray());
-            user.Set("ds", new YArray());
-            users.Set(userDescription, user);
+            userMap = new YMap();
+            userMap.Set("ids", new YArray());
+            userMap.Set("ds", new YArray());
+            users.Set(userDescription, userMap);
         }
 
-        ArrayOf(user, "ids").Add(new object[] { clientId });
+        ArrayOf(userMap, "ids")!.Add(new object[] { clientId });
 
         // When another peer replaces this user's entry, the client ids and deletions known so far are
         // copied into the new one.
         users.Observe(e => _deferred.Add(() =>
         {
             var overwrite = UserOf(users, userDescription);
-            if (overwrite == null || ReferenceEquals(overwrite, user))
+            if (overwrite == null || ReferenceEquals(overwrite, userMap))
             {
                 return;
             }
 
-            user = overwrite;
+            userMap = overwrite;
             foreach (var (id, description) in Clients)
             {
                 if (description == userDescription)
                 {
-                    ArrayOf(user, "ids")?.Add(new object[] { id });
+                    ArrayOf(userMap, "ids")?.Add(new object[] { id });
                 }
             }
 
             if (Dss.TryGetValue(userDescription, out var known))
             {
-                ArrayOf(user, "ds")?.Add(new object[] { EncodeDeleteSet(known) });
+                ArrayOf(userMap, "ds")?.Add(new object[] { EncodeDeleteSet(known) });
             }
         }));
 
-        if (doc != Doc)
-        {
-            doc.AfterAllTransactions -= Flush;
-            doc.AfterAllTransactions += Flush;
-        }
-
-        doc.AfterTransaction += (s, tr) =>
+        Doc.AfterTransaction += (s, tr) =>
         {
             // The transaction is reused once its batch has ended: what the write needs is read now.
             var ds = tr.DeleteSet;
             if (tr.Local && ds.Clients.Count > 0 && filter(tr))
             {
                 var encoded = EncodeDeleteSet(ds);
-                _deferred.Add(() => ArrayOf(user, "ds")?.Add(new object[] { encoded }));
+                _deferred.Add(() => ArrayOf(userMap, "ds")?.Add(new object[] { encoded }));
             }
         };
     }
 
-    private void Flush(object sender, IReadOnlyList<Transaction> transactions)
+    private void Flush(object? sender, IReadOnlyList<Transaction> transactions)
     {
         if (_deferred.Count == 0)
         {
@@ -203,12 +199,12 @@ public sealed class PermanentUserData
     /// <summary>
     /// Yjs parity: <c>getUserByClientId(clientid)</c>.
     /// </summary>
-    public string GetUserByClientId(long clientId) => Clients.TryGetValue(clientId, out var v) ? v : null;
+    public string? GetUserByClientId(long clientId) => Clients.TryGetValue(clientId, out var v) ? v : null;
 
     /// <summary>
     /// Yjs parity: <c>getUserByDeletedId(id)</c>.
     /// </summary>
-    public string GetUserByDeletedId(ID id)
+    public string? GetUserByDeletedId(ItemId id)
     {
         foreach (var kvp in Dss)
         {
@@ -222,7 +218,7 @@ public sealed class PermanentUserData
     }
 
     /// <summary>The delete set another peer stored, or null when it is malformed (it is ignored, not fatal).</summary>
-    private static DeleteSet TryDecodeDeleteSet(byte[] encoded)
+    private static DeleteSet? TryDecodeDeleteSet(byte[] encoded)
     {
         try
         {

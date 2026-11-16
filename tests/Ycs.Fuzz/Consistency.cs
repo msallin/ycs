@@ -30,7 +30,7 @@ internal static class Consistency
     {
         var format = v2 ? "v2" : "v1";
         var state = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
-        var fresh = new YDoc(new YDocOptions { Gc = doc.Gc, ClientId = 2, Limits = UpdateLimits.Unlimited });
+        var fresh = new YDoc(new YDocOptions { GarbageCollection = doc.GarbageCollection, ClientId = 2, Limits = UpdateLimits.Unlimited });
         try
         {
             if (v2)

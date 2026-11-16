@@ -78,7 +78,7 @@ public class MapCountTests
         for (var i = 0; i < docs.Length; i++)
         {
             var index = i;
-            docs[i] = new YDoc(new YDocOptions { ClientId = i + 1, Gc = gc });
+            docs[i] = new YDoc(new YDocOptions { ClientId = i + 1, GarbageCollection = gc });
             inboxes[i] = new List<byte[]>();
             docs[i].Updated += (_, e) =>
             {
@@ -92,7 +92,7 @@ public class MapCountTests
             };
         }
 
-        var undo = new UndoManager(docs[0].GetMap("m"), new UndoManagerOptions { CaptureTimeout = 0 });
+        var undo = new UndoManager(docs[0].GetMap("m"), new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
 
         for (var step = 0; step < 150; step++)
         {

@@ -62,13 +62,12 @@ internal sealed class ReferenceRun
 
     public YDoc NewDoc(long client, bool gc = true, Predicate<ItemView> gcFilter = null)
     {
-        var options = new YDocOptions { ClientId = client, Gc = gc };
-        if (gcFilter != null)
+        var doc = new YDoc(new YDocOptions
         {
-            options.GcFilter = gcFilter;
-        }
-
-        var doc = new YDoc(options);
+            ClientId = client,
+            GarbageCollection = gc,
+            GarbageCollectionFilter = gcFilter == null ? null : item => gcFilter(item),
+        });
         if (Reference)
         {
             doc.RunExtensionsDisabledForTests = true;

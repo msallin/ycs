@@ -97,7 +97,7 @@ public class RetryAtomicityTests
     public void Retry_PendingValueSplitInACollectedType_IntegratesWithoutGarbageCollection()
     {
         // Without garbage collection nothing is collected, so the same structs integrate (as in Yjs, unseen).
-        var doc = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 9, GarbageCollection = false });
         doc.ApplyUpdate(SplitValueInDeletedMap());
 
         doc.ApplyUpdate(XOfClient5());
@@ -131,7 +131,7 @@ public class RetryAtomicityTests
     {
         foreach (var v2 in new[] { false, true })
         {
-            var fresh = new YDoc(new YDocOptions { ClientId = 2, Gc = doc.Gc, Limits = UpdateLimits.Unlimited });
+            var fresh = new YDoc(new YDocOptions { ClientId = 2, GarbageCollection = doc.GarbageCollection, Limits = UpdateLimits.Unlimited });
             if (v2)
             {
                 fresh.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);

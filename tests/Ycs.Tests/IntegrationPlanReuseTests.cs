@@ -90,14 +90,14 @@ public class IntegrationPlanReuseTests
     {
         // As Yjs, which merges the waiting ranges [1, 1] and [0, 1] into [0, 2] when the second arrives: the pair is
         // deleted as one item, not split (a split would replace both halves with U+FFFD).
-        var source = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var source = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var text = source.GetText("t");
         var updates = new System.Collections.Generic.List<byte[]>();
         source.Updated += (_, e) => updates.Add(e.Update.ToArray());
         text.Insert(0, "\ud83d\udc4d");
         text.ApplyDelta([new Delta.Delete(1)]);
         text.ApplyDelta([new Delta.Delete(1)]);
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
 
         doc.ApplyUpdate(updates[2]);
         doc.ApplyUpdate(updates[1]);
@@ -112,7 +112,7 @@ public class IntegrationPlanReuseTests
     {
         // The property engine's huge-clock-gc-encoding: a GC struct up to clock 2^31 - 65, items, a Skip, pending
         // structs and waiting deletions. Expected: Yjs 13.6.32's encodeStateAsUpdate after the same three updates.
-        var doc = new YDoc(new YDocOptions { Gc = false, ClientId = 2 });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false, ClientId = 2 });
 
         doc.ApplyUpdate(Convert.FromBase64String("AQL4+v//BwAAv////wfHrAIFrAIFAgILAQMDrAIBAwI="));
         doc.ApplyUpdate(Convert.FromBase64String("AQMLAIWsAgYReyJpbWFnZSI6ImkucG5nIn1ErAIGAmJjAQEBYQECrAIBAggLAQAC"));
@@ -128,9 +128,9 @@ public class IntegrationPlanReuseTests
     {
         // Clocks up to 2^31 - 1 are valid (docs/api.md); the v2 clock columns write diff * 2 + flag, as lib0, without a
         // 30-bit limit (a Debug.Assert of one failed here in Debug builds).
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.ApplyUpdate(Convert.FromBase64String("AgOsAgACAAy/////BwIBMQMiaiIKAUOsAgADAQIDAwwAAL////8HBwEBYQAKAwA="));
-        var copy = new YDoc(new YDocOptions { Gc = false });
+        var copy = new YDoc(new YDocOptions { GarbageCollection = false });
 
         copy.ApplyUpdate(doc.EncodeStateAsUpdate(format: UpdateFormat.V2), format: UpdateFormat.V2);
 

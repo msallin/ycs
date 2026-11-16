@@ -107,8 +107,8 @@ var result = new
     {
         afterUndo1,
         afterUndo2,
-        canUndo = um2.CanUndo(),
-        canRedo = um2.CanRedo()
+        canUndo = um2.CanUndo,
+        canRedo = um2.CanRedo
     }
 };
 

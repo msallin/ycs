@@ -76,8 +76,8 @@ public class UpdateOperationsTests
     {
         foreach (var enc in Encoders)
         {
-            var doc1 = new YDoc(new YDocOptions { Gc = false });
-            var doc2 = new YDoc(new YDocOptions { Gc = false });
+            var doc1 = new YDoc(new YDocOptions { GarbageCollection = false });
+            var doc2 = new YDoc(new YDocOptions { GarbageCollection = false });
 
             doc1.GetArray("array").Insert(0, new List<object> { 1 });
             doc2.GetArray("array").Insert(0, new List<object> { 2 });
@@ -87,7 +87,7 @@ public class UpdateOperationsTests
 
             var merged = enc.MergeUpdates(new[] { update1, update2 });
 
-            var doc3 = new YDoc(new YDocOptions { Gc = false });
+            var doc3 = new YDoc(new YDocOptions { GarbageCollection = false });
             enc.ApplyUpdate(doc3, merged);
 
             var result = doc3.GetArray("array").ToArray();
@@ -102,7 +102,7 @@ public class UpdateOperationsTests
     {
         foreach (var enc in Encoders)
         {
-            var doc = new YDoc(new YDocOptions { Gc = false });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = false });
             doc.GetArray("array").Insert(0, new List<object> { "x" });
             var update = enc.EncodeStateAsUpdate(doc);
 
@@ -152,7 +152,7 @@ public class UpdateOperationsTests
 
     private static (YDoc Doc, List<byte[]> Updates) CaptureUpdates(Enc enc, Action<YArray> ops)
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var updates = new List<byte[]>();
 
         enc.Subscribe(doc, (s, e) => updates.Add(e.Update.ToArray()));
@@ -199,7 +199,7 @@ public class UpdateOperationsTests
 
         foreach (var mergedUpdate in cases)
         {
-            var merged = new YDoc(new YDocOptions { Gc = false });
+            var merged = new YDoc(new YDocOptions { GarbageCollection = false });
             enc.ApplyUpdate(merged, mergedUpdate);
 
             CollectionAssert.AreEqual(
@@ -230,13 +230,13 @@ public class UpdateOperationsTests
     {
         foreach (var enc in Encoders)
         {
-            var doc = new YDoc(new YDocOptions { Gc = false });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = false });
             doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3 });
             var update = enc.EncodeStateAsUpdate(doc);
 
             var diffed = enc.DiffUpdate(update, EncodeEmptyStateVector());
 
-            var applied = new YDoc(new YDocOptions { Gc = false });
+            var applied = new YDoc(new YDocOptions { GarbageCollection = false });
             enc.ApplyUpdate(applied, diffed);
 
             CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, (System.Collections.ICollection)applied.GetArray("array").ToArray());
@@ -248,7 +248,7 @@ public class UpdateOperationsTests
     {
         foreach (var enc in Encoders)
         {
-            var doc = new YDoc(new YDocOptions { Gc = false });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = false });
             doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3 });
             var update = enc.EncodeStateAsUpdate(doc);
             var fullSv = enc.EncodeStateVector(doc);
@@ -298,7 +298,7 @@ public class UpdateOperationsTests
     {
         foreach (var enc in Encoders)
         {
-            var doc = new YDoc(new YDocOptions { Gc = false });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = false });
             doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3 });
             doc.GetMap("map").Set("a", "b");
 
@@ -312,7 +312,7 @@ public class UpdateOperationsTests
     {
         foreach (var enc in Encoders)
         {
-            var doc = new YDoc(new YDocOptions { Gc = false });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = false });
             doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3, 4, 5 });
             var update = enc.EncodeStateAsUpdate(doc);
 
@@ -334,7 +334,7 @@ public class UpdateOperationsTests
     [TestMethod]
     public void ConvertUpdateFormat_V1ToV2ToApply_MatchesOriginal()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new List<object> { 1, "two", true });
         doc.GetMap("map").Set("key", "value");
 
@@ -351,7 +351,7 @@ public class UpdateOperationsTests
     [TestMethod]
     public void ConvertUpdateFormat_V2ToV1ToApply_MatchesOriginal()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new List<object> { 1, "two", true });
 
         var v2 = doc.EncodeStateAsUpdate(format: UpdateFormat.V2);
@@ -366,7 +366,7 @@ public class UpdateOperationsTests
     [TestMethod]
     public void ConvertUpdateFormat_RoundTrip_IsByteIdentical()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         doc.GetArray("array").Insert(0, new List<object> { 1, 2, 3 });
 
         var v1 = doc.EncodeStateAsUpdate();
@@ -385,7 +385,7 @@ public class UpdateOperationsTests
     {
         foreach (var enc in Encoders)
         {
-            var doc = new YDoc(new YDocOptions { Gc = false });
+            var doc = new YDoc(new YDocOptions { GarbageCollection = false });
             var array = doc.GetArray("array");
             array.Insert(0, new List<object> { 1, 2, 3 });
             array.Delete(1, 1);
@@ -432,7 +432,7 @@ public class UpdateOperationsTests
     [TestMethod]
     public void DescribeUpdate_ReturnsNonEmptyString_AndDoesNotThrow()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var array = doc.GetArray("array");
         array.Insert(0, new List<object> { 1, 2, 3 });
         array.Delete(1, 1);
@@ -498,9 +498,9 @@ public class UpdateOperationsTests
         // The property engine's convert-v1-to-v2-overlapping-delete-set: client 11's ranges [0, 3] and [0, 2] overlap, which
         // is valid v1; v2 needs each range at or after the end of the one before, so the conversion merges them.
         var v1 = Convert.FromBase64String("AgGsAgIEAKwCAQN4w6kC8KIECoesAgEGx/CiBAqsAgEDA2RpdgILAgADAAKsAgEBAg==");
-        var fromV1 = new YDoc(new YDocOptions { Gc = false });
+        var fromV1 = new YDoc(new YDocOptions { GarbageCollection = false });
         fromV1.ApplyUpdate(v1);
-        var fromV2 = new YDoc(new YDocOptions { Gc = false });
+        var fromV2 = new YDoc(new YDocOptions { GarbageCollection = false });
 
         fromV2.ApplyUpdate(YUpdate.Convert(v1, UpdateFormat.V1, UpdateFormat.V2), format: UpdateFormat.V2);
 
@@ -540,8 +540,8 @@ public class UpdateOperationsTests
     {
         var c = MergeConflicts.Value.RootElement.GetProperty("cases")[index];
         var v1 = c.GetProperty("updates").EnumerateArray().Select(u => Convert.FromHexString(u.GetString())).ToList();
-        var fromV1 = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
-        var fromV2 = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
+        var fromV1 = new YDoc(new YDocOptions { ClientId = 9, GarbageCollection = false });
+        var fromV2 = new YDoc(new YDocOptions { ClientId = 9, GarbageCollection = false });
 
         foreach (var u in v1)
         {
@@ -578,8 +578,8 @@ public class UpdateOperationsTests
         var actual = orders.Select(o =>
         {
             var order = o.GetProperty("order").GetString().Select(c => updates[c - '0']).ToList();
-            var fromV1 = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
-            var fromV2 = new YDoc(new YDocOptions { ClientId = 9, Gc = false });
+            var fromV1 = new YDoc(new YDocOptions { ClientId = 9, GarbageCollection = false });
+            var fromV2 = new YDoc(new YDocOptions { ClientId = 9, GarbageCollection = false });
             foreach (var u in order)
             {
                 fromV1.ApplyUpdate(u);

@@ -16,7 +16,7 @@ var jsonOptions = new JsonSerializerOptions { WriteIndented = true, Encoder = Ja
 
 var input = JsonNode.Parse(File.ReadAllText(args[0]));
 
-var doc = new YDoc(new YDocOptions { Gc = false });
+var doc = new YDoc(new YDocOptions { GarbageCollection = false });
 doc.ApplyUpdate(Convert.FromBase64String(input["updateV1"].GetValue<string>()));
 
 var snapshot = Snapshot.Decode(Convert.FromBase64String(input["snapshotV1"].GetValue<string>()));

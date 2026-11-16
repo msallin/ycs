@@ -53,7 +53,7 @@ public class ScalingTests
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("t");
         text.Insert(0, new string('a', 20_000));
-        _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = int.MaxValue });
+        _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.MaxValue });
         var random = new Random(1);
 
         var stopwatch = Stopwatch.StartNew();

@@ -445,7 +445,7 @@ internal static class YcsCases
     {
         var doc = NewDoc();
         var text = doc.GetText("text");
-        var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = 0 });
+        var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
         var chars = Inputs.Typing.AsSpan(0, Inputs.UndoN).ToArray();
         void Type()
         {

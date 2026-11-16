@@ -9,7 +9,7 @@ public class SnapshotInputTests
 {
     private static YDoc Doc(int clientId, string text)
     {
-        var doc = new YDoc(new YDocOptions { ClientId = clientId, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = clientId, GarbageCollection = false });
         doc.GetText("t").Insert(0, text);
         return doc;
     }
@@ -42,7 +42,7 @@ public class SnapshotInputTests
     [TestMethod]
     public void ToArraySnapshot_DeleteSetOfAnUnknownClient_IsIgnored()
     {
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var array = doc.GetArray("a");
         array.Insert(0, new object[] { 1, 2 });
         var own = doc.CreateSnapshot();
@@ -55,7 +55,7 @@ public class SnapshotInputTests
     [TestMethod]
     public void GetAllSnapshot_DeleteSetBeyondTheDocument_IsIgnored()
     {
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var map = doc.GetMap("m");
         map.Set("k", 1);
         var own = doc.CreateSnapshot();

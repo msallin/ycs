@@ -63,7 +63,7 @@ internal static class Hostile
 
     private static (string, string, string) Ycs(HostileCase c)
     {
-        var doc = new YDoc(new YDocOptions { Gc = c.Gc, ClientId = 1 });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = c.Gc, ClientId = 1 });
         if (c.BaseV1.Length > 0)
         {
             doc.ApplyUpdate(c.BaseV1, null, limits: UpdateLimits.Unlimited);

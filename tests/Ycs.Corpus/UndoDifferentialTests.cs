@@ -87,9 +87,15 @@ internal static class UndoReplay
             ["x"] = doc.GetXmlFragment("x"),
         };
 
+        var tracked = config.GetProperty("tracked").ValueKind == JsonValueKind.Array
+            ? config.GetProperty("tracked").EnumerateArray()
+                .Select(o => o.ValueKind == JsonValueKind.Null ? null : o.GetString() == "cls" ? typeof(ClassOrigin) : (object?)o.GetString())
+                .ToHashSet()
+            : null;
         var options = new UndoManagerOptions
         {
-            CaptureTimeout = config.GetProperty("timeout").GetDouble() > 0 ? 1_000_000_000 : 0,
+            TrackedOrigins = tracked,
+            CaptureTimeout = TimeSpan.FromMilliseconds(config.GetProperty("timeout").GetDouble() > 0 ? 1_000_000_000 : 0),
             IgnoreRemoteMapChanges = config.GetProperty("ignoreRemoteMapChanges").GetBoolean(),
             DeleteFilter = config.GetProperty("deleteFilter").GetInt32() switch
             {
@@ -100,22 +106,15 @@ internal static class UndoReplay
             CaptureTransaction = config.GetProperty("captureTransaction").GetBoolean() ? tr => tr.Origin is not "nocap" : null,
         };
 
-        if (config.GetProperty("tracked").ValueKind == JsonValueKind.Array)
-        {
-            options.TrackedOrigins = config.GetProperty("tracked").EnumerateArray()
-                .Select(o => o.ValueKind == JsonValueKind.Null ? null : o.GetString() == "cls" ? typeof(ClassOrigin) : (object)o.GetString())
-                .ToHashSet();
-        }
-
         var scope = config.GetProperty("scope");
         var um = scope.ValueKind == JsonValueKind.Null
             ? new UndoManager(doc, options)
-            : new UndoManager(scope.EnumerateArray().Select(n => (object)roots[n.GetString()]).ToList(), options);
+            : new UndoManager(scope.EnumerateArray().Select(n => roots[n.GetString()]).ToList(), options);
 
         var events = new List<string>();
-        um.StackItemAdded += (_, e) => events.Add($"added {Name(e.Type)} {e.ChangedParentTypes.Count}");
-        um.StackItemUpdated += (_, e) => events.Add($"updated {Name(e.Type)} {e.ChangedParentTypes.Count}");
-        um.StackItemPopped += (_, e) => events.Add($"popped {Name(e.Type)} {e.ChangedParentTypes.Count}");
+        um.StackItemAdded += (_, e) => events.Add($"added {Name(e.Operation)} {e.ChangedParentTypes.Count}");
+        um.StackItemUpdated += (_, e) => events.Add($"updated {Name(e.Operation)} {e.ChangedParentTypes.Count}");
+        um.StackItemPopped += (_, e) => events.Add($"popped {Name(e.Operation)} {e.ChangedParentTypes.Count}");
         um.StackCleared += (_, e) => events.Add($"cleared {Bool(e.UndoStackCleared)} {Bool(e.RedoStackCleared)}");
 
         var history = new List<string>();
@@ -199,7 +198,7 @@ internal static class UndoReplay
 
     private static object Origin(JsonElement name) => name.ValueKind == JsonValueKind.Null ? null : name.GetString() == "cls" ? new ClassOrigin() : name.GetString();
 
-    private static string Name(UndoManager.OperationType type) => type == UndoManager.OperationType.Undo ? "undo" : "redo";
+    private static string Name(UndoOperation type) => type == UndoOperation.Undo ? "undo" : "redo";
 
     private static string Bool(bool b) => b ? "true" : "false";
 

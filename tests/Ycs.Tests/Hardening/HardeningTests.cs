@@ -487,20 +487,20 @@ public class HardeningTests
         doc.ApplyUpdate(Subdocument("76 02 02 67 63 79 04 6D 65 74 61 76 01 01 61 7D 01"));
         var subdoc = (YDoc)doc.GetMap("m").Get("k");
 
-        Assert.IsFalse(subdoc.Gc);
-        Assert.AreEqual(1, ((IDictionary<string, object>)subdoc.Meta)["a"]);
+        Assert.IsFalse(subdoc.GarbageCollection);
+        Assert.AreEqual(1, subdoc.Meta["a"]);
     }
 
     [TestMethod]
     public void EncodeStateAsUpdate_DeletedSubdocumentWithoutGc_Encodes()
     {
-        var doc = new YDoc(new YDocOptions { Gc = false });
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var map = doc.GetMap("m");
         var subdoc = new YDoc();
         map.Set("k", subdoc);
         map.Delete("k");
 
-        var copy = new YDoc(new YDocOptions { Gc = false });
+        var copy = new YDoc(new YDocOptions { GarbageCollection = false });
         copy.ApplyUpdate(doc.EncodeStateAsUpdate());
 
         Assert.IsFalse(copy.GetMap("m").ContainsKey("k"));

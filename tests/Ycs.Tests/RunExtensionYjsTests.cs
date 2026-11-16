@@ -132,7 +132,7 @@ public class RunExtensionYjsTests
     [TestMethod]
     public void ToArraySnapshot_TakenAndReadWithinATransaction_ShowsWhatTheSnapshotHolds()
     {
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var a = doc.GetArray("a");
         a.Push(new object[] { 1, 2 });
         IList<object> read = null;
@@ -152,7 +152,7 @@ public class RunExtensionYjsTests
     [TestMethod]
     public void ToDelta_SnapshotsWithinATransaction_ChangesPerYjsItem()
     {
-        var doc = new YDoc(new YDocOptions { ClientId = 1, Gc = false });
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = false });
         var t = doc.GetText("t");
         t.Insert(0, "ab");
         var s1 = doc.CreateSnapshot();
@@ -393,7 +393,7 @@ public class RunExtensionYjsTests
         var doc = new YDoc(new YDocOptions
         {
             ClientId = 1,
-            GcFilter = item =>
+            GarbageCollectionFilter = item =>
             {
                 calls.Add($"{item.Id.Clock}+{item.Length}");
                 return keep(item);

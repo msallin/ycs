@@ -14,11 +14,11 @@ namespace Ycs;
 /// Mirrors Yjs 13.6.32's <c>Snapshot</c> (src/utils/Snapshot.js): an immutable pair of a state
 /// vector and a delete set that together pin down "the document as of this point in time".
 /// <br/>
-/// Snapshots are only meaningful against a document created with <c>Gc = false</c>
-/// (<see cref="YDocOptions.Gc"/>) - a garbage-collected document may already have thrown away the
+/// Snapshots are only meaningful against a document created with <c>GarbageCollection = false</c>
+/// (<see cref="YDocOptions.GarbageCollection"/>) - a garbage-collected document may already have thrown away the
 /// content of deleted items a snapshot would need to restore. <see cref="RestoreDocument"/> and
 /// <see cref="YDocSnapshotExtensions.CreateDocFromSnapshot"/> both enforce this the same way Yjs
-/// does, by throwing if <c>originDoc.Gc</c> is <c>true</c>.
+/// does, by throwing if <c>originDoc.GarbageCollection</c> is <c>true</c>.
 /// </summary>
 public sealed partial class Snapshot : IEquatable<Snapshot>
 {
