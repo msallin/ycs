@@ -103,7 +103,7 @@ public class ContentType : IContentEx
             else if (IsOlderThan(item, transaction))
             {
                 // Collected with the type later, but not in the transaction's delete set: merge it then.
-                transaction._mergeStructs.Add(item);
+                transaction._mergeStructs.Add(item.Id);
             }
         }
     }

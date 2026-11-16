@@ -550,7 +550,7 @@ internal readonly partial struct ItemRef
         }
 
         // Right is more specific.
-        transaction._mergeStructs.Add(rightItem);
+        transaction._mergeStructs.Add(rightItem.Id);
 
         // Update parent._map.
         if (rightItem.ParentSub != null && rightItem.Right.IsNull)
