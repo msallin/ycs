@@ -1,12 +1,12 @@
 {
  "scenario": "memory",
- "date": "2026-11-16T15:36:38.154Z",
+ "date": "2026-11-16T18:14:54.707Z",
  "options": {
   "_": [
    "all"
   ],
   "server-cpus": "0-3",
-  "trace": "/home/claude/projects/ycs-server-p6/bench/server/.trace/automerge-paper.json.gz"
+  "trace": "/home/claude/projects/ycs-server/bench/server/.trace/automerge-paper.json.gz"
  },
  "machineBefore": {
   "cpu": "AMD EPYC-Genoa Processor",
@@ -19,9 +19,9 @@
   "driverCpus": "4-7",
   "driverWorkers": 4,
   "loadAverage": [
-   78.93,
-   62.76,
-   46.92
+   6.75,
+   3.76,
+   1.89
   ]
  },
  "servers": {
@@ -34,31 +34,31 @@
    "ratePerEditor": 2,
    "durationS": 120,
    "empty": {
-    "rssMiB": 55.15234375,
-    "managedBytes": 729120,
-    "heapSizeBytes": 827616,
-    "committedBytes": 2867200,
+    "rssMiB": 63.828125,
+    "managedBytes": 828752,
+    "heapSizeBytes": 926536,
+    "committedBytes": 3325952,
     "rooms": 0
    },
    "built": {
-    "rssMiB": 130.3359375,
-    "managedBytes": 30553592,
-    "heapSizeBytes": 30550368,
-    "committedBytes": 64425984,
+    "rssMiB": 131.7734375,
+    "managedBytes": 30720816,
+    "heapSizeBytes": 30709664,
+    "committedBytes": 63258624,
     "rooms": 100
    },
    "edited": {
-    "rssMiB": 221.10546875,
-    "managedBytes": 31202272,
-    "heapSizeBytes": 31379336,
-    "committedBytes": 131420160,
+    "rssMiB": 220.60546875,
+    "managedBytes": 31350552,
+    "heapSizeBytes": 31567656,
+    "committedBytes": 129765376,
     "rooms": 100
    },
    "perRoomKiB": {
-    "rssBuilt": 769.88,
-    "heapBuilt": 291.254609375,
-    "rssEdited": 1699.36,
-    "heapEdited": 297.589375
+    "rssBuilt": 695.76,
+    "heapBuilt": 291.9146875,
+    "rssEdited": 1605.4,
+    "heapEdited": 298.064453125
    },
    "editing": {
     "updatesSent": 48000,
@@ -67,30 +67,30 @@
     "deliveries": 48000,
     "echoes": 0,
     "closedEarly": 0,
-    "deliveredUpdatesPerS": 399.9591375081179,
-    "deliveriesPerS": 399.9591375081179,
-    "typingS": 120.00824,
-    "drainS": 0.00402,
+    "deliveredUpdatesPerS": 399.9928334617338,
+    "deliveriesPerS": 399.9928334617338,
+    "typingS": 120.00181,
+    "drainS": 0.00034,
     "latency": {
-     "count": 47999,
-     "p50Ms": 2.07,
-     "p95Ms": 7.63,
-     "p99Ms": 14.01,
-     "maxMs": 96.43
+     "count": 48000,
+     "p50Ms": 0.12,
+     "p95Ms": 0.22,
+     "p99Ms": 0.66,
+     "maxMs": 25.47
     },
     "server": {
-     "cores": 0.056744202633964236,
-     "cpuSeconds": 6.8100000000000005,
-     "cpuUsPerDelivery": 141.87500000000003,
-     "runQueueWaitS": 43.560149947,
-     "rssPeakMiB": 220.68359375,
-     "rssEndMiB": 220.68359375
+     "cores": 0.07816526620564715,
+     "cpuSeconds": 9.38,
+     "cpuUsPerDelivery": 195.41666666666666,
+     "runQueueWaitS": 1.203837208,
+     "rssPeakMiB": 220.15234375,
+     "rssEndMiB": 220.15234375
     },
     "driver": {
-     "processCores": 0.06855200460352967,
-     "busiestWorkerCore": 0.01565155926569502,
-     "loopDelayP99Ms": 13.844479,
-     "loopDelayMaxMs": 125.698047
+     "processCores": 0.06215340308486139,
+     "busiestWorkerCore": 0.013797111135092162,
+     "loopDelayP99Ms": 10.862591,
+     "loopDelayMaxMs": 29.507583
     }
    },
    "valid": true,
@@ -105,34 +105,34 @@
    "ratePerEditor": 2,
    "durationS": 120,
    "empty": {
-    "rssMiB": 83.20703125,
-    "heapUsedBytes": 10205888,
-    "heapTotalBytes": 30801920,
-    "externalBytes": 4367674,
-    "arrayBuffersBytes": 347143,
+    "rssMiB": 82.4375,
+    "heapUsedBytes": 10204056,
+    "heapTotalBytes": 30539776,
+    "externalBytes": 4367671,
+    "arrayBuffersBytes": 242119,
     "rooms": 0
    },
    "built": {
-    "rssMiB": 132.4140625,
-    "heapUsedBytes": 37597792,
+    "rssMiB": 137.4140625,
+    "heapUsedBytes": 37537768,
     "heapTotalBytes": 106037248,
-    "externalBytes": 8867767,
-    "arrayBuffersBytes": 4889545,
+    "externalBytes": 10937233,
+    "arrayBuffersBytes": 6667587,
     "rooms": 100
    },
    "edited": {
-    "rssMiB": 166.13671875,
-    "heapUsedBytes": 38167016,
-    "heapTotalBytes": 78249984,
-    "externalBytes": 4555030,
-    "arrayBuffersBytes": 576808,
+    "rssMiB": 241.49609375,
+    "heapUsedBytes": 36681648,
+    "heapTotalBytes": 174718976,
+    "externalBytes": 5091473,
+    "arrayBuffersBytes": 1118721,
     "rooms": 100
    },
    "perRoomKiB": {
-    "rssBuilt": 503.88,
-    "heapBuilt": 311.445283203125,
-    "rssEdited": 849.2,
-    "heapEdited": 274.8875390625
+    "rssBuilt": 562.96,
+    "heapBuilt": 331.08666015625,
+    "rssEdited": 1628.76,
+    "heapEdited": 265.63861328125
    },
    "editing": {
     "updatesSent": 48000,
@@ -141,30 +141,30 @@
     "deliveries": 48000,
     "echoes": 48000,
     "closedEarly": 0,
-    "deliveredUpdatesPerS": 399.97106875935975,
-    "deliveriesPerS": 399.97106875935975,
-    "typingS": 120.00473,
-    "drainS": 0.00395,
+    "deliveredUpdatesPerS": 399.99236681233333,
+    "deliveriesPerS": 399.99236681233333,
+    "typingS": 120.00166,
+    "drainS": 0.00063,
     "latency": {
-     "count": 48000,
-     "p50Ms": 2.85,
-     "p95Ms": 14.01,
-     "p99Ms": 174.84,
-     "maxMs": 926.76
+     "count": 47999,
+     "p50Ms": 0.11,
+     "p95Ms": 0.27,
+     "p99Ms": 1.12,
+     "maxMs": 15.27
     },
     "server": {
-     "cores": 0.04824651016909777,
-     "cpuSeconds": 5.79,
-     "cpuUsPerDelivery": 120.625,
-     "runQueueWaitS": 60.805227759999994,
-     "rssPeakMiB": 282.76953125,
-     "rssEndMiB": 166.11328125
+     "cores": 0.04416582383552847,
+     "cpuSeconds": 5.3,
+     "cpuUsPerDelivery": 110.41666666666667,
+     "runQueueWaitS": 0.712985355,
+     "rssPeakMiB": 241.49609375,
+     "rssEndMiB": 241.49609375
     },
     "driver": {
-     "processCores": 0.06842020093879876,
-     "busiestWorkerCore": 0.016096019054621716,
-     "loopDelayP99Ms": 14.123007,
-     "loopDelayMaxMs": 97.845247
+     "processCores": 0.06080984787873631,
+     "busiestWorkerCore": 0.013646797906939944,
+     "loopDelayP99Ms": 10.928127,
+     "loopDelayMaxMs": 23.085055
     }
    },
    "valid": true,
@@ -172,8 +172,8 @@
   }
  },
  "loadAverageAfter": [
-  85.53,
-  76.02,
-  56.4
+  3.89,
+  3.53,
+  2.23
  ]
 }
