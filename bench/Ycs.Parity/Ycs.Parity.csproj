@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Not a part of the library: writes one SHA-256 line per output of the update operations (README.md).
+    The fuzzer's generator is compiled from tests/Ycs.Properties.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\tests\Ycs.Properties\UpdateFuzz.cs" Link="Fuzz\UpdateFuzz.cs" />
+    <Compile Include="..\..\tests\Ycs.Properties\Json.cs" Link="Fuzz\Json.cs" />
+    <ProjectReference Include="..\..\src\Ycs\Ycs.csproj" />
+  </ItemGroup>
+
+</Project>
