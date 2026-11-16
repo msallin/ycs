@@ -1,0 +1,23 @@
+# 128-position leaves, prototype (new) against modernize 9e182ef (base); ab.py 4 6; uptime before and after each file
+ 14:25:08 up 3 days, 22:12,  1 user,  load average: 7.43, 4.28, 17.63
+apply-state-v1/ycs       base median      52.4 ms (min 49.1 max 56.1; pass medians 54.1, 51.7, 52.6, 52.5)  alloc    33.14 MiB  held 4.5 MiB  peak RSS 79 MiB  load 6.40
+apply-state-v1/ycs       new  median      52.5 ms (min 49.5 max 65.7; pass medians 52.2, 53.0, 55.1, 52.1)  alloc    33.14 MiB  held 4.5 MiB  peak RSS 75 MiB  load 6.87
+apply-state-v2/ycs       base median      55.4 ms (min 52.8 max 58.5; pass medians 55.2, 57.0, 54.1, 56.8)  alloc    35.14 MiB  held 4.4 MiB  peak RSS 75 MiB  load 5.16
+apply-state-v2/ycs       new  median      55.1 ms (min 51.9 max 115.1; pass medians 53.8, 96.4, 56.5, 54.5)  alloc    35.14 MiB  held 4.4 MiB  peak RSS 75 MiB  load 5.44
+concurrent-20            base median      67.6 ms (min 66.3 max 71.6; pass medians 66.7, 70.9, 67.6, 67.3)  alloc    28.31 MiB  held 29.1 MiB  peak RSS 110 MiB  load 4.08
+concurrent-20            new  median      68.1 ms (min 66.1 max 74.1; pass medians 67.0, 70.1, 67.5, 71.8)  alloc    28.32 MiB  held 29.1 MiB  peak RSS 116 MiB  load 4.17
+trace-replay             base median     204.2 ms (min 198.8 max 214.9; pass medians 205.6, 207.7, 202.6, 204.0)  alloc    43.04 MiB  held 3.0 MiB  peak RSS 214 MiB  load 3.32
+trace-replay             new  median     203.6 ms (min 194.9 max 222.1; pass medians 209.9, 201.8, 203.8, 198.3)  alloc    43.04 MiB  held 3.0 MiB  peak RSS 217 MiB  load 3.32
+array-delete-random      base median     195.0 ms (min 169.8 max 229.5; pass medians 182.0, 190.7, 192.0, 208.0)  alloc    32.78 MiB  held 20.1 MiB  peak RSS 100 MiB  load 3.00
+array-delete-random      new  median     202.6 ms (min 183.4 max 240.1; pass medians 207.1, 224.3, 193.7, 198.4)  alloc    32.78 MiB  held 20.1 MiB  peak RSS 108 MiB  load 3.00
+text-append-1txn-observed base median     129.2 ms (min 123.3 max 131.7; pass medians 124.6, 130.9, 128.5, 130.0)  alloc    18.77 MiB  held 2.3 MiB  peak RSS 65 MiB  load 2.79
+text-append-1txn-observed new  median     134.5 ms (min 124.1 max 151.5; pass medians 140.4, 137.3, 130.4, 125.0)  alloc    18.77 MiB  held 2.3 MiB  peak RSS 79 MiB  load 2.86
+ 14:27:54 up 3 days, 22:15,  1 user,  load average: 2.73, 3.50, 15.16
+ 14:30:36 up 3 days, 22:18,  1 user,  load average: 1.09, 2.64, 12.99
+apply-updates/ycs        base median     219.1 ms (min 216.4 max 265.8; pass medians 218.5, 217.6, 242.2, 227.5)  alloc    59.31 MiB  held 18.6 MiB  peak RSS 141 MiB  load 1.34
+apply-updates/ycs        new  median     222.7 ms (min 219.8 max 240.9; pass medians 221.1, 223.4, 223.5, 223.4)  alloc    59.31 MiB  held 18.6 MiB  peak RSS 141 MiB  load 1.28
+array-delete-random      base median     197.5 ms (min 165.5 max 236.8; pass medians 200.4, 210.0, 174.3, 198.6)  alloc    32.78 MiB  held 20.1 MiB  peak RSS 108 MiB  load 1.39
+array-delete-random      new  median     207.6 ms (min 180.3 max 257.5; pass medians 199.8, 210.8, 220.6, 200.5)  alloc    32.78 MiB  held 20.1 MiB  peak RSS 106 MiB  load 1.43
+text-append-1txn-observed base median     134.1 ms (min 129.6 max 171.5; pass medians 136.7, 134.1, 138.7, 130.7)  alloc    18.77 MiB  held 2.3 MiB  peak RSS 65 MiB  load 1.81
+text-append-1txn-observed new  median     134.7 ms (min 127.6 max 140.1; pass medians 137.9, 137.2, 127.8, 128.5)  alloc    18.77 MiB  held 2.3 MiB  peak RSS 67 MiB  load 1.71
+ 14:32:07 up 3 days, 22:19,  1 user,  load average: 1.81, 2.45, 11.96

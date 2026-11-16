@@ -527,6 +527,30 @@ ycs child of c9f673a (`modernize`) and of the branch (42f0687), interleaved with
     no pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined):
     none beyond 2 %. Recorded as open question 6 of the design. It is the price of the leaf object and the two-level
     lookup, against -26 % and -29 % on the workloads that split.
+* **A flat form below one leaf: no gain, not kept** (2026-11-16, `results/2026-11-16-leaf-flat/`, `ab.py 4 6`, load 1.1
+  to 8.4 on a shared machine). The candidate of open question 6: while a client has no directory (at most 128 structs),
+  the structs, starts and flags without the leaf object. Prototyped for the operations that matter (the indexer, both
+  `FindIndex`, `Add`, `Refresh` read the one leaf's arrays cached in the list; `prototype.patch`) and measured against
+  9e182ef:
+
+  | workload | 9e182ef | prototype | change |
+  | --- | ---: | ---: | --- |
+  | `apply-state-v1/ycs` | 52.4 ms | 52.5 ms | 0 % |
+  | `apply-state-v2/ycs` | 55.4 ms | 55.1 ms | -1 % |
+  | `concurrent-20` | 67.6 ms | 68.1 ms | +1 % |
+  | `apply-updates/ycs` | 219.1 ms | 222.7 ms | +2 % (runs 216-266 / 220-241) |
+  | `trace-replay` | 204.2 ms | 203.6 ms | 0 % |
+  | `array-delete-random` | 195.0 / 197.5 ms | 202.6 / 207.6 ms | +4 / +5 % (runs 166-237 / 180-258: noise) |
+  | `text-append-1txn-observed` | 129.2 / 134.1 ms | 134.5 / 134.7 ms | +4 / 0 % |
+
+  The flat form cannot reach these workloads: their clients hold far more than 128 structs (the trace's one client
+  about 11,000, `concurrent-20`'s twenty each several hundred; inferred from the unchanged times, not counted), so
+  they keep their leaves and the two-level lookup. The upper bound, with every client one flat leaf (`LeafCapacity`
+  1 << 20 in both builds, no directory anywhere): `apply-state-v1` 50.0 to 49.3 ms (-1.4 %), `apply-state-v2` 52.4 to
+  50.8 ms (-3.1 %), `concurrent-20` 63.5 to 62.7 ms (-1.3 %). Even there the leaf object's extra load is not what costs; where the "half with a single leaf" goes was not found (not
+  proven: the flags, counts and sums that a flat form keeps are the candidates). Below the 3 points of the three workloads
+  that the change had to recover, so the code is not committed. Going back from leaves to the flat form when merges
+  leave one leaf is what the directory's removal already does (`RemoveLeaf`).
 * **The pivot among the leaves** (42f0687, a first guess from the clocks as Yjs' `findIndexSS` makes) bought nothing:
   without it `concurrent-20` 71.4 / 69.8 ms, `apply-state-v1` 53.2 / 53.1, `apply-state-v2` 58.8 / 58.7,
   `apply-updates` 225.8 / 219.6, `trace-replay` 199.0 / 198.2 (`results/2026-11-16-no-leaf-pivot/`, `ab.py 4 6`); the
