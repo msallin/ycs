@@ -12,16 +12,9 @@ namespace Ycs;
 /// You can manage binding to a custom (non-Xml) type with YXmlHook. It behaves exactly like a
 /// <see cref="YMap"/> (including which events it raises), plus a 'HookName'.
 /// </summary>
-public class YXmlHook : YMap
+public partial class YXmlHook : YMap
 {
     internal const int YXmlHookRefId = 5;
-
-    public YXmlHook(string hookName)
-    {
-        HookName = hookName;
-    }
-
-    public string HookName { get; }
 
     internal override AbstractType InternalCopy()
     {
@@ -38,8 +31,6 @@ public class YXmlHook : YMap
 
         return el;
     }
-
-    public new YXmlHook Clone() => InternalClone() as YXmlHook;
 
     internal override void Write(IUpdateEncoder encoder)
     {
