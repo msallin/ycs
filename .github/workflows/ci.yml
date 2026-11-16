@@ -34,6 +34,7 @@ jobs:
         run: |
           (cd interop/server && npm ci)
           bash interop/server/smoke.sh
+          bash interop/server/converge.sh
           (cd interop/signalr && npm ci)
           bash interop/signalr/smoke.sh
           cmp interop/signalr/provider.mjs samples/Ycs.Server/demo/src/signalr-provider.mjs
