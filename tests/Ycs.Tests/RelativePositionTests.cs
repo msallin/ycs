@@ -102,7 +102,7 @@ public class RelativePositionTests : YTestBase
         Assert.AreEqual(1, posLeft.Index);
     }
 
-    private void CheckRelativePositions(YText yText)
+    private static void CheckRelativePositions(YText yText)
     {
         // Test if all positions are encoded and restored correctly.
         for (int i = 0; i < yText.Length; i++)

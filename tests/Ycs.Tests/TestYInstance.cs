@@ -13,8 +13,8 @@ namespace Ycs;
 
 public class TestYInstance : YDoc
 {
-    public TestConnector _tc;
-    public IDictionary<TestYInstance, Queue<byte[]>> _receiving = new Dictionary<TestYInstance, Queue<byte[]>>();
+    public TestConnector _tc { get; set; }
+    public IDictionary<TestYInstance, Queue<byte[]>> _receiving { get; set; } = new Dictionary<TestYInstance, Queue<byte[]>>();
 
     public TestYInstance(TestConnector connector, int clientId, YDocOptions options)
         : base(options)
