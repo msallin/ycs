@@ -1,6 +1,6 @@
 # Design: items as structs in a slab, linked by handles
 
-Status: steps 1 to 3 built (section 1); the rest is the design for the remaining work (sections 2 to 5), revised
+Status: steps 1 to 4 built (section 1); the rest is the design for the remaining work (sections 2 to 5), revised
 after the design review and the review of steps 1 and 2 (2026-11-15). Parity target unchanged: Yjs 13.6.32, the same
 content, events and update bytes. No unsafe code: arrays of structs and `ref` to their elements only. Numbers come
 from `bench/Ycs.Layout` (the model; README and `results/`), `bench/Ycs.Compare` (README, "After layout steps 1 and 2")
@@ -13,8 +13,9 @@ its client's list. The design puts each struct in a slot of a slab, links slots 
 values in append-only arenas and the rare fields in side tables. The model holds 35-45% of today's memory on the six
 workloads measured, and at most about 400 bytes more than today on the smallest document (section 2.2). Built so far, on today's objects: start clocks beside each client's structs, and the run-head index that makes Yjs'
 marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s), and the leaf order of step 3, which took
-back the 15-19% steps 1 and 2 cost on the two split-heavy workloads and made the walks' lookups logarithmic. The public API breaks once, in
-step 6, after the internal reference layer (steps 4 and 5) has enumerated every holder.
+back the 15-19% steps 1 and 2 cost on the two split-heavy workloads and made the walks' lookups logarithmic, and the
+internal reference layer `ItemRef` of step 4, which enumerated the public boundaries and the holders across free points
+(1.4). The public API breaks once, in step 6, after step 5 has given those holders ids.
 
 ## 1. What is built
 
@@ -126,7 +127,131 @@ Positions stay global ints; no caller changed.
   heap kept the loaded document alive until a gen2 collection; it clears every list now (bench/Ycs.Compare/README.md,
   "The leaf order").
 
-### 1.4 Known gaps of what is built
+### 1.4 Steps 4a and 4b: `ItemRef`
+
+`Structs/ItemRef.cs`, `Structs/ItemRef.Operations.cs`. The library's code holds the structs of the store through
+`internal readonly struct ItemRef : IEquatable<ItemRef>`, one field: today's object. Yjs' `Item` algorithms moved from
+`Item.cs` onto it unchanged but for the reference (integrate, split, merge and its test, delete, mark deleted, gc, keep,
+visibility, write, next and prev, run extension); `Item` keeps its fields and public members, and its overrides
+delegate. On it since 4a: the struct lists (leaves of `ItemRef[]`), the store's lookups, splits, replacement and delete
+set application, the conflict resolution, the transaction's merge list, the delete set's passes, the type collection's
+walks, `IContentEx.Integrate`, the search markers and the push hint; since 4b: a type's `_start`, `_item` and `_map`,
+the walks of every type, the text's list position, the undo manager, the events' changes and paths, the relative and
+absolute positions.
+
+* **Shape**: `default` is Yjs' null (`IsNull`); `==`, `Equals(ItemRef)` and `GetHashCode` (the object's identity hash)
+  are written out; `IsItem`, `IsGC`, `AsItem` (what `as Item` gave), `IsSameKind` (the merge rules' `GetType()`
+  comparison: on the struct it would name `ItemRef`). An item's members test the type (`as Item`), so on a GC struct
+  they throw `NullReferenceException`, as `(str as Item).Member` did; the type test walks faster than a cast (below).
+  The members every kind has (`Delete`, `Integrate`, `CanMergeWith`, `MergeWith`, `Write`) dispatch by kind: an item's
+  algorithm, else the struct's own override. `ItemRef.New` is Yjs' `new Item(id, left, left && left.lastId, right, right
+  && right.id, parent, parentSub, content)`. Objects enter by `ItemRef.Of` and leave by `ToStruct`/`ToItem`: those calls
+  are the boundaries, listed below.
+* **What it costs**: no allocation (every workload allocates the same bytes, below); no box (a test reads every
+  method body of the library and fails on a `box` or `constrained.` of an `ItemRef`; the one exception is the
+  non-generic `IEnumerator.Current` of the lists' `IEnumerable<ItemRef>`, which nothing calls); no `ValueType.Equals`
+  (equality written out, `HashSet<ItemRef>` and `Dictionary<_, ItemRef>` use `IEquatable<ItemRef>`); no interface
+  dispatch on it. What remains is the type test on each item member, one compare where the field read
+  needed none: the accessors are inlined (`AggressiveInlining`: `Integrate` and the walks read more of them than the JIT
+  inlines by its budget, and a call per read cost the observed typing 10-15 %), and the hottest walks read a position's
+  item once per step.
+* **Traps found on the way**: an `ItemRef` compared with `null` binds to the lifted operator and is always false (seven
+  places once the temporary conversions went; CS8073 is an error in `src` now); `(object)type._item ?? type` boxed and
+  was never null (the garbage collection check of the integration plan; caught by its test and by the box test);
+  `x.GetType()` on the struct names `ItemRef` (the merge rules; `IsSameKind`); `is { }` on the struct always matches.
+* **Invariant** (`ItemRefSignatureTests`): no internal field, property, parameter or return names `Item` or
+  `AbstractStruct` but in `ItemRef`, the struct classes, the public members, the decoded form (the update reader, the
+  pending structs, `UpdateOperations`, the integration plan; until step 9), the members that pass a public filter
+  (`Predicate<Item>`, `Func<Item, bool>`) to its call, and three hooks of the property tests.
+
+**The public boundaries (step 6's work list).** Thirteen conversions, for twelve public members:
+
+| public member | where it converts |
+| --- | --- |
+| `Item.LastId`, `Item.Next`, `Item.Prev`, `Item.SplitItem` | `Item.cs` (`ItemRef.Of(this)`, `ToStruct`/`ToItem` of the result) |
+| `YEvent.Adds(AbstractStruct)`, `YEvent.Deletes(AbstractStruct)` | `YEvent.cs` (`ItemRef.Of`; the library calls the internal overloads) |
+| `ChangesCollection.Added`, `ChangesCollection.Deleted` | `YEvent.CollectChanges` (`ToItem`, 2) |
+| `YDoc.GcFilter` / `YDocOptions.GcFilter` | `DeleteSet.TryGcDeleteSet`, `IntegrationPlan.HasLiveNonValue` (`ToItem`, 2); the plan's other calls pass its decoded-form items |
+| `UndoManagerOptions.DeleteFilter` | `UndoManager.PopStackItem` (`ToItem`) |
+| `AbstractType.TypeMapEnumerate` (protected) | `AbstractType.cs` (`ToItem`) |
+| `YArrayBase.InsertGenericsAfter(Transaction, Item, ...)` (protected) | `YArrayBase.cs` (`ItemRef.Of`) |
+
+Public members that hand out objects without a conversion: `Item.Left`, `Item.Right` (the fields themselves),
+`DecodedUpdate.Structs` (the decoded form), and the classes `AbstractStruct`, `GC`, `Skip`, `Item`, `IContent`, the
+`Content*`.
+
+**The holders across a free point (step 5's work list).** Marked in the code with "ItemRef lifetime
+(docs/design-item-layout.md, 3.1)":
+
+| holder | what it is held across |
+| --- | --- |
+| `Transaction._mergeStructs` | the cleanup's merge pass, which reads an entry after merging the entries after it |
+| `YArrayBase.EnumerateContent` (the public enumerator of arrays and XML fragments) | the caller's code between two values |
+| `YArray.EnumerateList` (`Map`, `ForEach`, `ToArray`, the clone) | the callback of `Map` and `ForEach` |
+| `YArrayBase.ForEach` (`YXmlFragment.ForEach`) | the callback |
+| `YXmlTreeWalker._currentNode` | the caller's code between two nodes |
+| `YText.WriteTo` | the caller's `IBufferWriter<char>` |
+| `YArrayBase._searchMarkers` of a collected type | the type's collection, which does not clear them (H5) |
+
+The walks inside a transaction that call user code (`YText.ToDelta`'s `computeYChange` with snapshots, the undo
+manager's redo) run where no cleanup can happen, and the other holders of 2.4 (type starts, map entries, search markers
+of a live type, the push hint, the clock order) are kept current by split and merge.
+
+**Where the code was not moved mechanically, and why.**
+
+* The decoded form stays objects (2.5, step 9): `IntegrationPlan` keys dictionaries by `Item` and mixes the store's
+  items into them (`Target`, `KeyOf`, `LandsLast`, `DeletedTypes`: `ToStruct`/`ToItem` of a store lookup), the pending
+  structs' rest store holds `Skip` structs (`ToStruct` to test for them), `Item.ResolveReferences` links a decoded item
+  to the store's (`ToStruct`). Step 7 must give the plan an id or a handle for the store's items there.
+* Casts that only fail on a GC struct the code cannot reach (no item's neighbour, run or redone copy is one) are gone;
+  the next member read throws `NullReferenceException` where the cast threw `InvalidCastException`:
+  `(Item)structs[reached]` in `StructStore.SeekRight` and the marker walk, the undo manager's
+  `(Item)GetItemCleanStart(...)`, `LeftOf`'s `(Item)left.Right`, and the casts in the item algorithms (`(Item)right` in
+  a merge). No suite reaches one.
+* `TypeMapEnumerateValues` iterates the map instead of the public `TypeMapEnumerate`, with the same filter; the text's
+  and the XML fragment's inserts call `InsertGenericsAfterReturningLast`, which the protected `InsertGenericsAfter`
+  calls.
+* Performance, not semantics: the accessors are inlined, `AsItem` keeps its type test's result, the text position's
+  steps and the marker walk read the position's item once.
+
+**Proof** (the numbers: bench/Ycs.Compare/README.md, "ItemRef"):
+
+* Every suite as before: `Ycs.Tests` Release 2,906 passed (also with `YCS_LEAF_CAPACITY` 2 and 4), Debug 2,902 and 4
+  skipped (the stale-marker scripts against the committed Yjs fixtures among them); the corpus 3,366; the properties 630
+  (22 skipped), `walk-index` on 30,000 scripts; the fuzzer 18; the budgets 2; `interop/run.sh`; the soak against Yjs on
+  60,000 new scripts (seeds 7,200,001 to 7,260,000): no mismatch.
+* Byte for byte against c263413 (the base built beside it): the encoded state, v1 and v2, of the 110 corpus cases with
+  their updates applied in order, reversed and shuffled, and the events seen on the way (330 runs); and of 2,000 random
+  scripts of the review's probe (five kinds, 3 to 6 clients), compared after every step on content, search markers,
+  every marker lookup's item and index and the v1 and v2 state: identical.
+* The review's differential fuzz: 6,000 scripts (seeds from 7,300,001; `breath` 1,500, `breathundo`, `breathmany`,
+  `small`, `text` 1,000 each, `big` 500), each run item by item and through the index with leaves of 2, 16 and 128, the
+  lists recounted after every operation: 0 differing.
+* `ItemRefTests` (null, identity, hashing, the members on an item and on a GC struct), `ItemRefBoxingTests` (a sabotage,
+  the `(object)type._item ?? type` above put back, fails it), `ItemRefSignatureTests`. `PublicApi.txt` unchanged; no
+  unsafe code; no new warning in `src` (two fewer); the Native AOT sample publishes without a warning.
+
+**Measured** (`bench/Ycs.Compare`, `ab.py`, c263413 against the branch, interleaved):
+
+| workload | c263413 | ItemRef | change |
+| --- | ---: | ---: | --- |
+| `apply-updates/ycs` | 220.3 ms | 222.6 ms | +1 % |
+| `trace-replay` | 198.6 ms | 202.1 ms | +2 % |
+| `apply-state-v1/ycs`, `-v2/ycs` | 51.8, 56.9 ms | 52.2, 57.9 ms | +1 %, +2 % |
+| `array-delete-random`, `array-insert-random` | 165.7, 138.7 ms | 169.8, 137.2 ms | +2 %, -1 % |
+| `text-random`, `text-random-100k` | 25.9, 768.7 ms | 24.5, 772.7 ms | noise |
+| `concurrent-20`, `map-set-distinct` | 68.0, 40.0 ms | 67.4, 41.6 ms | noise |
+| `text-append-1txn-observed`, 25k / 100k | 29.8 / 124.3 ms | 31.9 / 130.9 ms | **+7 % / +5 %** |
+| `text-append-1txn-observed`, 200k / 400k | 268.3 / 535.4 ms | 271.2 / 549.9 ms | +1 % / +3 % |
+
+Allocations and held memory are equal to the byte in all of them. The one cost beyond noise is typing into an observed
+text in one transaction at 25,000 and 100,000 characters: the marker walk's literal steps test the type of each
+neighbour they read (`Item` is not sealed, so a cast or a test is a compare where the object field needed none). It was
+8-14 % before the accessors were inlined and the members switched from a cast to a type test; with the walk on an `Item`
+variable it was +3 % (an experiment, not kept: it would hold the object step 7 removes). Step 7's slab reads a slot by
+index and has no test; see bench/Ycs.Compare/README.md, "ItemRef", for the experiments.
+
+### 1.5 Known gaps of what is built
 
 * The obligation to call `StructStore.Refresh` is stated there, not at `Item.Left` and `Item.MarkDeleted` (N6), a
   small task of its own.
@@ -302,8 +427,8 @@ reviewed alone. Effects: *measured* where a source is named, otherwise estimates
 | step | concern | effect | risk |
 | --- | --- | --- | --- |
 | 3 | the leaf order of a client's structs: built (1.3) | `apply-updates`, `trace-replay` below 53a35de (measured) | medium |
-| 4a | `ItemRef` in the store core | none (est.) | low |
-| 4b | `ItemRef` in the types, undo, events | none (est.) | low |
+| 4a | `ItemRef` in the store core: built (1.4) | none beyond noise, but observed typing in one transaction +5-7 % (measured) | low |
+| 4b | `ItemRef` in the types, undo, events: built (1.4) | (with 4a) | low |
 | 5 | ids wherever a struct is held across a free point | < 1% (est.) | low-medium |
 | 6 | the public API break | none inside; a view read costs a hint check | medium |
 | 7 | the slab, content still as objects | about half of the memory saving; no `Item` allocation per edit (est.) | high |
@@ -313,7 +438,7 @@ reviewed alone. Effects: *measured* where a source is named, otherwise estimates
 **Step 3, the leaf order: built** (1.3). `apply-updates` and `trace-replay` are below 53a35de again; the slab
 inherits the order.
 
-**Step 4, `ItemRef`, in two halves.** Every internal use of `Item`/`AbstractStruct` (435 in `src/Ycs`: `StructStore`
+**Step 4, `ItemRef`, in two halves: built** (1.4). Every internal use of `Item`/`AbstractStruct` (435 in `src/Ycs`: `StructStore`
 87, `Item` 41, `YArrayBase` 39, `YText` 30, `UndoManager` 23, the rest under 16) goes through `ItemRef` wrapping
 today's object, with implicit conversions both ways until the end of 4b.
 
@@ -325,7 +450,9 @@ today's object, with implicit conversions both ways until the end of 4b.
 * *Proof*: every suite, byte for byte; a test that walks the internal signatures for the rule above; the budgets
   (`tests/Ycs.Budgets`) catch an `ItemRef` boxed through an interface. The holder table of 2.4 is checked against the
   result.
-* *Effect*: none (est.: a one-field struct inlines). *Risk*: low per line, a large diff; review as a diff of renames.
+* *Effect*: none (est.: a one-field struct inlines); measured: none beyond noise but typing into an observed text in one
+  transaction, +5-7 % (the type test of each member read, 1.4). *Risk*: low per line, a large diff; review as a diff of
+  renames.
 
 **Step 5, ids across free points.** `Transaction._mergeStructs` holds ids (looked up at the merge pass); the public
 enumerators hold an id and a hint; a collected type's search markers are cleared. On objects, before any slot exists.

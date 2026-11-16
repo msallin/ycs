@@ -544,6 +544,57 @@ ycs child of c9f673a (`modernize`) and of the branch (42f0687), interleaved with
 | `text-append-1txn-observed-400k` | 493.9 ms | 597.5 / 552.4 ms | 802.0 ms |
 | `text-random-100k` | 2,563.8 ms | 2,670.1 / 1,406.6 ms (noise) | 1,411.2 ms |
 
+### ItemRef (2026-11-16, ycs only)
+
+Steps 4a and 4b of [`docs/design-item-layout.md`](../../docs/design-item-layout.md) (section 1.4): the library holds the
+structs of the store through `ItemRef`, a struct around today's object. The ycs child of c263413 (`modernize`) and of
+the branch, interleaved with `ab.py` (`results/2026-11-16-itemref/`, whose README names each file). The machine was
+shared with other work (load averages from 2 to 90); each row is from the quietest run of it: the first four from
+`final-4x6.txt` (load 4 to 6), `concurrent-20`, `map-set-distinct` and `text-random-100k` from
+`final-rest-6x6-loaded.txt` (load 10 to 14), the rest from `final-quiet-6x6.txt` (load 2 to 8).
+
+| workload | c263413 | ItemRef (2e96e1f) | change | alloc (MiB) | held (MiB) |
+| --- | ---: | ---: | --- | ---: | ---: |
+| `apply-updates/ycs` | 220.3 ms | 222.6 ms | +1 % | 59.31 / 59.31 | 18.6 / 18.6 |
+| `trace-replay` | 198.6 ms | 202.1 ms | +2 % | 43.04 / 43.04 | 3.0 / 3.0 |
+| `apply-state-v1/ycs` | 51.8 ms | 52.2 ms | +1 % | 33.14 / 33.14 | 4.5 / 4.5 |
+| `apply-state-v2/ycs` | 56.9 ms | 57.9 ms | +2 % | 35.14 / 35.14 | 4.4 / 4.4 |
+| `array-delete-random` | 165.7 ms | 169.8 ms | +2 % (pass medians 159-183 / 163-184) | 32.78 / 32.78 | 20.1 / 20.1 |
+| `array-insert-random` | 138.7 ms | 137.2 ms | -1 % | 16.93 / 16.93 | 18.9 / 18.9 |
+| `text-random` | 25.9 ms | 24.5 ms | -5 % (noise) | 3.74 / 3.74 | 5.3 / 5.3 |
+| `text-random-100k` | 768.7 ms | 772.7 ms | +1 % | 18.59 / 18.59 | 27.1 / 27.1 |
+| `concurrent-20` | 68.0 ms | 67.4 ms | -1 % | 28.31 / 28.31 | 29.1 / 29.1 |
+| `map-set-distinct` | 40.0 ms | 41.6 ms | +4 % (pass medians 38-44 / 39-47) | 36.55 / 36.55 | 38.9 / 38.9 |
+| `text-append-1txn-observed-25k` | 29.8 ms | 31.9 ms | **+7 %** (pass medians 29.0-31.1 / 30.8-33.2) | 4.71 / 4.71 | 0.6 / 0.6 |
+| `text-append-1txn-observed` (100k) | 124.3 ms | 130.9 ms | **+5 %** | 18.77 / 18.77 | 2.3 / 2.3 |
+| `text-append-1txn-observed-200k` | 268.3 ms | 271.2 ms | +1 % | 37.52 / 37.52 | 4.5 / 4.5 |
+| `text-append-1txn-observed-400k` | 535.4 ms | 549.9 ms | +3 % | 75.03 / 75.03 | 8.9 / 8.9 |
+
+* **Allocations and held memory are the same to the byte** in every workload: no `ItemRef` is boxed (also checked
+  statically: `ItemRefBoxingTests` reads every method body of the library).
+* **What it cost, and what took it back.** The first build of the layer (`first-4x6.txt`, 0515e7f) cost the observed
+  typing 8 to 14 % and `trace-replay` 5 %, at equal allocations. Three causes, found in the JIT's output and by
+  experiment:
+  * The JIT's inlining budget: `Integrate` and the walks read more `ItemRef` members than it inlines by its own
+    heuristics, so `get_Left`, `get_Right` and others became calls (12 calls of `get_Left` in `IntegrateItem`). The
+    accessors are `AggressiveInlining` now (observed 100k: +14 % to 0 % in that run).
+  * The cast. Every member of an item reads through `(Item)_struct`, and `Item` is not sealed (the public API says
+    `class Item`), so the cast tests null and then the method table on every read where the object field needed none.
+    With an unchecked reinterpretation in place of the cast (an experiment; `Unsafe` is banned), `trace-replay` was 6 %
+    faster than the base: the casts were all of its cost. A type test (`_struct as Item`) walks faster than the cast
+    and is what the members use now; with an exact-type check (`GetType() == typeof(Item)`) or a test with an
+    out-of-line cast for the failing case, the observed typing was 20 % slower, not faster.
+  * The marker walk's steps. In one transaction of 25,000 inserts into an observed text the marker walk takes up to 32
+    literal steps per insert, and each step tests the type of a reference the JIT has just tested (`AsItem`): with the
+    walk on an `Item` variable, as before, the observed typing was +3 % instead of +9 % (an experiment). Moving the
+    walk's index jumps out of line made it slower (they are inlined, as before). Assigning the walk's two variables
+    one by one instead of as a tuple, and reading a text position's item once per step, helped a little.
+* **What remains**: the observed typing in one transaction, +7 % at 25,000 characters and +5 % at 100,000 (2 ms and
+  6 ms), within noise at 200,000 and 400,000; the rest within noise. Not boxing and not a copy: one type test per
+  member read on a reference freshly read from a neighbour. The slab of step 7 replaces the test by an index into an
+  array of slots; until then, the marker walk on the object (the experiment above) is the known way to remove the
+  rest.
+
 ## Not compared
 
 * XML types and formatting attributes, subdocuments, snapshots and relative/sticky positions: both have them, but
