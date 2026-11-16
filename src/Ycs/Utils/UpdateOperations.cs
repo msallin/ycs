@@ -41,6 +41,10 @@ public sealed class DecodedUpdate
 
     public IReadOnlyList<AbstractStruct> Structs { get; }
 
+    internal IReadOnlyList<DecodedStruct> DecodedStructs => _decodedStructs ??= UpdateOperations.Detach(Structs);
+
+    private IReadOnlyList<DecodedStruct> _decodedStructs;
+
     public IReadOnlyDictionary<long, IReadOnlyList<DeletedRange>> DeleteSet { get; }
 }
 
@@ -774,6 +778,99 @@ public static class UpdateOperations
     {
         ArgumentNullException.ThrowIfNull(update);
         return YUpdateException.Decode(() => DecodeUpdateCore(new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits))));
+    }
+
+    internal static DecodedStruct[] Detach(IReadOnlyList<AbstractStruct> structs)
+    {
+        var result = new DecodedStruct[structs.Count];
+        for (var i = 0; i < result.Length; i++)
+        {
+            result[i] = Detach(structs[i]);
+        }
+
+        return result;
+    }
+
+    private static DecodedStruct Detach(AbstractStruct s)
+    {
+        var none = Array.Empty<object>();
+        if (s is not Item item)
+        {
+            var kind = s is Skip ? ItemKind.Skip : ItemKind.GC;
+            return new DecodedStruct(s.Id, s.Length, kind, null, null, null, null, null, none, null, null, null, -1, null, null);
+        }
+
+        var content = item.Content;
+        IReadOnlyList<object> values = none;
+        string text = null, formatKey = null, typeName = null, docGuid = null;
+        object formatValue = null;
+        var typeRef = -1;
+        ItemKind itemKind;
+        switch (content)
+        {
+            case ContentDeleted:
+                itemKind = ItemKind.Deleted;
+                break;
+            case ContentJson:
+                itemKind = ItemKind.Json;
+                values = content.GetContent();
+                break;
+            case ContentBinary:
+                itemKind = ItemKind.Binary;
+                values = content.GetContent();
+                break;
+            case ContentString str:
+                itemKind = ItemKind.String;
+                text = str.GetString();
+                break;
+            case ContentEmbed:
+                itemKind = ItemKind.Embed;
+                values = content.GetContent();
+                break;
+            case ContentFormat format:
+                itemKind = ItemKind.Format;
+                formatKey = format.Key;
+                formatValue = format.Value;
+                break;
+            case ContentType type:
+                itemKind = ItemKind.Type;
+                (typeRef, typeName) = type.Type switch
+                {
+                    YXmlElement element => (YXmlElement.YXmlElementRefId, element.NodeName),
+                    YXmlHook hook => (YXmlHook.YXmlHookRefId, hook.HookName),
+                    YXmlText => (YXmlText.YXmlTextRefId, null),
+                    YXmlFragment => (YXmlFragment.YXmlFragmentRefId, null),
+                    YText => (YText.YTextRefId, null),
+                    YMap => (YMap.YMapRefId, null),
+                    _ => (YArray.YArrayRefId, null),
+                };
+                break;
+            case ContentAny:
+                itemKind = ItemKind.Any;
+                values = content.GetContent();
+                break;
+            default:
+                itemKind = ItemKind.Doc;
+                docGuid = ((ContentDoc)content).Doc.Guid;
+                break;
+        }
+
+        return new DecodedStruct(
+            item.Id,
+            item.Length,
+            itemKind,
+            item.LeftOrigin,
+            item.RightOrigin,
+            item.Parent as string,
+            item.Parent as ID?,
+            item.ParentSub,
+            values,
+            text,
+            formatKey,
+            formatValue,
+            typeRef,
+            typeName,
+            docGuid);
     }
 
     private static DecodedUpdate DecodeUpdateCore(IUpdateDecoder decoder)
