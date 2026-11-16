@@ -142,7 +142,7 @@ internal static class Editing
         var doc = new YDoc(new YDocOptions { ClientId = ReceiverId });
         _ = r.RootKind switch
         {
-            't' => (AbstractType)doc.GetText(r.Root),
+            't' => (YType)doc.GetText(r.Root),
             'm' => doc.GetMap(r.Root),
             _ => doc.GetArray(r.Root),
         };

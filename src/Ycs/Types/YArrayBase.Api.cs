@@ -10,7 +10,7 @@ namespace Ycs;
 
 public abstract partial class YArrayBase
 {
-    protected YArrayBase(bool useSearchMarkers = true)
+    private protected YArrayBase(bool useSearchMarkers = true)
     {
         _searchMarkers = useSearchMarkers ? new ArraySearchMarkerCollection() : null;
     }
@@ -25,7 +25,7 @@ public abstract partial class YArrayBase
         return EnumerateContent().GetEnumerator();
     }
 
-    protected void InsertGenerics(Transaction transaction, int index, ICollection<object> content)
+    private protected void InsertGenerics(Transaction transaction, int index, ICollection<object> content)
     {
         if (index > Length)
         {
@@ -99,7 +99,7 @@ public abstract partial class YArrayBase
         InsertGenericsAfterReturningLast(transaction, n, content);
     }
 
-    protected void Delete(Transaction transaction, int index, int length)
+    private protected void Delete(Transaction transaction, int index, int length)
     {
         if (length == 0)
         {
@@ -171,7 +171,7 @@ public abstract partial class YArrayBase
     /// gives an empty list; a start that is still negative then yields null for each index before 0,
     /// as JavaScript reads them.
     /// </summary>
-    protected IReadOnlyList<object> InternalSlice(int start, int end)
+    private protected IReadOnlyList<object> InternalSlice(int start, int end)
     {
         if (start < 0)
         {
@@ -214,7 +214,7 @@ public abstract partial class YArrayBase
         return cs.AsReadOnly();
     }
 
-    protected void ForEach(Action<object, int, YArrayBase> fun)
+    private protected void ForEach(Action<object, int, YArrayBase> fun)
     {
         int index = 0;
         var n = _start;
@@ -236,7 +236,7 @@ public abstract partial class YArrayBase
         }
     }
 
-    protected void ForEachSnapshot(Action<object, int, YArrayBase> fun, Snapshot snapshot)
+    private protected void ForEachSnapshot(Action<object, int, YArrayBase> fun, Snapshot snapshot)
     {
         // Visibility is decided per item, by its first clock: Yjs' items.
         Doc?.MaterializeRunExtensions();
@@ -258,7 +258,7 @@ public abstract partial class YArrayBase
         }
     }
 
-    protected IEnumerable<object> EnumerateContent()
+    private protected IEnumerable<object> EnumerateContent()
     {
         var n = _start;
         while (!n.IsNull)

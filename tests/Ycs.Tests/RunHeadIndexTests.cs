@@ -287,8 +287,8 @@ public class RunHeadIndexTests
         private readonly Random _random;
         private readonly YDoc _a;
         private readonly YDoc _b;
-        private readonly AbstractType _ta;
-        private readonly AbstractType _tb;
+        private readonly YType _ta;
+        private readonly YType _tb;
         private readonly bool _text;
         private int _armed;
         private long _clients = 10;
@@ -423,11 +423,11 @@ public class RunHeadIndexTests
         return doc;
     }
 
-    private static AbstractType List(YDoc doc, bool text) => text ? doc.GetText("t") : doc.GetArray("t");
+    private static YType List(YDoc doc, bool text) => text ? doc.GetText("t") : doc.GetArray("t");
 
-    private static int Length(AbstractType type) => type is YText t ? t.Length : ((YArray)type).Length;
+    private static int Length(YType type) => type is YText t ? t.Length : ((YArray)type).Length;
 
-    private static void Insert(AbstractType type, int index, string chars)
+    private static void Insert(YType type, int index, string chars)
     {
         if (type is YText text)
         {
@@ -439,7 +439,7 @@ public class RunHeadIndexTests
         }
     }
 
-    private static void Delete(AbstractType type, int index, int length)
+    private static void Delete(YType type, int index, int length)
     {
         if (type is YText text)
         {
@@ -451,7 +451,7 @@ public class RunHeadIndexTests
         }
     }
 
-    private static string Content(AbstractType type) => type is YText text ? text.ToString() : string.Join(",", ((YArray)type).ToArray());
+    private static string Content(YType type) => type is YText text ? text.ToString() : string.Join(",", ((YArray)type).ToArray());
 
     private static void Sync(YDoc from, YDoc to) => to.ApplyUpdateV1(from.EncodeStateAsUpdateV1(to.EncodeStateVectorV1()));
 

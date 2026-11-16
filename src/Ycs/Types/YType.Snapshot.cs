@@ -14,7 +14,7 @@ namespace Ycs;
 /// item that was merged across the snapshot's boundary is seen whole, as in Yjs. Only
 /// <see cref="YText.ToDelta"/> splits (<c>splitSnapshotAffectedStructs</c>, in a transaction).
 /// </summary>
-public partial class AbstractType
+public abstract partial class YType
 {
     /// <summary>
     /// Yjs' <c>typeMapGetSnapshot(parent, key, snapshot)</c>: the value of <paramref name="key"/> as of

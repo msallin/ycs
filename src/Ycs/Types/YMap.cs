@@ -28,19 +28,19 @@ public class YMapEvent : YEvent
 /// <summary>
 /// A shared Map implementation.
 /// </summary>
-public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, object>>
+public partial class YMap : YType, IEnumerable<KeyValuePair<string, object>>
 {
     internal const int YMapRefId = 1;
 
     private Dictionary<string, object> _prelimContent;
 
     /// <summary>The JSON object of this map with each nested type left null and listed in <paramref name="nested"/>.</summary>
-    internal override object ShallowJson(List<(AbstractType Type, object Container, string Key, int Index)> nested)
+    internal override object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested)
     {
         var result = new Dictionary<string, object>();
         foreach (var kvp in TypeMapEnumerateValues())
         {
-            if (kvp.Value is AbstractType at)
+            if (kvp.Value is YType at)
             {
                 nested.Add((at, result, kvp.Key, 0));
                 result[kvp.Key] = null;
@@ -54,12 +54,12 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
         return result;
     }
 
-    internal override AbstractType InternalCopy()
+    internal override YType InternalCopy()
     {
         return new YMap();
     }
 
-    internal override AbstractType InternalClone()
+    internal override YType InternalClone()
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -70,8 +70,8 @@ public partial class YMap : AbstractType, IEnumerable<KeyValuePair<string, objec
             // Bug fix vs. the original port: `TypeMapEnumerate()` yields raw `Item`s, not their
             // content values, so cloning used to store the `Item` itself as the value. Use
             // `TypeMapEnumerateValues()` (actual values) and recursively clone nested shared types,
-            // matching Yjs' `clone()`: `map.set(key, value instanceof AbstractType ? value.clone() : value)`.
-            map.Set(kvp.Key, kvp.Value is AbstractType at ? at.InternalClone() : kvp.Value);
+            // matching Yjs' `clone()`: `map.set(key, value instanceof YType ? value.clone() : value)`.
+            map.Set(kvp.Key, kvp.Value is YType at ? at.InternalClone() : kvp.Value);
         }
 
         return map;

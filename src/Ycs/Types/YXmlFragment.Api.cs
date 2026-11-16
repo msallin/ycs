@@ -41,7 +41,7 @@ public partial class YXmlFragment
     /// <summary>
     /// Creates a subtree of childNodes, filtered by the given predicate.
     /// </summary>
-    public YXmlTreeWalker CreateTreeWalker(Func<AbstractType, bool> filter = null)
+    public YXmlTreeWalker CreateTreeWalker(Func<YType, bool> filter = null)
     {
         return new YXmlTreeWalker(this, filter);
     }
@@ -106,7 +106,7 @@ public partial class YXmlFragment
     /// <summary>
     /// Inserts new content right after 'refItem' (or at the start, if 'refItem' is null).
     /// </summary>
-    public void InsertAfter(AbstractType refItem, ICollection<object> content)
+    public void InsertAfter(YType refItem, ICollection<object> content)
     {
         if (Doc != null)
         {

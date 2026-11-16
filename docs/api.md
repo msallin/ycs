@@ -82,13 +82,37 @@ foreach (DecodedStruct s in UpdateOperations.DecodeUpdate(doc.EncodeStateAsUpdat
 cleanup merges items a, b and c into one, a view of b reads "bc", where Yjs' orphaned item reads "b". So views kept from
 `Changes.Added` and read after the transaction give "abc", "bc", "c".
 
+## Positions
+
+`RelativePosition` is a `readonly record struct` that keeps pointing at the same character (or the end of the same
+type) while the document changes; `AbsolutePosition` is the index it resolves to at a moment. Both are values: equal
+positions are equal keys of a `HashSet` or `Dictionary`.
+
+```csharp
+var position = RelativePosition.FromIndex(text, 3);          // assoc 0: the character after, -1: before
+text.Insert(0, "abc");
+if (position.TryResolve(doc, out var absolute))              // false: names a struct the document lacks or collected
+{
+    // absolute.Type, absolute.Index (6), absolute.Assoc
+}
+
+byte[] bytes = position.Encode();                            // Yjs' encodeRelativePosition; awareness carries it
+var same = RelativePosition.Decode(bytes);                   // YUpdateException for malformed bytes
+```
+
+`Encode(IBufferWriter<byte>)` writes into a buffer. `WriteJson(Utf8JsonWriter)` and `FromJson(JsonElement)` are Yjs'
+`relativePositionToJSON` object (`{"item":{"client":1,"clock":0},"assoc":0}`; `type`, `tname` and `item` only where
+set). `TryResolve(doc, out position, followUndoneDeletions: false)` gives the same result on every client; the
+default follows undone deletions, which suits the user who undid. `default(RelativePosition)` names nothing: it does
+not resolve and does not encode.
+
 ## Untrusted input
 
 [Untrusted input and threads](untrusted-input.md) is the short form, with the defaults of the limits. This section is
 the contract. Every API that decodes bytes — `ApplyUpdate…`, `TryApplyUpdate…`,
 `EncodeStateAsUpdate…(stateVector)`, everything in `UpdateOperations`, `Snapshot.DecodeSnapshot…`,
 `CreateDocFromSnapshot` and `Snapshot.RestoreDocument` (a snapshot that holds more than the document),
-`SnapshotContainsUpdate…`, `RelativePosition.Read`, `RelativePosition.CreateRelativePositionFromJSON`, `SyncProtocol.Read…` — throws only
+`SnapshotContainsUpdate…`, `RelativePosition.Decode`, `RelativePosition.FromJson`, `SyncProtocol.Read…` — throws only
 `YUpdateException` for malformed input, with a message that says what was wrong (never the
 input's content). The snapshot reads (`ToArraySnapshot`, `GetSnapshot`, `GetAllSnapshot`,
 `ToDelta(snapshot)`) ignore deletions of clients or clocks the document does not have, as Yjs does.

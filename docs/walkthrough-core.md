@@ -183,7 +183,7 @@ subdocument gets a random guid on the wire).
 | --- | --- | --- |
 | `ID`, `createID`, `compareIDs` | `ID` (struct), `ID.Equals(ID?, ID?)` | equivalent |
 | `writeID`, `readID` | `ID.Write`, `ID.Read` | equivalent (client < 2^32, F9) |
-| `findRootTypeKey` | `YDoc.FindRootTypeKey`, cached in `AbstractType.FindRootTypeKey` | equivalent |
+| `findRootTypeKey` | `YDoc.FindRootTypeKey`, cached in `YType.FindRootTypeKey` | equivalent |
 | `isParentOf` | `UndoManager.IsParentOf` | equivalent |
 
 ### utils/Doc.js
@@ -215,7 +215,7 @@ subdocument gets a random guid on the wire).
 | a client listed twice rejected | Yjs keeps only the last section (`clientRefs.set`), so rejecting is safer; Yjs' writers and `mergeUpdates` on descending input never emit it |
 | own-client reference must be earlier (`CheckEarlier`) | every origin/parent exists when an item is created, so always true for valid updates |
 | `MaxPendingBytes`, `PendingStructs` list, `PendingDeletes`, `HasPending` | F12, F3 |
-| `AbstractType._mapCount`, `StructStore.Version`, `IsObserved` gating | equivalent; `_mapCount` is recomputed when a placeholder root is upgraded |
+| `YType._mapCount`, `StructStore.Version`, `IsObserved` gating | equivalent; `_mapCount` is recomputed when a placeholder root is upgraded |
 | transaction reuse, `UpdateReader` pooling | reviewed, no leak found (below) |
 
 ## Findings
@@ -489,7 +489,7 @@ half of a surrogate pair) appends to it instead (`Item.ExtendRun`) when the tran
 the only one of its batch (one an observer starts runs before the other one's merge, which Yjs then
 does on its own terms) and nobody observes the type: no handler on it, no deep handler on it or an
 ancestor, no `AfterTransaction`, `AfterTransactionCleanup`, `AfterAllTransactions` or
-`BeforeObserverCalls` handler on the document (`AbstractType.IsObserved`; an UndoManager is an
+`BeforeObserverCalls` handler on the document (`YType.IsObserved`; an UndoManager is an
 `AfterTransaction` handler). The transaction records where the item would have started and splits
 there (`Transaction.MaterializeRunExtensions`) before anything that could tell the difference: the
 cleanup when someone is called with the transaction or its events before the merge (a handler attached

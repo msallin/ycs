@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -27,10 +28,10 @@ public class RelativePositionYjsTests
     {
         var (doc, _, nested) = NestedText();
 
-        var rpos = RelativePosition.FromTypeIndex(nested, index, assoc);
-        var abs = AbsolutePosition.TryCreateFromRelativePosition(rpos, doc);
+        var rpos = RelativePosition.FromIndex(nested, index, assoc);
+        Assert.IsTrue(rpos.TryResolve(doc, out var abs));
 
-        Assert.AreEqual((yjsHex, true, resolvedIndex), (Convert.ToHexStringLower(rpos.ToArray()), abs.Type == nested, abs.Index));
+        Assert.AreEqual((yjsHex, true, resolvedIndex), (Convert.ToHexStringLower(rpos.Encode()), abs.Type == nested, abs.Index));
     }
 
     [TestMethod]
@@ -40,48 +41,46 @@ public class RelativePositionYjsTests
         var empty = new YText();
         array.Insert(3, new object[] { empty });
 
-        Assert.AreEqual("02010600", Convert.ToHexStringLower(RelativePosition.FromTypeIndex(empty, 0).ToArray()));
-    }
-
-    public static IEnumerable<object[]> MalformedJson => new[]
-    {
-        new object[] { "item not an object", new Dictionary<string, object> { ["item"] = "1:2" } },
-        new object[] { "type not an object", new Dictionary<string, object> { ["type"] = 5 } },
-        new object[] { "client missing", new Dictionary<string, object> { ["item"] = new Dictionary<string, object> { ["clock"] = 1 } } },
-        new object[] { "clock missing", new Dictionary<string, object> { ["type"] = new Dictionary<string, object> { ["client"] = 1 } } },
-        new object[] { "clock negative", new Dictionary<string, object> { ["item"] = new Dictionary<string, object> { ["client"] = 1, ["clock"] = -1 } } },
-        new object[] { "client too large", new Dictionary<string, object> { ["item"] = new Dictionary<string, object> { ["client"] = 1e300, ["clock"] = 0 } } },
-        new object[] { "clock a fraction", new Dictionary<string, object> { ["item"] = new Dictionary<string, object> { ["client"] = 1, ["clock"] = 0.5 } } },
-        new object[] { "clock a string", new Dictionary<string, object> { ["item"] = new Dictionary<string, object> { ["client"] = 1, ["clock"] = "0" } } },
-        new object[] { "assoc a string", new Dictionary<string, object> { ["tname"] = "t", ["assoc"] = "x" } },
-        new object[] { "tname a number", new Dictionary<string, object> { ["tname"] = 1 } },
-        new object[] { "nothing named", new Dictionary<string, object> { ["assoc"] = 0 } },
-    };
-
-    [TestMethod]
-    [DynamicData(nameof(MalformedJson))]
-    public void CreateRelativePositionFromJSON_Malformed_ThrowsYUpdateException(string name, Dictionary<string, object> json)
-    {
-        Assert.ThrowsExactly<YUpdateException>(() => RelativePosition.CreateRelativePositionFromJSON(json), name);
+        Assert.AreEqual("02010600", Convert.ToHexStringLower(RelativePosition.FromIndex(empty, 0).Encode()));
     }
 
     [TestMethod]
-    public void CreateRelativePositionFromJSON_AssocBeyondInt_IsClamped()
+    [DataRow("""{"item":"1:2"}""", DisplayName = "item not an object")]
+    [DataRow("""{"type":5}""", DisplayName = "type not an object")]
+    [DataRow("""{"item":{"clock":1}}""", DisplayName = "client missing")]
+    [DataRow("""{"type":{"client":1}}""", DisplayName = "clock missing")]
+    [DataRow("""{"item":{"client":1,"clock":-1}}""", DisplayName = "clock negative")]
+    [DataRow("""{"item":{"client":1e300,"clock":0}}""", DisplayName = "client too large")]
+    [DataRow("""{"item":{"client":1,"clock":0.5}}""", DisplayName = "clock a fraction")]
+    [DataRow("""{"item":{"client":1,"clock":"0"}}""", DisplayName = "clock a string")]
+    [DataRow("""{"tname":"t","assoc":"x"}""", DisplayName = "assoc a string")]
+    [DataRow("""{"tname":"t","assoc":1e300}""", DisplayName = "assoc too large")]
+    [DataRow("""{"tname":1}""", DisplayName = "tname a number")]
+    [DataRow("""{"assoc":0}""", DisplayName = "nothing named")]
+    [DataRow("""{"item":null,"tname":null}""", DisplayName = "null members are absent")]
+    [DataRow("""[]""", DisplayName = "not an object")]
+    public void FromJson_Malformed_ThrowsYUpdateException(string json)
     {
-        var rpos = RelativePosition.CreateRelativePositionFromJSON(new Dictionary<string, object> { ["tname"] = "t", ["assoc"] = -1e15 });
+        using var document = JsonDocument.Parse(json);
 
-        Assert.AreEqual(int.MinValue, rpos.Assoc);
+        Assert.ThrowsExactly<YUpdateException>(() => RelativePosition.FromJson(document.RootElement));
     }
 
     [TestMethod]
-    public void CreateAbsolutePosition_JsonClockBeyondTheDocument_IsNull()
+    public void FromJson_AssocBeyondInt_IsClamped()
+    {
+        using var document = JsonDocument.Parse("""{"tname":"t","assoc":-1e15}""");
+
+        Assert.AreEqual(int.MinValue, RelativePosition.FromJson(document.RootElement).Assoc);
+    }
+
+    [TestMethod]
+    public void TryResolve_JsonClockBeyondTheDocument_IsFalse()
     {
         var (doc, _, _) = NestedText();
-        var rpos = RelativePosition.CreateRelativePositionFromJSON(new Dictionary<string, object>
-        {
-            ["item"] = new Dictionary<string, object> { ["client"] = 1L, ["clock"] = (double)(1L << 40) },
-        });
+        using var document = JsonDocument.Parse("""{"item":{"client":1,"clock":1099511627776}}""");
+        var rpos = RelativePosition.FromJson(document.RootElement);
 
-        Assert.IsNull(AbsolutePosition.TryCreateFromRelativePosition(rpos, doc));
+        Assert.IsFalse(rpos.TryResolve(doc, out _));
     }
 }

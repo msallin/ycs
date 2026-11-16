@@ -38,7 +38,7 @@ edit lands. What proves both:
 | `run-extension`, `merge-order` (`tests/Ycs.Properties`) | the reference | see [reference comparisons](#reference-comparisons) |
 | the live soak, `fixtures/windows.jsonl` (`tests/Ycs.Properties`) | Yjs | scripts with quiet clients, filters, typing runs with an update applied or a snapshot read in the middle, reacting observers (`GenOptions.Windows`); the soak reports how many steps and scripts extended a run |
 
-"Observed" (`AbstractType.IsObserved`): a handler on the type, a deep handler on it or an ancestor, or
+"Observed" (`YType.IsObserved`): a handler on the type, a deep handler on it or an ancestor, or
 an `AfterTransaction`, `AfterTransactionCleanup` or `AfterAllTransactions` handler on the document; with
 a `BeforeObserverCalls` handler nothing extends either. Update handlers do not count. An observed type,
 and every type of a document with an UndoManager (an `AfterTransaction` handler), makes Yjs' items.
@@ -244,7 +244,7 @@ XML children and map keys):
 | `transact` | `origin`, `ops` (local steps without `c`, and `deliver`s to this client: an update applied inside the transaction) | `YDoc.Transact` |
 | `um`, `undo`, `redo`, `stop`, `umclear` | `id`, `scope` (paths or `"$doc"`), `timeout` (`"0"` or `"inf"`), `origins` | `UndoManager` |
 | `snap`, `readSnap`, `docFromSnap` | `id`, `prev` | `CreateSnapshot`, `ToDelta(snapshot, prev)`, `ToArraySnapshot`, `GetAllSnapshot`, `CreateDocFromSnapshot`, `EncodeSnapshot(V2)` |
-| `rpos`, `rres` | `id`, `at`, `assoc` (`rres` on any client) | `RelativePosition.FromTypeIndex`, `EncodeRelativePosition`, `RelativePositionToJSON`, `DecodeRelativePosition`, `AbsolutePosition.TryCreateFromRelativePosition` |
+| `rpos`, `rres` | `id`, `at`, `assoc` (`rres` on any client) | `RelativePosition.FromIndex`, `Encode`, `WriteJson`, `Decode`, `TryResolve` |
 | `observe` | | `Observe`/`ObserveDeep` on a nested type |
 | `react` | `id`, `ops`, `txn` | `Observe` on any type: the first time it changes, the handler makes `ops` (in one `Transact` with `txn`, else each in its own), also during another transaction's cleanup; the results are an event (`react`) |
 

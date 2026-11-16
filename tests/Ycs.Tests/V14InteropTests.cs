@@ -134,13 +134,13 @@ public class V14InteropTests
             var index = p.GetProperty("index").GetInt32();
             var assoc = p.GetProperty("assoc").GetInt32();
             var encoded = p.GetProperty("encoded").GetString();
-            var rpos = RelativePosition.DecodeRelativePosition(Convert.FromBase64String(encoded));
-            var own = RelativePosition.FromTypeIndex(RootOf(doc, root, kinds[root]), index, assoc);
-            var resolved = AbsolutePosition.TryCreateFromRelativePosition(rpos, doc)?.Index;
+            var rpos = RelativePosition.Decode(Convert.FromBase64String(encoded));
+            var own = RelativePosition.FromIndex(RootOf(doc, root, kinds[root]), index, assoc);
+            var resolved = rpos.TryResolve(doc, out var absolute) ? absolute.Index : (int?)null;
 
             expected.Add($"{root}@{index},{assoc}: {encoded} {encoded} {p.GetProperty("resolved").GetInt32()}");
-            actual.Add($"{root}@{index},{assoc}: {Convert.ToBase64String(RelativePosition.EncodeRelativePosition(rpos))} " +
-                $"{Convert.ToBase64String(RelativePosition.EncodeRelativePosition(own))} {resolved}");
+            actual.Add($"{root}@{index},{assoc}: {Convert.ToBase64String(rpos.Encode())} " +
+                $"{Convert.ToBase64String(own.Encode())} {resolved}");
         }
 
         Assert.AreEqual(string.Join("\n", expected), string.Join("\n", actual));
@@ -281,7 +281,7 @@ public class V14InteropTests
         }
     }
 
-    private static AbstractType RootOf(YDoc doc, string name, string kind) => kind switch
+    private static YType RootOf(YDoc doc, string name, string kind) => kind switch
     {
         "text" => doc.GetText(name),
         "map" => doc.GetMap(name),
@@ -332,7 +332,7 @@ public class V14InteropTests
     private static object Value(object v) => v switch
     {
         byte[] b => new Dictionary<string, object> { ["$b"] = Convert.ToBase64String(b) },
-        AbstractType t => Node(t),
+        YType t => Node(t),
         IDictionary<string, object> d => d.OrderBy(kv => kv.Key, StringComparer.Ordinal).ToDictionary(kv => kv.Key, kv => Value(kv.Value)),
         IList l => l.Cast<object>().Select(Value).ToList(),
         _ => v,
@@ -349,7 +349,7 @@ public class V14InteropTests
         return (object)op;
     }).ToList();
 
-    private static object Node(AbstractType t)
+    private static object Node(YType t)
     {
         var node = t switch
         {

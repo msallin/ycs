@@ -137,7 +137,7 @@ internal sealed class CorpusDoc
         var result = new Dictionary<string, IReadOnlyList<ItemRun>>();
         foreach (var (name, type) in roots)
         {
-            AbstractType root = type switch
+            YType root = type switch
             {
                 "text" => _doc.GetText(name),
                 "array" => _doc.GetArray(name),
@@ -154,7 +154,7 @@ internal sealed class CorpusDoc
     public IReadOnlyList<ItemRun> Items(string root, string type) =>
         ItemsOf(type == "text" ? _doc.GetText(root) : _doc.GetArray(root));
 
-    private static void Collect(AbstractType type, string path, Dictionary<string, IReadOnlyList<ItemRun>> into)
+    private static void Collect(YType type, string path, Dictionary<string, IReadOnlyList<ItemRun>> into)
     {
         switch (type)
         {
@@ -163,7 +163,7 @@ internal sealed class CorpusDoc
                 var i = 0;
                 foreach (var value in seq)
                 {
-                    if (value is AbstractType nested)
+                    if (value is YType nested)
                     {
                         Collect(nested, $"{path}[{i}]", into);
                     }
@@ -175,7 +175,7 @@ internal sealed class CorpusDoc
             case YMap map:
                 foreach (var (key, value) in map)
                 {
-                    if (value is AbstractType nested)
+                    if (value is YType nested)
                     {
                         Collect(nested, $"{path}.{key}", into);
                     }
@@ -185,7 +185,7 @@ internal sealed class CorpusDoc
         }
     }
 
-    private static List<ItemRun> ItemsOf(AbstractType type)
+    private static List<ItemRun> ItemsOf(YType type)
     {
         var runs = new List<ItemRun>();
         var previous = default(ItemRef);
@@ -216,7 +216,7 @@ internal sealed class CorpusDoc
     private static object Plain(object value) => value switch
     {
         null => null,
-        AbstractType t => Plain(t.ToJson()),
+        YType t => Plain(t.ToJson()),
         string or bool or byte[] => value,
         IDictionary<string, object> map => map.ToDictionary(kv => kv.Key, kv => Plain(kv.Value)),
         IDictionary dict => dict.Keys.Cast<object>().ToDictionary(k => (string)k, k => Plain(dict[k])),

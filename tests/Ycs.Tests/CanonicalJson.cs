@@ -51,7 +51,7 @@ internal static class CanonicalJson
             case string s: Str(sb, s); break;
             case char c: Str(sb, c.ToString()); break;
             case bool b: sb.Append(b ? "true" : "false"); break;
-            case AbstractType t: Str(sb, $"<{t.GetType().Name}>"); break;
+            case YType t: Str(sb, $"<{t.GetType().Name}>"); break;
             case byte[] bytes: Write(sb, new Dictionary<string, object> { ["$bytes"] = Convert.ToHexString(bytes).ToLowerInvariant() }); break;
             case Delta d:
                 {

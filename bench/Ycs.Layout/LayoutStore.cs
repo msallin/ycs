@@ -69,8 +69,8 @@ internal sealed class TypeEntry
     public Dictionary<string, int> Map;
     public int Item = -1;
     public string RootName;
-    public int Length;      // the visible countable length of the list (AbstractType.Length)
-    public int MapCount;    // the live map entries (AbstractType._mapCount)
+    public int Length;      // the visible countable length of the list (YType.Length)
+    public int MapCount;    // the live map entries (YType._mapCount)
 }
 
 /// <summary>A key and a cold content object for one item, when it has both (a nested type in a map holds no object).</summary>

@@ -234,7 +234,7 @@ public partial class YText
 
     /// <summary>
     /// Inserts an embed: a shared type (which becomes part of this text, as in an array), or any
-    /// other value as JSON. It counts one towards <see cref="AbstractType.Length"/>.
+    /// other value as JSON. It counts one towards <see cref="YType.Length"/>.
     /// </summary>
     public void InsertEmbed(int index, object embed, IDictionary<string, object> attributes = null)
     {
@@ -377,7 +377,7 @@ public partial class YText
 
     /// <summary>
     /// Copies the text, as <see cref="ToString"/> returns it, into <paramref name="destination"/>
-    /// without allocating. <see cref="AbstractType.Length"/> is always enough room (it also counts
+    /// without allocating. <see cref="YType.Length"/> is always enough room (it also counts
     /// embeds, which the text leaves out).
     /// </summary>
     /// <returns>How many characters were written.</returns>
@@ -505,12 +505,4 @@ public partial class YText
 
         return res;
     }
-
-    /// <summary>
-    /// This function is experimental and subject to change / be removed. Mirrors Yjs' exported
-    /// free function <c>cleanupYTextFormatting(type)</c>; identical to the instance method
-    /// <see cref="CleanupFormatting"/>, provided as a static under the Yjs-familiar name for parity.
-    /// </summary>
-    /// <returns>How many formatting attributes have been cleaned up.</returns>
-    public static int CleanupYTextFormatting(YText type) => type.CleanupFormatting();
 }

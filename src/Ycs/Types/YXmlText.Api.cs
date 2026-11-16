@@ -12,7 +12,7 @@ using System.Text;
 
 namespace Ycs;
 
-public partial class YXmlText
+public sealed partial class YXmlText
 {
     // JS has no explicit constructor here: a derived class without one implicitly forwards its
     // arguments to 'super(...)', so 'new Y.XmlText(str)' still works (verified against real Yjs).

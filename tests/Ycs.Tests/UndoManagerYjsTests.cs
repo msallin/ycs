@@ -181,7 +181,7 @@ public class UndoManagerYjsTests
         var text = doc.GetText("t");
         var um = new UndoManager(text);
         text.Insert(0, "abc");
-        IDictionary<AbstractType, IList<YEvent>> changed = null;
+        IDictionary<YType, IList<YEvent>> changed = null;
         um.StackItemPopped += (_, e) => changed = e.ChangedParentTypes;
 
         doc.Transact(_ => um.Undo());

@@ -37,7 +37,7 @@ public class YTextTests : YTestBase
         text.Delete(1, 1);
         Assert.AreEqual("aXb", text.ToString());
         Assert.AreEqual(3, text.Length);
-        Assert.IsFalse(text.ToDelta().Any(d => d.Insert is AbstractType), "the embedded type should be deleted");
+        Assert.IsFalse(text.ToDelta().Any(d => d.Insert is YType), "the embedded type should be deleted");
     }
 
     [TestMethod]
@@ -685,7 +685,7 @@ public class YTextTests : YTestBase
         }, users, iterations);
     }
 
-    private static int GetTypeChildren(AbstractType type)
+    private static int GetTypeChildren(YType type)
     {
         int result = 0;
 

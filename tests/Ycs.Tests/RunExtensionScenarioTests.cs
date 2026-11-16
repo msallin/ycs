@@ -380,10 +380,10 @@ public class RunExtensionScenarioTests
             doc.Transact(tr =>
             {
                 t.Insert(2, "c"); t.Insert(3, "d"); t.Insert(4, "e");
-                for (var i = 0; i <= t.Length; i++) { rs.Add(RelativePosition.FromTypeIndex(t, i, 0)); rs.Add(RelativePosition.FromTypeIndex(t, i, -1)); }
+                for (var i = 0; i <= t.Length; i++) { rs.Add(RelativePosition.FromIndex(t, i, 0)); rs.Add(RelativePosition.FromIndex(t, i, -1)); }
                 t.Insert(5, "f"); t.Delete(3, 1);
             });
-            foreach (var r in rs) { var abs = AbsolutePosition.TryCreateFromRelativePosition(r, doc); c.L(ReferenceRun.Hex(r.ToArray()) + " -> " + abs?.Index); }
+            foreach (var r in rs) { var found = r.TryResolve(doc, out var abs); c.L(ReferenceRun.Hex(r.Encode()) + " -> " + (found ? abs.Index : null)); }
         });
         Add("s18-listeners-mid-txn", c =>
         {

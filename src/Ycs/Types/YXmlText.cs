@@ -18,16 +18,16 @@ namespace Ycs;
 /// as XML attributes (a 'link' with value '{ href: "..." }' renders as '&lt;link href="..."&gt;'); one
 /// with a boolean or number value (e.g. 'bold: true') renders as a tag without attributes.
 /// </summary>
-public partial class YXmlText : YText
+public sealed partial class YXmlText : YText
 {
     internal const int YXmlTextRefId = 6;
 
-    internal override AbstractType InternalCopy()
+    internal override YType InternalCopy()
     {
         return new YXmlText();
     }
 
-    internal override AbstractType InternalClone()
+    internal override YType InternalClone()
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();

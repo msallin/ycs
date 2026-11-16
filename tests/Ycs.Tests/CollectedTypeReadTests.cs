@@ -11,7 +11,7 @@ namespace Ycs;
 [TestClass]
 public class CollectedTypeReadTests
 {
-    private static T Collected<T>(T held, Action<T> fill) where T : AbstractType
+    private static T Collected<T>(T held, Action<T> fill) where T : YType
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var map = doc.GetMap("r");

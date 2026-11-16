@@ -459,7 +459,7 @@ public partial class YText : YArrayBase
         /// <summary>
         /// Negate applied formats.
         /// </summary>
-        public void InsertNegatedAttributes(Transaction transaction, AbstractType parent, OrderedDictionary<string, object> negatedAttributes)
+        public void InsertNegatedAttributes(Transaction transaction, YType parent, OrderedDictionary<string, object> negatedAttributes)
         {
             // Check if we really need to remove attributes.
             while (
@@ -641,9 +641,9 @@ public partial class YText : YArrayBase
         }
     }
 
-    internal override AbstractType InternalCopy() => new YText();
+    internal override YType InternalCopy() => new YText();
 
-    internal override AbstractType InternalClone()
+    internal override YType InternalClone()
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -724,7 +724,7 @@ public partial class YText : YArrayBase
     /// <param name="attributes">The attributes of the text; null for none. Attributes at the position that are not in them are set to null in them, as in Yjs.</param>
     private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, object text, IDictionary<string, object> attributes)
     {
-        if (text is AbstractType)
+        if (text is YType)
         {
             CheckCanNest();
         }
@@ -748,7 +748,7 @@ public partial class YText : YArrayBase
         var content = text switch
         {
             string => null,
-            AbstractType type => (IContent)new ContentType(type),
+            YType type => (IContent)new ContentType(type),
             _ => new ContentEmbed(Validated(text, doc.Limits.MaxDepth)),
         };
 

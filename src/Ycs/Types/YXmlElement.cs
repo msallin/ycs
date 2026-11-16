@@ -15,7 +15,7 @@ namespace Ycs;
 /// * it has attributes (key/value pairs);
 /// * it has child elements that must inherit from YXmlElement / YXmlText.
 /// </summary>
-public partial class YXmlElement : YXmlFragment
+public sealed partial class YXmlElement : YXmlFragment
 {
     internal const int YXmlElementRefId = 3;
 
@@ -35,12 +35,12 @@ public partial class YXmlElement : YXmlFragment
         _prelimAttrs = null;
     }
 
-    internal override AbstractType InternalCopy()
+    internal override YType InternalCopy()
     {
         return new YXmlElement(NodeName);
     }
 
-    internal override AbstractType InternalClone()
+    internal override YType InternalClone()
     {
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
@@ -54,7 +54,7 @@ public partial class YXmlElement : YXmlFragment
         var children = new List<object>();
         foreach (var v in ToArray())
         {
-            children.Add(v is AbstractType at ? at.InternalClone() : v);
+            children.Add(v is YType at ? at.InternalClone() : v);
         }
 
         el.Insert(0, children);
