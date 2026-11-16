@@ -35,6 +35,7 @@ internal sealed class HostileRoom
     private readonly List<Hostile> hostiles = [];
     private readonly Queue<string> log = new();
     private int step;
+    private bool selfInconsistent;
     private long nextForgerId = 1_000;
 
     public HostileRoom(ulong seed, int honestClients = 3)
@@ -499,6 +500,11 @@ internal sealed class HostileRoom
         }
 
         var expected = Signature(listener.Doc);
+        if (selfInconsistent || SelfInconsistent(listener.Doc, expected))
+        {
+            return;
+        }
+
         foreach (var peer in honest.Where(p => p.Connected))
         {
             var actual = Signature(peer.Doc);
@@ -524,21 +530,32 @@ internal sealed class HostileRoom
         }
     }
 
+    // Every state a client sees is the room's. The room may show more: it forgets the clock of a client without a
+    // state after the timeout (clients never do), so a message with that clock again, a replay or the client's own
+    // after a reconnect, sets the state in the room and in a client that joins, while the others keep rejecting it.
     private void CheckAwareness()
     {
-        var states = listener.States();
-        var roomIds = string.Join(';', Room.AwarenessClientIds.Order());
-        var listenerIds = string.Join(';', listener.View.ClientIds.Order());
-        if (roomIds != listenerIds)
+        var probe = new Session(Room);
+        probe.Start();
+        var roomStates = new Dictionary<ulong, string?>();
+        foreach (var message in Messages.Drain(probe).Where(m => Messages.Split(m).Type == MessageType.Awareness))
         {
-            throw Fail($"the room's awareness ids {roomIds} are not the broadcast ones {listenerIds}");
+            foreach (var (id, state) in Messages.AwarenessEntries(message))
+            {
+                roomStates[id] = state;
+            }
         }
 
-        foreach (var peer in honest.Where(p => p.Connected))
+        probe.Close();
+        foreach (var peer in honest.Where(p => p.Connected).Append(listener))
         {
-            if (peer.States() != states)
+            foreach (var id in peer.View.ClientIds)
             {
-                throw Fail($"honest {peer.ClientId} sees awareness {peer.States()}, the room broadcast {states}");
+                peer.View.TryGetState(id, out var state);
+                if (!roomStates.TryGetValue(id, out var roomState) || roomState != state)
+                {
+                    throw Fail($"{peer.ClientId} sees the awareness state {id}={state}, the room has {roomState ?? "none"}");
+                }
             }
         }
 
@@ -553,6 +570,22 @@ internal sealed class HostileRoom
         }
 
         Stats.AwarenessIds(Room.AwarenessClientIds.Count);
+    }
+
+    // An item whose right origin lies before its origin (a hostile one: Yjs never writes one) is placed otherwise
+    // when it arrives than when the same structs are read from the document's state, in Yjs as in Ycs
+    // (HostileSyncTests): from then on a client that joins sees another text, and content is no longer compared.
+    private bool SelfInconsistent(YDoc doc, string signature)
+    {
+        var copy = new YDoc();
+        copy.ApplyUpdateV1(doc.EncodeStateAsUpdateV1(), null, UpdateLimits.Unlimited);
+        selfInconsistent = Signature(copy) != signature;
+        if (selfInconsistent)
+        {
+            Stats.SelfInconsistent();
+        }
+
+        return selfInconsistent;
     }
 
     // The state vector as sorted text, the deleted ranges, and the content of the types the clients edit.
@@ -649,6 +682,11 @@ internal sealed class HostileStats
 
     public int MaxAwarenessIds { get; private set; }
 
+    /// <summary>Runs whose document came to differ from its own state (see <see cref="HostileRoom"/>).</summary>
+    public int SelfInconsistentRuns { get; private set; }
+
+    public void SelfInconsistent() => SelfInconsistentRuns++;
+
     /// <summary>Per kind of message: how many were sent, closed their session, and closed it but changed the document.</summary>
     public Dictionary<string, (int Sent, int Closed, int ClosedButChanged)> Kinds { get; } = [];
 
@@ -678,11 +716,12 @@ internal sealed class HostileStats
             Kinds[kind] = (s + sent, c + closed, ch + changed);
         }
 
+        SelfInconsistentRuns += other.SelfInconsistentRuns;
         PendingExcess(other.MaxPendingExcess);
         AwarenessIds(other.MaxAwarenessIds);
     }
 
     public override string ToString() =>
-        $"closed {string.Join(", ", CloseReasons.OrderBy(e => e.Key).Select(e => $"{e.Key} {e.Value}"))}; most bytes pending {MaxPendingExcess}; most awareness states {MaxAwarenessIds}\n"
+        $"closed {string.Join(", ", CloseReasons.OrderBy(e => e.Key).Select(e => $"{e.Key} {e.Value}"))}; most bytes pending {MaxPendingExcess}; most awareness states {MaxAwarenessIds}; documents that differ from their own state {SelfInconsistentRuns}\n"
         + string.Join('\n', Kinds.OrderBy(e => e.Key, StringComparer.Ordinal).Select(e => $"  {e.Key}: sent {e.Value.Sent}, closed {e.Value.Closed}, of them after a change {e.Value.ClosedButChanged}"));
 }

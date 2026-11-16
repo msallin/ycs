@@ -97,4 +97,39 @@ public class HostileSyncTests
             (SessionCloseReason.ProtocolError, true, 150 + 66, text, text, Convert.ToHexString(room.EncodeStateVector()), Convert.ToHexString(room.EncodeStateVector())),
             (hostile.CloseReason, text.Contains('b', StringComparison.Ordinal), text.Length, a.Text, b.Text, Convert.ToHexString(a.Doc.EncodeStateVectorV1()), Convert.ToHexString(b.Doc.EncodeStateVectorV1())));
     }
+
+    // Yjs 13.6.32 gives the same two texts: the item is placed one way when it arrives after the run it points into,
+    // another when it is read with that run from one update. Only a crafted update has such an item.
+    [TestMethod]
+    public void Receive_ItemWhoseRightOriginPrecedesItsOrigin_AJoinerSeesAnotherText()
+    {
+        var room = new Room("r");
+        var a = new TestClient(HonestA);
+        a.Connect(room);
+        a.Insert(0, "abcdef");
+        TestClient.PumpAll(a);
+        var hostile = Join(room);
+
+        // Client 2 inserts "z" with origin (A, 4) and right origin (A, 1).
+        var crafted = new MemoryStream();
+        foreach (var value in new ulong[] { 1, 1, 2, 0 })
+        {
+            HostileUpdates.WriteVarUint(crafted, value);
+        }
+
+        crafted.WriteByte(0xC4);
+        foreach (var value in new ulong[] { (ulong)HonestA, 4, (ulong)HonestA, 1, 1 })
+        {
+            HostileUpdates.WriteVarUint(crafted, value);
+        }
+
+        crafted.Write("z\0"u8);
+        hostile.Receive(Messages.Update(crafted.ToArray()));
+        TestClient.PumpAll(a);
+        var joiner = new TestClient(HonestB);
+        joiner.Connect(room);
+        TestClient.PumpAll(a, joiner);
+
+        Assert.AreEqual(("azbcdef", "abcdezf"), (a.Text, joiner.Text));
+    }
 }
