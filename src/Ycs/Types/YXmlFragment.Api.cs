@@ -133,13 +133,18 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     /// Inserts <paramref name="children"/> right after <paramref name="reference"/> (or at the start, if it is null).
     /// </summary>
     /// <exception cref="ArgumentException">A child is not a <see cref="YXmlFragment"/> (an element is one), a <see cref="YXmlText"/> or a <see cref="YXmlHook"/>;
-    /// or, for a fragment that is not in a document, <paramref name="reference"/> is not one of its children.</exception>
+    /// or, for a fragment that is not in a document, <paramref name="reference"/> is not one of its children; or <paramref name="reference"/> was collected together with its parent, so it is in no list.</exception>
     public void InsertAfter(YType? reference, params ReadOnlySpan<YType> children)
     {
         var nodes = Nodes(children);
         if (Doc != null)
         {
-            Doc.Transact((self: this, item: reference == null ? default : reference._item, nodes), static (s, tr) => s.self.InsertGenericsAfterReturningLast(tr, s.item, s.nodes));
+            if (reference is { IsCollected: true } && !reference.CurrentItem().IsItem)
+            {
+                throw new ArgumentException("The reference was collected with its parent: it is in no list any more. Nothing was inserted.", nameof(reference));
+            }
+
+            Doc.Transact((self: this, reference, nodes), static (s, tr) => s.self.InsertGenericsAfterReturningLast(tr, s.reference == null ? default : s.reference.ItemToInsertAfter(tr), s.nodes));
         }
         else
         {
@@ -355,7 +360,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
                             }
                             else
                             {
-                                n = ((YType)n.Parent)._item;
+                                n = ((YType)n.Parent).CurrentItem();
                             }
                         }
                     }

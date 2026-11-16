@@ -389,9 +389,17 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   document inserted again belongs to the item integrated last. The rule: code that may meet a collected type asks
   `IsRoot`, `ParentType`, `ItemId`, `ItemParentSub`, `ItemDeleted` or `ItemKeep`, never `_item`. A test switch
   (`AbstractType.PoisonCollectedHandleForTests`, `YCS_POISON=1` for `Ycs.Tests`) replaces the handle after collection
-  with an unrelated live item, as a reused slot would; the suite passes with it on. What still reads a collected type's
-  `_item`, and is owed before 7.6 (the plan): the XML siblings (`NextSibling`, `PrevSibling`, `InsertAfter`) and
-  `StructStore.IntegrationPlan`'s keys (7.0c).
+  with an unrelated live item, as a reused slot would; the suite passes with it on.
+* **The position of a collected type** (7.6): the XML siblings (`NextSibling`, `PrevSibling`, `InsertAfter`) need where
+  the type was, not a fact. A collected type holds an id (`_collectedId`), and `YType.CurrentItem` finds the struct that
+  holds it now (a type item has length 1): the deleted item its own struct merged into, or, when its parent was
+  collected too and the struct is a GC struct, none (the siblings are none, as Yjs' deleted right chain gives, and
+  `InsertAfter` throws `ArgumentException`). `InsertAfter` splits that item to end at the id (`GetItemCleanEnd`). No slot
+  is pinned: a pin would keep the old struct's links, which name neighbours whose slots are freed and reused in turn, so
+  it would need the neighbours pinned too; an id names one struct start whatever is freed. The deviation from Yjs: its
+  orphaned item keeps the links it had when it left the list, ours answers from the store now (a sibling inserted
+  after the merge shows). A Debug read of a slot checks that the slot's owner is the struct that reads (`Slab.CheckOwner`,
+  `CheckLinked` for a link), and a slot is poisoned when it goes on the free list.
 
 ### 2.5 Decoding, and the operations without a document
 

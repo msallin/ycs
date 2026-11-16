@@ -125,6 +125,8 @@ that is none of those, which only another client can have written, reads as null
 `YXmlElement` has `NodeName`, `NextSibling`, `PrevSibling` and attributes as `YValue`s: `GetAttribute` (null when unset),
 `SetAttribute`, `RemoveAttribute`, `HasAttribute` and `GetAttributes(snapshot?)`. `YXmlText` is a `YText` with
 `NextSibling` and `PrevSibling`. `YXmlHook` is a `YMap` with a `HookName`.
+A node that was removed and collected still answers `NextSibling`, `PrevSibling` and `InsertAfter(node, ...)` from the place it
+held; one collected together with its parent is in no list: its siblings are null and `InsertAfter` throws `ArgumentException`.
 
 ## Events
 

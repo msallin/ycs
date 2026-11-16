@@ -12,9 +12,9 @@ namespace Ycs;
 
 public abstract partial class YType
 {
-    // The item the type is in. Once the type is collected (Collect), nothing but the XML siblings' links (NextSibling,
-    // PrevSibling, InsertAfter) and StructStore.IntegrationPlan's keys may read it; the rest asks IsRoot, ParentType,
-    // ItemId, ItemParentSub, ItemDeleted or ItemKeep.
+    // The item the type is in. Once the type is collected (Collect) its struct can merge away and its slot be reused, so
+    // nothing reads _item: the position asks CurrentItem, the facts IsRoot, ParentType, ItemId, ItemParentSub,
+    // ItemDeleted or ItemKeep (StructStore.IntegrationPlan's keys read it behind IsCollected).
     private protected YType()
     {
     }
@@ -51,6 +51,28 @@ public abstract partial class YType
     }
 
     internal int TableIndexForTests => _tableIndex;
+
+    /// <summary>
+    /// The item the type is in as the store holds it now: <see cref="_item"/>, or for a collected type the item that
+    /// holds its id (its own struct may have merged into a deleted left neighbour); default for a root type, and for a
+    /// collected type whose struct became a GC struct (its parent was collected too: it is in no list).
+    /// </summary>
+    internal ItemRef CurrentItem()
+    {
+        if (!_collected)
+        {
+            return _item;
+        }
+
+        return Doc.Store.Find(_collectedId).AsItem;
+    }
+
+    /// <summary>
+    /// <see cref="CurrentItem"/> split to end where the type's own struct ended, so that an insert after it lands right
+    /// after the position the type held (a collected type's struct may be a part of a longer deleted item).
+    /// </summary>
+    internal ItemRef ItemToInsertAfter(Transaction transaction) =>
+        _collected ? Doc.Store.GetItemCleanEnd(transaction, _collectedId) : _item;
 
     internal bool IsRoot => !_collected && _item.IsNull;
 

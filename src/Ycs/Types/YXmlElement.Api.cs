@@ -33,7 +33,7 @@ public sealed partial class YXmlElement
     {
         get
         {
-            var n = YXmlNodeHelpers.NextVisible(_item);
+            var n = YXmlNodeHelpers.NextVisible(CurrentItem());
             return !n.IsNull ? YXmlNodeHelpers.ContentTypeOf(n) : null;
         }
     }
@@ -45,7 +45,7 @@ public sealed partial class YXmlElement
     {
         get
         {
-            var n = YXmlNodeHelpers.PrevVisible(_item);
+            var n = YXmlNodeHelpers.PrevVisible(CurrentItem());
             return !n.IsNull ? YXmlNodeHelpers.ContentTypeOf(n) : null;
         }
     }
