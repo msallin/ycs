@@ -322,14 +322,13 @@ internal sealed class WebsocketProvider : IAsyncDisposable
         {
             try
             {
-                var reader = new MemoryStream(message, writable: false);
-                switch (Wire.ReadVarUint(reader))
+                switch (SyncProtocol.ReadMessageType(message, out var body))
                 {
                     case Wire.Sync:
-                        HandleSync(open, message.AsSpan((int)reader.Position));
+                        HandleSync(open, body);
                         break;
                     case Wire.Awareness:
-                        HandleAwareness(open, reader);
+                        HandleAwareness(open, new MemoryStream(message, message.Length - body.Length, body.Length, writable: false));
                         break;
                     default:
                         // y-websocket's auth (2) and query awareness (3): this server sends neither.
@@ -349,18 +348,16 @@ internal sealed class WebsocketProvider : IAsyncDisposable
     private void HandleSync(Connection open, ReadOnlySpan<byte> message)
     {
         var reply = new ArrayBufferWriter<byte>();
-        reply.Write([(byte)Wire.Sync]);
-        var type = SyncProtocol.ReadSyncMessage(message, reply, Doc, this);
-
-        // Only a step 1 writes a reply; the outer type alone is one byte.
-        if (reply.WrittenCount > 1)
+        SyncProtocol.WriteMessageType(reply, Wire.Sync);
+        var result = SyncProtocol.ReadSyncMessage(message, reply, Doc, this);
+        if (result.Replied)
         {
             open.Send(reply.WrittenSpan.ToArray());
             return;
         }
 
         Received?.Invoke();
-        if (type == SyncMessageType.SyncStep2 && !Synced)
+        if (result.Type == SyncMessageType.SyncStep2 && !Synced)
         {
             Synced = true;
             StatusChanged?.Invoke();

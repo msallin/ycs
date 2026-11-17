@@ -1,15 +1,18 @@
 readonly struct Ycs.AbsolutePosition : System.IEquatable<AbsolutePosition>
-    AbsolutePosition(YType Type, int Index, int Assoc = 0)
+    AbsolutePosition(YType Type, int Index, Assoc Assoc = 0)
+    Assoc Assoc { get; init; }
     YType Type { get; init; }
     bool Equals(AbsolutePosition other)
-    int Assoc { get; init; }
     int Index { get; init; }
     override bool Equals(object obj)
     override int GetHashCode()
     override string ToString()
     static bool op_Equality(AbsolutePosition left, AbsolutePosition right)
     static bool op_Inequality(AbsolutePosition left, AbsolutePosition right)
-    void Deconstruct(out YType Type, out int Index, out int Assoc)
+    void Deconstruct(out YType Type, out int Index, out Assoc Assoc)
+enum Ycs.Assoc : int
+    After = 0
+    Before = -1
 sealed class Ycs.DecodedStruct : System.IEquatable<DecodedStruct>
     DecodedStruct <Clone>$()
     DecodedStruct()
@@ -208,23 +211,25 @@ sealed class Ycs.PermanentUserData
     string? GetUserByDeletedId(ItemId id)
     void SetUserMapping(long clientId, string user, System.Func<Transaction, bool>? filter = null)
 readonly struct Ycs.RelativePosition : System.IEquatable<RelativePosition>
+    Assoc Assoc { get; init; }
     ItemId? Item { get; init; }
     ItemId? TypeId { get; init; }
-    RelativePosition(ItemId? TypeId, string? RootName, ItemId? Item, int Assoc = 0)
+    RelativePosition(ItemId? TypeId, string? RootName, ItemId? Item, Assoc Assoc = 0)
     bool Equals(RelativePosition other)
     bool TryResolve(YDoc doc, out AbsolutePosition position, bool followUndoneDeletions = true)
     byte[] Encode()
-    int Assoc { get; init; }
     override bool Equals(object obj)
     override int GetHashCode()
     override string ToString()
     static RelativePosition Decode(System.ReadOnlySpan<byte> encoded)
-    static RelativePosition FromIndex(YType type, int index, int assoc = 0)
+    static RelativePosition FromIndex(YType type, int index, Assoc assoc = 0)
     static RelativePosition FromJson(System.Text.Json.JsonElement json)
+    static RelativePosition FromJson(string json)
     static bool op_Equality(RelativePosition left, RelativePosition right)
     static bool op_Inequality(RelativePosition left, RelativePosition right)
+    string ToJsonString()
     string? RootName { get; init; }
-    void Deconstruct(out ItemId? TypeId, out string? RootName, out ItemId? Item, out int Assoc)
+    void Deconstruct(out ItemId? TypeId, out string? RootName, out ItemId? Item, out Assoc Assoc)
     void Encode(System.Buffers.IBufferWriter<byte> destination)
     void WriteJson(System.Text.Json.Utf8JsonWriter writer)
 sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
@@ -234,6 +239,8 @@ sealed class Ycs.Snapshot : System.IEquatable<Snapshot>
     override bool Equals(object? obj)
     override int GetHashCode()
     static Snapshot Decode(System.ReadOnlySpan<byte> bytes, UpdateFormat format = 0)
+    static bool op_Equality(Snapshot? left, Snapshot? right)
+    static bool op_Inequality(Snapshot? left, Snapshot? right)
     static readonly Snapshot Empty
     void Encode(System.Buffers.IBufferWriter<byte> destination, UpdateFormat format = 0)
 sealed class Ycs.StackItem
@@ -255,11 +262,26 @@ enum Ycs.SyncMessageType : uint
     SyncStep2 = 1
     Update = 2
 static class Ycs.SyncProtocol
-    static SyncMessageType ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, UpdateFormat format = 0)
-    static SyncMessageType ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin, UpdateFormat format = 0)
+    const uint MessageAwareness = 1
+    const uint MessageSync = 0
+    static SyncReadResult ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin = null, UpdateFormat format = 0)
+    static SyncReadResult ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin = null, UpdateFormat format = 0)
+    static uint ReadMessageType(System.ReadOnlySpan<byte> message, out System.ReadOnlySpan<byte> body)
+    static void WriteMessageType(System.Buffers.IBufferWriter<byte> destination, uint messageType)
     static void WriteSyncStep1(System.Buffers.IBufferWriter<byte> destination, YDoc doc)
     static void WriteSyncStep2(System.Buffers.IBufferWriter<byte> destination, YDoc doc, System.ReadOnlySpan<byte> encodedStateVector, UpdateFormat format = 0)
     static void WriteUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update)
+readonly struct Ycs.SyncReadResult : System.IEquatable<SyncReadResult>
+    SyncMessageType Type { get; init; }
+    SyncReadResult(SyncMessageType Type, bool Replied)
+    bool Equals(SyncReadResult other)
+    bool Replied { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(SyncReadResult left, SyncReadResult right)
+    static bool op_Inequality(SyncReadResult left, SyncReadResult right)
+    void Deconstruct(out SyncMessageType Type, out bool Replied)
 sealed class Ycs.Transaction
     System.Collections.Generic.IDictionary<string, object?> Meta { get; }
     System.Collections.Generic.IReadOnlyDictionary<YType, System.Collections.Generic.IReadOnlyList<YEvent>> ChangedParentTypes { get; }

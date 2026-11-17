@@ -716,7 +716,7 @@ namespace Ycs.Properties
                             return "skip";
                         }
 
-                        var rp = RelativePosition.FromIndex(t, Clamp(s.Int("at"), TypeLength.Of(t)), (int)s.Int("assoc"));
+                        var rp = RelativePosition.FromIndex(t, Clamp(s.Int("at"), TypeLength.Of(t)), s.Int("assoc") < 0 ? Assoc.Before : Assoc.After);
                         var bytes = rp.Encode();
                         _run.RelativePositions[ScriptRun.IdText(s.Get("id"))] = bytes;
                         return Obj(("b", ScriptRun.B64(bytes)), ("j", Replica.View(Replica.JsonOf(rp))));

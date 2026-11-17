@@ -75,7 +75,7 @@ foreach (var v2 in new[] { false, true })
     Check(copyXml.Count == 2 && copyXml[0] is YXmlElement { NodeName: "p" } copyPara && copyPara.GetAttributes()["class"] == "intro" && copyXml.ToString() == xml.ToString(), $"v{(v2 ? 2 : 1)}: xml lost");
     Console.WriteLine($"v{(v2 ? 2 : 1)}: {update.Length} bytes, text '{copyText}'");
 
-    var position = RelativePosition.FromIndex(copyText, 4, -1);
+    var position = RelativePosition.FromIndex(copyText, 4, Assoc.Before);
     var buffer = new System.Buffers.ArrayBufferWriter<byte>();
     using (var json = new System.Text.Json.Utf8JsonWriter(buffer))
     {

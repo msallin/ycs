@@ -9,13 +9,13 @@ namespace Ycs.Client;
 /// </summary>
 internal static class Wire
 {
-    public const uint Sync = 0;
-    public const uint Awareness = 1;
+    public const uint Sync = SyncProtocol.MessageSync;
+    public const uint Awareness = SyncProtocol.MessageAwareness;
 
     public static byte[] SyncStep1(YDoc doc)
     {
         var message = new ArrayBufferWriter<byte>();
-        message.Write([(byte)Sync]);
+        SyncProtocol.WriteMessageType(message, Sync);
         SyncProtocol.WriteSyncStep1(message, doc);
         return message.WrittenSpan.ToArray();
     }
@@ -23,7 +23,7 @@ internal static class Wire
     public static byte[] Update(byte[] update)
     {
         var message = new ArrayBufferWriter<byte>(update.Length + 16);
-        message.Write([(byte)Sync]);
+        SyncProtocol.WriteMessageType(message, Sync);
         SyncProtocol.WriteUpdate(message, update);
         return message.WrittenSpan.ToArray();
     }

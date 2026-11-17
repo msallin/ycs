@@ -15,7 +15,7 @@ namespace Ycs;
 /// <param name="Type">The type the index is in.</param>
 /// <param name="Index">The index in <paramref name="Type"/>.</param>
 /// <param name="Assoc">The association of the relative position it came from.</param>
-public readonly record struct AbsolutePosition(AbstractType Type, int Index, int Assoc = 0)
+public readonly record struct AbsolutePosition(AbstractType Type, int Index, Assoc Assoc = Assoc.After)
 {
     internal static bool TryResolve(RelativePosition rpos, YDoc doc, bool followUndoneDeletions, out AbsolutePosition position)
     {
@@ -48,7 +48,7 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, int
             if (!type.ItemDeleted)
             {
                 // Adjust position based on the left assotiation, if necessary.
-                index = (right.Deleted || !right.Countable) ? 0 : (res.diff + (assoc >= 0 ? 0 : 1));
+                index = (right.Deleted || !right.Countable) ? 0 : (res.diff + (assoc == Assoc.After ? 0 : 1));
                 var n = right.Left.AsItem;
                 while (!n.IsNull)
                 {
@@ -97,7 +97,7 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, int
                 }
             }
 
-            index = assoc >= 0 ? type.Length : 0;
+            index = assoc == Assoc.After ? type.Length : 0;
         }
 
         position = new AbsolutePosition(type, index, assoc);
