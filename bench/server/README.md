@@ -60,6 +60,71 @@ the trace (23,490 bytes of state); RSS and heap of the empty server, after loadi
 per room typed `--rate` (2/s) for `--duration` s (120; the plan's hour is `--duration 3600`). Per room: the difference
 to the empty server divided by the rooms. Check: every room's text after editing.
 
+## Results (2026-11-17, a dedicated runner)
+
+The final round (`bench/run-round.sh` at 7d994f4) on a machine that ran nothing else, with 4 cores instead of 8: the
+server on 2 cores, the driver on the other 2. Every run passed its check. JSON in
+[`results/2026-11-17-final/`](results/2026-11-17-final/).
+
+#### Fan-out (2026-11-17T23:04Z)
+
+Machine: AMD EPYC-Genoa Processor, 4 logical cores, 16 GiB, kernel 6.8.0-124-generic, Node v24.22.3, .NET SDK 11.0.100; server on cores 0-1, driver on cores 2,3 (2 workers); load average at start 0.9 1.1 1.1.
+
+| clients per room × rooms | rate per client | server | offered upd/s | delivered upd/s | latency p50 / p95 / p99 ms | server cores | server CPU µs per delivery | server waited for a core (s) | server RSS peak MiB | drain s | driver: busiest worker / loop delay p99 ms | checks |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 10 × 100 | 4/s | node | 4000 | 3999 | 1.1 / 3.2 / 7.8 | 0.81 | 22.5 | 0.5 | 158 | 0.0 | 36% / 11.0 | ok |
+| 10 × 100 | 4/s | ycs | 4000 | 3999 | 0.6 / 1.6 / 3.0 | 0.92 | 25.6 | 8.9 | 164 | 0.0 | 33% / 11.2 | ok |
+| 100 × 10 | 1/s | node | 1000 | 746 | 3933.2 / 9261.6 / 12764.9 | 1.01 | 13.7 | 0.2 | 163 | 6.8 | 50% / 11.8 | ok |
+| 100 × 10 | 1/s | ycs | 1000 | 1000 | 2.3 / 6.4 / 9.9 | 1.54 | 15.6 | 13.0 | 139 | 0.0 | 62% / 13.1 | ok |
+| 1000 × 1 | 0.1/s | node | 100 | 72 | 4990.2 / 7669.9 / 7888.4 | 1.01 | 14.1 | 0.3 | 225 | 7.9 | 51% / 11.2 | ok |
+| 1000 × 1 | 0.1/s | ycs | 100 | 100 | 8.9 / 18.0 / 23.0 | 1.38 | 13.8 | 10.4 | 137 | 0.0 | 62% / 17.0 | ok |
+
+#### Join cost (2026-11-17T23:07Z)
+
+Machine: AMD EPYC-Genoa Processor, 4 logical cores, 16 GiB, kernel 6.8.0-124-generic, Node v24.22.3, .NET SDK 11.0.100; server on cores 0-1, driver on cores 2,3 (2 workers); load average at start 2.0 1.6 1.3.
+
+Document: 1.12 MB state (v1), 524260 characters of text; the stale client holds the state after 90% of the edits.
+
+| client | joins at once | server | step 2 bytes | connect → synced p50 / p95 / max ms | server CPU ms per join | server waited for a core (s) | checks |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| fresh | 1 (× 3) | node | 1117050 | 24.6 / 27.4 / 27.4 | 43.3 | 0.1 | ok |
+| fresh | 1 (× 3) | ycs | 1117050 | 13.2 / 13.3 / 13.3 | 33.3 | 0.0 | ok |
+| fresh | 10 (× 3) | node | 1117050 | 144.6 / 231.1 / 233.0 | 21.7 | 0.4 | ok |
+| fresh | 10 (× 3) | ycs | 1117050 | 137.7 / 277.3 / 278.0 | 29.0 | 0.2 | ok |
+| fresh | 100 (× 3) | node | 1117050 | 705.5 / 1311.5 / 1418.6 | 17.6 | 2.7 | ok |
+| fresh | 100 (× 3) | ycs | 1117050 | 768.0 / 1009.0 / 1013.7 | 11.0 | 1.3 | ok |
+| stale | 1 (× 3) | node | 160422 | 4.8 / 5.3 / 5.3 | 3.3 | 0.0 | ok |
+| stale | 1 (× 3) | ycs | 160422 | 3.5 / 3.9 / 3.9 | 6.7 | 0.0 | ok |
+| stale | 10 (× 3) | node | 160422 | 98.3 / 173.5 / 176.6 | 5.3 | 0.1 | ok |
+| stale | 10 (× 3) | ycs | 160422 | 120.1 / 168.5 / 168.6 | 2.7 | 0.0 | ok |
+| stale | 100 (× 3) | node | 160422 | 202.3 / 333.6 / 379.8 | 3.9 | 0.4 | ok |
+| stale | 100 (× 3) | ycs | 160422 | 169.6 / 254.4 / 257.1 | 2.1 | 0.1 | ok |
+
+#### Memory per room (2026-11-17T23:07Z)
+
+Machine: AMD EPYC-Genoa Processor, 4 logical cores, 16 GiB, kernel 6.8.0-124-generic, Node v24.22.3, .NET SDK 11.0.100; server on cores 0-1, driver on cores 2,3 (2 workers); load average at start 2.1 1.7 1.3.
+
+100 rooms, each loaded with the first 20000 edits of the trace (23490 bytes of state, 14302 characters), then 2 clients per room typing 2/s each for 120 s. Heap: the managed heap after a full compacting GC (Ycs), V8's used heap plus external memory after a full GC (Node).
+
+| server | empty: RSS / heap MiB | per room built: RSS / heap KiB | per room after editing: RSS / heap KiB | editing latency p50 / p99 ms | checks |
+| --- | --- | --- | --- | --- | --- |
+| ycs | 63.5 / 0.8 | 619 / 220 | 1294 / 237 | 0.2 / 0.6 | ok |
+| node | 82.8 / 13.9 | 480 / 309 | 1796 / 276 | 0.3 / 0.8 | ok |
+
+
+Observations:
+
+* **Throughput**: with 2 server cores the gap is wider than on 4. Node delivers 746 of 1,000 updates/s in the rooms of
+  100 and 72 of 100 in the room of 1,000, at p50 of 4 to 5 s; Ycs delivers everything with p99 at most 23 ms, using
+  1.4 to 1.5 cores.
+* **CPU per delivery**: Ycs 25.6 µs in rooms of 10 (Node 22.5), 15.6 and 13.8 in the larger rooms (Node 13.7 and 14.1):
+  within 14 % of Node in every shape, closer than the 20 % of 2026-11-16. Its threads waited 9 to 13 s for one of its
+  two cores (more threads than cores); Node's one thread did not wait.
+* **Join**: a fresh client of the 1.1 MB document syncs in 13 ms on Ycs and 25 ms on Node (33 and 43 ms of server CPU);
+  100 at once take 768 against 706 ms at p50 but 1,014 against 1,419 ms at the maximum, at 11 against 18 ms of CPU each.
+* **Memory per room**: built, Ycs 619 KiB RSS / 220 KiB heap against Node's 480 / 309 (2026-11-16: 696 / 292, before
+  the layout's steps 8 and 9); after 120 s of editing Ycs holds 1,294 KiB RSS per room and Node 1,796.
+
 ## Results (2026-11-16, 18:12 to 18:19 UTC)
 
 A quieter machine than the first run (load average 42 to 79, replaced): the fan-out ran at load average 1.9; a

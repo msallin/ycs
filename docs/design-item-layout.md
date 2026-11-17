@@ -558,6 +558,8 @@ members that expose a struct are:
   the object layout; seven variants (the cursor not rewritten when unchanged, a plain binary search in the leaf, no
   pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined, a flat form
   below one leaf) gave nothing beyond 2% ([Compare](../bench/Ycs.Compare/README.md), "The leaf order").
-* **The remaining gaps against the object layout** (`trace-replay` +19%, `text-append` +26%, mid-document typing
-  +30%, `text-append-1txn-observed-25k` +22%, `map-set-same` +15%, `array-push` +8%): spread over the transaction with
-  no phase above 10%; no clean timing round of the whole table exists (the machine was never quiet).
+* **The remaining gaps against the object layout**, from the clean round on a dedicated machine
+  ([Compare](../bench/Ycs.Compare/README.md), "Final round"): `read-array` 2.7× (an element read goes through the slab
+  and the value arena), `read-map` +44%, `trace-replay` +20%, `encode-v1` +19%, `text-append-1txn-observed` +13%,
+  `array-push-1txn` and `map-set-same` +10 to +11%, `text-append` +8%. The editing gaps are spread over the transaction
+  with no phase above 10%; the read and encode paths have not been profiled on the built layout.

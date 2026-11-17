@@ -1,0 +1,294 @@
+trace: 259778 edits in 259778 transactions, 104852 characters; state v1 ycs 289132 / yrs 289132 bytes, v2 ycs 159927 / yrs 159927; updates ycs 259778 (5700582 bytes) / yrs 259778 (5700582 bytes); x100 state v1 ycs 31264816 bytes
+pass 1 text-append              ycs  median      27.5 ms  load 1.79->1.79
+pass 1 text-append              yrs  median    3651.7 ms  load 1.79->1.48
+pass 1 text-append-utf8         ycs  median      27.9 ms  load 1.48->1.44
+pass 1 text-append-utf8         yrs  median    1867.2 ms  load 1.44->1.34
+pass 1 text-append-1txn         ycs  median      15.6 ms  load 1.34->1.34
+pass 1 text-append-1txn         yrs  median   27026.3 ms  load 1.34->1.20
+pass 1 text-append-1txn-25k     ycs  median       3.8 ms  load 1.20->1.20
+pass 1 text-append-1txn-25k     yrs  median    1396.8 ms  load 1.20->1.17
+pass 1 text-append-1txn-observed ycs  median     229.4 ms  load 1.17->1.16
+pass 1 text-append-1txn-observed yrs  median   27578.5 ms  load 1.16->1.10
+pass 1 text-append-1txn-observed-200k ycs  median     448.1 ms  load 1.10->1.09
+pass 1 text-append-1txn-observed-200k yrs  median  133460.7 ms  load 1.09->1.04
+pass 1 text-append-1txn-observed-400k ycs  median     952.5 ms  load 1.04->1.03
+pass 1 text-append-1txn-observed-400k yrs  median  552001.6 ms  load 1.03->1.06
+pass 1 text-append-1txn-observed-25k ycs  median      55.3 ms  load 1.06->1.06
+pass 1 text-append-1txn-observed-25k yrs  median    1423.5 ms  load 1.06->1.05
+pass 1 txn-empty                ycs  median       7.6 ms  load 1.05->1.05
+pass 1 txn-empty                yrs  median      13.0 ms  load 1.05->1.05
+pass 1 text-random              ycs  median      38.3 ms  load 1.05->1.04
+pass 1 text-random              yrs  median    1772.2 ms  load 1.04->1.03
+pass 1 text-random-100k         ycs  median    1255.5 ms  load 1.03->1.03
+pass 1 text-random-100k         yrs  median  183515.6 ms  load 1.03->1.00
+pass 1 trace-replay             ycs  median     344.2 ms  load 1.00->1.00
+pass 1 trace-replay             yrs  median   12331.3 ms  load 1.00->1.00
+pass 1 concurrent-20            ycs  median      92.0 ms  load 1.00->1.00
+pass 1 concurrent-20            yrs  median      80.4 ms  load 1.00->1.00
+pass 1 many-clients-200         ycs  median       2.0 ms  load 1.00->1.00
+pass 1 many-clients-200         yrs  median       2.3 ms  load 1.00->1.00
+pass 1 many-clients-1000        ycs  median       7.4 ms  load 1.00->1.00
+pass 1 many-clients-1000        yrs  median      24.5 ms  load 1.00->1.00
+pass 1 apply-state-v1/ycs       ycs  median      77.4 ms  load 1.00->1.00
+pass 1 apply-state-v1/ycs       yrs  median      48.2 ms  load 1.00->1.00
+pass 1 apply-state-v1/yrs       ycs  median      75.8 ms  load 1.00->1.00
+pass 1 apply-state-v1/yrs       yrs  median      49.6 ms  load 1.00->1.00
+pass 1 apply-state-v2/ycs       ycs  median      78.0 ms  load 1.00->1.00
+pass 1 apply-state-v2/ycs       yrs  median      52.3 ms  load 1.00->1.00
+pass 1 apply-state-v2/yrs       ycs  median      75.5 ms  load 1.00->1.08
+pass 1 apply-state-v2/yrs       yrs  median      50.1 ms  load 1.08->1.08
+pass 1 apply-state-x100/ycs     ycs  median     836.8 ms  load 1.08->1.06
+pass 1 apply-state-x100/ycs     yrs  median     751.7 ms  load 1.06->1.06
+pass 1 apply-updates/ycs        ycs  median     270.7 ms  load 1.05->1.05
+pass 1 apply-updates/ycs        yrs  median     370.0 ms  load 1.05->1.04
+pass 1 apply-updates/yrs        ycs  median     275.9 ms  load 1.04->1.04
+pass 1 apply-updates/yrs        yrs  median     365.6 ms  load 1.04->1.04
+pass 1 apply-updates-1txn/yrs   ycs  median     171.5 ms  load 1.04->1.04
+pass 1 apply-updates-1txn/yrs   yrs  median    1794.7 ms  load 1.04->1.03
+pass 1 encode-v1                ycs  median       8.2 ms  load 1.03->1.02
+pass 1 encode-v1                yrs  median       8.8 ms  load 1.02->1.02
+pass 1 encode-v2                ycs  median       9.9 ms  load 1.02->1.02
+pass 1 encode-v2                yrs  median      10.0 ms  load 1.02->1.02
+pass 1 encode-sv                ycs  median       0.1 ms  load 1.02->1.02
+pass 1 encode-sv                yrs  median       0.3 ms  load 1.02->1.02
+pass 1 encode-diff              ycs  median       4.9 ms  load 1.02->1.02
+pass 1 encode-diff              yrs  median       4.6 ms  load 1.02->1.02
+pass 1 map-set-distinct         ycs  median      38.6 ms  load 1.02->1.02
+pass 1 map-set-distinct         yrs  median     138.6 ms  load 1.02->1.02
+pass 1 map-set-distinct-1txn    ycs  median      31.4 ms  load 1.02->1.02
+pass 1 map-set-distinct-1txn    yrs  median     113.0 ms  load 1.02->1.02
+pass 1 map-set-same             ycs  median      64.6 ms  load 1.01->1.01
+pass 1 map-set-same             yrs  median     131.9 ms  load 1.01->1.01
+pass 1 array-push               ycs  median      25.4 ms  load 1.01->1.01
+pass 1 array-push               yrs  median     112.4 ms  load 1.01->1.01
+pass 1 array-push-1txn          ycs  median      12.5 ms  load 1.01->1.01
+pass 1 array-push-1txn          yrs  median   70664.2 ms  load 1.01->1.00
+pass 1 array-push-1txn-20k      ycs  median       2.6 ms  load 1.00->1.00
+pass 1 array-push-1txn-20k      yrs  median    2203.3 ms  load 1.00->1.00
+pass 1 array-insert-random      ycs  median     213.3 ms  load 1.00->1.00
+pass 1 array-insert-random      yrs  median   21728.8 ms  load 1.00->1.18
+pass 1 array-delete-random      ycs  median     178.4 ms  load 1.18->1.16
+pass 1 array-delete-random      yrs  median   24798.2 ms  load 1.16->1.11
+pass 1 read-text                ycs  median       0.2 ms  load 1.11->1.11
+pass 1 read-text                yrs  median      46.2 ms  load 1.11->1.10
+pass 1 read-array               ycs  median      20.5 ms  load 1.10->1.10
+pass 1 read-array               yrs  median      99.4 ms  load 1.10->1.09
+pass 1 read-map                 ycs  median      40.1 ms  load 1.09->1.09
+pass 1 read-map                 yrs  median     398.0 ms  load 1.09->1.08
+pass 1 undo-type                ycs  median      32.1 ms  load 1.08->1.08
+pass 1 undo-type                yrs  median     161.0 ms  load 1.08->1.07
+pass 1 undo-all                 ycs  median      43.6 ms  load 1.07->1.07
+pass 1 undo-all                 yrs  median     357.3 ms  load 1.07->1.06
+pass 1 redo-all                 ycs  median      47.7 ms  load 1.06->1.06
+pass 1 redo-all                 yrs  median      80.5 ms  load 1.06->1.05
+pass 1 observe-count            ycs  median      54.3 ms  load 1.05->1.05
+pass 1 observe-count            yrs  median    3682.6 ms  load 1.05->1.03
+pass 1 observe-delta            ycs  median      99.5 ms  load 1.03->1.03
+pass 1 observe-delta            yrs  median    5423.9 ms  load 1.03->1.01
+pass 2 text-append              yrs  median    3582.0 ms  load 1.01->1.01
+pass 2 text-append              ycs  median      27.3 ms  load 1.01->1.01
+pass 2 text-append-utf8         yrs  median    1833.2 ms  load 1.01->1.00
+pass 2 text-append-utf8         ycs  median      27.3 ms  load 1.00->1.00
+pass 2 text-append-1txn         yrs  median   26459.1 ms  load 1.00->1.00
+pass 2 text-append-1txn         ycs  median      15.3 ms  load 1.00->1.00
+pass 2 text-append-1txn-25k     yrs  median    1419.2 ms  load 1.00->1.00
+pass 2 text-append-1txn-25k     ycs  median       3.9 ms  load 1.00->1.24
+pass 2 text-append-1txn-observed yrs  median   26474.4 ms  load 1.24->1.16
+pass 2 text-append-1txn-observed ycs  median     227.3 ms  load 1.16->1.14
+pass 2 text-append-1txn-observed-200k yrs  median  124528.0 ms  load 1.14->1.08
+pass 2 text-append-1txn-observed-200k ycs  median     450.9 ms  load 1.08->1.07
+pass 2 text-append-1txn-observed-400k yrs  median  520751.5 ms  load 1.07->1.00
+pass 2 text-append-1txn-observed-400k ycs  median     948.5 ms  load 1.00->1.00
+pass 2 text-append-1txn-observed-25k yrs  median    1465.0 ms  load 1.00->1.00
+pass 2 text-append-1txn-observed-25k ycs  median      54.0 ms  load 1.00->1.00
+pass 2 txn-empty                yrs  median      14.4 ms  load 1.00->1.00
+pass 2 txn-empty                ycs  median       7.6 ms  load 1.00->1.00
+pass 2 text-random              yrs  median    1783.8 ms  load 1.00->1.00
+pass 2 text-random              ycs  median      37.1 ms  load 1.00->1.00
+pass 2 text-random-100k         yrs  median  168609.8 ms  load 1.00->1.04
+pass 2 text-random-100k         ycs  median    1357.5 ms  load 1.04->1.04
+pass 2 trace-replay             yrs  median   12075.5 ms  load 1.04->1.01
+pass 2 trace-replay             ycs  median     350.2 ms  load 1.01->1.01
+pass 2 concurrent-20            yrs  median      79.4 ms  load 1.01->1.09
+pass 2 concurrent-20            ycs  median      91.3 ms  load 1.09->1.09
+pass 2 many-clients-200         yrs  median       2.3 ms  load 1.09->1.08
+pass 2 many-clients-200         ycs  median       2.0 ms  load 1.08->1.08
+pass 2 many-clients-1000        yrs  median      24.1 ms  load 1.08->1.07
+pass 2 many-clients-1000        ycs  median       7.6 ms  load 1.07->1.07
+pass 2 apply-state-v1/ycs       yrs  median      49.9 ms  load 1.07->1.07
+pass 2 apply-state-v1/ycs       ycs  median      73.6 ms  load 1.07->1.07
+pass 2 apply-state-v1/yrs       yrs  median      49.4 ms  load 1.07->1.06
+pass 2 apply-state-v1/yrs       ycs  median      76.9 ms  load 1.06->1.06
+pass 2 apply-state-v2/ycs       yrs  median      50.3 ms  load 1.06->1.06
+pass 2 apply-state-v2/ycs       ycs  median      76.7 ms  load 1.06->1.06
+pass 2 apply-state-v2/yrs       yrs  median      50.9 ms  load 1.06->1.05
+pass 2 apply-state-v2/yrs       ycs  median      76.3 ms  load 1.05->1.05
+pass 2 apply-state-x100/ycs     yrs  median     765.9 ms  load 1.05->1.04
+pass 2 apply-state-x100/ycs     ycs  median     839.3 ms  load 1.04->1.04
+pass 2 apply-updates/ycs        yrs  median     371.5 ms  load 1.03->1.03
+pass 2 apply-updates/ycs        ycs  median     268.0 ms  load 1.03->1.03
+pass 2 apply-updates/yrs        yrs  median     369.2 ms  load 1.03->1.02
+pass 2 apply-updates/yrs        ycs  median     289.8 ms  load 1.02->1.02
+pass 2 apply-updates-1txn/yrs   yrs  median    1767.9 ms  load 1.02->1.02
+pass 2 apply-updates-1txn/yrs   ycs  median     167.4 ms  load 1.02->1.02
+pass 2 encode-v1                yrs  median       8.9 ms  load 1.02->1.02
+pass 2 encode-v1                ycs  median       8.1 ms  load 1.02->1.02
+pass 2 encode-v2                yrs  median       9.8 ms  load 1.02->1.01
+pass 2 encode-v2                ycs  median       9.8 ms  load 1.01->1.01
+pass 2 encode-sv                yrs  median       0.3 ms  load 1.01->1.01
+pass 2 encode-sv                ycs  median       0.1 ms  load 1.01->1.01
+pass 2 encode-diff              yrs  median       4.9 ms  load 1.01->1.01
+pass 2 encode-diff              ycs  median       4.9 ms  load 1.01->1.01
+pass 2 map-set-distinct         yrs  median     139.8 ms  load 1.01->1.01
+pass 2 map-set-distinct         ycs  median      40.1 ms  load 1.01->1.01
+pass 2 map-set-distinct-1txn    yrs  median     115.2 ms  load 1.01->1.01
+pass 2 map-set-distinct-1txn    ycs  median      28.4 ms  load 1.01->1.01
+pass 2 map-set-same             yrs  median     131.1 ms  load 1.01->1.01
+pass 2 map-set-same             ycs  median      65.9 ms  load 1.01->1.01
+pass 2 array-push               yrs  median     119.2 ms  load 1.01->1.01
+pass 2 array-push               ycs  median      25.2 ms  load 1.01->1.01
+pass 2 array-push-1txn          yrs  median   70144.2 ms  load 1.01->1.13
+pass 2 array-push-1txn          ycs  median      12.1 ms  load 1.12->1.12
+pass 2 array-push-1txn-20k      yrs  median    2174.5 ms  load 1.12->1.08
+pass 2 array-push-1txn-20k      ycs  median       2.5 ms  load 1.08->1.08
+pass 2 array-insert-random      yrs  median   20718.7 ms  load 1.08->1.15
+pass 2 array-insert-random      ycs  median     178.6 ms  load 1.15->1.14
+pass 2 array-delete-random      yrs  median   28681.5 ms  load 1.14->1.16
+pass 2 array-delete-random      ycs  median     177.1 ms  load 1.16->1.16
+pass 2 read-text                yrs  median      47.1 ms  load 1.16->1.15
+pass 2 read-text                ycs  median       0.2 ms  load 1.15->1.15
+pass 2 read-array               yrs  median      97.4 ms  load 1.15->1.14
+pass 2 read-array               ycs  median      20.7 ms  load 1.14->1.14
+pass 2 read-map                 yrs  median     398.5 ms  load 1.14->1.13
+pass 2 read-map                 ycs  median      40.2 ms  load 1.13->1.12
+pass 2 undo-type                yrs  median     160.5 ms  load 1.12->1.11
+pass 2 undo-type                ycs  median      30.3 ms  load 1.11->1.11
+pass 2 undo-all                 yrs  median     343.9 ms  load 1.11->1.10
+pass 2 undo-all                 ycs  median      42.9 ms  load 1.10->1.09
+pass 2 redo-all                 yrs  median      79.7 ms  load 1.09->1.08
+pass 2 redo-all                 ycs  median      47.6 ms  load 1.08->1.08
+pass 2 observe-count            yrs  median    3607.0 ms  load 1.08->1.05
+pass 2 observe-count            ycs  median      54.8 ms  load 1.05->1.04
+pass 2 observe-delta            yrs  median    5448.2 ms  load 1.04->1.02
+pass 2 observe-delta            ycs  median      92.3 ms  load 1.02->1.02
+pass 3 text-append              ycs  median      28.1 ms  load 1.02->1.02
+pass 3 text-append              yrs  median    3581.5 ms  load 1.02->1.01
+pass 3 text-append-utf8         ycs  median      27.5 ms  load 1.01->1.01
+pass 3 text-append-utf8         yrs  median    1869.2 ms  load 1.01->1.01
+pass 3 text-append-1txn         ycs  median      15.3 ms  load 1.01->1.01
+pass 3 text-append-1txn         yrs  median   25801.5 ms  load 1.01->1.00
+pass 3 text-append-1txn-25k     ycs  median       3.8 ms  load 1.00->1.00
+pass 3 text-append-1txn-25k     yrs  median    1435.3 ms  load 1.00->1.00
+pass 3 text-append-1txn-observed ycs  median     226.3 ms  load 1.00->1.00
+pass 3 text-append-1txn-observed yrs  median   26112.2 ms  load 1.00->1.00
+pass 3 text-append-1txn-observed-200k ycs  median     454.6 ms  load 1.00->1.00
+pass 3 text-append-1txn-observed-200k yrs  median  124333.0 ms  load 1.00->1.00
+pass 3 text-append-1txn-observed-400k ycs  median     959.4 ms  load 1.00->1.00
+pass 3 text-append-1txn-observed-400k yrs  median  520777.6 ms  load 1.00->1.02
+pass 3 text-append-1txn-observed-25k ycs  median      54.0 ms  load 1.02->1.02
+pass 3 text-append-1txn-observed-25k yrs  median    1434.9 ms  load 1.02->1.01
+pass 3 txn-empty                ycs  median       7.7 ms  load 1.01->1.01
+pass 3 txn-empty                yrs  median      12.2 ms  load 1.01->1.01
+pass 3 text-random              ycs  median      36.8 ms  load 1.01->1.01
+pass 3 text-random              yrs  median    1787.4 ms  load 1.01->1.01
+pass 3 text-random-100k         ycs  median    1323.7 ms  load 1.01->1.01
+pass 3 text-random-100k         yrs  median  163550.6 ms  load 1.01->1.00
+pass 3 trace-replay             ycs  median     359.1 ms  load 1.00->1.00
+pass 3 trace-replay             yrs  median   12045.1 ms  load 1.00->1.00
+pass 3 concurrent-20            ycs  median      90.4 ms  load 1.00->1.00
+pass 3 concurrent-20            yrs  median      79.3 ms  load 1.00->1.00
+pass 3 many-clients-200         ycs  median       1.9 ms  load 1.00->1.00
+pass 3 many-clients-200         yrs  median       2.3 ms  load 1.00->1.00
+pass 3 many-clients-1000        ycs  median       7.5 ms  load 1.00->1.00
+pass 3 many-clients-1000        yrs  median      24.6 ms  load 1.00->1.00
+pass 3 apply-state-v1/ycs       ycs  median      75.6 ms  load 1.00->1.00
+pass 3 apply-state-v1/ycs       yrs  median      48.4 ms  load 1.00->1.00
+pass 3 apply-state-v1/yrs       ycs  median      74.5 ms  load 1.00->1.00
+pass 3 apply-state-v1/yrs       yrs  median      48.7 ms  load 1.00->1.00
+pass 3 apply-state-v2/ycs       ycs  median      77.1 ms  load 1.00->1.00
+pass 3 apply-state-v2/ycs       yrs  median      50.6 ms  load 1.00->1.00
+pass 3 apply-state-v2/yrs       ycs  median      77.8 ms  load 1.00->1.08
+pass 3 apply-state-v2/yrs       yrs  median      50.5 ms  load 1.08->1.08
+pass 3 apply-state-x100/ycs     ycs  median     840.1 ms  load 1.08->1.13
+pass 3 apply-state-x100/ycs     yrs  median     733.5 ms  load 1.13->1.12
+pass 3 apply-updates/ycs        ycs  median     269.9 ms  load 1.11->1.10
+pass 3 apply-updates/ycs        yrs  median     365.2 ms  load 1.10->1.09
+pass 3 apply-updates/yrs        ycs  median     275.3 ms  load 1.09->1.08
+pass 3 apply-updates/yrs        yrs  median     374.9 ms  load 1.08->1.08
+pass 3 apply-updates-1txn/yrs   ycs  median     175.1 ms  load 1.08->1.08
+pass 3 apply-updates-1txn/yrs   yrs  median    1767.9 ms  load 1.08->1.13
+pass 3 encode-v1                ycs  median       8.3 ms  load 1.13->1.28
+pass 3 encode-v1                yrs  median       8.9 ms  load 1.28->1.28
+pass 3 encode-v2                ycs  median      10.2 ms  load 1.28->1.26
+pass 3 encode-v2                yrs  median       9.9 ms  load 1.26->1.26
+pass 3 encode-sv                ycs  median       0.1 ms  load 1.26->1.24
+pass 3 encode-sv                yrs  median       0.3 ms  load 1.24->1.24
+pass 3 encode-diff              ycs  median       4.7 ms  load 1.24->1.24
+pass 3 encode-diff              yrs  median       4.5 ms  load 1.24->1.22
+pass 3 map-set-distinct         ycs  median      40.1 ms  load 1.22->1.22
+pass 3 map-set-distinct         yrs  median     149.1 ms  load 1.22->1.20
+pass 3 map-set-distinct-1txn    ycs  median      29.2 ms  load 1.20->1.19
+pass 3 map-set-distinct-1txn    yrs  median     117.5 ms  load 1.19->1.19
+pass 3 map-set-same             ycs  median      65.1 ms  load 1.19->1.17
+pass 3 map-set-same             yrs  median     143.0 ms  load 1.17->1.17
+pass 3 array-push               ycs  median      25.4 ms  load 1.17->1.24
+pass 3 array-push               yrs  median     114.8 ms  load 1.24->1.24
+pass 3 array-push-1txn          ycs  median      13.3 ms  load 1.24->1.22
+pass 3 array-push-1txn          yrs  median   71259.6 ms  load 1.22->1.07
+pass 3 array-push-1txn-20k      ycs  median       2.5 ms  load 1.07->1.06
+pass 3 array-push-1txn-20k      yrs  median    2239.1 ms  load 1.06->1.05
+pass 3 array-insert-random      ycs  median     191.1 ms  load 1.05->1.04
+pass 3 array-insert-random      yrs  median   19993.8 ms  load 1.04->1.00
+pass 3 array-delete-random      ycs  median     189.6 ms  load 1.00->1.00
+pass 3 array-delete-random      yrs  median   25925.0 ms  load 1.00->1.00
+pass 3 read-text                ycs  median       0.3 ms  load 1.00->1.00
+pass 3 read-text                yrs  median      46.2 ms  load 1.00->1.00
+pass 3 read-array               ycs  median      21.0 ms  load 1.00->1.00
+pass 3 read-array               yrs  median      98.8 ms  load 1.00->1.00
+pass 3 read-map                 ycs  median      39.9 ms  load 1.00->1.00
+pass 3 read-map                 yrs  median     391.0 ms  load 1.00->1.00
+pass 3 undo-type                ycs  median      29.8 ms  load 1.00->1.00
+pass 3 undo-type                yrs  median     162.0 ms  load 1.00->1.00
+pass 3 undo-all                 ycs  median      43.7 ms  load 1.00->1.08
+pass 3 undo-all                 yrs  median     344.0 ms  load 1.08->1.07
+pass 3 redo-all                 ycs  median      47.5 ms  load 1.07->1.07
+pass 3 redo-all                 yrs  median      82.4 ms  load 1.07->1.07
+pass 3 observe-count            ycs  median      56.8 ms  load 1.07->1.06
+pass 3 observe-count            yrs  median    3559.0 ms  load 1.06->1.04
+pass 3 observe-delta            ycs  median      91.4 ms  load 1.04->1.04
+pass 3 observe-delta            yrs  median    5396.7 ms  load 1.04->1.10
+hostile alloc-struct-count                     ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":5.3119,"peakRssMiB":99}
+hostile alloc-struct-count                     yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":14.0631,"peakRssMiB":101}
+hostile alloc-struct-count-below-heap-limit    ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":4.7691,"peakRssMiB":99}
+hostile alloc-struct-count-below-heap-limit    yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":8.9911,"peakRssMiB":100}
+hostile alloc-any-length                       ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":6.7559,"peakRssMiB":99}
+hostile alloc-any-length                       yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":9.3848,"peakRssMiB":100}
+hostile alloc-json-length                      ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":6.5201,"peakRssMiB":99}
+hostile alloc-json-length                      yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":8.9815,"peakRssMiB":100}
+hostile nonatomic-truncated-delete-set         ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":10.3723,"peakRssMiB":99}
+hostile nonatomic-truncated-delete-set         yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":14.2383,"peakRssMiB":101}
+hostile nonatomic-truncated-v2                 ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":31.598,"peakRssMiB":100}
+hostile nonatomic-truncated-v2                 yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":9.3181,"peakRssMiB":100}
+hostile nonatomic-malformed-delete-set         ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":26.5196,"peakRssMiB":99}
+hostile nonatomic-malformed-delete-set         yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":14.5018,"peakRssMiB":101}
+hostile nonatomic-negative-delete-length       ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":28.3182,"peakRssMiB":104}
+hostile nonatomic-negative-delete-length       yrs  {"outcome":"applied","readable":"yes","unchanged":"yes","ms":12.3976,"peakRssMiB":101}
+hostile nonatomic-find-index-out-of-range      ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":9.4044,"peakRssMiB":99}
+hostile nonatomic-find-index-out-of-range      yrs  {"outcome":"crash: died with signal 6 (SIGABRT): thread \u0027\u003Cunnamed\u003E\u0027 (94510) panicked at yrs/src/block_store.rs:53:30:"}
+hostile nonatomic-zero-length-struct           ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":7.1565,"peakRssMiB":99}
+hostile nonatomic-zero-length-struct           yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":8.8255,"peakRssMiB":100}
+hostile nonatomic-find-index-unexpected        ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":7.639,"peakRssMiB":99}
+hostile nonatomic-find-index-unexpected        yrs  {"outcome":"applied","readable":"yes","unchanged":"yes","ms":11.7148,"peakRssMiB":100}
+hostile nonatomic-clean-end-unexpected         ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":9.256,"peakRssMiB":99}
+hostile nonatomic-clean-end-unexpected         yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":13.8919,"peakRssMiB":101}
+hostile nonatomic-any-splice-out-of-range      ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":13.1577,"peakRssMiB":99}
+hostile nonatomic-any-splice-out-of-range      yrs  {"outcome":"applied","readable":"yes","unchanged":"no","ms":12.4406,"peakRssMiB":101}
+hostile truncated-state                        ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":8.4161,"peakRssMiB":99}
+hostile truncated-state                        yrs  {"outcome":"rejected: EndOfStream","readable":"yes","unchanged":"yes","ms":14.477,"peakRssMiB":101}
+hostile gc-bomb-pending-2M                     ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":7.6793,"peakRssMiB":99}
+hostile gc-bomb-pending-2M                     yrs  {"outcome":"applied","readable":"yes","unchanged":"yes","ms":80.0669,"peakRssMiB":163}
+hostile deleted-items-524288                   ycs  {"outcome":"rejected: YUpdateException","readable":"yes","unchanged":"yes","ms":8.8951,"peakRssMiB":99}
+hostile deleted-items-524288                   yrs  {"outcome":"applied","readable":"yes","unchanged":"no","ms":246.9659,"peakRssMiB":211}
+hostile conflict-2000                          ycs  {"outcome":"applied","readable":"yes","unchanged":"no","ms":191.1648,"peakRssMiB":100}
+hostile conflict-2000                          yrs  {"outcome":"applied","readable":"yes","unchanged":"no","ms":336.2786,"peakRssMiB":101}
+wrote /home/runner-ycs/actions-runner/_work/_temp/round/compare/results.json and tables.md

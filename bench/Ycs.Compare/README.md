@@ -2,7 +2,7 @@
 
 A benchmark of ycs (this repository, pure C#) against [YDotNet](https://github.com/y-crdt/ydotnet) 0.7.0, the
 .NET binding of yrs 0.26 (the Rust port of Yjs, called through P/Invoke). Same workloads, same inputs, same machine;
-every result is checked before it counts. Run on 2026-11-15.
+every result is checked before it counts. First run on 2026-11-15; the latest on 2026-11-17 ("Final round" below).
 
 ```bash
 bench/Ycs.Compare/run.sh            # everything: about 40 minutes; results in results/<UTC date>/
@@ -21,6 +21,109 @@ every process, with the load average) and the rendered tables are in [`results/2
 The project is in `Ycs.sln`, so CI builds it and it cannot stop compiling unnoticed; CI does not run it. It is the
 only place YDotNet (`YDotNet` and `YDotNet.Native`, exactly `[0.7.0]`) is referenced: neither `src`, the tests nor
 `bench/Ycs.Benchmarks` depends on a native library.
+
+## Final round (2026-11-17, a dedicated runner)
+
+The whole of `bench/run-round.sh` at 7d994f4 on a machine that ran nothing else (a self-hosted GitHub Actions runner,
+workflow `bench.yml`): AMD EPYC-Genoa, 4 logical cores, 16 GiB, Ubuntu 24.04, kernel 6.8, .NET SDK 11.0.100, Node
+v24.22.3. The load average was 1.0 to 1.8 while the benchmarks ran (one benchmark process busy on a core, nothing
+else) and 2.8 at the start of the comparison (the build that precedes it). Everything is in
+[`results/2026-11-17-final/`](results/2026-11-17-final/): `tables.md` (the full tables, the hostile updates included),
+`results.json`, the A/B lines (`ab-044bb73.txt`), the `Ycs.Benchmarks` outputs (`benchmarks-*.txt`), `machine.txt`
+and `round.log` (the load at the start and end of each step). Every result passed its checks; the hostile cases are as
+before (ycs rejects all 16 malformed ones with the document unchanged; YDotNet applies 5 of them and aborts on one). Native
+AOT: the sample publishes with no warning, 2.8 MB (YDotNet 4.3 MB, its native library 2.3 MB of it, 3 trim warnings); YDotNet does not run
+on browser-wasm (`wasm.txt`).
+
+The machine is slower per core than the one of the earlier sections, so its milliseconds are not comparable with
+theirs; the ratios are.
+
+### ycs against YDotNet
+
+Median ms per run (min–max; ± the spread of the per-pass medians), 3 passes of 5 timed runs, each in its own process.
+
+| workload | ycs | YDotNet | faster | first run ycs / YDotNet | checks |
+| --- | ---: | ---: | --- | ---: | --- |
+| `text-append` | 27.6 (27.1–28.6, ±2%) | 3582 (3546–3713, ±2%) | ycs 129.9× | 316 / 3634 | equal, v1 bytes identical |
+| `text-append-utf8` | 27.6 (27.1–28.1, ±1%) | 1851 (1818–1899, ±2%) | ycs 67.1× | 320 / 1927 | equal, v1 bytes identical |
+| `text-append-1txn` | 15.3 (15.1–15.7, ±2%) | 26459 (25801–27026, ±2%) | ycs 1729.5× | 171 / 26459 | equal, v1 bytes identical |
+| `text-append-1txn-25k` | 3.9 (3.8–5.0, ±1%) | 1414 (1394–1471, ±2%) | ycs 367.1× | 72.0 / 1458 | equal, v1 bytes identical |
+| `text-append-1txn-observed` | 227 (220–253, ±1%) | 26474 (26112–27579, ±4%) | ycs 116.5× | 800 / 26474 | equal, v1 bytes identical |
+| `text-append-1txn-observed-200k` | 451 (445–459, ±1%) | 124528 (124333–133461, ±7%) | ycs 276.1× | 1036 / 124528 | equal, v1 bytes identical |
+| `text-append-1txn-observed-400k` | 952 (941–979, ±1%) | 520778 (520751–552002, ±6%) | ycs 546.8× | 1569 / 520778 | equal, v1 bytes identical |
+| `text-append-1txn-observed-25k` | 54.1 (53.7–56.1, ±2%) | 1441 (1417–1487, ±2%) | ycs 26.7× | 474 / 1453 | equal, v1 bytes identical |
+| `txn-empty` | 7.6 (7.5–8.0, ±1%) | 13.0 (12.2–14.6, ±10%) | ycs 1.7× | 56.2 / 18.8 | equal, v1 bytes identical |
+| `text-random` | 37.2 (36.3–38.9, ±3%) | 1778 (1759–1819, ±1%) | ycs 47.8× | 438 / 1808 | equal, v1 bytes identical |
+| `text-random-100k` | 1324 (1256–1358, ±5%) | 168610 (163551–183516, ±9%) | ycs 127.4× | 1324 / 168610 | equal, v1 bytes identical |
+| `trace-replay` | 350 (341–374, ±3%) | 12139 (11885–12530, ±2%) | ycs 34.7× | 1255 / 11830 | equal, v1 bytes identical |
+| `concurrent-20` | 91.3 (89.4–95.0, ±1%) | 79.4 (78.5–81.4, ±1%) | YDotNet 1.2× | 582 / 100 | equal, v1 bytes differ |
+| `many-clients-200` | 1.9 (1.9–2.1, ±4%) | 2.3 (2.2–2.6, ±2%) | ycs 1.2× | 18.4 / 3.1 | equal, v1 bytes differ |
+| `many-clients-1000` | 7.5 (7.3–10.2, ±2%) | 24.5 (24.0–37.6, ±2%) | ycs 3.3× | 52.1 / 26.1 | equal, v1 bytes differ |
+| `apply-state-v1/ycs` | 75.6 (72.4–78.3, ±3%) | 48.8 (47.9–54.9, ±3%) | YDotNet 1.6× | 471 / 58.4 | equal, v1 bytes identical |
+| `apply-state-v1/yrs` | 76.3 (73.4–78.1, ±2%) | 49.0 (48.4–53.0, ±1%) | YDotNet 1.6× | 445 / 58.0 | equal, v1 bytes identical |
+| `apply-state-v2/ycs` | 77.1 (75.1–82.4, ±1%) | 51.2 (49.6–52.9, ±3%) | YDotNet 1.5× | 530 / 64.4 | equal, v1 bytes identical |
+| `apply-state-v2/yrs` | 76.4 (75.1–79.0, ±2%) | 50.5 (49.5–52.4, ±1%) | YDotNet 1.5× | 442 / 61.2 | equal, v1 bytes identical |
+| `apply-state-x100/ycs` | 839 (781–977, ±0%) | 752 (724–833, ±2%) | YDotNet 1.1× | 2014 / 946 | equal, v1 bytes identical |
+| `apply-updates/ycs` | 270 (267–290, ±1%) | 370 (362–382, ±1%) | ycs 1.4× | 996 / 387 | equal, v1 bytes identical |
+| `apply-updates/yrs` | 279 (271–295, ±5%) | 369 (363–424, ±2%) | ycs 1.3× | 1011 / 383 | equal, v1 bytes identical |
+| `apply-updates-1txn/yrs` | 172 (164–189, ±2%) | 1770 (1756–1810, ±2%) | ycs 10.3× | 789 / 1826 | equal, v1 bytes identical |
+| `encode-v1` | 8.2 (8.0–8.8, ±1%) | 8.9 (8.7–9.0, ±1%) | ycs 1.1× | 74.3 / 10.4 | equal, v1 bytes identical |
+| `encode-v2` | 9.9 (9.7–10.4, ±3%) | 10.0 (9.7–10.3, ±1%) | ycs 1.0× | 76.7 / 11.3 | equal, v1 bytes identical |
+| `encode-sv` | 0.1 (0.1–0.1, ±4%) | 0.3 (0.2–0.3, ±3%) | ycs 3.0× | 3.6 / 1.1 | equal, v1 bytes identical |
+| `encode-diff` | 4.9 (4.7–5.0, ±3%) | 4.6 (4.5–5.0, ±5%) | YDotNet 1.0× | 52.0 / 5.8 | equal, v1 bytes identical |
+| `map-set-distinct` | 40.1 (36.0–50.4, ±4%) | 144 (136–149, ±7%) | ycs 3.6× | 420 / 215 | equal, v1 bytes identical |
+| `map-set-distinct-1txn` | 29.2 (26.7–44.8, ±8%) | 115 (109–131, ±2%) | ycs 3.9× | 273 / 202 | equal, v1 bytes identical |
+| `map-set-same` | 65.1 (63.9–68.2, ±1%) | 132 (131–151, ±8%) | ycs 2.0× | 626 / 187 | equal, v1 bytes identical |
+| `array-push` | 25.4 (24.4–26.9, ±1%) | 115 (112–121, ±4%) | ycs 4.5× | 326 / 196 | equal, v1 bytes identical |
+| `array-push-1txn` | 12.6 (11.6–14.3, ±6%) | 70664 (70144–71260, ±1%) | ycs 5605.3× | 121 / 70664 | equal, v1 bytes identical |
+| `array-push-1txn-20k` | 2.5 (2.4–2.6, ±2%) | 2203 (2138–2409, ±2%) | ycs 866.1× | 48.6 / 2238 | equal, v1 bytes identical |
+| `array-insert-random` | 191 (175–215, ±12%) | 21050 (19266–29483, ±5%) | ycs 110.1× | 762 / 20554 | equal, v1 bytes identical |
+| `array-delete-random` | 180 (167–211, ±6%) | 25925 (24798–28681, ±11%) | ycs 144.0× | 699 / 25925 | equal, v1 bytes identical |
+| `read-text` | 0.2 (0.2–0.3, ±6%) | 46.3 (45.3–47.9, ±2%) | ycs 194.0× | 5.8 / 52.8 | equal, v1 bytes identical |
+| `read-array` | 20.7 (20.4–22.1, ±2%) | 98.2 (97.0–103, ±1%) | ycs 4.8× | 40.2 / 182 | equal, v1 bytes identical |
+| `read-map` | 40.1 (39.5–40.8, ±1%) | 395 (382–405, ±2%) | ycs 9.8× | 212 / 777 | equal, v1 bytes identical |
+| `undo-type` | 30.3 (29.1–34.3, ±6%) | 161 (160–206, ±1%) | ycs 5.3× | 181 / 182 | equal, v1 bytes identical |
+| `undo-all` | 43.5 (41.6–45.0, ±2%) | 344 (318–377, ±4%) | ycs 7.9× | 191 / 338 | equal, v1 bytes identical |
+| `redo-all` | 47.6 (46.4–49.0, ±0%) | 80.1 (77.8–85.0, ±2%) | ycs 1.7× | 194 / 85.6 | equal, v1 bytes identical |
+| `observe-count` | 54.9 (54.0–60.1, ±4%) | 3607 (3558–3752, ±2%) | ycs 65.8× | 583 / 3660 | equal, v1 bytes identical |
+| `observe-delta` | 92.3 (90.8–101, ±8%) | 5417 (5376–5619, ±1%) | ycs 58.7× | 765 / 5527 | equal, v1 bytes identical |
+
+### Against the object layout
+
+044bb73 (the last commit with items as objects) against 7d994f4, built from separate trees, `ab.py 4 6` (4 passes of 6
+runs, interleaved). On this machine a difference under about 3 % is noise (the passes' medians agree within that on
+most lines). Allocation and held memory are deterministic.
+
+| workload | 044bb73 ms | 7d994f4 ms | change | alloc MiB 044bb73 / 7d994f4 | held MiB 044bb73 / 7d994f4 |
+| --- | ---: | ---: | ---: | --- | --- |
+| `trace-replay` | 291.2 | 348.6 | +20 % | 43.04 / 24.86 | 3.0 / 1.9 |
+| `text-random` | 38.3 | 36.8 | -4 % | 3.74 / 1.68 | 5.3 / 3.2 |
+| `text-random-100k` | 1756.9 | 1348.2 | -23 % | 18.59 / 7.87 | 27.1 / 16.3 |
+| `text-append` | 25.5 | 27.6 | +8 % | 0.20 / 0.57 | 1.3 / 1.5 |
+| `array-insert-random` | 261.3 | 180.3 | -31 % | 16.93 / 5.41 | 18.9 / 10.4 |
+| `array-delete-random` | 284.2 | 181.0 | -36 % | 32.78 / 4.20 | 20.1 / 11.6 |
+| `array-push-1txn` | 11.3 | 12.5 | +11 % | 10.39 / 4.28 | 9.4 / 10.4 |
+| `concurrent-20` | 89.7 | 92.0 | +3 % | 28.55 / 14.24 | 29.1 / 14.2 |
+| `apply-state-v1/ycs` | 72.5 | 75.0 | +3 % | 33.14 / 38.08 | 4.5 / 2.7 |
+| `apply-state-v2/ycs` | 74.2 | 76.3 | +3 % | 35.14 / 40.08 | 4.4 / 2.8 |
+| `apply-updates/ycs` | 270.4 | 275.0 | +2 % | 59.31 / 11.95 | 18.6 / 17.4 |
+| `encode-v1` | 6.9 | 8.2 | +19 % | 2.76 / 2.76 | 3.2 / 1.9 |
+| `text-append-1txn-observed-25k` | 49.6 | 54.0 | +9 % | 4.71 / 2.11 | 0.6 / 0.7 |
+| `text-append-1txn-observed` | 195.6 | 220.5 | +13 % | 18.77 / 8.30 | 2.3 / 2.4 |
+| `map-set-distinct` | 58.7 | 39.8 | -32 % | 36.55 / 22.57 | 38.9 / 24.9 |
+| `map-set-distinct-1txn` | 45.2 | 32.4 | -28 % | 39.25 / 25.28 | 38.9 / 24.9 |
+| `map-set-same` | 59.6 | 65.5 | +10 % | 28.99 / 6.85 | 0.0 / 0.0 |
+| `array-push` | 27.2 | 25.2 | -7 % | 10.39 / 4.34 | 9.4 / 10.9 |
+| `read-array` | 7.6 | 20.7 | +172 % | 0.00 / 0.00 | 4.3 / 4.8 |
+| `read-map` | 27.7 | 40.0 | +44 % | 0.00 / 0.00 | 34.1 / 20.1 |
+
+What remains slower than the object layout, now measured cleanly: `read-array` (2.7×; an element read goes through the
+slab and the value arena instead of one array index), `read-map` (+44 %, more than the +0 to +6 % the development
+machine showed in 8.13), `trace-replay` (+20 %), `encode-v1` (+19 %), `text-append-1txn-observed` (+9 to +13 %),
+`array-push-1txn`, `map-set-same` (+10 to +11 %) and `text-append` (+8 %). Everything that splits or searches is faster
+(random edits -23 to -36 %, map inserts -28 to -32 %), and every workload allocates less or the same except the state
+loads (+5 MiB, the arenas' growth) and `text-append` (+0.4 MiB). The open items are in the design document,
+[section 5](../../docs/design-item-layout.md#5-open-items).
 
 ## Method
 
