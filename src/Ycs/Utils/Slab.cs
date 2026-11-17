@@ -88,7 +88,7 @@ internal sealed class Slab
 
     /// <summary>
     /// The characters of the String items the slots hold: a String slot's <see cref="Slot.Payload"/> is the offset of its
-    /// range, its <see cref="Slot.Length"/> the range's length (no range when the length is 0). Made on first use.
+    /// range, its <see cref="Slot.Length"/> the range's length. Made on first use.
     /// </summary>
     internal Arena<char> Chars => _chars ??= new Arena<char>(Arena.CharFirstPage, Arena.CharMaxPage);
 

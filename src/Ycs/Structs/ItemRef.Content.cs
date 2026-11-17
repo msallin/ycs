@@ -110,11 +110,8 @@ internal readonly partial struct ItemRef
     internal void AppendChars(string text)
     {
         Typed<ContentString>(SlotKind.String).Append(text);
-        if (text.Length > 0)
-        {
-            ref var slot = ref Write();
-            slot.Payload = slot.Length == 0 ? _slab.Chars.Append(text) : _slab.Chars.Extend(slot.Payload, slot.Length, text);
-        }
+        ref var slot = ref Write();
+        slot.Payload = _slab.Chars.Extend(slot.Payload, slot.Length, text);
     }
 
     /// <summary>Appends <paramref name="values"/> to a <see cref="SlotKind.Any"/> item; the caller adjusts <see cref="Length"/>.</summary>

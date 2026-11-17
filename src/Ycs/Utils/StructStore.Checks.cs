@@ -326,7 +326,7 @@ internal sealed partial class StructStore
         {
             foreach (var s in list)
             {
-                if (s.IsItem && s.Kind == SlotKind.String && s.Length > 0)
+                if (s.IsItem && s.Kind == SlotKind.String)
                 {
                     ranges.Add((Slab.Read(s.Handle).Payload, s.Length));
                 }
@@ -348,7 +348,7 @@ internal sealed partial class StructStore
         {
             foreach (var s in list)
             {
-                if (s.IsItem && s.Kind == SlotKind.String && s.Length > 0 && !chars.Slice(Slab.Read(s.Handle).Payload, s.Length).SequenceEqual(((ContentString)s.Content).GetString()))
+                if (s.IsItem && s.Kind == SlotKind.String && !chars.Slice(Slab.Read(s.Handle).Payload, s.Length).SequenceEqual(((ContentString)s.Content).GetString()))
                 {
                     return $"the range of {s.Id.Client}:{s.Id.Clock} differs from its text";
                 }
