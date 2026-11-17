@@ -358,7 +358,7 @@ Written by Ycs, by reading:
 | **structs/Item.js as used by undo** | | |
 | `redoItem` | `Transaction.RedoItem` | DIFFERS (3) |
 | `followRedone` | `StructStore.FollowRedone` | identical |
-| `keepItem` | `Item.KeepItemAndParents` | identical |
+| `keepItem` | `ItemRef.KeepItemAndParents` | identical |
 | `isParentOf` | `UndoManager.IsParentOf` | identical |
 | `ContentType.copy` / `YText._copy` | `ContentType.Copy` / missing `YText.InternalCopy` | DIFFERS (4) |
 | **utils/Snapshot.js** | | |
@@ -368,7 +368,7 @@ Written by Ycs, by reading:
 | `decodeSnapshotV2`, `decodeSnapshot` | `DecodeSnapshotV2`, `DecodeSnapshot` | identical |
 | `createSnapshot`, `emptySnapshot` | `CreateSnapshot`, `Empty` | identical |
 | `snapshot(doc)` | `YDoc.CreateSnapshot` | identical |
-| `isVisible` | `Item.IsVisible` | identical |
+| `isVisible` | `ItemRef.IsVisible` | identical |
 | `splitSnapshotAffectedStructs` | `Transaction.SplitSnapshotAffectedStructs` | equivalent (holes above) |
 | `createDocFromSnapshot` | `YDoc.CreateDocFromSnapshot` | equivalent (holes above) |
 | `snapshotContainsUpdateV2`, `snapshotContainsUpdate` | `SnapshotContainsUpdateV2`, `SnapshotContainsUpdate` | equivalent (reads all structs, checks the last per client) |

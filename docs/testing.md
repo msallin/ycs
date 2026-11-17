@@ -22,7 +22,7 @@ What each project guards, and how to run, soak and update them. CI
 
 ## Runs extended in place and search markers
 
-An insert that continues its client's run extends that item in place (`Item.ExtendRun`) where nobody
+An insert that continues its client's run extends that item in place (`ItemRef.ExtendRun`) where nobody
 observes the type, and the transaction splits the run back into Yjs' items before anything could tell
 the two apart (docs/walkthrough-core.md, "Runs extended in place"). Search markers are where Yjs has
 them after every operation: where Yjs leaves them stale, the item a marker sits on decides where an

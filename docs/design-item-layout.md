@@ -1,6 +1,6 @@
 # Design: items as structs in a slab, linked by handles
 
-Status: steps 1 to 5 built (section 1); the rest is the design for the remaining work (sections 2 to 5), revised
+Status: steps 1 to 7 built (section 1); steps 8 and 9 are the design for the remaining work (sections 2 to 5), revised
 after the design review and the review of steps 1 and 2 (2026-11-15). Parity target unchanged: Yjs 13.6.32, the same
 content, events and update bytes. No unsafe code: arrays of structs and `ref` to their elements only. Numbers come
 from `bench/Ycs.Layout` (the model; README and `results/`), `bench/Ycs.Compare` (README, "After layout steps 1 and 2")
@@ -8,16 +8,22 @@ and the two reviews (findings H, M, L: the design review's; N: the review of ste
 
 ## Summary
 
-Today an item is a 128-byte object plus a content object (40 bytes for a string, 88 for a single array value), held by
-its client's list. The design puts each struct in a slot of a slab, links slots by 32-bit handles, keeps characters and
-values in append-only arenas and the rare fields in side tables. The model holds 35-45% of today's memory on the six
-workloads measured, and at most about 400 bytes more than today on the smallest document (section 2.2). Built so far, on today's objects: start clocks beside each client's structs, and the run-head index that makes Yjs'
-marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s), and the leaf order of step 3, which took
-back the 15-19% steps 1 and 2 cost on the two split-heavy workloads and made the walks' lookups logarithmic, and the
-internal reference layer `ItemRef` of step 4, which enumerated the public boundaries and the holders across free points
-(1.4). Step 5 gave those holders ids (1.5), and step 6 broke the public API once (1.6).
+Before step 7 an item was a 128-byte object plus a content object (40 bytes for a string, 88 for a single array value),
+held by its client's list. Step 7 replaced the item object by a 64-byte slot of a slab, linked to its neighbours by
+32-bit handles; the content is still an object beside the slot (1.7). Steps 8 and 9 keep characters and values in
+append-only arenas, the rare fields in side tables, and decode into staging tables (4). The model holds 35-45% of
+the memory of the object layout on the six workloads measured, and at most about 400 bytes more on the smallest
+document (section 2.2). Built before step 7, on the objects: start clocks beside each client's structs, the run-head
+index that makes Yjs' marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s), the leaf order of step 3,
+which took back the 15-19% steps 1 and 2 cost on the two split-heavy workloads and made the walks' lookups logarithmic,
+and the internal reference layer `ItemRef` of step 4, which enumerated the public boundaries and the holders across free
+points (1.4). Step 5 gave those holders ids (1.5), step 6 broke the public API once (1.6), and step 7 put every struct of
+the store in a slot of a slab, linked by handles, content still an object beside it (1.7).
 
 ## 1. What is built
+
+1.1 to 1.6 record each step as it was built, on the objects of its time; 1.7 and sections 2 and 3 describe the code as it
+is.
 
 ### 1.1 Step 1: start clocks beside the structs
 
@@ -130,7 +136,8 @@ Positions stay global ints; no caller changed.
 ### 1.4 Steps 4a and 4b: `ItemRef`
 
 `Structs/ItemRef.cs`, `Structs/ItemRef.Operations.cs`. The library's code holds the structs of the store through
-`internal readonly struct ItemRef : IEquatable<ItemRef>`, one field: today's object. Yjs' `Item` algorithms moved from
+`internal readonly struct ItemRef : IEquatable<ItemRef>`, one field: the object of its time (step 7 made it (slab, handle):
+1.7). Yjs' `Item` algorithms moved from
 `Item.cs` onto it unchanged but for the reference (integrate, split, merge and its test, delete, mark deleted, gc, keep,
 visibility, write, next and prev, run extension); `Item` keeps its fields and public members, and its overrides
 delegate. On it since 4a: the struct lists (leaves of `ItemRef[]`), the store's lookups, splits, replacement and delete
@@ -240,7 +247,7 @@ text in one transaction at 25,000 and 100,000 characters: the marker walk's lite
 neighbour they read (`Item` is not sealed, so a cast or a test is a compare where the object field needed none). It was
 8-14 % before the accessors were inlined and the members switched from a cast to a type test; with the walk on an `Item`
 variable it was +3 % (an experiment, not kept: it would hold the object step 7 removes). Step 7's slab reads a slot by
-index and has no test; see bench/Ycs.Compare/README.md, "ItemRef", for the experiments.
+index and has no test (1.7); see bench/Ycs.Compare/README.md, "ItemRef", for the experiments.
 
 ### 1.5 Step 5: ids across free points
 
@@ -255,8 +262,8 @@ struct without its id; no public API changed (`PublicApi.txt`).
 | `YArrayBase._searchMarkers` of a collected type | cleared with the push hint when the type is collected (`ForgetList`) |
 
 `Departures` counts the structs that left a list: merged into their left neighbour (`ItemRef.MergeItemWith`) or
-replaced by a GC struct (`StructStore.ReplaceStruct`). It is the hint's validity check until step 7, where the handle's
-slot answers it (a live slot that starts at the id).
+replaced by a GC struct (`StructStore.ReplaceWithGC`). It is the enumerators' validity check (`StructStore.NextAfter`); an
+`ItemView`'s hint is the slot's handle, which a live slot that holds the id answers (3.2).
 
 * **Open question 3, accepted and pinned**: after a merge an enumerator continues from the struct that holds its id now
   (`EnumeratorLifetimeTests`). That is where Yjs' orphaned item continues unless the list changed right of it since:
@@ -288,7 +295,64 @@ slot answers it (a live slot that starts at the id).
 `TypeMapEnumerate` is `private protected`; `InsertGenericsAfter` is gone (its one caller passed null). Migration:
 `docs/api.md`.
 
-## 2. The layout still to build
+### 1.7 Step 7: the slab
+
+`Utils/Slab.cs`, `Utils/TypeTable.cs`, `Utils/ClientTable.cs`, `Structs/ItemHandle.cs`, `Structs/ItemRef*.cs`. Every struct
+of a store (an item or a GC struct) is a slot of its document's `Slab`; no `Item` or `GC` object is allocated for one.
+The content stays an object, beside the slot. What a reader needs:
+
+* **A slot** is the 64-byte sequential struct of 2.1 with no reference field. Its kind (`Info`, bits 8 to 15) is the
+  content's wire reference number: 0 for a GC struct, `Slot.FreeKind` (0xFF) for a slot on a free list. `Payload` holds
+  the free-list link of a free slot and nothing else until step 8.
+* **Pages** (2.2): page 0 starts at 16 slots (`Slab.FirstPageSlotsForTests` changes it for the test runs; 1 makes every
+  allocation copy) and doubles by copy up to 1,024; the next pages hold 1,024 and never move. A handle is
+  `page << 10 | index`; a read is two array indexes (the slab publishes the pages' arrays by number). Beside each page
+  two `object[]` pages, `Refs` (the content) and `Keys` (a map item's key), are allocated on first use, null for a
+  free slot; beside the slab, `Redone` (`Dictionary<int, ID>`, flag `HasRedone`) holds the id each redone item names.
+  `Keys` is a second page set, not a `KeyedRef` allocation per map item; step 8 may fold it into `Refs`
+  (docs/plan-layout-8-9.md, D5).
+* **`ItemRef`** is (slab, handle), two fields in Release (a test asserts them); `default` is Yjs' null. Two references
+  are equal when they name the same slot of the same slab. A member reads the slot; a write goes to the slot. In Debug
+  it also keeps the slot's generation (below). Code that reads several fields of a slot takes one `ref Slot` or
+  `ref readonly Slot` after the method's last allocation (`Allocate` may move page 0) and reads it once per step.
+* **A client and a parent are indexes.** `ClientTable` numbers the clients of a document and `TypeTable` its types, both
+  never reused; a slot names them in four bytes each. A type gets its index when a slot first names it; a collected
+  type's entry is cleared and stays (a slot inserted into a collected type puts it back).
+* **Free and reuse.** A merge frees the right part's slot (`ItemRef.FreeSlot`: its kind becomes Free, its objects and
+  redone id are dropped, its generation changes). It joins the free list only at `Slab.AllowReuse`, which
+  `Transaction` calls at the end of the outermost batch, nested transactions of observers and `Update` handlers
+  included. The rule is defensive (2.4). A page, but page 0, left with no live slot is released then. Debug poisons a
+  slot when it joins the free list and the old array of a grown page 0.
+* **A GC struct is the slot of the item it replaces.** `StructStore.ReplaceWithGC` calls `ItemRef.BecomeGC`, which
+  rewrites the slot in place (client, clock and length stay; `Info` is Deleted alone; links, origins and parent are
+  none; content, key and redone id are dropped), puts the same handle back in the client's list and counts a departure
+  (1.5). Every `ItemRef` and `ItemHandle` to it stays valid and reads a GC struct. A GC struct merges into a GC struct
+  to its left like any struct, which frees its slot.
+* **Holders** keep an `ItemHandle`, not an `ItemRef` (2.4): the leaves of `ClientStructs`, a type's start, item and map
+  values (`YType._startHeld`, `_itemHeld`, `_map`), the search markers and the push hint. A type keeps its document's
+  slab. `YDoc._item` stays an `ItemRef` (a subdocument's item is in its parent's slab).
+* **Generations, Debug only.** Each slot has a generation that a free changes. An `ItemRef` made from a handle or an
+  `ItemHandle` keeps the generation of the slot when it was made, and a read through a reference that finds another one
+  throws `InvalidOperationException` (`Slab.CheckGeneration`): a holder that outlived its struct fails at the read. In
+  Release there is no generation and a read costs the index.
+* **The decoded form** (`Item`, `GC`, `Skip`, `IContent`) is no store's: the update reader, the pending rest store and the
+  integration plan hold it, and `ItemRef.Adopt` is the one place it enters a store (it resolves the references and
+  writes a slot). The merge, split and write of the decoded structs are their own (`Item.cs`, `GC.cs`, `Skip.cs`,
+  `LazyStructWriter.cs`, `UpdateOperations.cs`, `EncodingUtils.cs`): no `ItemRef` serves a struct outside a store.
+  Step 9 moves the decoded form to staging tables.
+* **A collected type** answers its item's facts from a copy, and its XML siblings by its id (2.4).
+* **The store check.** `StructStore.CheckForTests` runs after every test transaction: links mirror, the orders are
+  contiguous, the free lists are sound, no holder names a freed slot, a type item names its type, and a type's entry
+  in the table is never reused. The test runs also set leaves of 2 positions, page 0 to `YCS_SLAB_FIRST` slots (1: every
+allocation of it copies) and, with `YCS_POISON=1`, poison the handle of a collected type (2.4).
+
+**Proof**: the check after every test transaction, the suites with page 0 at one slot, the properties of step 5 with real
+reuse, the corpus byte for byte. **Measured**: bench/Ycs.Compare/README.md, "Step 7 against the object layout" (held
+memory and time) and "The slab, performance pass".
+
+## 2. The layout: built in step 7, to complete in steps 8 and 9
+
+2.1 to 2.4 and 2.6 describe the slab as it is; where a part waits for step 8 or 9 the text says so.
 
 ### 2.1 A slot
 
@@ -303,11 +367,12 @@ client a hostile update pushes past 2^32 in three structs (M8); see open questio
 | `Left`, `Right` (handles, -1 none) | 8 |
 | `Parent` (index into the type table; -1: a GC struct) | 4 |
 | `Info` (keep, countable, deleted, marker, has-redone; the kind in bits 8..15) | 4 |
-| `Payload` (by kind: an arena offset or a type index) | 8 |
+| `Payload` (step 8: an arena offset or a type index; today only a free slot's list link) | 8 |
 | **total** | **64** (the model measured 52 with 32-bit clocks) |
 
-Beside the slab, by handle: `Refs` (`object[]` pages allocated on first use: a map item's key, a cold content object,
-or a `KeyedRef(key, content)`), `Redone` (`Dictionary<int, ID>`, flag `HasRedone`). Origins stay ids: Yjs compares and
+Beside the slab, by handle: `Refs` (`object[]` pages allocated on first use: the content object, until step 8 moves
+`String` and `Any` out, and for good the cold kinds), `Keys` (a map item's key; a second page set, 1.7), `Redone`
+(`Dictionary<int, ID>`, flag `HasRedone`). Origins stay ids: Yjs compares and
 encodes them as ids, a split changes which struct holds an origin, and an origin may name a GC struct.
 
 Content kinds: `String` (the char arena), `Any` (the value arena: the caller's objects, shared), `Deleted` and `GC`
@@ -358,9 +423,10 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
 ### 2.4 Handles: lifetime and slot reuse
 
 * **Split**: the left part keeps its handle; the right part gets a new slot. **Merge**: the right part's slot is
-  freed (kind `Free`, linked in its page's free list). **GC**: an item whose parent type is collected is replaced by a new `GC` struct in its list
-  (`StructStore.ReplaceStruct`), which takes over the old struct's slot handle (`TakeSlotFrom`) and rewrites the slot;
-  the old object's handle is reset to -1. An item that only loses its content (`Deleted`) stays, with its handle.
+  freed (kind `Free`, linked in its page's free list at the batch's end). **GC**: an item whose parent type is collected
+  becomes a GC struct in its own slot (`StructStore.ReplaceWithGC`, `ItemRef.BecomeGC`): the slot is rewritten in place,
+  the handle stays in the list, and every reference and holder to it stays valid and reads a GC struct. An item that only
+  loses its content (`Deleted`) stays, with its handle.
 * **Reuse**: a freed slot is reused only when the cleanup queue (`_transactionCleanups`) is empty: after the outermost
   batch, nested transactions from observers and `Update` handlers included (H4). The rule is defensive: a stricter
   sabotage that reuses right after each transaction's merge pass, not at the batch end, found no reader that fails
@@ -368,7 +434,7 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   released (M4: 1,000,000 merged items would otherwise leave 64 MB of free slots).
 * **No generation counters in Release.** A generation per slot (4 bytes, 6% of a slot) tells that a slot changed; in
   Debug only, a slot has one and an `ItemRef` keeps it (zero cost in Release: a test asserts that `ItemRef` has two
-  fields there). What a holder
+  fields there, `_slab` and `_handle`). What a holder
   outside the store needs to know is whether the slot still holds *its* struct, and "the slot is live and its id is
   the held id" answers that exactly, because an id names one struct start. So every holder that can outlive a free
   point holds an id (and at most a handle as a hint, validated by that check): delete sets, stack items, snapshots,
@@ -382,8 +448,8 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   read rebuilds the `ItemRef` with that generation, so a holder that outlived its struct throws in Debug, and the
   store check also compares the generation. `YDoc._item` stays an `ItemRef`: a subdocument's item is in its parent's
   slab, which the subdocument does not hold.
-* **Type table**: an entry is never reused; a collected type's `AbstractType` gets index -1, and its search markers
-  are cleared at collection (`_start` and the markers are, since step 5: `ContentType.cs`), so a user-held collected `YArray` writes no
+* **Type table**: an index is never reused; a collected type's entry is cleared and its `YType` keeps its index, and its
+  search markers and `_start` are cleared at collection (`ContentType.cs`), so a user-held collected `YArray` writes no
   marker flag through a handle that now names another type's item (H5).
 * **A collected type keeps its item's facts** (7.0e). The struct that held a collected type can merge away and its slot
   be reused while user code holds the type (or, for a subdocument, the `YDoc`); a handle read after that names another
@@ -391,13 +457,13 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
 
   | holder | read after collection | kept as |
   | --- | --- | --- |
-  | `AbstractType._item` | `Parent`, `IsRoot`; the item's id (relative positions, `WriteItem`'s parent id, `YEvent.Path`); whether it is deleted (`Transaction`, `CanExtendRun`, `Integrate`); its key (`YEvent.Path`); its keep (`KeepItemAndParents`, which continues at `ParentType`); the scope walk of `UndoManager` (`ParentType`) | `_collectedParent`, `_collectedId`, `_collectedParentSub`, `_collectedKeep`; deleted is always true |
+  | `YType._item` | `Parent`, `IsRoot`; the item's id (relative positions, `WriteItem`'s parent id, `YEvent.Path`); whether it is deleted (`Transaction`, `CanExtendRun`, `Integrate`); its key (`YEvent.Path`); its keep (`KeepItemAndParents`, which continues at `ParentType`); the scope walk of `UndoManager` (`ParentType`) | `_collectedParent`, `_collectedId`, `_collectedParentSub`, `_collectedKeep`; deleted is always true |
   | `YDoc._item` (a subdocument) | the parent document (`Load`, `Destroy`) | `_collectedParentDoc` |
 
-  Whatever sets `_item` again (`AbstractType.Integrate`, `YDoc.SetItem` from `ContentDoc.Integrate`) clears the facts: a
+  Whatever sets `_item` again (`YType.Integrate`, `YDoc.SetItem` from `ContentDoc.Integrate`) clears the facts: a
   document inserted again belongs to the item integrated last. The rule: code that may meet a collected type asks
   `IsRoot`, `ParentType`, `ItemId`, `ItemParentSub`, `ItemDeleted` or `ItemKeep`, never `_item`. A test switch
-  (`AbstractType.PoisonCollectedHandleForTests`, `YCS_POISON=1` for `Ycs.Tests`) replaces the handle after collection
+  (`YType.PoisonCollectedHandleForTests`, `YCS_POISON=1` for `Ycs.Tests`) replaces the handle after collection
   with an unrelated live item, as a reused slot would; the suite passes with it on.
 * **The position of a collected type** (7.6): the XML siblings (`NextSibling`, `PrevSibling`, `InsertAfter`) need where
   the type was, not a fact. A collected type holds an id (`_collectedId`), and `YType.CurrentItem` finds the struct that
@@ -409,8 +475,8 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   orphaned item keeps the links it had when it left the list, ours answers from the store now (a sibling inserted
   after the merge shows). Answering by id is also the only correct way for `InsertAfter`: in yjs 13.6.32
   `insertAfter(orphan, x)` does not merely work from stale siblings, it corrupts the local list (the local doc
-  shows `right` while a peer decoding the update sees `x, right`), so local and remote diverge. A Debug read of a slot checks that the slot's owner is the struct that reads (`Slab.CheckOwner`,
-  `CheckLinked` for a link), and a slot is poisoned when it goes on the free list.
+  shows `right` while a peer decoding the update sees `x, right`), so local and remote diverge. A Debug read through a reference or a holder that outlived its struct throws (the generation check, 1.7), and
+  a slot is poisoned when it goes on the free list.
 
 ### 2.5 Decoding, and the operations without a document
 
@@ -433,20 +499,20 @@ client today and 348 designed (52-byte slots; 360 with 64; M5).
 
 `internal readonly struct ItemRef : IEquatable<ItemRef>`, with the members of today's `Item` and `AbstractStruct` that
 the library uses (`Id`, `Length`, `Left`, `Right`, `Content`, `Deleted`, `Countable`, origins, `Parent`, ...), so that
-ported code keeps reading like Yjs. In steps 4 and 5 it wraps today's object; in step 7 it becomes (slab, handle) and
-the long-lived holders inside the store keep plain `int` handles.
+ported code keeps reading like Yjs. It is (slab, handle) (1.7), and the long-lived holders inside the store keep an
+`ItemHandle` (2.4).
 
 * **Lifetime**: valid until its struct is merged away or its type collected. Code may hold one across a split (the left
   part keeps its handle) but not across a cleanup's merge pass or a type's collection, except in the holders of 2.4
   that those update.
-* **Equality**: by handle (by reference while it wraps an object), written out (no `ValueType.Equals`, which reflects).
+* **Equality**: the same slab and the same handle, written out (no `ValueType.Equals`, which reflects).
 * **Threads**: as the document: one thread at a time.
 
 ### 3.2 `ItemView` (public)
 
-`public readonly struct ItemView : IEquatable<ItemView>`: the document, the id, and an internal hint: until step 7 the
-object, valid unless a merge or a GC replacement took it out of the store (a flag those set on it); from step 7 the
-handle, valid when its slot is live and starts at the id.
+`public readonly struct ItemView : IEquatable<ItemView>`: the document, the id, and an internal hint: the
+slab handle of the struct it was made from, valid when its slot is live and holds the id (a detached view holds the
+decoded struct instead).
 
 * **What it reads**: the struct that holds its id *now*, as if split at the id without splitting it. With S the struct
   that holds the id and o = id.clock - S.clock: `Length` = S.Length - o; `Content` = S's content from o; `LeftOrigin` =
@@ -499,7 +565,7 @@ reviewed alone. Effects: *measured* where a source is named, otherwise estimates
 | 4b | `ItemRef` in the types, undo, events: built (1.4) | (with 4a) | low |
 | 5 | ids wherever a struct is held across a free point: built (1.5) | none beyond noise (measured) | low-medium |
 | 6 | the public API break: built (1.6) | none inside; a view read costs a hint check | medium |
-| 7 | the slab, content still as objects | about half of the memory saving; no `Item` allocation per edit (est.) | high |
+| 7 | the slab, content still as objects: built (1.7) | held memory -15 to -27 %, allocation lower, typing slower (measured) | high |
 | 8 | inline content and the arenas | the rest of the saving; no allocation per edit (est.) | medium-high |
 | 9 | the decoder and the update operations on staging tables | a load allocates about what it holds (est.) | medium |
 
@@ -545,22 +611,24 @@ enumerators hold an id and a hint; a collected type's search markers are cleared
   views, equality and hashing; Plenum's `Plenum.Blazor.Tests` against the new build.
 * *Effect*: none inside. *Risk*: medium: the consumers' migration.
 
-**Step 7, the slab.** `ItemRef` becomes (slab, handle); slots, geometric pages, the client and type tables, `Refs`
-pages on first use, per-page free lists with reuse at the batch end and page release; content stays as objects in
+**Step 7, the slab: built** (1.7). `ItemRef` is (slab, handle); slots, geometric pages, the client and type tables, `Refs`
+and `Keys` pages on first use, per-page free lists with reuse at the batch end and page release; content stays as objects in
 `Refs`; the leaf order (1.3) holds handles; a flat order would make a delete 2.2-2.9× slower than today's code
 (bench/Ycs.Layout README, "Editing").
 
-* *Files*: new `Utils/Slab.cs`, `Utils/TypeTable.cs`; `ItemRef`; `StructStore*.cs`, `ClientStructs*.cs`,
-  `Structs/Item.cs`, `GC.cs` (their state moves into slots), `AbstractType.cs` (`_start`, `_item`, `_map` as handles).
-* *Invariant*: 2.4; the store consistency check (links mirror, orders contiguous and equal to the slots' clocks, no
-  holder at a `Free` slot, free lists sound, type entries never reused).
-* *Proof*: the check after every test transaction; page 0 starting at one slot in the test runs; the step-5 properties
-  now with real reuse; corpus, differential, soaks. Sabotages: reuse at transaction end instead of batch end (the H4
-  property); a `ref Slot` kept across an allocation (the one-slot run); markers not cleared (the H5 test).
-* *Effect*: est. about half of the saving (a character from 186 to about 120 bytes: the `Item` object becomes a 64-byte
-  slot, the content object stays); integration 1.4-1.7× and deletion 1.6-4.1× faster than today with the leaf order
-  (model: bench/Ycs.Layout README, "Editing"); literal walks 8× faster (model: 2.6 against 21 ns a step); no `Item` allocation per edit or split. *Risk*: high: stale handles;
-  the largest diff.
+* *Files*: new `Utils/Slab.cs`, `Utils/TypeTable.cs`, `Utils/ClientTable.cs`, `Structs/ItemHandle.cs`; `ItemRef*.cs`;
+  `StructStore*.cs`, `ClientStructs*.cs`, `Transaction.cs`, `DeleteSet.cs`; `Structs/Item.cs`, `GC.cs` (decoded form
+  only now), `Skip.cs`, `ContentType.cs`; `YType.cs` (`_start`, `_item`, `_map` as handles), `YArrayBase.cs`;
+  `UpdateOperations.cs`, `EncodingUtils.cs`, `LazyStructWriter.cs` (the decoded form has its own merge, split and write, so
+  that `ItemRef` serves the store's structs only).
+* *Invariant*: 2.4; the store check after every test transaction (links mirror, orders contiguous and equal to the
+  slots' clocks, no holder at a `Free` slot, free lists sound, type entries never reused).
+* *Proof*: the check after every test transaction; page 0 starting at one slot in the test runs; the step 5 properties
+  with real reuse; corpus, differential, soaks. Sabotages: reuse at transaction end instead of batch end (found no
+  reader that fails: the rule is defensive); a `ref Slot` kept across an allocation (the one-slot run); markers not
+  cleared (the H5 test); a collected type's handle poisoned (`YCS_POISON=1`).
+* *Effect*: measured, bench/Ycs.Compare/README.md, "Step 7 against the object layout": held memory 15 to 27 % below the object layout on the struct-heavy workloads, allocation 15-60 % lower on editing, time +10 to +43 % on typing and observed appends and equal or faster on random-position array and map workloads (044bb73 against 5464252). *Risk*: was
+  high (stale handles; the largest diff).
 
 **Step 8, inline content.** `String` and `Any` in the arenas (2.3), `Deleted` and `Type` inline; cold kinds stay in
 `Refs`.
@@ -591,7 +659,7 @@ decided (it is: open question 2), right before 7; 7 to 9 are the rewrite (7 alon
 * A Fenwick tree over positions and an `int[]` of lengths: leaf sums from the starts are as fast and cost nothing per
   struct (the tree is over the leaves' sums, 1.3).
 * A full B+tree: two levels hold a client of a million structs in a directory of 8,000-16,000 leaves; revisit if measured.
-* Generation counters: the id check is exact (2.4).
+* Generation counters in Release: the id check is exact (2.4); Debug has them (1.7).
 * A separate small-document representation: geometric pages cost at most about 400 bytes a document (2.2).
 * Inline scalars and a rope per text: every read would box, every offset would shift.
 * A struct of arrays or a hot/cold split of the slot: measure after step 8, not before.
@@ -619,5 +687,5 @@ decided (it is: open question 2), right before 7; 7 to 9 are the rewrite (7 alon
    test inlined) gave nothing beyond 2 %, and a seventh, a flat form below one leaf (the hot operations reading the
    leaf's arrays without the leaf object), gave 0 to +1 % on the three, and at best 1 to 3 % with every client one flat
    leaf: not built. Its cases (clients of at most 128 structs) are not the workloads that lose, whose clients hold
-   hundreds to thousands (bench/Ycs.Compare/README.md, "The leaf order"). Remaining candidate: the slab's own layout
-   (step 7), which replaces the lists.
+   hundreds to thousands (bench/Ycs.Compare/README.md, "The leaf order"). The slab of step 7 replaced the object lists; what it
+   did to these workloads: bench/Ycs.Compare/README.md, "Step 7 against the object layout".

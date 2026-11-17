@@ -66,18 +66,18 @@ subdocument gets a random guid on the wire).
 | JS | C# | Verdict |
 | --- | --- | --- |
 | `followRedone` | `StructStore.FollowRedone` | identical |
-| `keepItem` | `Item.KeepItemAndParents` | identical |
-| `splitItem` | `Item.SplitItem` (+ `StructStore.SplitItem` bumps `Version`) | equivalent |
+| `keepItem` | `ItemRef.KeepItemAndParents` | identical |
+| `splitItem` | `ItemRef.SplitItem` (+ `StructStore.SplitItem` bumps `Version`) | equivalent |
 | `isDeletedByUndoStack` | - | not ported (see F4) |
 | `redoItem` (6 parameters) | `Transaction.RedoItem(item, redoItems)` | **DIFFERS** - F4 |
-| `Item` constructor, `info` bits (keep/countable/deleted/marker) | constructor, `InfoEnum` | equivalent (JS toggles with XOR, C# sets/clears; same values) |
-| `Item.getMissing` | `Item.FindMissing` + `Item.ResolveReferences` | **DIFFERS** - F5 |
-| `Item.integrate` (conflict loop, relinking, map value, length, delete-if-parent-deleted) | `Item.Integrate` | equivalent (adds `_mapCount` bookkeeping) |
+| `Item` constructor, `info` bits (keep/countable/deleted/marker) | `ItemRef.New`, the flag bits of `Slot.Info` | equivalent (JS toggles with XOR, C# sets/clears; same values) |
+| `Item.getMissing` | `Item.FindMissing` + `ItemRef.ResolveReferences` | **DIFFERS** - F5 |
+| `Item.integrate` (conflict loop, relinking, map value, length, delete-if-parent-deleted) | `ItemRef.Integrate` | equivalent (adds `_mapCount` bookkeeping) |
 | `next`, `prev`, `lastId` | `Next`, `Prev`, `LastId` | identical |
-| `Item.mergeWith` | `Item.MergeWith` (`CanMergeWith`, then the merge) + `YArrayBase.OnMerge` | equivalent |
-| `Item.delete` | `Item.Delete` | equivalent (`_mapCount`) |
-| `Item.gc` | `Item.Gc` | identical |
-| `Item.write` | `Item.Write` | equivalent |
+| `Item.mergeWith` | `ItemRef.MergeWith` (`CanMergeWith`, then the merge) + `YArrayBase.OnMerge` | equivalent |
+| `Item.delete` | `ItemRef.Delete` | equivalent (`_mapCount`) |
+| `Item.gc` | `ItemRef.Gc` | identical |
+| `Item.write` | `ItemRef.Write` | equivalent |
 | `readItemContent` / `contentRefs` | `EncodingUtils.ReadItemContent` | equivalent (unknown ref: `YUpdateException` instead of a `TypeError`) |
 
 ### structs/GC.js, Skip.js, AbstractStruct.js
@@ -300,7 +300,7 @@ Severity: wrong document on structurally odd (hand-made) updates only; no valid 
 that reaches it (children of a collected type all become GC together). Confirmed by run.
 
 - Yjs: `if (left is GC || right is GC) parent = null; else if (!parent) { left is Item ? left's parent : right is Item ? right's parent }`.
-  Port (`Item.ResolveReferences`): sets `Parent = null` for the GC case and then falls into
+  Port (`ItemRef.ResolveReferences`): sets `Parent = null` for the GC case and then falls into
   `if (Parent == null)`, which takes the parent of the other, non-GC neighbour; and it asks the
   **right** neighbour first.
 - Scenario a: base `AQMBACEBAW0BYQEAAQgBAXICdwFMdwFSAQEBAAI=`, then the crafted item
@@ -475,7 +475,7 @@ own clock, `afterTransactionCleanup`, `update`, `updateV2`, subdocuments, and af
 transaction `afterAllTransactions` with `_transactionCleanups` replaced first. Equal to Yjs.
 
 **Merging.** `DeleteSet.TryToMergeWithLefts` finds the run that merges leftwards from a struct
-(`AbstractStruct.CanMergeWith`, which changes nothing) and merges it into its leftmost struct from
+(`ItemRef.CanMergeWith`, which changes nothing) and merges it into its leftmost struct from
 left to right; Yjs merges pair by pair from the right, which copies the run's content into every
 left neighbour. Whether two neighbours merge depends only on the pair (ids, origins, `right`,
 deleted, content class, `redone`), and merging does not change that for other pairs, so the order
@@ -483,9 +483,9 @@ does not matter. Yjs' order is kept as `TryToMergeWithLeftsPairwise`, and the `m
 property compares the struct stores after every step (docs/testing.md, reference comparisons).
 
 **Runs extended in place.** An insert that would be merged into its left neighbour at the end of
-the transaction (`Item.CanExtendRun`: the same client and the next clock, the neighbour as its origin,
+the transaction (`ItemRef.CanExtendRun`: the same client and the next clock, the neighbour as its origin,
 the same right origin and parent, undeleted, not kept or redone, a text that does not end in the first
-half of a surrogate pair) appends to it instead (`Item.ExtendRun`) when the transaction is local and
+half of a surrogate pair) appends to it instead (`ItemRef.ExtendRun`) when the transaction is local and
 the only one of its batch (one an observer starts runs before the other one's merge, which Yjs then
 does on its own terms) and nobody observes the type: no handler on it, no deep handler on it or an
 ancestor, no `AfterTransaction`, `AfterTransactionCleanup`, `AfterAllTransactions` or

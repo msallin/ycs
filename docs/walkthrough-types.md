@@ -541,6 +541,6 @@ f. `ContentString.GetContent()` yields `char`s, Yjs one-character strings (visib
   are visible in one snapshot only, or `computeYChange`.
 - Subdocuments (`ContentDoc`) as array and map values, `ContentJson`, `ContentBinary` values, and
   which values `AnyEncoding.Validate` rejects that Yjs accepts (`Date`, `undefined`).
-- Relative and absolute positions, the encoders and decoders, `Item.Integrate` (other areas).
+- Relative and absolute positions, the encoders and decoders, `ItemRef.Integrate` (other areas).
 - Negative indices, and indices beyond the length for `YText` (Yjs appends silently; read as equal).
 - Markers on a root text that got formats as a placeholder (finding 19): read, not run.
