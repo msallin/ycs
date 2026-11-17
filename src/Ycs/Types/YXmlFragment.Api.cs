@@ -6,6 +6,7 @@
 
 using System.Collections;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Text;
 
@@ -13,8 +14,9 @@ namespace Ycs;
 
 /// <summary>
 /// The children of a fragment or an element: <see cref="YXmlElement"/>, <see cref="YXmlText"/> and <see cref="YXmlHook"/>
-/// nodes, read as <see cref="YType"/>. A value that is none of them, which only a foreign client can have put there, reads
-/// as null.
+/// nodes, read as <see cref="YType"/>. A child of another kind, which only a foreign client can have put there, counts in
+/// <see cref="Count"/> but is not a node: the indexer throws for it, <see cref="TryGetValue"/> returns false, and enumeration,
+/// <see cref="Slice"/> and <see cref="ToArray()"/> leave it out.
 /// </summary>
 public partial class YXmlFragment : IReadOnlyList<YType>
 {
@@ -35,26 +37,22 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     internal override int Length => _prelimContent?.Count ?? base.Length;
 
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not in 0 to <see cref="Count"/> - 1.</exception>
+    /// <exception cref="InvalidOperationException">The child at <paramref name="index"/> is not an XML node (see <see cref="TryGetValue"/>).</exception>
     public YType this[int index]
     {
         get
         {
             CheckIndex(index);
-            return (RawAt(index) as YType)!;
+            return RawAt(index) as YType
+                ?? throw new InvalidOperationException($"The child at index {index} is not an XML node (a foreign client put another kind of value there). Test it with TryGetValue.");
         }
     }
 
-    /// <summary>The child at <paramref name="index"/>; false when there is none.</summary>
-    public bool TryGetValue(int index, out YType? value)
+    /// <summary>The child at <paramref name="index"/>; false when there is none or it is not an XML node.</summary>
+    public bool TryGetValue(int index, [NotNullWhen(true)] out YType? value)
     {
-        if (unchecked((uint)index >= (uint)Count))
-        {
-            value = null;
-            return false;
-        }
-
-        value = RawAt(index) as YType;
-        return true;
+        value = unchecked((uint)index >= (uint)Count) ? null : RawAt(index) as YType;
+        return value != null;
     }
 
     /// <summary>
@@ -191,41 +189,17 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     public YType[] Slice(int start, int length)
     {
         CheckRange(start, length, nameof(start));
-        var result = new YType[length];
         if (length == 0)
         {
-            return result;
+            return [];
         }
 
-        if (_prelimContent != null)
-        {
-            for (var i = 0; i < length; i++)
-            {
-                result[i] = (_prelimContent[start + i] as YType)!;
-            }
-
-            return result;
-        }
-
-        var slice = InternalSlice(start, start + length);
-        for (var i = 0; i < result.Length; i++)
-        {
-            result[i] = (slice[i] as YType)!;
-        }
-
-        return result;
+        return Nodes(_prelimContent != null ? _prelimContent.GetRange(start, length) : InternalSlice(start, start + length));
     }
 
     public YType[] ToArray()
     {
-        var result = new YType[Count];
-        var i = 0;
-        foreach (var raw in EnumerateValues())
-        {
-            result[i++] = (raw as YType)!;
-        }
-
-        return result;
+        return Nodes(EnumerateValues());
     }
 
     /// <summary>The children visible in <paramref name="snapshot"/>. It only reads: an item merged across the snapshot's boundary is seen whole, as in Yjs.</summary>
@@ -233,20 +207,17 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var raw = ContentAtSnapshot(snapshot);
-        var result = new YType[raw.Count];
-        for (var i = 0; i < result.Length; i++)
-        {
-            result[i] = (raw[i] as YType)!;
-        }
-
-        return result;
+        return Nodes(raw);
     }
 
     public IEnumerator<YType> GetEnumerator()
     {
         foreach (var raw in EnumerateValues())
         {
-            yield return (raw as YType)!;
+            if (raw is YType node)
+            {
+                yield return node;
+            }
         }
     }
 
@@ -266,6 +237,20 @@ public partial class YXmlFragment : IReadOnlyList<YType>
             Debug.Assert(_prelimContent != null);
             PrelimInsert(_prelimContent, index, content);
         }
+    }
+
+    private static YType[] Nodes(IEnumerable<object?> raw)
+    {
+        var nodes = new List<YType>();
+        foreach (var value in raw)
+        {
+            if (value is YType node)
+            {
+                nodes.Add(node);
+            }
+        }
+
+        return [.. nodes];
     }
 
     private static object[] Nodes(ReadOnlySpan<YType> children)

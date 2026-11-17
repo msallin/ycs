@@ -394,8 +394,11 @@ sealed class Ycs.YArray : YArrayBase, System.Collections.Generic.IEnumerable<YVa
     YValue[] Slice(int start, int length)
     YValue[] ToArray()
     YValue[] ToArray(Snapshot snapshot)
+    bool Contains(YValue value)
+    bool Remove(YValue value)
     bool TryGetValue(int index, out YValue value)
     int Count { get; }
+    int IndexOf(YValue value)
     override object ToJson()
     void Add(System.ReadOnlySpan<YValue> values)
     void Insert(int index, System.ReadOnlySpan<YValue> values)
@@ -434,7 +437,6 @@ class Ycs.YDoc
     YMap GetMap(string name = "")
     YText GetText(string name = "")
     YValue Meta { get; }
-    YXmlElement GetXmlElement(string name = "")
     YXmlFragment GetXmlFragment(string name = "")
     YXmlText GetXmlText(string name = "")
     bool AutoLoad { get; }
@@ -511,6 +513,7 @@ class Ycs.YMap : YType, System.Collections.Generic.IEnumerable<System.Collection
     bool TryGetValue(string key, out YValue value)
     int Count { get; }
     override object ToJson()
+    void Add(System.Collections.Generic.KeyValuePair<string, YValue> entry)
     void Add(string key, YValue value)
     void Clear()
 sealed class Ycs.YMapEvent : YEvent
@@ -633,7 +636,6 @@ sealed class Ycs.YXmlElement : YXmlFragment
     YType? PrevSibling { get; }
     YValue GetAttribute(string attributeName)
     YXmlElement Clone()
-    YXmlElement()
     YXmlElement(string nodeName)
     bool HasAttribute(string attributeName)
     override string ToString()

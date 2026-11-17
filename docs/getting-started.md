@@ -183,7 +183,7 @@ Console.WriteLine(text); // one two
 ```
 
 The `UndoManager` tracks changes to its scope made in transactions whose origin is in `TrackedOrigins` (by default:
-no origin). Apply peers' updates with an origin, as above, and it never undoes another user's edits. Changes within
+only the null origin: a transaction run with `origin: "me"` is not tracked unless `TrackedOrigins` has "me"). Apply peers' updates with an origin, as above, and it never undoes another user's edits. Changes within
 `CaptureTimeout` (500 ms by default, read from `UndoManagerOptions.TimeProvider`) form one step. `StopCapturing()`
 ends the current step. The manager is `IDisposable`: dispose it to unhook it from the document.
 

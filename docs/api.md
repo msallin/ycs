@@ -20,7 +20,7 @@ Contents: [Documents](#documents-and-options), [YValue](#yvalue), [Shared types]
 ## Documents and options
 
 `YDoc` holds the shared types of one document. `doc.GetText(name)`, `GetMap`, `GetArray`, `GetXmlFragment`,
-`GetXmlElement` and `GetXmlText` return the root type of that name, created on first use; peers that use the same name
+`GetXmlText` return the root type of that name, created on first use; peers that use the same name
 and type share it. The default name is the empty string.
 
 `YDocOptions` is a sealed record with `init` properties (`with` copies one):
@@ -86,7 +86,11 @@ is not in a document yet: its content can be read, changed and then inserted int
 `YArray` is an `IReadOnlyList<YValue>`: `Count`, the indexer (an `ArgumentOutOfRangeException` for an index out of range),
 `TryGetValue(index, out value)`, `Add(params ReadOnlySpan<YValue>)` (Yjs' `push`), `Insert(index, params
 ReadOnlySpan<YValue>)`, `RemoveAt(index)`, `RemoveRange(index, count)`, `Slice(start, length)` (so `array[1..3]` works),
-`ToArray()`, `ToArray(snapshot)`, `Clone()` and `ToJson()`. `new YArray(1, "two")` builds one that is not in a document yet.
+`IndexOf(value)`, `Contains(value)` and `Remove(value)` (the first occurrence; true when found), which compare by value, so
+a shared type is found only as the same instance, `ToArray()`, `ToArray(snapshot)`, `Clone()` and `ToJson()`.
+`new YArray(1, "two")` and `YArray a = [1, 2, 3]` build one that is not in a document yet. `Add` and `Insert` take the
+values to add: `array.Add([1, 2])` appends two values, 1 and 2, not one nested array; for a nested array write
+`array.Add(new YArray(1, 2))`.
 A range that is not within the array throws before anything changes.
 
 ### YMap
@@ -120,7 +124,10 @@ indexer, `TryGetValue`, `FirstChild`, `Add`, `Insert`, `InsertAfter(reference, .
 which throw `ArgumentException` for a child that is not a `YXmlElement`, `YXmlFragment`, `YXmlText` or `YXmlHook`),
 `RemoveAt`, `RemoveRange`, `Slice`, `ToArray()`, `ToArray(snapshot)`, `CreateTreeWalker(filter?)` (a lazy
 `IEnumerable<YType>` of the descendants in document order), `QuerySelector(query)` and `QuerySelectorAll(query)`. A child
-that is none of those, which only another client can have written, reads as null.
+that is none of those, which only another client can have written, counts in `Count` but is not a node: `TryGetValue`
+returns false for it, the indexer throws `InvalidOperationException`, and enumeration, `Slice` and `ToArray` leave it out.
+There is no root element: a document has `GetXmlFragment(name)` (an element needs a node name, which is not part of the
+wire format of a root type), so `fragment.Add(new YXmlElement("article"))` for an element.
 
 `YXmlElement` has `NodeName`, `NextSibling`, `PrevSibling` and attributes as `YValue`s: `GetAttribute` (null when unset),
 `SetAttribute`, `RemoveAttribute`, `HasAttribute` and `GetAttributes(snapshot?)`. `YXmlText` is a `YText` with
@@ -229,7 +236,7 @@ converts to a span implicitly.
 | On | Members |
 | --- | --- |
 | `YDoc` | `ApplyUpdate(update, origin = null, format = V1, limits = null)` and `TryApplyUpdate` (the same, returning false for a malformed update); `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
-| `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
+| `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client; clocks count the positions of the id space, not structs, so a struct of a run covers several), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
 | `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`, `Snapshot.Empty`; equality is `Equals` |
 | `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree) |
 

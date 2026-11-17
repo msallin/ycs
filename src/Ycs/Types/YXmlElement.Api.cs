@@ -11,12 +11,6 @@ namespace Ycs;
 
 public sealed partial class YXmlElement
 {
-    public YXmlElement()
-        : this("UNDEFINED")
-    {
-        // Do nothing.
-    }
-
     public YXmlElement(string nodeName)
     {
         ArgumentNullException.ThrowIfNull(nodeName);

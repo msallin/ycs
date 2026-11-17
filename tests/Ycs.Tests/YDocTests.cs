@@ -4,6 +4,7 @@
 //  </copyright>
 // ------------------------------------------------------------------------------
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -156,5 +157,16 @@ public class YDocTests : YTestBase
             guids.Sort();
             CollectionAssert.AreEqual(new[] { "a", "c" }, guids);
         }
+    }
+
+    [TestMethod]
+    public void Get_RootOfAnotherType_NamesBothAndTheGetter()
+    {
+        var doc = new YDoc();
+        doc.GetText("content");
+
+        var ex = Assert.ThrowsExactly<InvalidOperationException>(() => doc.GetMap("content"));
+
+        Assert.AreEqual("The root 'content' is a YText; it cannot be read as a YMap. Use GetText(\"content\").", ex.Message);
     }
 }
