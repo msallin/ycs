@@ -85,6 +85,24 @@ public sealed partial class YArray : IReadOnlyList<YValue>
         Release(content);
     }
 
+    /// <summary>Inserts <paramref name="values"/> at <paramref name="index"/> as <see cref="Insert"/> does.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is beyond <see cref="Count"/>; nothing is inserted.</exception>
+    public void InsertRange(int index, IEnumerable<YValue> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        Insert(index, SpanOf(values));
+    }
+
+    /// <summary>Appends <paramref name="values"/> as <see cref="Add"/> does.</summary>
+    public void AddRange(IEnumerable<YValue> values)
+    {
+        ArgumentNullException.ThrowIfNull(values);
+        Add(SpanOf(values));
+    }
+
+    private static ReadOnlySpan<YValue> SpanOf(IEnumerable<YValue> values) =>
+        values is YValue[] array ? array : values.ToArray();
+
     /// <summary>
     /// The index of the first value equal to <paramref name="value"/>, or -1. Values compare by value; a shared type is
     /// equal only to itself (the same instance).
@@ -194,13 +212,10 @@ public sealed partial class YArray : IReadOnlyList<YValue>
         return result;
     }
 
-    public IEnumerator<YValue> GetEnumerator()
-    {
-        foreach (var raw in EnumerateValues())
-        {
-            yield return YValue.FromStored(raw);
-        }
-    }
+    /// <summary>The values in order. <c>foreach</c> binds to this struct enumerator and allocates nothing per value.</summary>
+    public Enumerator GetEnumerator() => new(EnumerateValues());
+
+    IEnumerator<YValue> IEnumerable<YValue>.GetEnumerator() => GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 

@@ -253,6 +253,8 @@ public abstract partial class YArrayBase
         return result;
     }
 
+    private protected ItemRef FirstItem => _start;
+
     /// <summary>The countable content of the document's list, as stored, in order; it survives the structs merging or leaving while the caller holds it.</summary>
     private protected IEnumerable<object?> EnumerateRaw()
     {

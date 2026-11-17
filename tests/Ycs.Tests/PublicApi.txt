@@ -410,11 +410,11 @@ sealed class Ycs.UpdateMeta : System.IEquatable<UpdateMeta>
     static bool op_Inequality(UpdateMeta? left, UpdateMeta? right)
     void Deconstruct(out System.Collections.Generic.IReadOnlyDictionary<long, long> From, out System.Collections.Generic.IReadOnlyDictionary<long, long> To)
 sealed class Ycs.YArray : YArrayBase, System.Collections.Generic.IEnumerable<YValue>, System.Collections.Generic.IReadOnlyCollection<YValue>, System.Collections.Generic.IReadOnlyList<YValue>, System.Collections.IEnumerable
-    System.Collections.Generic.IEnumerator<YValue> GetEnumerator()
     System.IDisposable Observe(System.Action<YArrayEvent> handler)
     YArray Clone()
     YArray()
     YArray(System.ReadOnlySpan<YValue> values)
+    YArray.Enumerator GetEnumerator()
     YValue this[int index] { get; }
     YValue[] Slice(int start, int length)
     YValue[] ToArray()
@@ -425,9 +425,15 @@ sealed class Ycs.YArray : YArrayBase, System.Collections.Generic.IEnumerable<YVa
     int Count { get; }
     int IndexOf(YValue value)
     void Add(System.ReadOnlySpan<YValue> values)
+    void AddRange(System.Collections.Generic.IEnumerable<YValue> values)
     void Insert(int index, System.ReadOnlySpan<YValue> values)
+    void InsertRange(int index, System.Collections.Generic.IEnumerable<YValue> values)
     void RemoveAt(int index)
     void RemoveRange(int index, int count)
+struct Ycs.YArray.Enumerator : System.Collections.Generic.IEnumerator<YValue>, System.Collections.IEnumerator, System.IDisposable
+    YValue Current { get; }
+    bool MoveNext()
+    void Dispose()
 abstract class Ycs.YArrayBase : YType
 sealed class Ycs.YArrayEvent : YEvent
     YArray Target { get; }

@@ -119,13 +119,15 @@ is not in a document yet: its content can be read, changed and then inserted int
 
 `YArray` is an `IReadOnlyList<YValue>`: `Count`, the indexer (an `ArgumentOutOfRangeException` for an index out of range),
 `TryGetValue(index, out value)`, `Add(params ReadOnlySpan<YValue>)` (Yjs' `push`), `Insert(index, params
-ReadOnlySpan<YValue>)`, `RemoveAt(index)`, `RemoveRange(index, count)`, `Slice(start, length)` (so `array[1..3]` works),
+ReadOnlySpan<YValue>)` (and `AddRange` / `InsertRange(index, ...)` for an `IEnumerable<YValue>`), `RemoveAt(index)`, `RemoveRange(index, count)`, `Slice(start, length)` (so `array[1..3]` works),
 `IndexOf(value)`, `Contains(value)` and `Remove(value)` (the first occurrence; true when found), which compare by value, so
 a shared type is found only as the same instance, `ToArray()`, `ToArray(snapshot)` and `Clone()`.
 `new YArray(1, "two")` and `YArray a = [1, 2, 3]` build one that is not in a document yet. `Add` and `Insert` take the
 values to add: `array.Add([1, 2])` appends two values, 1 and 2, not one nested array; for a nested array write
 `array.Add(new YArray(1, 2))`.
 A range that is not within the array throws before anything changes.
+`foreach` over an array uses a struct enumerator and allocates nothing per value; `array[i]` in a loop costs a marker
+lookup per call, so prefer `foreach` (or `ToArray()`) for a walk over the whole array.
 
 ### YMap
 

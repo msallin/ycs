@@ -195,6 +195,25 @@ internal static class Scenarios
             };
         }, Warmups: 2),
 
+        new("array.enumerate-100k", 20, () =>
+        {
+            var doc = new YDoc(new YDocOptions { ClientId = 1 });
+            var array = doc.GetArray("array");
+            YValue[] values = new YValue[100_000];
+            Array.Fill(values, (YValue)1L);
+            doc.Transact(_ => array.Add(values));
+            return _ =>
+            {
+                long sum = 0;
+                foreach (var value in array)
+                {
+                    sum += (long)value;
+                }
+
+                GC.KeepAlive(sum);
+            };
+        }),
+
         new("text.type-100k-in-one-transaction", 3, () =>
         {
             // One operation is the whole transaction on a fresh document: 100,000 keystrokes at the end, merged at its end.

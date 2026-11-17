@@ -101,5 +101,5 @@ public sealed partial class YArray : YArrayBase
     }
 
     /// <summary>The values in order, as stored; those of an array not in a document yet too.</summary>
-    private IEnumerable<object?> EnumerateValues() => _prelimContent ?? EnumerateRaw();
+    private RawEnumerator EnumerateValues() => new(this);
 }

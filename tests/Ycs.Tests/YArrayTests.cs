@@ -569,4 +569,65 @@ public class YArrayTests : YTestBase
             }
         }, users, iterations);
     }
+
+    [TestMethod]
+    public void AddRange_ListOfValues_AppendsInOrder()
+    {
+        var doc = new YDoc();
+        var array = doc.GetArray("a");
+        array.Add(1);
+
+        array.AddRange(new List<YValue> { 2, 3 });
+        array.AddRange(new YValue[] { 4 });
+
+        CollectionAssert.AreEqual(new object[] { 1, 2, 3, 4 }, array.Select(v => v.ToObject()).ToArray());
+    }
+
+    [TestMethod]
+    public void InsertRange_LazySequenceBeforePrelim_InsertsAtIndex()
+    {
+        var array = new YArray();
+        array.Add(1, 4);
+
+        array.InsertRange(1, Enumerable.Range(2, 2).Select(i => (YValue)i));
+
+        CollectionAssert.AreEqual(new object[] { 1, 2, 3, 4 }, array.Select(v => v.ToObject()).ToArray());
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => array.InsertRange(5, new List<YValue> { 1 }));
+    }
+
+    [TestMethod]
+    public void GetEnumerator_ObserverEditsDuringEnumeration_SeesTheCopyOfTheRun()
+    {
+        var doc = new YDoc();
+        var array = doc.GetArray("a");
+        array.Add(1, 2, 3);
+        var seen = new List<object?>();
+
+        foreach (var value in array)
+        {
+            if (seen.Count == 0)
+            {
+                array.RemoveRange(0, 3);
+            }
+
+            seen.Add(value.ToObject());
+        }
+
+        CollectionAssert.AreEqual(new object[] { 1, 2, 3 }, seen);
+    }
+
+    [TestMethod]
+    public void GetEnumerator_MixedRuns_SkipsDeletedAndEnumeratesNested()
+    {
+        var doc = new YDoc();
+        var array = doc.GetArray("a");
+        array.Add(1, "x", new YMap());
+        array.Add(2);
+        array.RemoveRange(1, 1);
+        IEnumerable<YValue> sequence = array;
+
+        var seen = sequence.Select(v => v.Kind).ToArray();
+
+        CollectionAssert.AreEqual(new[] { YValueKind.Number, YValueKind.SharedType, YValueKind.Number }, seen);
+    }
 }

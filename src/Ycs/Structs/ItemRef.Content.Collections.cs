@@ -78,6 +78,9 @@ internal readonly struct StoredContent
         }
     }
 
+    /// <summary>The rented copy of an Any item's values, null for the other kinds: a reader that checks the kind once per run reads it directly (through <see cref="ValueFreezer.OnRead"/>).</summary>
+    internal object?[]? AnyValues => _values;
+
     // A type has length 1: the index is ignored.
     internal object? ValueAt(int index) => _type ?? (_text != null ? _text[index].ToString() : _values != null ? ValueFreezer.OnRead(_values[index]) : ItemRef.StoredValueAt(_content, index));
 }
