@@ -10,6 +10,7 @@ internal readonly partial struct ItemRef
         SlotKind.Deleted => Array.Empty<object>(),
         SlotKind.Type => new object[] { TypeOf },
         SlotKind.String => CharElements(),
+        SlotKind.Any => Values,
         _ => Content.GetContent(),
     };
 

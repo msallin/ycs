@@ -225,6 +225,7 @@ public class ItemRefContentTests
         var item = NewItem(new Slab(), new ContentAny(new object[] { 1L }));
 
         item.AppendValues([2L, 3L]);
+        item.Length += 2;
 
         CollectionAssert.AreEqual(new object[] { 1L, 2L, 3L }, new List<object>(item.Values));
     }

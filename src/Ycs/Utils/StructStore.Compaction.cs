@@ -2,7 +2,7 @@ namespace Ycs;
 
 internal sealed partial class StructStore
 {
-    /// <summary>When the tests force a compaction of the character arena (<see cref="Slab.CompactChars"/>).</summary>
+    /// <summary>When the tests force a compaction of the arenas (<see cref="Slab.CompactChars"/>, <see cref="Slab.CompactValues"/>).</summary>
     internal enum CompactionMode
     {
         /// <summary>Only when <see cref="CompactIfWorthwhile"/> says so, at the end of a batch.</summary>
@@ -18,7 +18,7 @@ internal sealed partial class StructStore
     internal static CompactionMode CompactionForTests;
 
     /// <summary>
-    /// Compacts the character arena when its garbage outweighs the live characters and the garbage made since the last
+    /// Compacts each arena (characters, values) when its garbage outweighs the live characters and the garbage made since the last
     /// compaction amounts to a largest page and to the number of slots, which a compaction walks
     /// (<see cref="Arena{T}.WorthCompacting"/>). Called where no batch is in progress: nothing then holds an offset.
     /// </summary>
@@ -26,11 +26,18 @@ internal sealed partial class StructStore
     {
         if (CompactionForTests != CompactionMode.None)
         {
-            Slab.CompactCharsForTests();
+            Slab.CompactForTests();
+            return;
         }
-        else if (Slab.CharsOrNull is { } chars && chars.WorthCompacting(Slab.LiveCount))
+
+        if (Slab.CharsOrNull is { } chars && chars.WorthCompacting(Slab.LiveCount))
         {
             Slab.CompactChars();
+        }
+
+        if (Slab.ValuesOrNull is { } values && values.WorthCompacting(Slab.LiveCount))
+        {
+            Slab.CompactValues();
         }
     }
 
@@ -43,7 +50,7 @@ internal sealed partial class StructStore
     {
         if (midBatch ? CompactionForTests == CompactionMode.MidBatch : CompactionForTests != CompactionMode.None)
         {
-            slab.CompactCharsForTests();
+            slab.CompactForTests();
         }
     }
 }

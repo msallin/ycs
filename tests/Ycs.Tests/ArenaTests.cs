@@ -53,6 +53,10 @@ public class ArenaTests
     [TestMethod]
     public void Constructor_LayoutSizes_FirstPageHoldsTheFirstSize()
     {
+        using var firstChars = StaticScope.Set(ref Arena<char>.FirstPageForTests, 0);
+        using var maxChars = StaticScope.Set(ref Arena<char>.MaxPageForTests, 0);
+        using var firstRefs = StaticScope.Set(ref Arena<object>.FirstPageForTests, 0);
+        using var maxRefs = StaticScope.Set(ref Arena<object>.MaxPageForTests, 0);
         var chars = new Arena<char>(Arena.CharFirstPage, Arena.CharMaxPage);
         var refs = new Arena<object>(Arena.RefFirstPage, Arena.RefMaxPage);
 

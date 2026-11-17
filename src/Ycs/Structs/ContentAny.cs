@@ -46,6 +46,15 @@ internal class ContentAny : IContentEx
 
     internal object ValueAt(int index) => ValueFreezer.OnRead(_content[index]);
 
+    /// <summary>Copies the values, as stored, to the start of <paramref name="destination"/>, which holds at least <see cref="Length"/>.</summary>
+    internal void CopyTo(Span<object> destination)
+    {
+        for (var i = 0; i < _content.Count; i++)
+        {
+            destination[i] = _content[i];
+        }
+    }
+
     public IContent Copy() => new ContentAny(_content.ToList());
 
     public IContent Splice(int offset)

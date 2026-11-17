@@ -91,6 +91,11 @@ internal sealed partial class StructStore
             throw new InvalidOperationException($"The character arena differs from the String items: {chars}.");
         }
 
+        if (ValuesViolation() is { } values)
+        {
+            throw new InvalidOperationException($"The value arena differs from the Any items: {values}.");
+        }
+
         if (CollectedTypeViolation() is { } collected)
         {
             throw new InvalidOperationException($"The store holds a collected type that is not forgotten: {collected}.");

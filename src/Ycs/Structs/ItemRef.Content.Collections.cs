@@ -9,7 +9,12 @@ internal readonly partial struct ItemRef
     /// <see cref="SlotKind.Json"/> without the read-only wrapper, null for collected content (Yjs' <c>getContent()[index]</c>
     /// of <c>[]</c> is <c>undefined</c>), else the element of <c>GetContent()</c>. Allocates nothing for Any and Json.
     /// </summary>
-    internal object StoredValueAt(int index) => Kind == SlotKind.Type ? TypeOf : StoredValueAt(Content, index);
+    internal object StoredValueAt(int index) => Kind switch
+    {
+        SlotKind.Type => TypeOf,
+        SlotKind.Any => ValueAt(index),
+        _ => StoredValueAt(Content, index),
+    };
 
     internal static object StoredValueAt(IContent content, int index) => content switch
     {

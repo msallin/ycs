@@ -215,7 +215,7 @@ internal sealed partial class StructStore
                 : $"the slot of the GC struct {id} holds more than a range";
         }
 
-        if (slot.Kind is not ((int)SlotKind.Type or (int)SlotKind.String) && slot.Payload != 0)
+        if (slot.Kind is not ((int)SlotKind.Type or (int)SlotKind.String or (int)SlotKind.Any) && slot.Payload != 0)
         {
             return $"the slot of {id} of kind {(SlotKind)slot.Kind} holds the payload {slot.Payload}";
         }
@@ -254,7 +254,12 @@ internal sealed partial class StructStore
             return $"the slot of {id} names parent {slot.Parent} of {Types.Count} types";
         }
 
-        return kind == SlotKind.String ? RangeViolation(id, slot, (ContentString)content) : null;
+        return kind switch
+        {
+            SlotKind.String => RangeViolation(id, slot, (ContentString)content),
+            SlotKind.Any => ValueRangeViolation(id, slot, (ContentAny)content),
+            _ => null,
+        };
     }
 
     // The range of a String slot holds the text of its object. The text is copied out, so that a builder-backed run stays one

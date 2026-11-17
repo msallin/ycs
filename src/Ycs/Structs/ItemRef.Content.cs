@@ -113,6 +113,11 @@ internal readonly partial struct ItemRef
                 var payload = CopyChars(slab, (ContentString)content);
                 slab.Write(handle).Payload = payload;
             }
+            else if (kind == SlotKind.Any)
+            {
+                var payload = CopyValues(slab, (ContentAny)content);
+                slab.Write(handle).Payload = payload;
+            }
         }
     }
 
@@ -128,6 +133,10 @@ internal readonly partial struct ItemRef
             case SlotKind.String:
                 Content = (IContentEx)Content.Splice(offset);
                 CutCharsHead(offset);
+                break;
+            case SlotKind.Any:
+                Content = (IContentEx)Content.Splice(offset);
+                CutValuesHead(offset);
                 break;
             default:
                 Content = (IContentEx)Content.Splice(offset);
@@ -149,6 +158,9 @@ internal readonly partial struct ItemRef
             case SlotKind.String:
                 content = (IContentEx)Content.Splice(diff);
                 return (SplitChars(diff), content.Length);
+            case SlotKind.Any:
+                content = (IContentEx)Content.Splice(diff);
+                return (SplitValues(diff), content.Length);
             default:
                 content = (IContentEx)Content.Splice(diff);
                 return (0, content.Length);
@@ -165,6 +177,10 @@ internal readonly partial struct ItemRef
             case SlotKind.String:
                 MergeObjects(right);
                 MergeChars(right);
+                break;
+            case SlotKind.Any:
+                MergeObjects(right);
+                MergeValues(right);
                 break;
             default:
                 MergeObjects(right);
@@ -188,6 +204,10 @@ internal readonly partial struct ItemRef
         if (Kind == SlotKind.String)
         {
             ReleaseChars();
+        }
+        else if (Kind == SlotKind.Any)
+        {
+            ReleaseValues();
         }
     }
 

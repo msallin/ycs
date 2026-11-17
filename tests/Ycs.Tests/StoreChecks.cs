@@ -8,7 +8,7 @@ namespace Ycs;
 /// Every transaction of this suite ends with a recount of the struct lists (starts, leaves and run-head index) and a
 /// comparison of every struct with its slot. YCS_LEAF_CAPACITY sets the leaf capacity of the lists (default: the
 /// library's); YCS_SLAB_FIRST the first size of the slab's page 0 (1: every allocation of it copies); YCS_ARENA_PAGE=n
-/// pages of n characters at most; YCS_ARENA_COPY=1 a merge always copies; YCS_COMPACT=always compacts the character arena after every transaction, =midbatch also in the middle of a batch (each struct added, item made and run appended to, and between gc and merge), YCS_COMPACT_EVERY=1 lifts the sampling of a slab of more than 2,048 slots; YCS_POISON=1 replaces a collected type's handle by an unrelated live item's (a reused slot), so that any read of the struct shows.
+/// pages of n characters and n values at most; YCS_ARENA_COPY=1 a merge always copies; YCS_COMPACT=always compacts the arenas after every transaction, =midbatch also in the middle of a batch (each struct added, item made and run appended to, and between gc and merge), YCS_COMPACT_EVERY=1 lifts the sampling of a slab of more than 2,048 slots; YCS_POISON=1 replaces a collected type's handle by an unrelated live item's (a reused slot), so that any read of the struct shows.
 /// </summary>
 [TestClass]
 public static class StoreChecks
@@ -30,11 +30,13 @@ public static class StoreChecks
             Slab.FirstPageSlotsForTests = int.Parse(first, CultureInfo.InvariantCulture);
         }
 
-        // Pages of n characters at most, the first n/4 (at least 1), so that runs outgrow pages and cross them.
+        // Pages of n characters (and n values) at most, the first n/4 (at least 1), so that runs outgrow pages and cross them.
         if (Environment.GetEnvironmentVariable("YCS_ARENA_PAGE") is { Length: > 0 } page)
         {
             Arena<char>.MaxPageForTests = int.Parse(page, System.Globalization.CultureInfo.InvariantCulture);
             Arena<char>.FirstPageForTests = Math.Max(1, Arena<char>.MaxPageForTests / 4);
+            Arena<object?>.MaxPageForTests = Arena<char>.MaxPageForTests;
+            Arena<object?>.FirstPageForTests = Arena<char>.FirstPageForTests;
         }
 
         ItemRef.CopyOnMergeForTests = Environment.GetEnvironmentVariable("YCS_ARENA_COPY") == "1";

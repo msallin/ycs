@@ -1,8 +1,9 @@
 using System.Diagnostics;
+using System.Runtime.CompilerServices;
 
 namespace Ycs;
 
-/// <summary>The page sizes the item layout gives its two arenas.</summary>
+/// <summary>The page sizes the item layout gives its two arenas (the value arena's are the Ref ones).</summary>
 internal static class Arena
 {
     internal const int CharFirstPage = 256;
@@ -236,7 +237,13 @@ internal sealed class Arena<T>
             }
 
             var moved = Place(length, false);
-            PageAt(offset).Data.AsSpan(IndexOf(offset), length).CopyTo(PageAt(moved).Data.AsSpan(IndexOf(moved)));
+            var old = PageAt(offset).Data.AsSpan(IndexOf(offset), length);
+            old.CopyTo(PageAt(moved).Data.AsSpan(IndexOf(moved)));
+            if (RuntimeHelpers.IsReferenceOrContainsReferences<T>())
+            {
+                old.Clear();
+            }
+
             relocate(tag, moved);
         }
 
@@ -352,6 +359,47 @@ internal sealed class Arena<T>
 
         return found;
     }
+
+    /// <summary>The elements of a held page that are not default and lie in no live range: for an arena of references, what an exit of a range failed to clear.</summary>
+    public int UnclearedOutside(IEnumerable<(long Offset, int Length)> live)
+    {
+        var inRange = new List<bool[]?>(_pages.Count);
+        foreach (var page in _pages)
+        {
+            inRange.Add(page == null ? null : new bool[page.Used]);
+        }
+
+        foreach (var (offset, length) in live)
+        {
+            if (PageOf(offset) < _pages.Count && offset >= 0 && inRange[PageOf(offset)] is { } marks && IndexOf(offset) + (long)length <= marks.Length)
+            {
+                Array.Fill(marks, true, IndexOf(offset), length);
+            }
+        }
+
+        var found = 0;
+        for (var number = 0; number < _pages.Count; number++)
+        {
+            if (_pages[number] is not { } page)
+            {
+                continue;
+            }
+
+            var marks = inRange[number]!;
+            for (var i = 0; i < marks.Length; i++)
+            {
+                if (!marks[i] && !EqualityComparer<T>.Default.Equals(page.Data[i], default!))
+                {
+                    found++;
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>The array of a held page, to see what a compaction left in it.</summary>
+    internal T[]? PageDataForTests(int number) => number < _pages.Count ? _pages[number]?.Data : null;
 
     private long Reserved()
     {

@@ -85,6 +85,7 @@ internal sealed partial class Slab
     private Dictionary<int, ID>? _redone;
 
     private Arena<char>? _chars;
+    private Arena<object?>? _values;
 
     /// <summary>
     /// The characters of the String items the slots hold: a String slot's <see cref="Slot.Payload"/> is the offset of its
@@ -94,6 +95,15 @@ internal sealed partial class Slab
 
     /// <summary><see cref="Chars"/>, or null while no item put characters in.</summary>
     internal Arena<char>? CharsOrNull => _chars;
+
+    /// <summary>
+    /// The values of the Any items the slots hold: an Any slot's <see cref="Slot.Payload"/> is the offset of its range, its
+    /// <see cref="Slot.Length"/> the range's length. Made on first use.
+    /// </summary>
+    internal Arena<object?> Values => _values ??= new Arena<object?>(Arena.RefFirstPage, Arena.RefMaxPage);
+
+    /// <summary><see cref="Values"/>, or null while no item put values in.</summary>
+    internal Arena<object?>? ValuesOrNull => _values;
 
     /// <summary>The clients the slots name, by index.</summary>
     internal readonly ClientTable Clients;

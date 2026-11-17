@@ -3,7 +3,7 @@ using System.Collections;
 namespace Ycs;
 
 /// <summary>A read-only view of the values a content holds, as <see cref="FrozenList"/> hands them out (a byte array as a copy).</summary>
-internal sealed class ContentView(List<object?> items) : IReadOnlyList<object?>
+internal sealed class ContentView(IReadOnlyList<object?> items) : IReadOnlyList<object?>
 {
     public int Count => items.Count;
 
