@@ -309,7 +309,7 @@ internal readonly partial struct ItemRef
         MarkDeleted();
         transaction.Doc.Store.Refresh(this);
         transaction.DeleteSet.Add(Id.Client, Id.Clock, Length);
-        transaction.AddChangedTypeToTransaction(parent, ParentSub);
+        transaction.AddChangedTypeToTransaction(parent!, ParentSub);
         return true;
     }
 

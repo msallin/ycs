@@ -32,7 +32,7 @@ internal sealed partial class StructStore
     /// or null); <paramref name="contentText"/> renders a content given its kind name and values (the string of a
     /// <c>ContentString</c> as the only value).
     /// </summary>
-    internal void DumpForTests(StringBuilder sb, bool markers, Func<object, string> parentText, Func<string, IReadOnlyList<object>, string> contentText)
+    internal void DumpForTests(StringBuilder sb, bool markers, Func<object?, string> parentText, Func<string, IReadOnlyList<object?>, string> contentText)
     {
         foreach (var (client, structs) in Clients.OrderBy(kv => kv.Key))
         {
@@ -43,7 +43,7 @@ internal sealed partial class StructStore
                 if (s.IsItem)
                 {
                     var contentName = ContentKindNameForTests(s.Kind);
-                    IReadOnlyList<object> values = s.Kind == SlotKind.String ? [s.Chars.ToString()] : s.Elements;
+                    IReadOnlyList<object?> values = s.Kind == SlotKind.String ? [s.Chars.ToString()] : s.Elements;
                     sb.Append(" content ").Append(contentName).Append(' ').Append(contentText(contentName, values));
                     sb.Append(" left ").Append(IdText(s.Left)).Append(" right ").Append(IdText(s.Right));
                     sb.Append(" origin ").Append(IdText(s.LeftOrigin)).Append(" rightOrigin ").Append(IdText(s.RightOrigin));

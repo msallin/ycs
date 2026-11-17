@@ -391,14 +391,14 @@ internal class DeleteSet
     }
 
     // Read before the merge: a merged struct is freed and reads nothing.
-    private static (YType Parent, string Key) MapEntryOf(ItemRef right) =>
-        right.IsItem && right.ParentSub != null ? ((YType)right.Parent, right.ParentSub) : default;
+    private static (YType? Parent, string? Key) MapEntryOf(ItemRef right) =>
+        right.IsItem && right.ParentSub is { } key ? (right.Parent, key) : default;
 
-    private static void RetargetMapEntry((YType Parent, string Key) map, ItemRef left, ItemRef right)
+    private static void RetargetMapEntry((YType? Parent, string? Key) map, ItemRef left, ItemRef right)
     {
-        if (map.Key != null && map.Parent.TryGetMapItem(map.Key, out var value) && value == right)
+        if (map is { Parent: { } parent, Key: { } key } && parent.TryGetMapItem(key, out var value) && value == right)
         {
-            map.Parent._map[map.Key] = left.Hold;
+            parent._map[key] = left.Hold;
         }
     }
 
