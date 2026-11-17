@@ -11,15 +11,15 @@ internal class ContentEmbed : IContentEx
         _embed = embed;
     }
 
-    /// <summary>The embedded value; a byte array as a copy.</summary>
-    public object Embed => ValueFreezer.OnRead(_embed)!;
+    /// <summary>The embedded value, null for an embed of JSON null (Yjs' <c>insertEmbed(null)</c>); a byte array as a copy.</summary>
+    public object? Embed => ValueFreezer.OnRead(_embed);
 
     int IContentEx.Ref => _ref;
 
     public bool Countable => true;
     public int Length => 1;
 
-    public IReadOnlyList<object> GetContent() => new object[] { Embed };
+    public IReadOnlyList<object?> GetContent() => new object?[] { Embed };
 
     public IContent Copy() => new ContentEmbed(_embed);
 
