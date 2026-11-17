@@ -99,7 +99,7 @@ internal readonly partial struct ItemRef
         slot.Clock = id.Clock;
         slot.Client = client;
         slot.Length = content.Length;
-        slot.Info = (content.Countable ? Slot.CountableFlag : 0) | (content.Ref << 8);
+        slot.Info = (((SlotKind)content.Ref).IsCountable() ? Slot.CountableFlag : 0) | (content.Ref << 8);
         slot.OriginClient = originClient;
         slot.OriginClock = leftOrigin?.Clock ?? 0;
         slot.ROriginClient = rightOriginClient;
@@ -731,7 +731,8 @@ internal readonly partial struct ItemRef
         right.Clock = clock;
         right.Client = left.Client;
         right.Length = content.Length;
-        right.Info = (content.Countable ? Slot.CountableFlag : 0) | (content.Ref << 8) | (left.Info & (Slot.DeletedFlag | Slot.KeepFlag));
+        // Countable comes from the right part's kind, not from the left's Info: the right part of a collected item is Deleted.
+        right.Info = (((SlotKind)content.Ref).IsCountable() ? Slot.CountableFlag : 0) | (content.Ref << 8) | (left.Info & (Slot.DeletedFlag | Slot.KeepFlag));
         right.OriginClient = left.Client;
         right.OriginClock = clock - 1;
         right.ROriginClient = left.ROriginClient;
