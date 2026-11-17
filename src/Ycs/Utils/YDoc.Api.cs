@@ -26,7 +26,6 @@ public partial class YDoc
         _transactionCleanups = new List<Transaction>();
 
         ClientId = _opts.ClientId ?? GenerateNewClientId();
-        _share = new Dictionary<string, YType>();
         Store = new StructStore();
         ShouldLoad = _opts.ShouldLoad;
         CollectionId = _opts.CollectionId;
@@ -255,11 +254,12 @@ public partial class YDoc
     internal T Get<T>(string name)
         where T : YType
     {
-        if (!_share.TryGetValue(name, out var type))
+        var share = _share ??= new Dictionary<string, YType>();
+        if (!share.TryGetValue(name, out var type))
         {
             type = CreateRoot<T>();
             type.Integrate(this, default);
-            _share[name] = type;
+            share[name] = type;
         }
 
         // Remote type is realized when this method is called.
@@ -288,7 +288,7 @@ public partial class YDoc
 
                 t.Length = type.Length;
 
-                _share[name] = t;
+                share[name] = t;
                 t.Integrate(this, default);
                 return t;
             }

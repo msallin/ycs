@@ -75,7 +75,8 @@ public partial class YDoc
         }
     }
 
-    private readonly Dictionary<string, YType> _share;
+    // The root types by name; made by the first one, so a document nobody asked a root of holds none.
+    private Dictionary<string, YType>? _share;
 
     /// <summary>
     /// 32 random bits, as Yjs' <c>random.uint32()</c>, from the system's random number generator: two
@@ -212,7 +213,11 @@ public partial class YDoc
     internal List<(ItemId Item, int Index)>? MarkerLookupsForTests;
 
     /// <summary>The root type named <paramref name="name"/>, if it was defined (without defining it).</summary>
-    internal bool TryGetRoot(string name, [MaybeNullWhen(false)] out YType type) => _share.TryGetValue(name, out type);
+    internal bool TryGetRoot(string name, [MaybeNullWhen(false)] out YType type)
+    {
+        type = null;
+        return _share != null && _share.TryGetValue(name, out type);
+    }
 
     internal void InvokeSubdocsChanged(IReadOnlySet<YDoc> loaded, IReadOnlySet<YDoc> added, IReadOnlySet<YDoc> removed)
     {
@@ -322,7 +327,7 @@ public partial class YDoc
 
     internal string FindRootTypeKey(YType type)
     {
-        foreach (var kvp in _share)
+        foreach (var kvp in _share ?? [])
         {
             if (type.Equals(kvp.Value))
             {
