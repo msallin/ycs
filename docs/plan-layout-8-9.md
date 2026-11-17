@@ -54,7 +54,8 @@ coordinator merges the rows).
   at `Used` extends in place on any page, not only the write page, and a page of its own (D2) starts with `Used` at the
   run's end and no tail entry (8.3a). `Extend` tests the fill mark before the tail table.
 * **D11, the budgets while two forms coexist.** A package that shadows (8.3 did; 9.4a does for the reader) raises the
-  budget rows it makes heavier, with a comment naming the package that lowers them again (8.6, 8.8, 9.6).
+  budget rows it makes heavier, with a comment naming the package that lowers them again (8.6, 8.8; 9.6 lowered the
+  remote-update row to 0 bytes).
 
 ## Done
 
@@ -64,13 +65,9 @@ from the arena), 8.6 (String objects removed), 8.7 and 8.8 (the value arena; Any
 8.10 (Type inline, `Payload` the type-table index); 8.11 not built (D5). Step 9: 9.0 (`StagingTable`), 9.1 (strings read
 as spans), 9.2 (`StructCursor.NextStaged`; `UpdateReader` always stages), 9.3 (`UpdateOperations` on staging), 9.4a
 (the integration plan on staging), 9.4b (detached views on staging), 9.4c (the garbage-collection pre-check on staged
-items), 9.5 (adoption from staging; the `YType` is created at adoption). Open: 8.13, 9.6, 8.12.
-
-9.5's review left for 9.6: `ContentJson.Splice` mutates the object the table still holds when a Json struct is adopted
-at an offset (`Adopt` says the table is only read); `ContentType`'s throwing `Type` getter and decoded constructor;
-`PendingDrop` reads `lease.Structs.Keys` instead of the table's clients; `bench/Ycs.Layout/Editing.cs` stages decoded
-objects by hand; step numbers in `StagingTable`'s XML docs; `StructStaging`'s `YUpdate.Decode` path creates a
-subdocument to read its guid (`ContentDoc` keeps the guid privately).
+items), 9.5 (adoption from staging; the `YType` is created at adoption), 9.6 (decoded objects removed: a load allocates no
+`Item`, `GC`, `Skip` or hot content object; `ContentJson.Tail` builds the right part of an offset adoption without
+changing the table). Open: 8.13, 8.12.
 
 ## Step 8: inline content and the arenas
 
@@ -249,7 +246,7 @@ removal); the design's `AbstractType` is `YType` in the code; a new 1.8 and 1.9 
    breaks "a run lies in one page" for every reader)? Recommendation: accept, held memory and time are what the layout is
    for; the budget row's comment says so.
 2. **8.11** (D5): measured after 8.8, saves nothing; not built.
-3. **The reader's shadow always on from 9.4a** raises the remote-update allocation until 9.6 (objects and table both
+3. **The reader's shadow always on from 9.4a** raised the remote-update allocation until 9.6 (objects and table both
    filled): accept the temporary budget raise (D11) or start 9.4a only after 8.8 so that 9.5 follows at once?
    Recommendation: start now; the raise is one row with a comment, and lane C is otherwise idle.
 4. **8.13 beside 9.5** (slot 5) with the file split given, or after 9.6 so that it measures the final load path too?

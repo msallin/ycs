@@ -152,7 +152,7 @@ absolute positions.
   they throw `NullReferenceException`, as `(str as Item).Member` did; the type test walks faster than a cast (below).
   The members every kind has (`Delete`, `Integrate`, `CanMergeWith`, `MergeWith`, `Write`) dispatch by kind: an item's
   algorithm, else the struct's own override. `ItemRef.New` is Yjs' `new Item(id, left, left && left.lastId, right, right
-  && right.id, parent, parentSub, content)`. A decoded object enters the store only through `ItemRef.Adopt`; `Of`, `ToStruct` and
+  && right.id, parent, parentSub, content)`. A staged struct enters the store only through `ItemRef.Adopt`; `Of`, `ToStruct` and
   `ToItem` are called by no method outside `ItemRef` (an IL test, `ItemRefAdoptionTests`, reads every method body and
   also catches a method group, `ldtoken` or `ldvirtftn` that names one).
 * **What it costs**: no allocation (every workload allocates the same bytes, below); no box (a test reads every
@@ -167,10 +167,8 @@ absolute positions.
   places once the temporary conversions went; CS8073 is an error in `src` now); `(object)type._item ?? type` boxed and
   was never null (the garbage collection check of the integration plan; caught by its test and by the box test);
   `x.GetType()` on the struct names `ItemRef` (the merge rules; `IsSameKind`); `is { }` on the struct always matches.
-* **Invariant** (`ItemRefSignatureTests`): no internal field, property, parameter or return names `Item` or
-  `AbstractStruct` but in `ItemRef`, the struct classes, the public members, the decoded form (the update reader, the
-  pending structs, `UpdateOperations`, the integration plan; until step 9), the members that pass a public filter
-  (`Predicate<Item>`, `Func<Item, bool>`) to its call, and three hooks of the property tests.
+* **Invariant**: no struct class exists but `ItemRef` (the slot) and the staged form (`StagingTable`, `DecodedStruct`); `Item`,
+  `GC`, `Skip` and `AbstractStruct` are not types of the library.
 
 **The public boundaries.** No public member names `Item`, `GC`, `Skip` or `AbstractStruct` (they are internal) and none
 converts: callers read an item through `ItemView` (a store view by id, or the detached view of a decoded struct the
@@ -196,11 +194,11 @@ of a live type, the push hint, the clock order) are kept current by split and me
 
 **Where the code was not moved mechanically, and why.**
 
-* The decoded form stays objects (2.5, step 9): `IntegrationPlan` keys its dictionaries by `PlanItem`, which is a
-  store item (by id) or a decoded one, so the plan never converts an `ItemRef` to an object; the pending structs'
-  rest store holds `Skip` structs, tested by kind. `ItemRef.Adopt` is the one place a decoded struct enters the store:
-  it resolves the item's references (`ResolveReferences` sets `Left` and `Right` to store `ItemRef`s) and integrates
-  it, or adds a GC struct.
+* The decoded form is staging tables (2.5): `IntegrationPlan` keys its dictionaries by `PlanItem`, which is a store item
+  (by id) or a staged one (table and index), so the plan never converts an `ItemRef` to an object; the pending structs'
+  rest is ranges of the reader's table, encoded by `LazyStructWriter`. `ItemRef.Adopt` is the one place a staged struct
+  enters the store: it resolves the item's references (`ResolveReferences` sets `Left` and `Right` to store `ItemRef`s)
+  and integrates it, or adds a GC struct.
 * Casts that only fail on a GC struct the code cannot reach (no item's neighbour, run or redone copy is one) are gone;
   the next member read throws `NullReferenceException` where the cast threw `InvalidCastException`:
   `(Item)structs[reached]` in `StructStore.SeekRight` and the marker walk, the undo manager's
@@ -338,11 +336,10 @@ The content of the other kinds stays an object, beside the slot; a Deleted slot 
   `ItemHandle` keeps the generation of the slot when it was made, and a read through a reference that finds another one
   throws `InvalidOperationException` (`Slab.CheckGeneration`): a holder that outlived its struct fails at the read. In
   Release there is no generation and a read costs the index.
-* **The decoded form** (`Item`, `GC`, `Skip`, `IContent`) is no store's: the update reader, the pending rest store and the
-  integration plan hold it, and `ItemRef.Adopt` is the one place it enters a store (it resolves the references and
-  writes a slot). The merge, split and write of the decoded structs are their own (`Item.cs`, `GC.cs`, `Skip.cs`,
-  `LazyStructWriter.cs`, `UpdateOperations.cs`, `EncodingUtils.cs`): no `ItemRef` serves a struct outside a store.
-  Step 9 moves the decoded form to staging tables.
+* **The decoded form** is a staging table (2.5), no store's: the update reader, the pending rest and the integration plan
+  hold it, and `ItemRef.Adopt` is the one place it enters a store (it resolves the references and writes a slot). The
+  write of a staged struct is `LazyStructWriter`'s, the write of a slot `ItemRef.Write`'s: no `ItemRef` serves a struct
+  outside a store.
 * **A collected type** answers its item's facts from a copy, and its XML siblings by its id (2.4).
 * **The store check.** `StructStore.CheckForTests` runs after every test transaction: links mirror, the orders are
   contiguous, the free lists are sound, no holder names a freed slot, a type item names its type, and a type's entry
@@ -507,11 +504,16 @@ count/64th time (`YCS_COMPACT_EVERY=1` lifts that), so that a test stays linear 
 
 ### 2.5 Decoding, and the operations without a document
 
-The decoder writes an update's structs into a staging table of the same slots (plus, per struct, the parent as a root
-name or an id, and the `Skip` kind), with its own geometric arenas; a staged struct gets its slab slot when it is
-integrated. `UpdateOperations` (`MergeUpdates`, `DiffUpdate`, `DecodeUpdate`) works on staging tables, so there is one
-representation and one encoder (M6). Until step 9 the decoded form stays today's objects, copied into slots at
-integration.
+The decoder writes an update's structs into a staging table (`StagingTable`) of the same fields as the slots (plus, per
+struct, the parent as a root name or an id, and the `Skip` kind), with its own geometric arenas: a String's characters
+and an Any's values are copied out of the decoder, a Type is its reference and name, the cold kinds (Json, Binary, Embed,
+Format, Doc) are the content object read from the decoder. No struct is an object: nothing the update holds is an
+`Item`, a `GC`, a `Skip` or a content object of a hot kind. A table belongs to one reader (`UpdateReader`, one per thread
+and open lease) and is reset when its lease is released. The integration plan, the pending rest, the detached views and
+the garbage-collection pre-check read the staged fields, and `ItemRef.Adopt` is where a staged struct gets its slab slot
+(it reads the table and never changes it). `UpdateOperations` (`MergeUpdates`, `DiffUpdate`, `DecodeUpdate`) works on
+staging tables, so there is one representation and one encoder (M6): `LazyStructWriter` writes a struct from its staged
+fields, `ItemRef.Write` from its slot, both through `ItemRef.WriteItemHeader`.
 
 ### 2.6 Clients
 
