@@ -19,11 +19,19 @@ internal readonly partial struct ItemRef
 
     private void WriteItem(IUpdateEncoder encoder, int offset)
     {
+        // The encoder allocates no slot: the reference stays valid for the whole write.
+        ref readonly var slot = ref Read();
+        var clients = _slab.Clients;
+        var id = new ID(clients[slot.Client], slot.Clock);
+        ID? leftOrigin = slot.OriginClient < 0 ? null : new ID(clients[slot.OriginClient], slot.OriginClock);
+        ID? rightOrigin = slot.ROriginClient < 0 ? null : new ID(clients[slot.ROriginClient], slot.ROriginClock);
+        var kind = (SlotKind)slot.Kind;
+        var parentSub = (string)_slab.ReadKey(_handle);
         string root = null;
         ID parentId = default;
-        if (offset == 0 && LeftOrigin == null && RightOrigin == null)
+        if (offset == 0 && leftOrigin == null && rightOrigin == null)
         {
-            var parent = Parent ?? throw new InvalidOperationException("An item without origins has no parent.");
+            var parent = (slot.Parent < 0 ? null : _slab.Types[slot.Parent]) ?? throw new InvalidOperationException("An item without origins has no parent.");
             if (parent.IsRoot)
             {
                 root = parent.FindRootTypeKey();
@@ -34,36 +42,25 @@ internal readonly partial struct ItemRef
             }
         }
 
-        if (Kind == SlotKind.Deleted)
+        WriteItemHeader(encoder, (int)kind, offset, id, leftOrigin, rightOrigin, parentSub, root, parentId);
+        switch (kind)
         {
-            WriteItemHeader(encoder, (int)SlotKind.Deleted, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
-            encoder.WriteLength(Length - offset);
-            return;
+            case SlotKind.Deleted:
+                encoder.WriteLength(slot.Length - offset);
+                break;
+            case SlotKind.Type:
+                TypeOf.Write(encoder);
+                break;
+            case SlotKind.String:
+                encoder.WriteString(Chars[offset..]);
+                break;
+            case SlotKind.Any:
+                WriteValues(encoder, offset);
+                break;
+            default:
+                Cold.Write(encoder, offset);
+                break;
         }
-
-        if (Kind == SlotKind.Type)
-        {
-            WriteItemHeader(encoder, (int)SlotKind.Type, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
-            TypeOf.Write(encoder);
-            return;
-        }
-
-        if (Kind == SlotKind.String)
-        {
-            WriteItemHeader(encoder, (int)SlotKind.String, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
-            encoder.WriteString(Chars[offset..]);
-            return;
-        }
-
-        if (Kind == SlotKind.Any)
-        {
-            WriteItemHeader(encoder, (int)SlotKind.Any, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
-            WriteValues(encoder, offset);
-            return;
-        }
-
-        WriteItemHeader(encoder, (int)Kind, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
-        Cold.Write(encoder, offset);
     }
 
     /// <summary>
