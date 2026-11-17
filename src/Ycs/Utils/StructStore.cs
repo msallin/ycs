@@ -166,12 +166,21 @@ internal sealed partial class StructStore
     internal void Refresh(ItemRef item)
     {
         var structs = StructsOf(item)!;
-        var index = structs.FindIndex(item.Clock);
-        Debug.Assert(structs[index] == item, "Only a struct of the store changes the run-head index.");
+        var index = _knownIndex;
+        if (index < 0 || index >= structs.Count || structs[index] != item)
+        {
+            index = structs.FindIndex(item.Clock);
+            Debug.Assert(structs[index] == item, "Only a struct of the store changes the run-head index.");
+        }
+
 
         // Recounted from the struct at the position, which is the item.
         structs.Refresh(index);
     }
+
+    // The position of the struct that ApplyDeleteSet is deleting, so that Refresh(ItemRef) need not search for it:
+    // used only where the struct at it is the item, so a value left behind by a throwing delete is harmless.
+    private int _knownIndex = -1;
 
     /// <summary>The list and position of <paramref name="item"/>, if the store holds it (a collected type's items it does not).</summary>
     internal bool TryFindPosition(ItemRef item, [NotNullWhen(true)] out ClientStructs? structs, out int index)
@@ -588,7 +597,9 @@ internal sealed partial class StructStore
                             structs.InsertSplit(index, SplitItem(transaction, str, (int)(clockEnd - str.Clock)));
                         }
 
+                        _knownIndex = index - 1;
                         str.Delete(transaction);
+                        _knownIndex = -1;
                     }
                 }
             }
