@@ -38,7 +38,7 @@ internal sealed class Arena<T>
 
     private readonly List<Page?> _pages = [];
     private readonly Stack<int> _released = [];
-    private readonly Dictionary<long, long> _tails = [];
+    private TailTable _tails;
     private readonly int _first;
     private readonly int _max;
 
@@ -150,7 +150,7 @@ internal sealed class Arena<T>
             _tails.Remove(end);
             if (end + values.Length < reservedEnd)
             {
-                _tails[end + values.Length] = reservedEnd;
+                _tails.Set(end + values.Length, reservedEnd);
             }
 
             _live += values.Length;
@@ -293,7 +293,7 @@ internal sealed class Arena<T>
             liveTotal += length;
         }
 
-        foreach (var (end, reservedEnd) in _tails)
+        foreach (var (end, reservedEnd) in _tails.Entries())
         {
             var page = PageOf(end) < _pages.Count && end >= 0 ? _pages[PageOf(end)] : null;
             if (page == null || PageOf(reservedEnd) != PageOf(end) || reservedEnd <= end || IndexOf(reservedEnd) > page.Used)
@@ -404,7 +404,7 @@ internal sealed class Arena<T>
     private long Reserved()
     {
         long reserved = 0;
-        foreach (var (end, reservedEnd) in _tails)
+        foreach (var (end, reservedEnd) in _tails.Entries())
         {
             reserved += reservedEnd - end;
         }
@@ -454,7 +454,7 @@ internal sealed class Arena<T>
             var reserve = Math.Min(length, write.Data.Length - write.Used);
             if (reserve > 0)
             {
-                _tails[start + length] = start + length + reserve;
+                _tails.Set(start + length, start + length + reserve);
                 write.Used += (int)reserve;
             }
         }
