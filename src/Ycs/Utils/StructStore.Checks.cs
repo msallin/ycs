@@ -14,10 +14,10 @@ internal sealed partial class StructStore
     /// values, its push hint and its search markers. A collected type's item is excluded: it names the GC struct that
     /// replaced it. Only types that an item of the store reaches are visited.
     /// </summary>
-    private HashSet<AbstractType> _typesSeen;
-    private List<AbstractType> _typeList;
+    private HashSet<YType> _typesSeen;
+    private List<YType> _typeList;
 
-    private string ConsistencyViolation(ClientStructs structs, ref HashSet<AbstractType> visited)
+    private string ConsistencyViolation(ClientStructs structs, ref HashSet<YType> visited)
     {
         foreach (var s in structs)
         {
@@ -51,7 +51,7 @@ internal sealed partial class StructStore
             }
 
             visited ??= [];
-            var type = s.Kind == SlotKind.Type ? s.TypeOf : s.Parent as AbstractType;
+            var type = s.Kind == SlotKind.Type ? s.TypeOf : s.Parent as YType;
             if (type != null && visited.Add(type))
             {
                 _typesSeen ??= [];
@@ -122,7 +122,7 @@ internal sealed partial class StructStore
         return null;
     }
 
-    private string TypeViolation(AbstractType type)
+    private string TypeViolation(YType type)
     {
         if (!type.IsCollected && !type._itemHeld.IsNone && !IsHeld(type._itemHeld))
         {

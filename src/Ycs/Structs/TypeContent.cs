@@ -23,9 +23,9 @@ internal static class TypeContent
     // (UpdateLimits.MaxDepth), so they keep the open types in a list instead of recursing. Both visit the items
     // in the order of Yjs' recursion: depth first, a type's list from its start, then its keys' values; the order
     // decides the order of the changed types, and so of the events.
-    private sealed class Open(AbstractType type, ItemRef owner)
+    private sealed class Open(YType type, ItemRef owner)
     {
-        public readonly AbstractType Type = type;
+        public readonly YType Type = type;
         public readonly ItemRef Owner = owner;
         public ItemRef Next = type._start;
         public bool InMap;

@@ -6,7 +6,7 @@ internal class ContentType : IContentEx
 {
     internal const int _ref = 7;
 
-    internal ContentType(AbstractType type)
+    internal ContentType(YType type)
     {
         Type = type;
     }
@@ -16,7 +16,7 @@ internal class ContentType : IContentEx
     public bool Countable => true;
     public int Length => 1;
 
-    public AbstractType Type { get; }
+    public YType Type { get; }
 
     public IReadOnlyList<object> GetContent() => new object[] { Type };
 
@@ -59,7 +59,7 @@ internal class ContentType : IContentEx
     }
 
     /// <summary>A new, empty type of the reference and name <see cref="ReadHeader"/> read: what an item of the update holds once it is adopted.</summary>
-    internal static AbstractType Create(int typeRef, string typeName) => typeRef switch
+    internal static YType Create(int typeRef, string typeName) => typeRef switch
     {
         YArray.YArrayRefId => new YArray(),
         YMap.YMapRefId => new YMap(),

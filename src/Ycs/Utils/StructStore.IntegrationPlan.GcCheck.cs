@@ -50,7 +50,7 @@ internal sealed partial class StructStore
             {
                 foreach (var type in deleted.Keys)
                 {
-                    if (type is { StoredParent: AbstractType, NestedType: { } nested } && HasLiveNonValue(nested, doc, !type.Keep && doc.GcFilter(GcViewOf(doc, type)), ranges))
+                    if (type is { StoredParent: YType, NestedType: { } nested } && HasLiveNonValue(nested, doc, !type.Keep && doc.GcFilter(GcViewOf(doc, type)), ranges))
                     {
                         throw MapValueSplit();
                     }
@@ -103,12 +103,12 @@ internal sealed partial class StructStore
             {
                 if (_table.At(index).Kind != StagedKind.GC)
                 {
-                    if (_table.LeftOrigin(index) is ID left)
+                    if (_table.LeftOrigin(index) is ItemId left)
                     {
                         Split(ref splits, left, left.Clock + 1, ReferenceSplit);
                     }
 
-                    if (_table.RightOrigin(index) is ID right)
+                    if (_table.RightOrigin(index) is ItemId right)
                     {
                         Split(ref splits, right, right.Clock, ReferenceSplit);
                     }
@@ -118,10 +118,10 @@ internal sealed partial class StructStore
             for (var k = 0; k < ranges.Count; k++)
             {
                 var (client, start, end) = ranges[k];
-                Split(ref splits, new ID(client, start), start, RangeStart(k + 1));
+                Split(ref splits, new ItemId(client, start), start, RangeStart(k + 1));
                 if (end > start)
                 {
-                    Split(ref splits, new ID(client, end - 1), end, RangeEnd(k + 1));
+                    Split(ref splits, new ItemId(client, end - 1), end, RangeEnd(k + 1));
                 }
             }
 
@@ -129,7 +129,7 @@ internal sealed partial class StructStore
         }
 
         /// <summary>Records <paramref name="boundary"/> if it falls inside the item that holds <paramref name="id"/> and that item may be a key's undeleted value.</summary>
-        private void Split(ref Dictionary<PlanItem, List<(long Boundary, int Time)>> splits, ID id, long boundary, int time)
+        private void Split(ref Dictionary<PlanItem, List<(long Boundary, int Time)>> splits, ItemId id, long boundary, int time)
         {
             var (target, start) = Target(id);
             if (!target.IsNull && start < boundary && boundary < target.Id.Clock + target.Length
@@ -182,13 +182,13 @@ internal sealed partial class StructStore
                     long structEnd;
                     if (clock < known)
                     {
-                        var found = _store.Find(new ID(client, clock));
+                        var found = _store.Find(new ItemId(client, clock));
                         type = PlanItem.Store(found);
                         structEnd = found.Id.Clock + found.Length;
                     }
                     else
                     {
-                        var planned = FindPlanned(new ID(client, clock));
+                        var planned = FindPlanned(new ItemId(client, clock));
                         if (planned < 0)
                         {
                             break;
@@ -223,9 +223,9 @@ internal sealed partial class StructStore
         private PlanItem LandsLast(YDoc doc, PlanItem item, int offset, KeyChains chains)
         {
             // Integrated from the store's state on, an item that overlaps the store has the item before as its origin.
-            var leftOrigin = offset > 0 ? new ID(item.Id.Client, item.Id.Clock + offset - 1) : item.LeftOrigin;
+            var leftOrigin = offset > 0 ? new ItemId(item.Id.Client, item.Id.Clock + offset - 1) : item.LeftOrigin;
             var (parent, key) = KeyOf(item);
-            if (parent is PlanItem parentItem ? parentItem.Deleted || chains.Deleted.Contains(parentItem) : parent is AbstractType { IsCollected: true } collectedParent && collectedParent.ItemDeleted)
+            if (parent is PlanItem parentItem ? parentItem.Deleted || chains.Deleted.Contains(parentItem) : parent is YType { IsCollected: true } collectedParent && collectedParent.ItemDeleted)
             {
                 chains.Deleted.Add(item);
                 return default;
@@ -246,8 +246,8 @@ internal sealed partial class StructStore
             {
                 var type = parent switch
                 {
-                    PlanItem { StoredParent: AbstractType } typeItem => typeItem.NestedType,
-                    AbstractType root => root,
+                    PlanItem { StoredParent: YType } typeItem => typeItem.NestedType,
+                    YType root => root,
                     _ => null,
                 };
                 if (type != null && type.TryGetMapItem(key, out var value))
@@ -271,7 +271,7 @@ internal sealed partial class StructStore
             {
                 last = false;
             }
-            else if (leftOrigin is ID origin)
+            else if (leftOrigin is ItemId origin)
             {
                 last = origin.Equals(chain.Value.LastId)
                     || (Target(origin).Item is { IsNull: false } left && !origin.Equals(left.LastId) && left.Id.Client < item.Id.Client && left == chain.Value);
@@ -321,7 +321,7 @@ internal sealed partial class StructStore
                     continue;
                 }
 
-                if (target.StoredParent is not AbstractType)
+                if (target.StoredParent is not YType)
                 {
                     if (values == null)
                     {
@@ -396,9 +396,9 @@ internal sealed partial class StructStore
         /// Whether a type below a collected one holds an undeleted item that is not the value of its key and that
         /// <paramref name="ranges"/> do not delete (the collection walks every key's items, the value and those left of it).
         /// </summary>
-        private static bool HasLiveNonValue(AbstractType type, YDoc doc, bool collected, List<(long Client, long Clock, long End)> ranges)
+        private static bool HasLiveNonValue(YType type, YDoc doc, bool collected, List<(long Client, long Clock, long End)> ranges)
         {
-            var stack = new List<(AbstractType Type, bool Collected)> { (type, collected) };
+            var stack = new List<(YType Type, bool Collected)> { (type, collected) };
             while (stack.Count > 0)
             {
                 var (t, c) = stack[^1];
@@ -468,7 +468,7 @@ internal sealed partial class StructStore
         /// The item that holds <paramref name="id"/> once the plan is carried out, with the clock it starts at (a
         /// planned item that overlaps the store is integrated from the store's state on), or null for a GC struct.
         /// </summary>
-        private (PlanItem Item, long Start) Target(ID id)
+        private (PlanItem Item, long Start) Target(ItemId id)
         {
             var known = _store.GetState(id.Client);
             if (id.Clock < known)
@@ -489,8 +489,8 @@ internal sealed partial class StructStore
         /// The parent and key <paramref name="item"/> has once integrated: its own, else those of the item its origin
         /// (or right origin) refers to, as <see cref="ItemRef.Adopt"/> takes them; (null, null) when it is
         /// integrated as a GC struct. The parent is a root's name, a root type, the <see cref="PlanItem"/> of the type's
-        /// item, or a collected type (its item is gone, <see cref="AbstractType.ItemDeleted"/> and
-        /// <see cref="AbstractType.ParentType"/> tell what its item did).
+        /// item, or a collected type (its item is gone, <see cref="YType.ItemDeleted"/> and
+        /// <see cref="YType.ParentType"/> tell what its item did).
         /// </summary>
         private (object Parent, string Key) KeyOf(PlanItem item)
         {
@@ -508,12 +508,12 @@ internal sealed partial class StructStore
 
                 if (item.HasParent)
                 {
-                    result = (item.ParentName ?? (item.ParentId is ID id ? Target(id).Item.Boxed : item.StoredParent is AbstractType type ? ParentOf(type) : item.StoredParent), item.ParentSub);
+                    result = (item.ParentName ?? (item.ParentId is ItemId id ? Target(id).Item.Boxed : item.StoredParent is YType type ? ParentOf(type) : item.StoredParent), item.ParentSub);
                     break;
                 }
 
                 chain.Add(item);
-                if ((item.LeftOrigin is ID l && Target(l).Item.IsNull) || (item.RightOrigin is ID r && Target(r).Item.IsNull) || (item.LeftOrigin ?? item.RightOrigin) is not ID origin)
+                if ((item.LeftOrigin is ItemId l && Target(l).Item.IsNull) || (item.RightOrigin is ItemId r && Target(r).Item.IsNull) || (item.LeftOrigin ?? item.RightOrigin) is not ItemId origin)
                 {
                     result = (null, null);
                     break;
@@ -535,6 +535,6 @@ internal sealed partial class StructStore
         }
 
         // A type as the parent of an item: its item (a collected type has none), else the type (a root, or collected).
-        private static object ParentOf(AbstractType type) => type.IsCollected || type._item.IsNull ? type : PlanItem.Store(type._item).Boxed;
+        private static object ParentOf(YType type) => type.IsCollected || type._item.IsNull ? type : PlanItem.Store(type._item).Boxed;
     }
 }

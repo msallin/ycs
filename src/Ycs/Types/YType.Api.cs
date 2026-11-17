@@ -93,7 +93,7 @@ public abstract partial class YType
             }
         }
 
-        var id = new ID(ownClientId, doc.Store.GetState(ownClientId));
+        var id = new ItemId(ownClientId, doc.Store.GetState(ownClientId));
         ReadOnlySpan<object?> one = [single];
         var newItem = content == null
             ? ItemRef.New(doc.Store.Slab, id, left, default, this, key, one)

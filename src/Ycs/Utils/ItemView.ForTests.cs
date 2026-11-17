@@ -73,7 +73,7 @@ public readonly partial struct ItemView
         var item = str.AsItem;
         Same("Id", str.Id, view.Id);
         Same("Length", str.Length, view.Length);
-        Same("LastId", new ID(str.Id.Client, str.Id.Clock + str.Length - 1), view.LastId);
+        Same("LastId", new ItemId(str.Id.Client, str.Id.Clock + str.Length - 1), view.LastId);
         Same("Deleted", str.Deleted, view.Deleted);
         Same("Kind", !item.IsNull ? item.Kind.ToItemKind() : str.IsGC ? ItemKind.GC : ItemKind.Skip, view.Kind);
         Same("Countable", !item.IsNull && item.Countable, view.Countable);
@@ -82,7 +82,7 @@ public readonly partial struct ItemView
         Same("RightOrigin", item.IsNull ? null : item.RightOrigin, view.RightOrigin);
         Same("Redone", item.IsNull ? null : item.Redone, view.Redone);
         Same("ParentSub", item.IsNull ? null : item.ParentSub, view.ParentSub);
-        Same("Parent", (item.IsNull ? null : item.Parent) as AbstractType, view.Parent);
+        Same("Parent", (item.IsNull ? null : item.Parent) as YType, view.Parent);
         Same("Left", item.IsNull || item.Left.IsNull ? null : item.Left.Id, view.Left?.Id);
         Same("Right", item.IsNull || item.Right.IsNull ? null : item.Right.Id, view.Right?.Id);
         Same("Left length", item.IsNull || item.Left.IsNull ? null : item.Left.Length, view.Left?.Length);

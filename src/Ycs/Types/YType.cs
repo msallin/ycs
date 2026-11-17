@@ -63,7 +63,7 @@ public abstract partial class YType
     // be reused, while user code still holds the type: Collect sets them before the struct is replaced; none changes later.
     private bool _collected;
     private YType _collectedParent;
-    private ID _collectedId;
+    private ItemId _collectedId;
     private string _collectedParentSub;
     private bool _collectedKeep;
 
@@ -120,7 +120,7 @@ public abstract partial class YType
     internal YType ParentType => _collected ? _collectedParent : _item.IsNull ? null : _item.Parent as YType;
 
     /// <summary>The id of the item the type is in; a root type has none.</summary>
-    internal ID ItemId => _collected ? _collectedId : _item.Id;
+    internal ItemId ItemId => _collected ? _collectedId : _item.Id;
 
     /// <summary>Whether the type's item is deleted: a collected type's is, and a root type has none.</summary>
     internal bool ItemDeleted => _collected || (!_item.IsNull && _item.Deleted);
@@ -184,7 +184,7 @@ public abstract partial class YType
 
     // The slot is in a slab of its own, which no store's checks count.
     internal static ItemRef PoisonItem() =>
-        ItemRef.New(new Slab(), new ID(424242, 7), default, default, new YMap(), "POISON", new object[] { "poison" });
+        ItemRef.New(new Slab(), new ItemId(424242, 7), default, default, new YMap(), "POISON", new object[] { "poison" });
 
     // How many keys of _map have a value that is not deleted, kept by ItemRef.Integrate and ItemRef.Delete.
     internal int _mapCount;

@@ -42,7 +42,7 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>The last content address of this struct.</summary>
-    public ID LastId => Length == 1 ? Id : new ID(Id.Client, Id.Clock + Length - 1);
+    public ItemId LastId => Length == 1 ? Id : new ItemId(Id.Client, Id.Clock + Length - 1);
 
     // Deleting a GC struct does nothing (it is deleted already).
     public void Delete(Transaction transaction)
@@ -61,7 +61,7 @@ internal readonly partial struct ItemRef
     public void Integrate(Transaction transaction, int offset) => IntegrateItem(transaction, offset);
 
     /// <summary>A new GC struct (not in a list) for the range <paramref name="length"/> from <paramref name="id"/>, in <paramref name="slab"/>.</summary>
-    internal static ItemRef NewGC(Slab slab, ID id, int length)
+    internal static ItemRef NewGC(Slab slab, ItemId id, int length)
     {
         var clientIndex = slab.Clients.GetOrAdd(id.Client);
         var gc = new ItemRef(slab, slab.Allocate());
@@ -77,26 +77,26 @@ internal readonly partial struct ItemRef
     /// A new item (not integrated) in <paramref name="slab"/> between <paramref name="left"/> and <paramref name="right"/>,
     /// which are its origins (Yjs' <c>new Item(id, left, left &amp;&amp; left.lastId, right, right &amp;&amp; right.id, parent, parentSub, content)</c>).
     /// </summary>
-    public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, IContent content) =>
+    public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType parent, string parentSub, IContent content) =>
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, (IContentEx)content);
 
     /// <summary>
     /// A new item (not integrated) between <paramref name="left"/> and <paramref name="right"/> with a copy of the content of
     /// <paramref name="source"/>, a store item that is not collected (what a redone item holds).
     /// </summary>
-    public static ItemRef NewCopyOf(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ItemRef source) =>
+    public static ItemRef NewCopyOf(Slab slab, ItemId id, ItemRef left, ItemRef right, YType parent, string parentSub, ItemRef source) =>
         source.Kind is SlotKind.String or SlotKind.Any or SlotKind.Deleted
             ? NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, source.Kind, source.Length, null, default, default, source)
             : New(slab, id, left, right, parent, parentSub, source.CopyContent());
 
-    private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, IContentEx content) =>
+    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType parent, string parentSub, IContentEx content) =>
         NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, (SlotKind)content.Ref, content.Length, content, default, default, default);
 
     // A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet): the object
     // of a kind that has one, the given type of a Type (else the one of its content object), else the chars of a String or
     // the values of an Any: the span, or the range of the store item copyOf (read after the compaction hook that opens
     // this method, which may move it). firstReplaced: the first char of the span is U+FFFD (see StoreChars).
-    private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, SlotKind kind, int length, IContentEx content, ReadOnlySpan<char> chars, ReadOnlySpan<object> values, ItemRef copyOf, AbstractType type = null, bool firstReplaced = false)
+    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType parent, string parentSub, SlotKind kind, int length, IContentEx content, ReadOnlySpan<char> chars, ReadOnlySpan<object> values, ItemRef copyOf, YType type = null, bool firstReplaced = false)
     {
         StructStore.CompactForTests(slab, true);
 
@@ -320,7 +320,7 @@ internal readonly partial struct ItemRef
         if (offset > 0)
         {
             var id = Id;
-            Left = transaction.Doc.Store.GetItemCleanEnd(transaction, new ID(id.Client, id.Clock - 1));
+            Left = transaction.Doc.Store.GetItemCleanEnd(transaction, new ItemId(id.Client, id.Clock - 1));
             if (Left.IsGC && Parent != null)
             {
                 // The store collected the first part of an item that still has a parent: no peer writes that. Yjs
@@ -342,7 +342,7 @@ internal readonly partial struct ItemRef
         if (parent != null)
         {
             var slab = _slab;
-            AbstractType mapParent = null;
+            YType mapParent = null;
             var previousCounted = false;
             var parentSub = ParentSub;
             int leftHandle;
@@ -604,7 +604,7 @@ internal readonly partial struct ItemRef
         {
             var redone = _slab.GetRedone(_handle);
             right.Info |= Slot.HasRedoneFlag;
-            _slab.SetRedone(handle, new ID(redone.Client, redone.Clock + diff));
+            _slab.SetRedone(handle, new ItemId(redone.Client, redone.Clock + diff));
         }
 
         // Update left (do not set leftItem.RightOrigin as it will lead to problems when syncing).
@@ -623,7 +623,7 @@ internal readonly partial struct ItemRef
         }
 
         // Right is more specific.
-        transaction._mergeStructs.Add(new ID(_slab.Clients[right.Client], clock));
+        transaction._mergeStructs.Add(new ItemId(_slab.Clients[right.Client], clock));
 
         // Update parent._map.
         if (parentSub != null && rightRight < 0)

@@ -191,7 +191,7 @@ internal class DeleteSet
         return null;
     }
 
-    public bool IsDeleted(ID id)
+    public bool IsDeleted(ItemId id)
     {
         return Clients.TryGetValue(id.Client, out var dis)
                && FindIndexSS(dis, id.Clock) != null;
@@ -393,10 +393,10 @@ internal class DeleteSet
     }
 
     // Read before the merge: a merged struct is freed and reads nothing.
-    private static (AbstractType Parent, string Key) MapEntryOf(ItemRef right) =>
-        right.IsItem && right.ParentSub != null ? ((AbstractType)right.Parent, right.ParentSub) : default;
+    private static (YType Parent, string Key) MapEntryOf(ItemRef right) =>
+        right.IsItem && right.ParentSub != null ? ((YType)right.Parent, right.ParentSub) : default;
 
-    private static void RetargetMapEntry((AbstractType Parent, string Key) map, ItemRef left, ItemRef right)
+    private static void RetargetMapEntry((YType Parent, string Key) map, ItemRef left, ItemRef right)
     {
         if (map.Key != null && map.Parent.TryGetMapItem(map.Key, out var value) && value == right)
         {

@@ -422,7 +422,7 @@ public abstract partial class YArrayBase : YType
             }
             else
             {
-                left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, jsonContent.AsSpan(0, jsonCount)!);
+                left = ItemRef.New(store.Slab, new ItemId(ownClientId, store.GetState(ownClientId)), left, right, this, null, jsonContent.AsSpan(0, jsonCount)!);
                 left.Integrate(transaction, 0);
             }
 
@@ -475,17 +475,17 @@ public abstract partial class YArrayBase : YType
                     packJsonContent();
 
                     // A copy, as Yjs: the caller's array must not change the document later.
-                    left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentBinary((byte[])arr.Clone()));
+                    left = ItemRef.New(store.Slab, new ItemId(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentBinary((byte[])arr.Clone()));
                     left.Integrate(transaction, 0);
                     break;
                 case YDoc d:
                     packJsonContent();
-                    left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentDoc(d));
+                    left = ItemRef.New(store.Slab, new ItemId(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentDoc(d));
                     left.Integrate(transaction, 0);
                     break;
                 case YType at:
                     packJsonContent();
-                    left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentType(at));
+                    left = ItemRef.New(store.Slab, new ItemId(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentType(at));
                     left.Integrate(transaction, 0);
                     break;
                 default:

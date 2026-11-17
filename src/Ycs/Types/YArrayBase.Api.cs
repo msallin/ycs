@@ -119,7 +119,7 @@ public abstract partial class YArrayBase
                 if (index < slot.Length)
                 {
                     // The split allocates: the length is read again after it.
-                    transaction.Doc.Store.GetItemCleanStart(transaction, new ID(n.Id.Client, n.Id.Clock + index));
+                    transaction.Doc.Store.GetItemCleanStart(transaction, new ItemId(n.Id.Client, n.Id.Clock + index));
                 }
 
                 index -= n.Length;
@@ -133,7 +133,7 @@ public abstract partial class YArrayBase
             {
                 if (length < n.Length)
                 {
-                    transaction.Doc.Store.GetItemCleanStart(transaction, new ID(n.Id.Client, n.Id.Clock + length));
+                    transaction.Doc.Store.GetItemCleanStart(transaction, new ItemId(n.Id.Client, n.Id.Clock + length));
                 }
 
                 n.Delete(transaction);

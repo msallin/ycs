@@ -63,7 +63,7 @@ internal sealed partial class StructStore
     }
 
     /// <summary>Every item whose content is a list type, with its id and the list (in the store's order of clients).</summary>
-    internal IEnumerable<(ID Item, YArrayBase List)> NestedListsForTests()
+    internal IEnumerable<(ItemId Item, YArrayBase List)> NestedListsForTests()
     {
         foreach (var (_, structs) in Clients)
         {
@@ -79,5 +79,5 @@ internal sealed partial class StructStore
 
     private static string IdText(ItemRef s) => s.IsNull ? "-" : $"{s.Id.Client}:{s.Id.Clock}";
 
-    private static string IdText(ID? id) => id is ID i ? $"{i.Client}:{i.Clock}" : "-";
+    private static string IdText(ItemId? id) => id is ItemId i ? $"{i.Client}:{i.Clock}" : "-";
 }

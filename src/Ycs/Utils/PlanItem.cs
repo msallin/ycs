@@ -40,9 +40,9 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
     /// <summary>This item as an object (a parent in the plan's keys), null for none.</summary>
     public object Boxed => IsNull ? null : this;
 
-    public ID Id => _table is null ? _stored.Id : _table.IdOf(_index);
+    public ItemId Id => _table is null ? _stored.Id : _table.IdOf(_index);
 
-    public ID LastId => _table is null ? _stored.LastId : new ID(Id.Client, _table.At(_index).Clock + _table.At(_index).Length - 1);
+    public ItemId LastId => _table is null ? _stored.LastId : new ItemId(Id.Client, _table.At(_index).Clock + _table.At(_index).Length - 1);
 
     public int Length => _table is null ? _stored.Length : _table.At(_index).Length;
 
@@ -57,7 +57,7 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
     public string ParentName => _table is not null && _table.At(_index).ParentKind == StagedParent.Root ? _table.ParentName(_index) : null;
 
     /// <summary>The id of the item that holds the parent type of a staged item; null for any other.</summary>
-    public ID? ParentId => _table is not null && _table.At(_index).ParentKind == StagedParent.Id ? _table.ParentId(_index) : null;
+    public ItemId? ParentId => _table is not null && _table.At(_index).ParentKind == StagedParent.Id ? _table.ParentId(_index) : null;
 
     /// <summary>Whether the item names a parent (a staged item with no origins) or belongs to a type (a stored one).</summary>
     public bool HasParent => _table is null ? _stored.Parent != null : _table.At(_index).ParentKind != StagedParent.None;
@@ -71,11 +71,11 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
     public bool IsType => _table is null ? _stored.Kind == SlotKind.Type : _table.At(_index).Kind == StagedKind.Type;
 
     /// <summary>The type a stored item holds, null for any other content or a staged item (which has no type yet).</summary>
-    public AbstractType NestedType => _table is null && _stored.Kind == SlotKind.Type ? _stored.TypeOf : null;
+    public YType NestedType => _table is null && _stored.Kind == SlotKind.Type ? _stored.TypeOf : null;
 
-    public ID? LeftOrigin => _table is null ? _stored.LeftOrigin : _table.LeftOrigin(_index);
+    public ItemId? LeftOrigin => _table is null ? _stored.LeftOrigin : _table.LeftOrigin(_index);
 
-    public ID? RightOrigin => _table is null ? _stored.RightOrigin : _table.RightOrigin(_index);
+    public ItemId? RightOrigin => _table is null ? _stored.RightOrigin : _table.RightOrigin(_index);
 
     /// <summary>The view the document's garbage collection filter is asked about: of the store's item, or the detached view of the staged one.</summary>
     public ItemView GcView(YDoc doc) => _table is null ? ItemView.At(doc, _stored.Id) : ItemView.Detached(doc, _table, _index);

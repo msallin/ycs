@@ -25,7 +25,7 @@ internal static class StructStaging
             return;
         }
 
-        ID? leftOrigin = cut > 0 ? new ID(id.Client, id.Clock + cut - 1) : from.LeftOrigin(i);
+        ItemId? leftOrigin = cut > 0 ? new ItemId(id.Client, id.Clock + cut - 1) : from.LeftOrigin(i);
         var j = to.Add(kind, length, leftOrigin, from.RightOrigin(i));
         if (cut == 0)
         {

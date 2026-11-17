@@ -232,7 +232,7 @@ public sealed partial class UndoManager
                                 var (redone, diff) = store.FollowRedone(str.Id);
                                 if (diff > 0)
                                 {
-                                    redone = store.GetItemCleanStart(transaction, new ID(redone.Id.Client, redone.Id.Clock + diff));
+                                    redone = store.GetItemCleanStart(transaction, new ItemId(redone.Id.Client, redone.Id.Clock + diff));
                                 }
 
                                 // A garbage-collected copy counts as deleted.
@@ -318,7 +318,7 @@ public sealed partial class UndoManager
         }
     }
 
-    private static bool IsDeletedByStack(List<StackItem> stack, ID id)
+    private static bool IsDeletedByStack(List<StackItem> stack, ItemId id)
     {
         foreach (var stackItem in stack)
         {
@@ -346,7 +346,7 @@ public sealed partial class UndoManager
             return store.GetItemCleanStart(transaction, item.Redone.Value);
         }
 
-        var parentItem = ((AbstractType)item.Parent)._item;
+        var parentItem = ((YType)item.Parent)._item;
         ItemRef left = default;
         ItemRef right;
 
@@ -365,7 +365,7 @@ public sealed partial class UndoManager
             }
         }
 
-        var parentType = parentItem.IsNull ? (AbstractType)item.Parent : parentItem.TypeOf;
+        var parentType = parentItem.IsNull ? (YType)item.Parent : parentItem.TypeOf;
 
         if (item.ParentSub == null)
         {
@@ -441,7 +441,7 @@ public sealed partial class UndoManager
             }
         }
 
-        var nextId = new ID(ownClientId, store.GetState(ownClientId));
+        var nextId = new ItemId(ownClientId, store.GetState(ownClientId));
         var redoneItem = ItemRef.NewCopyOf(store.Slab, nextId, left, right, parentType, item.ParentSub, item);
         item.Redone = nextId;
         redoneItem.KeepItemAndParents(true);
@@ -449,9 +449,9 @@ public sealed partial class UndoManager
         return redoneItem;
     }
 
-    private static bool IsParentOf(AbstractType parent, ItemRef child)
+    private static bool IsParentOf(YType parent, ItemRef child)
     {
-        for (var type = child.IsNull ? null : child.Parent as AbstractType; type != null; type = type.ParentType)
+        for (var type = child.IsNull ? null : child.Parent as YType; type != null; type = type.ParentType)
         {
             if (type == parent)
             {

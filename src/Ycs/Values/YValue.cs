@@ -111,7 +111,7 @@ public readonly partial struct YValue : IEquatable<YValue>
         {
             case YValue same:
                 return same;
-            case AbstractType or YDoc:
+            case YType or YDoc:
                 return FromStored(value);
         }
 
@@ -181,7 +181,7 @@ public readonly partial struct YValue : IEquatable<YValue>
                 return new YValue(YValueKind.Array, list, 0);
             case FrozenMap map:
                 return new YValue(YValueKind.Object, map, 0);
-            case AbstractType type:
+            case YType type:
                 return new YValue(YValueKind.SharedType, type, 0);
             case YDoc doc:
                 return new YValue(YValueKind.Document, doc, 0);
@@ -278,7 +278,7 @@ public readonly partial struct YValue : IEquatable<YValue>
     /// <summary>The bytes are copied.</summary>
     public static implicit operator YValue(byte[]? value) => value == null ? default : new YValue(YValueKind.Bytes, value.Clone(), 0);
 
-    public static implicit operator YValue(AbstractType? value) => value == null ? default : new YValue(YValueKind.SharedType, value, 0);
+    public static implicit operator YValue(YType? value) => value == null ? default : new YValue(YValueKind.SharedType, value, 0);
 
     public static implicit operator YValue(YDoc? value) => value == null ? default : new YValue(YValueKind.Document, value, 0);
 

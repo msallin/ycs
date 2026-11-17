@@ -7,10 +7,10 @@ namespace Ycs;
 public abstract partial class YType
 {
     /// <summary>The id of the item that holds this type, or null for a root or a type not yet integrated.</summary>
-    internal ID? OwnerIdForTests => IsRoot ? null : ItemId;
+    internal ItemId? OwnerIdForTests => IsRoot ? null : ItemId;
 
     /// <summary>The key and the item id of every entry of the type's map.</summary>
-    internal IEnumerable<KeyValuePair<string, ID>> MapIdsForTests() => _map.Select(kv => new KeyValuePair<string, ID>(kv.Key, MapItem(kv.Value).Id));
+    internal IEnumerable<KeyValuePair<string, ItemId>> MapIdsForTests() => _map.Select(kv => new KeyValuePair<string, ItemId>(kv.Key, MapItem(kv.Value).Id));
 
     /// <summary>Whether this type, or the type that holds it, or the one above, is deleted.</summary>
     internal bool InDeletedTypeForTests()
@@ -30,9 +30,9 @@ public abstract partial class YType
     /// The structs of the type's list from <c>_start</c> by <c>Right</c>, up to the first GC struct, which ends it:
     /// whether each item's <c>Left</c> is the struct before it, and whether its parent is this type with no key.
     /// </summary>
-    internal List<(long Client, long Clock, int Length, ID? LeftOrigin, ID? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListForTests()
+    internal List<(long Client, long Clock, int Length, ItemId? LeftOrigin, ItemId? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListForTests()
     {
-        var runs = new List<(long, long, int, ID?, ID?, bool, string, bool, bool)>();
+        var runs = new List<(long, long, int, ItemId?, ItemId?, bool, string, bool, bool)>();
         var previous = default(ItemRef);
         for (var s = _start; !s.IsNull; s = s.Right)
         {

@@ -22,13 +22,13 @@ internal readonly partial struct ItemRef
         // The encoder allocates no slot: the reference stays valid for the whole write.
         ref readonly var slot = ref Read();
         var clients = _slab.Clients;
-        var id = new ID(clients[slot.Client], slot.Clock);
-        ID? leftOrigin = slot.OriginClient < 0 ? null : new ID(clients[slot.OriginClient], slot.OriginClock);
-        ID? rightOrigin = slot.ROriginClient < 0 ? null : new ID(clients[slot.ROriginClient], slot.ROriginClock);
+        var id = new ItemId(clients[slot.Client], slot.Clock);
+        ItemId? leftOrigin = slot.OriginClient < 0 ? null : new ItemId(clients[slot.OriginClient], slot.OriginClock);
+        ItemId? rightOrigin = slot.ROriginClient < 0 ? null : new ItemId(clients[slot.ROriginClient], slot.ROriginClock);
         var kind = (SlotKind)slot.Kind;
         var parentSub = (string)_slab.ReadKey(_handle);
         string root = null;
-        ID parentId = default;
+        ItemId parentId = default;
         if (offset == 0 && leftOrigin == null && rightOrigin == null)
         {
             var parent = (slot.Parent < 0 ? null : _slab.Types[slot.Parent]) ?? throw new InvalidOperationException("An item without origins has no parent.");
@@ -69,9 +69,9 @@ internal readonly partial struct ItemRef
     /// and no origins): <paramref name="parentRoot"/> names a root type, or, when it is null, <paramref name="parentId"/>
     /// is the id of the type's item.
     /// </summary>
-    internal static void WriteItemHeader(IUpdateEncoder encoder, int contentRef, int offset, ID id, ID? leftOrigin, ID? rightOrigin, string parentSub, string parentRoot, ID parentId)
+    internal static void WriteItemHeader(IUpdateEncoder encoder, int contentRef, int offset, ItemId id, ItemId? leftOrigin, ItemId? rightOrigin, string parentSub, string parentRoot, ItemId parentId)
     {
-        var origin = offset > 0 ? new ID(id.Client, id.Clock + offset - 1) : leftOrigin;
+        var origin = offset > 0 ? new ItemId(id.Client, id.Clock + offset - 1) : leftOrigin;
         var info = (contentRef & Bits.Bits5) |
             (origin == null ? 0 : Bit.Bit8) |
             (rightOrigin == null ? 0 : Bit.Bit7) |

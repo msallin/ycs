@@ -40,7 +40,7 @@ internal static class ValueFreezer
     internal static object? OnRead(object? stored) => stored is byte[] bytes ? (byte[])bytes.Clone() : stored;
 
     /// <summary>The value of a type that is not in a document yet: <see cref="Freeze"/>, but a shared type or a subdocument stays itself.</summary>
-    internal static object? Detach(object? value) => value is AbstractType or YDoc ? value : Freeze(value);
+    internal static object? Detach(object? value) => value is YType or YDoc ? value : Freeze(value);
 
     internal static NotSupportedException Frozen() =>
         new("A list or object a document holds is read-only. Build a new value and insert it.");

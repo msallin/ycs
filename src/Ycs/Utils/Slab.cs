@@ -82,7 +82,7 @@ internal sealed partial class Slab
     private int _live;
 
     // The id of each live slot with the has-redone flag; entries leave with the slot.
-    private Dictionary<int, ID>? _redone;
+    private Dictionary<int, ItemId>? _redone;
 
     private Arena<char>? _chars;
     private Arena<object?>? _values;
@@ -203,10 +203,10 @@ internal sealed partial class Slab
     }
 
     /// <summary>The id the redone item at <paramref name="handle"/> names; only for a slot with <see cref="Slot.HasRedoneFlag"/>.</summary>
-    public ID GetRedone(int handle) => _redone![handle];
+    public ItemId GetRedone(int handle) => _redone![handle];
 
     /// <summary>Sets the id the item at <paramref name="handle"/> names as its redo, or removes it (null); the flag is the caller's.</summary>
-    public void SetRedone(int handle, ID? value)
+    public void SetRedone(int handle, ItemId? value)
     {
         if (value is { } id)
         {

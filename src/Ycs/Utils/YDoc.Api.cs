@@ -26,7 +26,7 @@ public partial class YDoc
         _transactionCleanups = new List<Transaction>();
 
         ClientId = _opts.ClientId ?? GenerateNewClientId();
-        _share = new Dictionary<string, AbstractType>();
+        _share = new Dictionary<string, YType>();
         Store = new StructStore();
         Subdocs = new HashSet<YDoc>();
         ShouldLoad = _opts.ShouldLoad;
@@ -42,7 +42,7 @@ public partial class YDoc
     {
         if (!ShouldLoad)
         {
-            var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : ((AbstractType)_item.Parent).Doc;
+            var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : ((YType)_item.Parent).Doc;
             parentDoc?.Transact(this, static (doc, tr) => tr.LoadedSubdocs.Add(doc));
         }
         ShouldLoad = true;
@@ -79,7 +79,7 @@ public partial class YDoc
                 item.RecreateSubdoc(Guid, _opts.Limits);
             }
 
-            var parentDoc = ((AbstractType)item.Parent).Doc;
+            var parentDoc = ((YType)item.Parent).Doc;
             Debug.Assert(parentDoc != null);
             parentDoc.Transact((doc: this, item), static (s, tr) =>
             {

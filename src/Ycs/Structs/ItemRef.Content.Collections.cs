@@ -57,13 +57,13 @@ internal readonly partial struct ItemRef
 internal readonly struct StoredContent
 {
     private readonly IContent _content;
-    private readonly AbstractType _type;
+    private readonly YType _type;
     private readonly string _text;
     private readonly object[] _values;
 
     internal StoredContent(IContent content) => _content = content;
 
-    internal StoredContent(AbstractType type) => _type = type;
+    internal StoredContent(YType type) => _type = type;
 
     // The text of a String item, one string per UTF-16 code unit.
     internal StoredContent(string text) => _text = text;

@@ -24,7 +24,7 @@ internal readonly partial struct ItemRef
     /// A new Any item (not integrated) between <paramref name="left"/> and <paramref name="right"/> whose values are a copy
     /// of <paramref name="values"/>, which must not be empty.
     /// </summary>
-    public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ReadOnlySpan<object> values) =>
+    public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType parent, string parentSub, ReadOnlySpan<object> values) =>
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.Any, values.Length, null, default, values, default);
 
     // The range of the right part after a split of this Any at diff; the tail reservation of the range stays with its end,
@@ -122,6 +122,6 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary><see cref="CanExtendRun"/> for <see cref="SlotKind.Any"/> values.</summary>
-    internal bool CanExtendAnyRun(Transaction transaction, AbstractType parent, ItemRef right, long client) =>
+    internal bool CanExtendAnyRun(Transaction transaction, YType parent, ItemRef right, long client) =>
         CanExtendRun(transaction, parent, right, SlotKind.Any, client);
 }

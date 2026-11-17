@@ -61,12 +61,12 @@ public sealed partial class Transaction
     // Enumerated in the order the types were added, as Yjs' Map (it orders the deep observer calls):
     // a Dictionary keeps that order while nothing is removed, and entries are only added, or all
     // cleared (SortEventsByOrderOfChange re-adds them).
-    internal readonly Dictionary<AbstractType, IList<YEvent>> _changedParentTypes = new();
+    internal readonly Dictionary<YType, IList<YEvent>> _changedParentTypes = new();
 
     // Ids, not structs: the cleanup's merge pass reads an entry after it merged the entries after it, which can have
     // merged that entry's struct away, and a nested transaction can have split or merged more. The lookup finds the
     // struct that holds the id now.
-    internal readonly List<ID> _mergeStructs = new();
+    internal readonly List<ItemId> _mergeStructs = new();
 
     // Where an insert continued the run of the item before it in place (ItemRef.ExtendRun) instead of integrating an
     // item of its own, in clock order: the clock at which that item would have started, as runs of equal steps
@@ -78,7 +78,7 @@ public sealed partial class Transaction
 
     internal bool HasRunExtensions => _runExtensions is { Count: > 0 };
 
-    internal void RecordRunExtension(ID start)
+    internal void RecordRunExtension(ItemId start)
     {
         var extensions = _runExtensions ??= new List<(long, long, long, int)>();
         if (extensions.Count > 0)
@@ -107,7 +107,7 @@ public sealed partial class Transaction
         {
             for (var k = 0; k < count; k++)
             {
-                store.GetItemCleanStart(this, new ID(client, first + (step * k)));
+                store.GetItemCleanStart(this, new ItemId(client, first + (step * k)));
             }
         }
 
@@ -115,7 +115,7 @@ public sealed partial class Transaction
     }
 
     // The deep observers to call in the cleanup, collected first, as Yjs does.
-    private readonly List<(AbstractType Type, IList<YEvent> Events)> _deepCalls = new();
+    private readonly List<(YType Type, IList<YEvent> Events)> _deepCalls = new();
 
     // Rarely used, so created on first use.
     private Dictionary<string, object> _meta;
@@ -249,16 +249,16 @@ public sealed partial class Transaction
         }
     }
 
-    internal ID GetNextId()
+    internal ItemId GetNextId()
     {
-        return new ID(_doc.ClientId, _doc.Store.GetState(_doc.ClientId));
+        return new ItemId(_doc.ClientId, _doc.Store.GetState(_doc.ClientId));
     }
 
     /// <summary>
     /// If 'type.parent' was added in current transaction, 'type' technically did not change,
     /// it was just added and we should not fire events for 'type'.
     /// </summary>
-    internal void AddChangedTypeToTransaction(AbstractType type, string parentSub)
+    internal void AddChangedTypeToTransaction(YType type, string parentSub)
     {
         if (type.IsRoot || (_beforeState.TryGetValue(type.ItemId.Client, out var clock) && type.ItemId.Clock < clock && !type.ItemDeleted))
         {
@@ -274,13 +274,13 @@ public sealed partial class Transaction
 
     /// <summary>
     /// A changed type builds its event only when someone observes it at its turn (see
-    /// <see cref="AbstractType.IsObserved"/>); Yjs builds every event. When an observer attached a deep
+    /// <see cref="YType.IsObserved"/>); Yjs builds every event. When an observer attached a deep
     /// observer or a document listener meanwhile, the skipped types build theirs now, without calling
     /// their own observers, and every event list is put back into the order of change.
     /// </summary>
     private static void BuildSkippedEvents(Transaction transaction)
     {
-        List<KeyValuePair<AbstractType, ISet<string>>> skipped = null;
+        List<KeyValuePair<YType, ISet<string>>> skipped = null;
         foreach (var kvp in transaction._changed)
         {
             var type = kvp.Key;
@@ -314,7 +314,7 @@ public sealed partial class Transaction
     // Separate from BuildSkippedEvents, whose common path must not allocate the closure.
     private static void SortEventsByOrderOfChange(Transaction transaction)
     {
-        var order = new Dictionary<AbstractType, int>(transaction._changed.Count);
+        var order = new Dictionary<YType, int>(transaction._changed.Count);
         foreach (var kvp in transaction._changed)
         {
             order[kvp.Key] = order.Count;
@@ -330,8 +330,8 @@ public sealed partial class Transaction
         }
 
         // The keys as Yjs adds them: each changed type that has an event, then its ancestors.
-        var ordered = new List<KeyValuePair<AbstractType, IList<YEvent>>>(changedParentTypes.Count);
-        var seen = new HashSet<AbstractType>();
+        var ordered = new List<KeyValuePair<YType, IList<YEvent>>>(changedParentTypes.Count);
+        var seen = new HashSet<YType>();
         foreach (var kvp in transaction._changed)
         {
             if (!HasOwnEvent(transaction, kvp.Key))
@@ -363,7 +363,7 @@ public sealed partial class Transaction
         }
     }
 
-    private static bool HasOwnEvent(Transaction transaction, AbstractType type)
+    private static bool HasOwnEvent(Transaction transaction, YType type)
     {
         if (transaction._changedParentTypes.TryGetValue(type, out var events))
         {
@@ -762,7 +762,7 @@ public sealed partial class Transaction
 
                 if (clock < store.GetState(client))
                 {
-                    store.GetItemCleanStart(transaction, new ID(client, clock));
+                    store.GetItemCleanStart(transaction, new ItemId(client, clock));
                 }
             }
 

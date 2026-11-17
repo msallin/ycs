@@ -6,7 +6,7 @@ namespace Ycs;
 /// </summary>
 internal sealed class TypeTable
 {
-    private readonly List<AbstractType?> _types = [];
+    private readonly List<YType?> _types = [];
     private int _collected;
 
     /// <summary>The indexes handed out, collected ones included.</summary>
@@ -15,16 +15,16 @@ internal sealed class TypeTable
     public int LiveCount => _types.Count - _collected;
 
     /// <summary>The type at <paramref name="index"/>; null once collected.</summary>
-    public AbstractType? this[int index] => _types[index];
+    public YType? this[int index] => _types[index];
 
-    public int Add(AbstractType type)
+    public int Add(YType type)
     {
         _types.Add(type);
         return _types.Count - 1;
     }
 
     /// <summary>Puts the cleared entry of <paramref name="index"/> back, which only its own type can be.</summary>
-    public void Restore(int index, AbstractType type)
+    public void Restore(int index, YType type)
     {
         if (_types[index] == null)
         {

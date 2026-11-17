@@ -419,7 +419,7 @@ public partial class YText : YArrayBase
                         {
                             // Split right: the split allocates, so the slot is read again after it.
                             var id = right.Id;
-                            transaction.Doc.Store.GetItemCleanStart(transaction, new ID(id.Client, id.Clock + count));
+                            transaction.Doc.Store.GetItemCleanStart(transaction, new ItemId(id.Client, id.Clock + count));
                         }
 
                         var length = right.Length;
@@ -472,7 +472,7 @@ public partial class YText : YArrayBase
             {
                 var left = Left;
                 var right = Right;
-                var nextFormat = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), left, right, parent, null, new ContentFormat(kvp.Key, kvp.Value));
+                var nextFormat = ItemRef.New(doc.Store.Slab, new ItemId(ownClientId, doc.Store.GetState(ownClientId)), left, right, parent, null, new ContentFormat(kvp.Key, kvp.Value));
                 nextFormat.Integrate(transaction, 0);
                 Right = nextFormat;
                 Forward();
@@ -720,7 +720,7 @@ public partial class YText : YArrayBase
                 // Save negated attribute (set null if currentVal is not set).
                 (negatedAttributes ??= new OrderedDictionary<string, object?>())[key] = currentVal;
 
-                currPos.Right = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, new ContentFormat(key, ValueFreezer.Freeze(value, doc.Limits.MaxDepth)));
+                currPos.Right = ItemRef.New(doc.Store.Slab, new ItemId(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, new ContentFormat(key, ValueFreezer.Freeze(value, doc.Limits.MaxDepth)));
                 currPos.Right.Integrate(transaction, 0);
                 currPos.Forward();
             }
@@ -784,7 +784,7 @@ public partial class YText : YArrayBase
             return;
         }
 
-        var id = new ID(ownClientId, doc.Store.GetState(ownClientId));
+        var id = new ItemId(ownClientId, doc.Store.GetState(ownClientId));
         currPos.Right = str != null
             ? ItemRef.New(doc.Store.Slab, id, currPos.Left, currPos.Right, this, null, str.AsSpan())
             : ItemRef.New(doc.Store.Slab, id, currPos.Left, currPos.Right, this, null, content!);
@@ -841,7 +841,7 @@ public partial class YText : YArrayBase
                     default:
                         if (length < curPos.Right.Length)
                         {
-                            transaction.Doc.Store.GetItemCleanStart(transaction, new ID(curPos.Right.Id.Client, curPos.Right.Id.Clock + length));
+                            transaction.Doc.Store.GetItemCleanStart(transaction, new ItemId(curPos.Right.Id.Client, curPos.Right.Id.Clock + length));
                         }
 
                         length -= curPos.Right.Length;
@@ -857,7 +857,7 @@ public partial class YText : YArrayBase
         // inserted - i.e. when length is bigger than type.length.
         if (length > 0)
         {
-            curPos.Right = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Right, this, null, new string('\n', length));
+            curPos.Right = ItemRef.New(doc.Store.Slab, new ItemId(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Right, this, null, new string('\n', length));
             curPos.Right.Integrate(transaction, 0);
             curPos.Forward();
         }
@@ -1052,7 +1052,7 @@ public partial class YText : YArrayBase
                 {
                     // The split allocates: the slot is not read after it.
                     var id = right.Id;
-                    transaction.Doc.Store.GetItemCleanStart(transaction, new ID(id.Client, id.Clock + length));
+                    transaction.Doc.Store.GetItemCleanStart(transaction, new ItemId(id.Client, id.Clock + length));
                 }
 
                 length -= right.Length;

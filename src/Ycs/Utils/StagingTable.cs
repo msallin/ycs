@@ -163,7 +163,7 @@ internal sealed class StagingTable
     /// (<see cref="Chars"/>), an Any <paramref name="length"/> values (<see cref="Values"/>). Parent, content object and
     /// type are set after.
     /// </summary>
-    public int Add(StagedKind kind, int length, ID? leftOrigin = null, ID? rightOrigin = null)
+    public int Add(StagedKind kind, int length, ItemId? leftOrigin = null, ItemId? rightOrigin = null)
     {
         if (_open < 0)
         {
@@ -228,7 +228,7 @@ internal sealed class StagingTable
     }
 
     /// <summary>The parent of struct <paramref name="i"/> as the id of the item that holds its type.</summary>
-    public void SetParentId(int i, ID parent)
+    public void SetParentId(int i, ItemId parent)
     {
         var client = ClientIndex(parent.Client);
         ref var s = ref _structs[i];
@@ -257,19 +257,19 @@ internal sealed class StagingTable
         return ref _structs[i];
     }
 
-    public ID IdOf(int i) => new(_clients[At(i).Client], At(i).Clock);
+    public ItemId IdOf(int i) => new(_clients[At(i).Client], At(i).Clock);
 
     /// <summary>The left origin, null for none.</summary>
-    public ID? LeftOrigin(int i) => At(i).OriginClient < 0 ? null : new ID(_clients[At(i).OriginClient], At(i).OriginClock);
+    public ItemId? LeftOrigin(int i) => At(i).OriginClient < 0 ? null : new ItemId(_clients[At(i).OriginClient], At(i).OriginClock);
 
     /// <summary>The right origin, null for none.</summary>
-    public ID? RightOrigin(int i) => At(i).ROriginClient < 0 ? null : new ID(_clients[At(i).ROriginClient], At(i).ROriginClock);
+    public ItemId? RightOrigin(int i) => At(i).ROriginClient < 0 ? null : new ItemId(_clients[At(i).ROriginClient], At(i).ROriginClock);
 
     /// <summary>The root name when <see cref="StagedStruct.ParentKind"/> is Root.</summary>
     public string ParentName(int i) => (string)_refs[At(i).ParentClient]!;
 
     /// <summary>The parent item's id when <see cref="StagedStruct.ParentKind"/> is Id.</summary>
-    public ID ParentId(int i) => new(_clients[At(i).ParentClient], At(i).ParentClock);
+    public ItemId ParentId(int i) => new(_clients[At(i).ParentClient], At(i).ParentClock);
 
     public string? ParentSub(int i) => At(i).ParentSub < 0 ? null : (string)_refs[At(i).ParentSub]!;
 

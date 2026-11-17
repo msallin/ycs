@@ -48,7 +48,7 @@ public partial class YDoc
             throw new ArgumentException("The document is already a subdocument and cannot be inserted again: create a second YDoc with the same guid instead. Nothing was inserted.");
         }
 
-        for (var d = parent; d != null; d = d._item.IsNull || d._itemCollected ? null : ((AbstractType)d._item.Parent).Doc)
+        for (var d = parent; d != null; d = d._item.IsNull || d._itemCollected ? null : ((YType)d._item.Parent).Doc)
         {
             if (d == this)
             {
@@ -64,15 +64,15 @@ public partial class YDoc
             return;
         }
 
-        _collectedParentDoc = ((AbstractType)_item.Parent).Doc;
+        _collectedParentDoc = ((YType)_item.Parent).Doc;
         _itemCollected = true;
-        if (AbstractType.PoisonCollectedHandleForTests)
+        if (YType.PoisonCollectedHandleForTests)
         {
-            _item = AbstractType.PoisonItem();
+            _item = YType.PoisonItem();
         }
     }
 
-    private readonly Dictionary<string, AbstractType> _share;
+    private readonly Dictionary<string, YType> _share;
 
     /// <summary>
     /// 32 random bits, as Yjs' <c>random.uint32()</c>, from the system's random number generator: two
@@ -206,10 +206,10 @@ public partial class YDoc
     internal int LiteralWalkStepsForTests = 32;
 
     /// <summary>When set, every marker lookup adds the item and index it ends at (the tests compare them).</summary>
-    internal List<(ID Item, int Index)>? MarkerLookupsForTests;
+    internal List<(ItemId Item, int Index)>? MarkerLookupsForTests;
 
     /// <summary>The root type named <paramref name="name"/>, if it was defined (without defining it).</summary>
-    internal bool TryGetRoot(string name, [MaybeNullWhen(false)] out AbstractType type) => _share.TryGetValue(name, out type);
+    internal bool TryGetRoot(string name, [MaybeNullWhen(false)] out YType type) => _share.TryGetValue(name, out type);
 
     internal void InvokeSubdocsChanged(IReadOnlySet<YDoc> loaded, IReadOnlySet<YDoc> added, IReadOnlySet<YDoc> removed)
     {
@@ -317,7 +317,7 @@ public partial class YDoc
         return _opts with { Guid = System.Guid.NewGuid().ToString("D") };
     }
 
-    internal string FindRootTypeKey(AbstractType type)
+    internal string FindRootTypeKey(YType type)
     {
         foreach (var kvp in _share)
         {

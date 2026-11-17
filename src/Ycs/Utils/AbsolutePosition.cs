@@ -9,7 +9,7 @@ namespace Ycs;
 /// <param name="Type">The type the index is in.</param>
 /// <param name="Index">The index in <paramref name="Type"/>.</param>
 /// <param name="Assoc">The association of the relative position it came from.</param>
-public readonly record struct AbsolutePosition(AbstractType Type, int Index, Assoc Assoc = Assoc.After)
+public readonly record struct AbsolutePosition(YType Type, int Index, Assoc Assoc = Assoc.After)
 {
     internal static bool TryResolve(RelativePosition rpos, YDoc doc, bool followUndoneDeletions, out AbsolutePosition position)
     {
@@ -19,7 +19,7 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, Ass
         var tName = rpos.RootName;
         var assoc = rpos.Assoc;
         int index = 0;
-        AbstractType type;
+        YType type;
 
         if (rightId != null)
         {
@@ -37,7 +37,7 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, Ass
                 return false;
             }
 
-            type = (AbstractType)right.Parent!;
+            type = (YType)right.Parent!;
 
             if (!type.ItemDeleted)
             {
@@ -60,7 +60,7 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, Ass
         {
             if (tName != null)
             {
-                type = doc.Get<AbstractType>(tName);
+                type = doc.Get<YType>(tName);
             }
             else if (typeId == null)
             {
@@ -102,7 +102,7 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, Ass
     /// The non-redone-following counterpart to <see cref="StructStore.FollowRedone"/>, used when
     /// <c>followUndoneDeletions</c> is <c>false</c>.
     /// </summary>
-    private static (ItemRef item, int diff) GetItemWithOffset(StructStore store, ID id)
+    private static (ItemRef item, int diff) GetItemWithOffset(StructStore store, ItemId id)
     {
         var item = store.Find(id);
         return (item, (int)(id.Clock - item.Id.Clock));

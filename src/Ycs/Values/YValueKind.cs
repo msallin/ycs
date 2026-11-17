@@ -25,7 +25,7 @@ public enum YValueKind
     /// <summary>An object with string keys.</summary>
     Object,
 
-    /// <summary>A shared type (<see cref="AbstractType"/>).</summary>
+    /// <summary>A shared type (<see cref="YType"/>).</summary>
     SharedType,
 
     /// <summary>A subdocument.</summary>

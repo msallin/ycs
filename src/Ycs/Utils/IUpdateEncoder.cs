@@ -33,8 +33,8 @@ internal interface IDSEncoder
 
 internal interface IUpdateEncoder : IDSEncoder
 {
-    void WriteLeftId(ID id);
-    void WriteRightId(ID id);
+    void WriteLeftId(ItemId id);
+    void WriteRightId(ItemId id);
 
     /// <summary>
     /// NOTE: Use 'writeClient' and 'writeClock' instead of writeID if possible.

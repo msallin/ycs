@@ -30,7 +30,7 @@ internal readonly partial struct ItemRef
         {
             if (integrate)
             {
-                store.AddStruct(NewGC(store.Slab, new ID(id.Client, id.Clock + offset), table.At(i).Length - offset));
+                store.AddStruct(NewGC(store.Slab, new ItemId(id.Client, id.Clock + offset), table.At(i).Length - offset));
             }
 
             return;
@@ -43,7 +43,7 @@ internal readonly partial struct ItemRef
         }
 
         var length = table.At(i).Length - offset;
-        var start = new ID(id.Client, id.Clock + offset);
+        var start = new ItemId(id.Client, id.Clock + offset);
         ItemRef adopted;
         switch (kind)
         {
@@ -90,17 +90,17 @@ internal readonly partial struct ItemRef
     /// left and right are the store's structs, split where needed, the origins are the ids of what they ended up naming,
     /// and the parent is resolved to a type, or to null when the item is to be integrated as a GC struct.
     /// </summary>
-    private static (ItemRef Left, ID? LeftOrigin, ItemRef Right, ID? RightOrigin, AbstractType Parent, string ParentSub) ResolveReferences(StagingTable table, int i, Transaction transaction, StructStore store)
+    private static (ItemRef Left, ItemId? LeftOrigin, ItemRef Right, ItemId? RightOrigin, YType Parent, string ParentSub) ResolveReferences(StagingTable table, int i, Transaction transaction, StructStore store)
     {
         var parentSub = table.ParentSub(i);
         var leftOrigin = table.LeftOrigin(i);
         var rightOrigin = table.RightOrigin(i);
-        AbstractType parent = null;
-        ID? parentId = null;
+        YType parent = null;
+        ItemId? parentId = null;
         switch (table.At(i).ParentKind)
         {
             case StagedParent.Root:
-                parent = transaction.Doc.Get<AbstractType>(table.ParentName(i));
+                parent = transaction.Doc.Get<YType>(table.ParentName(i));
                 break;
             case StagedParent.Id:
                 parentId = table.ParentId(i);

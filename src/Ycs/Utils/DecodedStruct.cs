@@ -10,7 +10,7 @@ namespace Ycs;
 public sealed record DecodedStruct
 {
     /// <summary>The id of the first clock the struct covers.</summary>
-    public required ID Id { get; init; }
+    public required ItemId Id { get; init; }
 
     /// <summary>The number of clocks it covers.</summary>
     public required long Length { get; init; }
@@ -19,16 +19,16 @@ public sealed record DecodedStruct
     public required ItemKind Kind { get; init; }
 
     /// <summary>The id the item was inserted after; null for none, and for a GC or a Skip.</summary>
-    public ID? LeftOrigin { get; init; }
+    public ItemId? LeftOrigin { get; init; }
 
     /// <summary>The id the item was inserted before; null for none, and for a GC or a Skip.</summary>
-    public ID? RightOrigin { get; init; }
+    public ItemId? RightOrigin { get; init; }
 
     /// <summary>The name of the root type when the update names it (an item without origins).</summary>
     public string? ParentName { get; init; }
 
     /// <summary>The id of the item whose type is the parent, when the update gives it (an item without origins).</summary>
-    public ID? ParentId { get; init; }
+    public ItemId? ParentId { get; init; }
 
     /// <summary>The map key of the item, null for a list entry.</summary>
     public string? ParentSub { get; init; }

@@ -63,7 +63,7 @@ internal sealed partial class StructStore
 
         // Nesting depth of the types this update creates (by the id of their item), and of the type
         // each item lands in (when it was needed), for the nesting limit.
-        private Dictionary<ID, int> _typeDepths;
+        private Dictionary<ItemId, int> _typeDepths;
         private int _maxDepth;
         private Dictionary<PlanItem, int> _parentDepths;
 
@@ -445,7 +445,7 @@ internal sealed partial class StructStore
                     throw new YUpdateException($"Shared types are nested deeper than {_maxDepth} levels (UpdateLimits.MaxDepth).");
                 }
 
-                (_typeDepths ??= new Dictionary<ID, int>())[typeItem.Id] = parentDepth + 1;
+                (_typeDepths ??= new Dictionary<ItemId, int>())[typeItem.Id] = parentDepth + 1;
             }
         }
 
@@ -471,7 +471,7 @@ internal sealed partial class StructStore
                     break;
                 }
 
-                if (item.ParentId is ID parentId)
+                if (item.ParentId is ItemId parentId)
                 {
                     depth = TypeDepth(parentId);
                     break;
@@ -481,7 +481,7 @@ internal sealed partial class StructStore
                 if (origin.Clock < _store.GetState(origin.Client))
                 {
                     var found = _store.Find(origin);
-                    depth = found.IsItem && found.Parent is AbstractType parent ? parent.Depth : -1;
+                    depth = found.IsItem && found.Parent is YType parent ? parent.Depth : -1;
                     break;
                 }
 
@@ -504,7 +504,7 @@ internal sealed partial class StructStore
         }
 
         /// <summary>The depth of the type defined by the item <paramref name="id"/>, or -1 when it is not a type.</summary>
-        private int TypeDepth(ID id)
+        private int TypeDepth(ItemId id)
         {
             if (id.Clock < _store.GetState(id.Client))
             {
@@ -516,7 +516,7 @@ internal sealed partial class StructStore
         }
 
         /// <summary>The index in the table of the planned struct that holds <paramref name="id"/>, -1 for none.</summary>
-        private int FindPlanned(ID id)
+        private int FindPlanned(ItemId id)
         {
             var client = _table.FindClient(id.Client);
             return client < 0 ? -1 : _table.FindByClock(client, id.Clock, ref _plannedHint);

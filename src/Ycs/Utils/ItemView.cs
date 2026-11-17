@@ -33,12 +33,12 @@ namespace Ycs;
 public readonly partial struct ItemView : IEquatable<ItemView>
 {
     private readonly YDoc? _doc;
-    private readonly ID _id;
+    private readonly ItemId _id;
     private readonly int _hint;
     private readonly StagingTable? _table;
     private readonly int _version;
 
-    private ItemView(YDoc? doc, ID id, int hint, StagingTable? table = null, int version = 0)
+    private ItemView(YDoc? doc, ItemId id, int hint, StagingTable? table = null, int version = 0)
     {
         _doc = doc;
         _id = id;
@@ -51,7 +51,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     internal static ItemView Of(YDoc doc, ItemRef str) => new(doc ?? throw new ArgumentNullException(nameof(doc)), str.Id, str.Handle);
 
     /// <summary>The view of the id <paramref name="id"/> of <paramref name="doc"/>, with no hint: the first read looks it up.</summary>
-    internal static ItemView At(YDoc doc, ID id) => new(doc ?? throw new ArgumentNullException(nameof(doc)), id, -1);
+    internal static ItemView At(YDoc doc, ItemId id) => new(doc ?? throw new ArgumentNullException(nameof(doc)), id, -1);
 
     /// <summary>
     /// The view of struct <paramref name="index"/> of <paramref name="table"/>, which is in no store: it reads the staged
@@ -69,7 +69,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
 
     public YDoc? Doc => _doc;
 
-    public ID Id => Checked() ? _id : default;
+    public ItemId Id => Checked() ? _id : default;
 
     public ItemKind Kind
     {
@@ -99,17 +99,17 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         }
     }
 
-    public ID LastId
+    public ItemId LastId
     {
         get
         {
             if (IsStaged)
             {
-                return new ID(_id.Client, _id.Clock + Staged.Length - 1);
+                return new ItemId(_id.Client, _id.Clock + Staged.Length - 1);
             }
 
             var s = Resolve(out _);
-            return new ID(s.Id.Client, s.Id.Clock + s.Length - 1);
+            return new ItemId(s.Id.Client, s.Id.Clock + s.Length - 1);
         }
     }
 
@@ -140,7 +140,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         }
     }
 
-    public ID? LeftOrigin
+    public ItemId? LeftOrigin
     {
         get
         {
@@ -150,11 +150,11 @@ public readonly partial struct ItemView : IEquatable<ItemView>
             }
 
             var s = Resolve(out var o);
-            return o > 0 ? new ID(_id.Client, _id.Clock - 1) : s.AsItem is { IsNull: false } item ? item.LeftOrigin : null;
+            return o > 0 ? new ItemId(_id.Client, _id.Clock - 1) : s.AsItem is { IsNull: false } item ? item.LeftOrigin : null;
         }
     }
 
-    public ID? RightOrigin => IsStaged ? _table!.RightOrigin(_hint) : Resolve(out _).AsItem is { IsNull: false } item ? item.RightOrigin : null;
+    public ItemId? RightOrigin => IsStaged ? _table!.RightOrigin(_hint) : Resolve(out _).AsItem is { IsNull: false } item ? item.RightOrigin : null;
 
     /// <summary>The view of (client, clock - 1) at an offset, else of S's left struct; null when there is none (a decoded struct has no neighbours).</summary>
     public ItemView? Left
@@ -167,18 +167,18 @@ public readonly partial struct ItemView : IEquatable<ItemView>
             }
 
             var s = Resolve(out var o);
-            return o > 0 ? new ItemView(_doc, new ID(_id.Client, _id.Clock - 1), s.Handle) : Neighbour(s.AsItem is { IsNull: false } item ? item.Left : default);
+            return o > 0 ? new ItemView(_doc, new ItemId(_id.Client, _id.Clock - 1), s.Handle) : Neighbour(s.AsItem is { IsNull: false } item ? item.Left : default);
         }
     }
 
     public ItemView? Right => IsStaged ? null : Neighbour(Resolve(out _).AsItem is { IsNull: false } item ? item.Right : default);
 
-    public AbstractType? Parent => IsStaged ? null : Resolve(out _).AsItem is { IsNull: false } item ? item.Parent : null;
+    public YType? Parent => IsStaged ? null : Resolve(out _).AsItem is { IsNull: false } item ? item.Parent : null;
 
     public string? ParentSub => IsStaged ? _table!.ParentSub(_hint) : Resolve(out _).AsItem is { IsNull: false } item ? item.ParentSub : null;
 
     /// <summary>S's, moved by the offset as Yjs' <c>splitItem</c> moves it.</summary>
-    public ID? Redone
+    public ItemId? Redone
     {
         get
         {
@@ -188,7 +188,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
             }
 
             var s = Resolve(out var o);
-            return (s.AsItem is { IsNull: false } item ? item.Redone : null) is ID redone ? new ID(redone.Client, redone.Clock + o) : null;
+            return (s.AsItem is { IsNull: false } item ? item.Redone : null) is ItemId redone ? new ItemId(redone.Client, redone.Clock + o) : null;
         }
     }
 

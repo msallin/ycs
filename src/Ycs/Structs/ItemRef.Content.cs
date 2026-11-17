@@ -17,7 +17,7 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>The type of a <see cref="SlotKind.Type"/> item, by the table index its slot holds.</summary>
-    internal AbstractType TypeOf
+    internal YType TypeOf
     {
         get
         {
@@ -113,7 +113,7 @@ internal readonly partial struct ItemRef
 
     // Fills the content storage of the new slot at handle from the content object (not a String's or an Any's: StoreChars,
     // StoreValues) or, for a Type, from type or else the type of the content object; the slot holds the kind and the length.
-    private static void StoreContent(Slab slab, int handle, SlotKind kind, IContentEx content, AbstractType type)
+    private static void StoreContent(Slab slab, int handle, SlotKind kind, IContentEx content, YType type)
     {
         if (kind == SlotKind.Type)
         {

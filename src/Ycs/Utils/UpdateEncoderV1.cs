@@ -100,13 +100,13 @@ internal sealed class UpdateEncoderV1 : DSEncoderV1, IUpdateEncoder
         t_free = this;
     }
 
-    public void WriteLeftId(ID id)
+    public void WriteLeftId(ItemId id)
     {
         RestWriter.WriteVarUint((ulong)id.Client);
         RestWriter.WriteVarUint((ulong)id.Clock);
     }
 
-    public void WriteRightId(ID id)
+    public void WriteRightId(ItemId id)
     {
         RestWriter.WriteVarUint((ulong)id.Client);
         RestWriter.WriteVarUint((ulong)id.Clock);

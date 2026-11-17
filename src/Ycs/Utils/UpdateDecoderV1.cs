@@ -36,9 +36,9 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
 
     public long MaxStructs { get; set; }
 
-    public ID ReadLeftId() => new ID(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
+    public ItemId ReadLeftId() => new ItemId(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
 
-    public ID ReadRightId() => new ID(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
+    public ItemId ReadRightId() => new ItemId(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
 
     public long ReadClient() => Reader.ReadVarUint53();
 

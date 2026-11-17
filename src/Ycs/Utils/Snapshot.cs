@@ -89,7 +89,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
 
                 if (clock < originDoc.Store.GetState(client))
                 {
-                    tr.Doc.Store.GetItemCleanStart(tr, new ID(client, clock));
+                    tr.Doc.Store.GetItemCleanStart(tr, new ItemId(client, clock));
                 }
 
                 var structs = originDoc.Store.Clients[client];

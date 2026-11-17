@@ -30,7 +30,7 @@ internal sealed partial class StructStore
     }
 
     /// <summary>Adds a GC struct of <paramref name="length"/> from <paramref name="id"/> to its client's list, outside any transaction.</summary>
-    internal ItemRef AddGcForTests(ID id, int length)
+    internal ItemRef AddGcForTests(ItemId id, int length)
     {
         var gc = ItemRef.NewGC(Slab, id, length);
         AddStruct(gc);
@@ -46,7 +46,7 @@ internal sealed partial class StructStore
     internal void CheckForTests(Transaction transaction = null)
     {
         _checks++;
-        HashSet<AbstractType> visited = null;
+        HashSet<YType> visited = null;
         HashSet<int> handles = [];
         foreach (var (client, structs) in Clients)
         {

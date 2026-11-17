@@ -39,7 +39,7 @@ internal static class EncodingUtils
     }
 
     /// <param name="structs">All structs by 'client'.</param>
-    /// <param name="clock">Write structs starting with 'ID(client,clock)'.</param>
+    /// <param name="clock">Write structs starting with 'ItemId(client,clock)'.</param>
     public static void WriteStructs(IUpdateEncoder encoder, ClientStructs structs, long client, long clock)
     {
         // Write first id.
@@ -328,7 +328,7 @@ internal static class EncodingUtils
     // The struct is added once it is read whole, when its length is known.
     private static int StageStruct(IUpdateDecoder decoder, StagingTable table, long client, long clock, ref object[] values)
     {
-        var id = new ID(client, clock);
+        var id = new ItemId(client, clock);
         var info = decoder.ReadInfo();
         switch (info & Bits.Bits5)
         {
@@ -343,11 +343,11 @@ internal static class EncodingUtils
                 return table.Add(StagedKind.Skip, (int)skipLength);
         }
 
-        var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ID?)CheckEarlier(decoder.ReadLeftId(), id) : null;
-        var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ID?)CheckEarlier(decoder.ReadRightId(), id) : null;
+        var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ItemId?)CheckEarlier(decoder.ReadLeftId(), id) : null;
+        var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ItemId?)CheckEarlier(decoder.ReadRightId(), id) : null;
 
         string parentName = null;
-        ID? parentId = null;
+        ItemId? parentId = null;
         string parentSub = null;
         if ((info & (Bit.Bit7 | Bit.Bit8)) == 0)
         {
@@ -428,7 +428,7 @@ internal static class EncodingUtils
         return i;
     }
 
-    private static ID CheckEarlier(ID reference, ID id)
+    private static ItemId CheckEarlier(ItemId reference, ItemId id)
     {
         Limits.CheckClient(reference.Client);
         if (reference.Client == id.Client && reference.Clock >= id.Clock)

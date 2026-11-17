@@ -135,9 +135,9 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     }
 
 
-    public ID ReadLeftId() => new ID((long)_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
+    public ItemId ReadLeftId() => new ItemId((long)_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
 
-    public ID ReadRightId() => new ID((long)_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
+    public ItemId ReadRightId() => new ItemId((long)_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
 
     /// <summary>
     /// Read the next client Id.

@@ -170,13 +170,13 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get => Read().Client;
     }
 
-    public ID Id
+    public ItemId Id
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             ref readonly var slot = ref Read();
-            return new ID(_slab.Clients[slot.Client], slot.Clock);
+            return new ItemId(_slab.Clients[slot.Client], slot.Clock);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
@@ -237,13 +237,13 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         set => Write().Right = value.Handle;
     }
 
-    public ID? LeftOrigin
+    public ItemId? LeftOrigin
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             ref readonly var slot = ref Read();
-            return slot.OriginClient < 0 ? null : new ID(_slab.Clients[slot.OriginClient], slot.OriginClock);
+            return slot.OriginClient < 0 ? null : new ItemId(_slab.Clients[slot.OriginClient], slot.OriginClock);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
@@ -255,13 +255,13 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         }
     }
 
-    public ID? RightOrigin
+    public ItemId? RightOrigin
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             ref readonly var slot = ref Read();
-            return slot.ROriginClient < 0 ? null : new ID(_slab.Clients[slot.ROriginClient], slot.ROriginClock);
+            return slot.ROriginClient < 0 ? null : new ItemId(_slab.Clients[slot.ROriginClient], slot.ROriginClock);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
@@ -274,7 +274,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     }
 
     /// <summary>The type the item is in, null for a GC struct and for an item of a type that was collected.</summary>
-    public AbstractType Parent
+    public YType Parent
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
@@ -307,7 +307,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     }
 
     // The id a redone item names is beside the slab (the slot holds only whether it has one).
-    public ID? Redone
+    public ItemId? Redone
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get => (Read().Info & Slot.HasRedoneFlag) == 0 ? null : _slab.GetRedone(_handle);

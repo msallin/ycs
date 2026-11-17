@@ -31,7 +31,7 @@ internal sealed partial class StructStore
     /// <summary>
     /// Counts the structs added and split. Every change to the content of a type adds a struct, splits
     /// one (which can rewrite characters: a split surrogate pair) or deletes, and a delete of countable
-    /// content lowers the type's <see cref="AbstractType.Length"/>: so while this and the length are
+    /// content lowers the type's <see cref="YType.Length"/>: so while this and the length are
     /// unchanged, so is the content (<see cref="YText.ToString"/> caches on it).
     /// </summary>
     internal long Version { get; private set; }
@@ -52,7 +52,7 @@ internal sealed partial class StructStore
     /// orphan continues unless the list changed right of it since. <c>default</c> at the end of the list, and when
     /// the id lies in a GC struct (its type was collected: nothing visible follows).
     /// </summary>
-    internal ItemRef NextAfter(ItemRef held, ID id, int departures)
+    internal ItemRef NextAfter(ItemRef held, ItemId id, int departures)
     {
         held = Resolve(held, id, departures);
         return held.IsNull ? default : held.Right.AsItem;
@@ -63,7 +63,7 @@ internal sealed partial class StructStore
     /// as it is after caller's code ran: the struct that holds <paramref name="id"/> now when structs left since,
     /// <c>default</c> when that is a GC struct. Until then <paramref name="held"/> is not read.
     /// </summary>
-    internal ItemRef Resolve(ItemRef held, ID id, int departures) => departures == Departures ? held : Find(id).AsItem;
+    internal ItemRef Resolve(ItemRef held, ItemId id, int departures) => departures == Departures ? held : Find(id).AsItem;
 
     /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="ItemRef.ExtendRun"/>).</summary>
     internal void NoteRunExtended(ItemRef item, int length)
@@ -250,7 +250,7 @@ internal sealed partial class StructStore
     /// <summary>
     /// Expects that id is actually in store. This function throws or is an infinite loop otherwise.
     /// </summary>
-    public ItemRef Find(ID id)
+    public ItemRef Find(ItemId id)
     {
         if (!Clients.TryGetValue(id.Client, out var structs))
         {
@@ -279,10 +279,10 @@ internal sealed partial class StructStore
         return index;
     }
 
-    public ItemRef GetItemCleanStart(Transaction transaction, ID id) => GetItemCleanStart(transaction, id.Client, id.Clock);
+    public ItemRef GetItemCleanStart(Transaction transaction, ItemId id) => GetItemCleanStart(transaction, id.Client, id.Clock);
 
     /// <summary>
-    /// <see cref="GetItemCleanStart(Transaction, ID)"/> for a clock that can be negative (no <see cref="ID"/> is made of
+    /// <see cref="GetItemCleanStart(Transaction, ItemId)"/> for a clock that can be negative (no <see cref="ItemId"/> is made of
     /// one): it throws then, as <see cref="ClientStructs.FindIndex(long)"/> does for any clock not in the store.
     /// </summary>
     public ItemRef GetItemCleanStart(Transaction transaction, long client, long clock)
@@ -297,7 +297,7 @@ internal sealed partial class StructStore
         return structs[indexCleanStart];
     }
 
-    public ItemRef GetItemCleanEnd(Transaction transaction, ID id)
+    public ItemRef GetItemCleanEnd(Transaction transaction, ItemId id)
     {
         if (!Clients.TryGetValue(id.Client, out var structs))
         {
@@ -362,9 +362,9 @@ internal sealed partial class StructStore
         } while (index < structs.Count && structs[index].Clock < clockEnd);
     }
 
-    public (ItemRef item, int diff) FollowRedone(ID id)
+    public (ItemRef item, int diff) FollowRedone(ItemId id)
     {
-        ID? nextId = id;
+        ItemId? nextId = id;
         int diff = 0;
         ItemRef item;
 
@@ -372,7 +372,7 @@ internal sealed partial class StructStore
         {
             if (diff > 0)
             {
-                nextId = new ID(nextId.Value.Client, nextId.Value.Clock + diff);
+                nextId = new ItemId(nextId.Value.Client, nextId.Value.Clock + diff);
             }
 
             item = Find(nextId.Value);
