@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Buffers;
 
@@ -38,7 +37,7 @@ internal readonly partial struct ItemRef
     /// A new String item (not integrated) between <paramref name="left"/> and <paramref name="right"/> whose text is a copy
     /// of <paramref name="text"/>, which must not be empty.
     /// </summary>
-    public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType parent, string parentSub, ReadOnlySpan<char> text) =>
+    public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType? parent, string? parentSub, ReadOnlySpan<char> text) =>
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.String, text.Length, null, text, default, default);
 
     // The range of the right part after a split of this String at diff; a pair cut in two becomes two replacement

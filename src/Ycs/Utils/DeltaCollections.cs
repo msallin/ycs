@@ -19,7 +19,7 @@ internal sealed class StoredItems : IReadOnlyList<YValue>
         ? YValue.FromStored(_items[index])
         : throw new ArgumentOutOfRangeException(nameof(index), index, $"The operation inserts {_count} items.");
 
-    public void AddRange(IReadOnlyList<object> values)
+    public void AddRange(IReadOnlyList<object?> values)
     {
         if (_count + values.Count > _items.Length)
         {
@@ -33,7 +33,7 @@ internal sealed class StoredItems : IReadOnlyList<YValue>
     }
 
     // The values as ContentView reads them (a byte array as a copy), taken at once from the arena.
-    public void AddRange(ReadOnlySpan<object> values)
+    public void AddRange(ReadOnlySpan<object?> values)
     {
         if (_count + values.Length > _items.Length)
         {

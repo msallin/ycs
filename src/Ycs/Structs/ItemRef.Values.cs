@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -14,7 +13,7 @@ namespace Ycs;
 internal readonly partial struct ItemRef
 {
     // Copies the values into the arena and makes the range the slot's.
-    private static void StoreValues(Slab slab, int handle, ReadOnlySpan<object> values)
+    private static void StoreValues(Slab slab, int handle, ReadOnlySpan<object?> values)
     {
         var payload = slab.Values.Append(values);
         slab.Write(handle).Payload = payload;
@@ -24,7 +23,7 @@ internal readonly partial struct ItemRef
     /// A new Any item (not integrated) between <paramref name="left"/> and <paramref name="right"/> whose values are a copy
     /// of <paramref name="values"/>, which must not be empty.
     /// </summary>
-    public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType parent, string parentSub, ReadOnlySpan<object> values) =>
+    public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType parent, string? parentSub, ReadOnlySpan<object?> values) =>
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.Any, values.Length, null, default, values, default);
 
     // The range of the right part after a split of this Any at diff; the tail reservation of the range stays with its end,
@@ -69,7 +68,7 @@ internal readonly partial struct ItemRef
     /// The raw values of a <see cref="SlotKind.Any"/> item, read from the arena. The span is valid only until user code runs
     /// or a batch ends (a compaction moves and frees ranges): consume it before.
     /// </summary>
-    internal ReadOnlySpan<object> ValueSpan
+    internal ReadOnlySpan<object?> ValueSpan
     {
         get
         {
@@ -81,17 +80,17 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>The <paramref name="index"/>th value of a <see cref="SlotKind.Any"/> item, read from the arena.</summary>
-    internal object ValueAt(int index) => ValueFreezer.OnRead(ValueSpan[index]);
+    internal object? ValueAt(int index) => ValueFreezer.OnRead(ValueSpan[index]);
 
     /// <summary>
     /// A read-only copy of the values of a <see cref="SlotKind.Any"/> item, as <see cref="FrozenList"/> hands them out. It is a
     /// copy, not a view of the range: its reader (an <see cref="ItemView"/>, an event handler) may run after the batch
     /// has moved or freed the range.
     /// </summary>
-    internal IReadOnlyList<object> Values => new ContentView(ValueSpan.ToArray());
+    internal IReadOnlyList<object?> Values => new ContentView(ValueSpan.ToArray());
 
     /// <summary>Appends <paramref name="values"/> to a <see cref="SlotKind.Any"/> item; the caller adjusts <see cref="Length"/>.</summary>
-    internal void AppendValues(ReadOnlySpan<object> values)
+    internal void AppendValues(ReadOnlySpan<object?> values)
     {
         StructStore.CompactForTests(_slab, true);
         if (Kind != SlotKind.Any)

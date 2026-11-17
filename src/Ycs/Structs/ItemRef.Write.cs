@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -26,8 +25,8 @@ internal readonly partial struct ItemRef
         ItemId? leftOrigin = slot.OriginClient < 0 ? null : new ItemId(clients[slot.OriginClient], slot.OriginClock);
         ItemId? rightOrigin = slot.ROriginClient < 0 ? null : new ItemId(clients[slot.ROriginClient], slot.ROriginClock);
         var kind = (SlotKind)slot.Kind;
-        var parentSub = (string)_slab.ReadKey(_handle);
-        string root = null;
+        var parentSub = (string?)_slab.ReadKey(_handle);
+        string? root = null;
         ItemId parentId = default;
         if (offset == 0 && leftOrigin == null && rightOrigin == null)
         {
@@ -58,7 +57,7 @@ internal readonly partial struct ItemRef
                 WriteValues(encoder, offset);
                 break;
             default:
-                Cold.Write(encoder, offset);
+                Cold!.Write(encoder, offset); // The kind is a cold one: its object is the slot's.
                 break;
         }
     }
@@ -69,7 +68,7 @@ internal readonly partial struct ItemRef
     /// and no origins): <paramref name="parentRoot"/> names a root type, or, when it is null, <paramref name="parentId"/>
     /// is the id of the type's item.
     /// </summary>
-    internal static void WriteItemHeader(IUpdateEncoder encoder, int contentRef, int offset, ItemId id, ItemId? leftOrigin, ItemId? rightOrigin, string parentSub, string parentRoot, ItemId parentId)
+    internal static void WriteItemHeader(IUpdateEncoder encoder, int contentRef, int offset, ItemId id, ItemId? leftOrigin, ItemId? rightOrigin, string? parentSub, string? parentRoot, ItemId parentId)
     {
         var origin = offset > 0 ? new ItemId(id.Client, id.Clock + offset - 1) : leftOrigin;
         var info = (contentRef & Bits.Bits5) |

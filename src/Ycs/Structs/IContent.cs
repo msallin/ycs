@@ -4,7 +4,7 @@ internal interface IContent
 {
     bool Countable { get; }
     int Length { get; }
-    IReadOnlyList<object> GetContent();
+    IReadOnlyList<object?> GetContent();
     IContent Copy();
     IContent Splice(int offset);
     bool MergeWith(IContent right);

@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
 
@@ -77,26 +76,26 @@ internal readonly partial struct ItemRef
     /// A new item (not integrated) in <paramref name="slab"/> between <paramref name="left"/> and <paramref name="right"/>,
     /// which are its origins (Yjs' <c>new Item(id, left, left &amp;&amp; left.lastId, right, right &amp;&amp; right.id, parent, parentSub, content)</c>).
     /// </summary>
-    public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType parent, string parentSub, IContent content) =>
+    public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType? parent, string? parentSub, IContent content) =>
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, (IContentEx)content);
 
     /// <summary>
     /// A new item (not integrated) between <paramref name="left"/> and <paramref name="right"/> with a copy of the content of
     /// <paramref name="source"/>, a store item that is not collected (what a redone item holds).
     /// </summary>
-    public static ItemRef NewCopyOf(Slab slab, ItemId id, ItemRef left, ItemRef right, YType parent, string parentSub, ItemRef source) =>
+    public static ItemRef NewCopyOf(Slab slab, ItemId id, ItemRef left, ItemRef right, YType? parent, string? parentSub, ItemRef source) =>
         source.Kind is SlotKind.String or SlotKind.Any or SlotKind.Deleted
             ? NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, source.Kind, source.Length, null, default, default, source)
             : New(slab, id, left, right, parent, parentSub, source.CopyContent());
 
-    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType parent, string parentSub, IContentEx content) =>
+    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType? parent, string? parentSub, IContentEx content) =>
         NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, (SlotKind)content.Ref, content.Length, content, default, default, default);
 
     // A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet): the object
     // of a kind that has one, the given type of a Type (else the one of its content object), else the chars of a String or
     // the values of an Any: the span, or the range of the store item copyOf (read after the compaction hook that opens
     // this method, which may move it). firstReplaced: the first char of the span is U+FFFD (see StoreChars).
-    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType parent, string parentSub, SlotKind kind, int length, IContentEx content, ReadOnlySpan<char> chars, ReadOnlySpan<object> values, ItemRef copyOf, YType type = null, bool firstReplaced = false)
+    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType? parent, string? parentSub, SlotKind kind, int length, IContentEx? content, ReadOnlySpan<char> chars, ReadOnlySpan<object?> values, ItemRef copyOf, YType? type = null, bool firstReplaced = false)
     {
         StructStore.CompactForTests(slab, true);
 
@@ -303,7 +302,7 @@ internal readonly partial struct ItemRef
             parent.Length -= Length;
         }
 
-        if (ParentSub != null && parent.TryGetMapItem(ParentSub, out var current) && current == this)
+        if (ParentSub != null && parent!.TryGetMapItem(ParentSub, out var current) && current == this)
         {
             parent._mapCount--;
         }
@@ -342,7 +341,7 @@ internal readonly partial struct ItemRef
         if (parent != null)
         {
             var slab = _slab;
-            YType mapParent = null;
+            YType? mapParent = null;
             var previousCounted = false;
             var parentSub = ParentSub;
             int leftHandle;
@@ -557,7 +556,7 @@ internal readonly partial struct ItemRef
         }
     }
 
-    public bool IsVisible(Snapshot snap)
+    public bool IsVisible(Snapshot? snap)
     {
         return snap == null
             ? !Deleted
@@ -628,7 +627,7 @@ internal readonly partial struct ItemRef
         // Update parent._map.
         if (parentSub != null && rightRight < 0)
         {
-            parent._map[parentSub] = rightItem.Hold;
+            parent!._map[parentSub] = rightItem.Hold;
         }
 
         return rightItem;

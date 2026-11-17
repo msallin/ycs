@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
@@ -274,7 +273,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     }
 
     /// <summary>The type the item is in, null for a GC struct and for an item of a type that was collected.</summary>
-    public YType Parent
+    public YType? Parent
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
@@ -290,13 +289,13 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         }
     }
 
-    public string ParentSub
+    public string? ParentSub
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             Check();
-            return (string)_slab.ReadKey(_handle);
+            return (string?)_slab.ReadKey(_handle);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set
@@ -320,13 +319,14 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         }
     }
 
+    // A GC struct holds no content object; the code asks an item for it (by its Kind) and never a GC struct.
     public IContentEx Content
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             Check();
-            return (IContentEx)_slab.ReadRef(_handle);
+            return (IContentEx)_slab.ReadRef(_handle)!;
         }
     }
 
@@ -370,7 +370,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public bool Equals(ItemRef other) => this == other;
 
-    public override bool Equals(object obj) => obj is ItemRef other && this == other;
+    public override bool Equals(object? obj) => obj is ItemRef other && this == other;
 
     public override int GetHashCode() => _handle;
 

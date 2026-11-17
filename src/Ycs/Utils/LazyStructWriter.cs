@@ -121,7 +121,7 @@ internal sealed class LazyStructWriter
                 encoder.WriteLength(values.Length - offset);
                 for (var v = offset; v < values.Length; v++)
                 {
-                    encoder.WriteAny(values[v]!);
+                    encoder.WriteAny(values[v]);
                 }
 
                 break;

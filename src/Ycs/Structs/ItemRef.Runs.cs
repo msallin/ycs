@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -53,7 +52,7 @@ internal readonly partial struct ItemRef
     {
         var start = new ItemId(Id.Client, Id.Clock + Length);
         Length += length;
-        var parent = Parent;
+        var parent = Parent!; // An item that continues a run is integrated in its parent.
         parent.Length += length;
         transaction.Doc.Store.NoteRunExtended(this, length);
         transaction.AddChangedTypeToTransaction(parent, null);

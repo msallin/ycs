@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
 
@@ -10,12 +9,12 @@ internal class ContentJson : IContentEx
 
     // Yjs reads the string 'undefined' as undefined and writes it back: it is kept as JsValue.Undefined
     // and read as null (GetContent, ValueAt).
-    private readonly List<object> _content;
+    private readonly List<object?> _content;
 
     // Whether _content may hold JsValue.Undefined (set when one is read, kept by Splice, Copy and MergeWith).
     private bool _mayHoldUndefined;
 
-    private ContentJson(List<object> content, bool mayHoldUndefined)
+    private ContentJson(List<object?> content, bool mayHoldUndefined)
     {
         _content = content;
         _mayHoldUndefined = mayHoldUndefined;
@@ -24,12 +23,12 @@ internal class ContentJson : IContentEx
     int IContentEx.Ref => _ref;
 
     public bool Countable => true;
-    public int Length => _content?.Count ?? 0;
+    public int Length => _content.Count;
 
-    public IReadOnlyList<object> GetContent() =>
+    public IReadOnlyList<object?> GetContent() =>
         _mayHoldUndefined ? _content.Select(c => c == JsValue.Undefined ? null : c).ToList() : _content.AsReadOnly();
 
-    internal object ValueAt(int index) => _content[index] == JsValue.Undefined ? null : _content[index];
+    internal object? ValueAt(int index) => _content[index] == JsValue.Undefined ? null : _content[index];
 
     public IContent Copy() => new ContentJson(_content.ToList(), _mayHoldUndefined);
 
@@ -83,7 +82,7 @@ internal class ContentJson : IContentEx
         var len = decoder.ReadLength();
 
         // Each value takes at least one byte (in v1; in v2 the strings are in their own column).
-        var content = new List<object>(Limits.Capacity(len, decoder.Reader.Remaining));
+        var content = new List<object?>(Limits.Capacity(len, decoder.Reader.Remaining));
 
         var undefined = false;
         for (int i = 0; i < len; i++)

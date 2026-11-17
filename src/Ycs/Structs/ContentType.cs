@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -40,7 +39,7 @@ internal class ContentType : IContentEx
     void IContentEx.Write(IUpdateEncoder encoder, int offset) => throw StoreSide();
 
     /// <summary>Reads a type's reference and, for an XML element or hook, its node name; throws for a reference no type has.</summary>
-    internal static int ReadHeader(IUpdateDecoder decoder, out string typeName)
+    internal static int ReadHeader(IUpdateDecoder decoder, out string? typeName)
     {
         var typeRef = decoder.ReadTypeRef();
         typeName = null;
@@ -59,14 +58,14 @@ internal class ContentType : IContentEx
     }
 
     /// <summary>A new, empty type of the reference and name <see cref="ReadHeader"/> read: what an item of the update holds once it is adopted.</summary>
-    internal static YType Create(int typeRef, string typeName) => typeRef switch
+    internal static YType Create(int typeRef, string? typeName) => typeRef switch
     {
         YArray.YArrayRefId => new YArray(),
         YMap.YMapRefId => new YMap(),
         YText.YTextRefId => new YText(),
-        YXmlElement.YXmlElementRefId => new YXmlElement(typeName),
+        YXmlElement.YXmlElementRefId => new YXmlElement(typeName!),
         YXmlFragment.YXmlFragmentRefId => new YXmlFragment(),
-        YXmlHook.YXmlHookRefId => new YXmlHook(typeName),
+        YXmlHook.YXmlHookRefId => new YXmlHook(typeName!),
         YXmlText.YXmlTextRefId => new YXmlText(),
         _ => throw new YUpdateException($"Unknown shared type: {typeRef}."),
     };

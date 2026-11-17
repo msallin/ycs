@@ -52,7 +52,7 @@ internal interface IUpdateEncoder : IDSEncoder
     /// </summary>
     void WriteLength(int len);
 
-    void WriteAny(object any);
+    void WriteAny(object? any);
     void WriteBuffer(ReadOnlySpan<byte> buf);
     void WriteKey(string key);
     void WriteJson(object? any);

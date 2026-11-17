@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -9,10 +8,10 @@ internal readonly partial struct ItemRef
     /// the reader (an <see cref="ItemView"/>) may run after a batch has moved the range. The readers that consume at
     /// once read <see cref="Chars"/> and <see cref="ValueSpan"/>.
     /// </summary>
-    internal IReadOnlyList<object> Elements => Kind switch
+    internal IReadOnlyList<object?> Elements => Kind switch
     {
-        SlotKind.Deleted => Array.Empty<object>(),
-        SlotKind.Type => new object[] { TypeOf },
+        SlotKind.Deleted => Array.Empty<object?>(),
+        SlotKind.Type => new object?[] { TypeOf },
         SlotKind.String => CharElements(),
         SlotKind.Any => Values,
         _ => Content.GetContent(),

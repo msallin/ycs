@@ -229,7 +229,7 @@ internal sealed class UpdateEncoderV2 : DSEncoderV2, IUpdateEncoder
         _lengthEncoder.Write((uint)len);
     }
 
-    public void WriteAny(object any) => RestWriter.WriteAny(any);
+    public void WriteAny(object? any) => RestWriter.WriteAny(any);
 
     public void WriteBuffer(ReadOnlySpan<byte> data) => RestWriter.WriteVarUint8Array(data);
 

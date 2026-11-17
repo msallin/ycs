@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Buffers;
 
@@ -11,7 +10,7 @@ internal readonly partial struct ItemRef
     /// <see cref="SlotKind.Json"/> without the read-only wrapper, null for collected content (Yjs' <c>getContent()[index]</c>
     /// of <c>[]</c> is <c>undefined</c>), else the element of <c>GetContent()</c>. Allocates nothing for Any and Json.
     /// </summary>
-    internal object StoredValueAt(int index) => Kind switch
+    internal object? StoredValueAt(int index) => Kind switch
     {
         SlotKind.Type => TypeOf,
         SlotKind.Any => ValueAt(index),
@@ -19,7 +18,7 @@ internal readonly partial struct ItemRef
         _ => StoredValueAt(Content, index),
     };
 
-    internal static object StoredValueAt(IContent content, int index) => content switch
+    internal static object? StoredValueAt(IContent? content, int index) => content switch
     {
         ContentJson json => json.ValueAt(index),
         null => null,
@@ -43,7 +42,7 @@ internal readonly partial struct ItemRef
                     return new(Chars.ToString());
                 case SlotKind.Any:
                     var span = ValueSpan;
-                    var values = ArrayPool<object>.Shared.Rent(span.Length);
+                    var values = ArrayPool<object?>.Shared.Rent(span.Length);
                     span.CopyTo(values);
                     return new(values);
                 default:
@@ -56,10 +55,10 @@ internal readonly partial struct ItemRef
 /// <summary>The content object of an item at one moment; it stays readable when the item's slot is reused.</summary>
 internal readonly struct StoredContent
 {
-    private readonly IContent _content;
-    private readonly YType _type;
-    private readonly string _text;
-    private readonly object[] _values;
+    private readonly IContent? _content;
+    private readonly YType? _type;
+    private readonly string? _text;
+    private readonly object?[]? _values;
 
     internal StoredContent(IContent content) => _content = content;
 
@@ -69,17 +68,17 @@ internal readonly struct StoredContent
     internal StoredContent(string text) => _text = text;
 
     // The values of an Any item, as stored, in an array rented from the shared pool (longer than the item).
-    internal StoredContent(object[] values) => _values = values;
+    internal StoredContent(object?[] values) => _values = values;
 
     /// <summary>Returns the rented array of an Any's values; the content is not readable afterwards.</summary>
     internal void Release()
     {
         if (_values != null)
         {
-            ArrayPool<object>.Shared.Return(_values, clearArray: true);
+            ArrayPool<object?>.Shared.Return(_values, clearArray: true);
         }
     }
 
     // A type has length 1: the index is ignored.
-    internal object ValueAt(int index) => _type ?? (_text != null ? _text[index].ToString() : _values != null ? ValueFreezer.OnRead(_values[index]) : ItemRef.StoredValueAt(_content, index));
+    internal object? ValueAt(int index) => _type ?? (_text != null ? _text[index].ToString() : _values != null ? ValueFreezer.OnRead(_values[index]) : ItemRef.StoredValueAt(_content, index));
 }

@@ -134,7 +134,7 @@ internal sealed class UpdateEncoderV1 : DSEncoderV1, IUpdateEncoder
         RestWriter.WriteVarUint((uint)len);
     }
 
-    public void WriteAny(object any) => RestWriter.WriteAny(any);
+    public void WriteAny(object? any) => RestWriter.WriteAny(any);
 
     public void WriteBuffer(ReadOnlySpan<byte> data) => RestWriter.WriteVarUint8Array(data);
 
