@@ -227,9 +227,10 @@ public abstract partial class YType
     /// </summary>
     internal void CheckCanInsert(YType child)
     {
-        if (!child._item.IsNull || child._collected)
+        // A root type has no item but a document: it is part of a document as much as a nested one.
+        if (!child._item.IsNull || child._collected || child.Doc != null)
         {
-            throw new ArgumentException("The type is already part of a document (integrated or collected) and cannot be inserted again. Nothing was inserted.", nameof(child));
+            throw new ArgumentException("The type is already part of a document (a root, integrated or collected) and cannot be inserted again. Nothing was inserted.", nameof(child));
         }
 
         CheckCanNest();
