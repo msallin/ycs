@@ -37,9 +37,13 @@ internal sealed partial class StructStore
         HashSet<ItemRef> itemsBeforeOrigin = null;
         HashSet<ItemRef> conflictingItems = null;
 
+        // ResolveConflict allocates no slot, so a ref Slot taken here stays valid through the walk; item's own fields
+        // (origins, right) do not change in it.
+        ref readonly var self = ref item.Peek();
+        var itemRight = self.Right;
         try
         {
-            while (!o.IsNull && o != item.Right)
+            while (!o.IsNull && o.Handle != itemRight)
             {
                 if (--IntegrationSteps < 0)
                 {
@@ -51,11 +55,14 @@ internal sealed partial class StructStore
                     };
                 }
 
-                var oIsItem = o.IsItem;
+                ref readonly var os = ref o.Peek();
+                var oIsItem = os.Kind != 0;
                 itemsBeforeOrigin?.Add(o);
                 conflictingItems?.Add(o);
 
-                if (item.LeftOrigin == (oIsItem ? o.LeftOrigin : null))
+                // The origins compare by client index, which names one client in the slab, and clock; none is -1.
+                var oOriginClient = oIsItem ? os.OriginClient : -1;
+                if (self.OriginClient == oOriginClient && (oOriginClient < 0 || self.OriginClock == os.OriginClock))
                 {
                     // Case 1
                     if (o.Id.Client < item.Id.Client)
@@ -64,7 +71,7 @@ internal sealed partial class StructStore
                         leftMoved = true;
                         conflictingItems?.Clear();
                     }
-                    else if (item.RightOrigin == (oIsItem ? o.RightOrigin : null))
+                    else if (oIsItem ? self.ROriginClient == os.ROriginClient && (self.ROriginClient < 0 || self.ROriginClock == os.ROriginClock) : self.ROriginClient < 0)
                     {
                         // This and 'o' are conflicting and point to the same integration points. The id
                         // decides which item comes first: this is to the left of 'o'.
@@ -74,11 +81,12 @@ internal sealed partial class StructStore
                     // Else, 'o' might be integrated before an item that this conflicts with. If so, we
                     // will find it in the next iterations.
                 }
-                else if (oIsItem && o.LeftOrigin is { } leftOrigin)
+                else if (oOriginClient >= 0)
                 {
+                    var leftOrigin = o.LeftOrigin!.Value;
                     bool beforeOrigin, conflicting;
                     var p = prev;
-                    if (p.IsItem && leftOrigin.Client == p.Id.Client && leftOrigin.Clock >= p.Id.Clock && leftOrigin.Clock < p.Id.Clock + p.Length)
+                    if (p.IsItem && leftOrigin.Client == p.Id.Client && leftOrigin.Clock >= p.Clock && leftOrigin.Clock < p.Clock + p.Length)
                     {
                         // The origin is the item scanned last (a run typed after it): scanned, and
                         // conflicting unless 'left' moved there.

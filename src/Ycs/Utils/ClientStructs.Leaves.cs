@@ -341,11 +341,11 @@ internal sealed partial class ClientStructs
         var leaf = new Leaf(_leafCapacity);
         ReserveLeaves(_leafCount + 1);
         leaf.Structs[0] = str.Hold;
-        leaf.Starts[0] = str.Id.Clock;
+        leaf.Starts[0] = str.Clock;
         leaf.Count = 1;
         InsertLeaf(_leafCount, leaf);
         _count++;
-        _end = str.Id.Clock + str.Length;
+        _end = str.Clock + str.Length;
     }
 
     /// <summary>Merges leaf <paramref name="k"/> with a neighbour when it holds at most a quarter of a leaf and they fit in one.</summary>

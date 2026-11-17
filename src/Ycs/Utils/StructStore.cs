@@ -23,6 +23,17 @@ internal sealed partial class StructStore
     // TODO: [alekseyk] To private?
     public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
 
+    // The values of Clients by the client's index in the slab's client table (what a slot names its client by): the paths
+    // that start from a struct find its list without hashing the client. Set where Clients is, by AddStruct.
+    private ClientStructs[] _structsByIndex = new ClientStructs[4];
+
+    /// <summary>The list of the struct's client; null when the store holds no struct of that client.</summary>
+    private ClientStructs StructsOf(ItemRef item)
+    {
+        var index = item.ClientIndex;
+        return (uint)index < (uint)_structsByIndex.Length ? _structsByIndex[index] : null;
+    }
+
     /// <summary>
     /// Counts the structs added and split. Every change to the content of a type adds a struct, splits
     /// one (which can rewrite characters: a split surrogate pair) or deletes, and a delete of countable
@@ -64,7 +75,7 @@ internal sealed partial class StructStore
     /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="ItemRef.ExtendRun"/>).</summary>
     internal void NoteRunExtended(ItemRef item, int length)
     {
-        Clients[item.Id.Client].LastExtended(length);
+        StructsOf(item).LastExtended(length);
         Version++;
         RunsExtended++;
     }
@@ -117,7 +128,7 @@ internal sealed partial class StructStore
                 var left = structs[i - 1];
                 var right = structs[i];
 
-                if (left.Id.Clock + left.Length != right.Id.Clock)
+                if (left.Clock + left.Length != right.Clock)
                 {
                     throw new Exception($"{nameof(StructStore)} failed integrity check: missing struct");
                 }
@@ -132,16 +143,24 @@ internal sealed partial class StructStore
 
     public void AddStruct(ItemRef str)
     {
-        var known = Clients.TryGetValue(str.Id.Client, out var structs);
-        if (known && structs.End != str.Id.Clock)
+        var structs = StructsOf(str);
+        if (structs != null && structs.End != str.Clock)
         {
             throw new Exception("Unexpected");
         }
 
-        if (!known)
+        if (structs == null)
         {
-            structs = _capacityHints != null && _capacityHints.Remove(str.Id.Client, out var capacity) ? new ClientStructs(Slab, capacity) : new ClientStructs(Slab);
-            Clients[str.Id.Client] = structs;
+            var client = str.Id.Client;
+            structs = _capacityHints != null && _capacityHints.Remove(client, out var capacity) ? new ClientStructs(Slab, capacity) : new ClientStructs(Slab);
+            Clients[client] = structs;
+            var index = str.ClientIndex;
+            if (index >= _structsByIndex.Length)
+            {
+                Array.Resize(ref _structsByIndex, Math.Max(index + 1, _structsByIndex.Length * 2));
+            }
+
+            _structsByIndex[index] = structs;
         }
 
         structs.Add(str);
@@ -154,8 +173,8 @@ internal sealed partial class StructStore
     /// </summary>
     internal void Refresh(ItemRef item)
     {
-        var structs = Clients[item.Id.Client];
-        var index = structs.FindIndex(item.Id.Clock);
+        var structs = StructsOf(item);
+        var index = structs.FindIndex(item.Clock);
         Debug.Assert(structs[index] == item, "Only a struct of the store changes the run-head index.");
 
         // Recounted from the struct at the position, which is the item.
@@ -165,9 +184,10 @@ internal sealed partial class StructStore
     /// <summary>The list and position of <paramref name="item"/>, if the store holds it (a collected type's items it does not).</summary>
     internal bool TryFindPosition(ItemRef item, out ClientStructs structs, out int index)
     {
-        if (Clients.TryGetValue(item.Id.Client, out structs) && item.Id.Clock < structs.End)
+        structs = StructsOf(item);
+        if (structs != null && item.Clock < structs.End)
         {
-            index = structs.FindIndex(item.Id.Clock);
+            index = structs.FindIndex(item.Clock);
             if (structs[index] == item)
             {
                 return true;
@@ -256,9 +276,9 @@ internal sealed partial class StructStore
     {
         int index = FindIndexSS(structs, clock);
         var str = structs[index];
-        if (str.Id.Clock < clock && str.IsItem)
+        if (str.Clock < clock && str.IsItem)
         {
-            structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(clock - str.Id.Clock)));
+            structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(clock - str.Clock)));
             return index + 1;
         }
 
@@ -293,9 +313,9 @@ internal sealed partial class StructStore
         int index = FindIndexSS(structs, id.Clock);
         var str = structs[index];
 
-        if ((id.Clock != str.Id.Clock + str.Length - 1) && !str.IsGC)
+        if ((id.Clock != str.Clock + str.Length - 1) && !str.IsGC)
         {
-            structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(id.Clock - str.Id.Clock + 1)));
+            structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(id.Clock - str.Clock + 1)));
         }
 
         return str;
@@ -312,7 +332,7 @@ internal sealed partial class StructStore
             throw new Exception();
         }
 
-        int index = FindIndexSS(structs, item.Id.Clock);
+        int index = FindIndexSS(structs, item.Clock);
         item.BecomeGC();
         structs.Replace(index, item);
         Departures++;
@@ -334,7 +354,7 @@ internal sealed partial class StructStore
         {
             str = structs[index];
 
-            if (clockEnd < str.Id.Clock + str.Length)
+            if (clockEnd < str.Clock + str.Length)
             {
                 FindIndexCleanStart(transaction, structs, clockEnd);
             }
@@ -345,7 +365,7 @@ internal sealed partial class StructStore
             }
 
             index++;
-        } while (index < structs.Count && structs[index].Id.Clock < clockEnd);
+        } while (index < structs.Count && structs[index].Clock < clockEnd);
     }
 
     public (ItemRef item, int diff) FollowRedone(ID id)
@@ -362,7 +382,7 @@ internal sealed partial class StructStore
             }
 
             item = Find(nextId.Value);
-            diff = (int)(nextId.Value.Clock - item.Id.Clock);
+            diff = (int)(nextId.Value.Clock - item.Clock);
             nextId = item.IsItem ? item.Redone : null;
         } while (nextId != null && item.IsItem);
 
@@ -530,9 +550,9 @@ internal sealed partial class StructStore
                 var str = structs[index];
 
                 // Split the first item if necessary.
-                if (!str.Deleted && str.Id.Clock < clock)
+                if (!str.Deleted && str.Clock < clock)
                 {
-                    structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(clock - str.Id.Clock)));
+                    structs.InsertSplit(index + 1, SplitItem(transaction, str, (int)(clock - str.Clock)));
 
                     // Increase, we now want to use the next struct.
                     index++;
@@ -541,16 +561,16 @@ internal sealed partial class StructStore
                 while (index < structs.Count)
                 {
                     str = structs[index++];
-                    if (str.Id.Clock >= clockEnd)
+                    if (str.Clock >= clockEnd)
                     {
                         break;
                     }
 
                     if (!str.Deleted)
                     {
-                        if (clockEnd < str.Id.Clock + str.Length)
+                        if (clockEnd < str.Clock + str.Length)
                         {
-                            structs.InsertSplit(index, SplitItem(transaction, str, (int)(clockEnd - str.Id.Clock)));
+                            structs.InsertSplit(index, SplitItem(transaction, str, (int)(clockEnd - str.Clock)));
                         }
 
                         str.Delete(transaction);

@@ -261,8 +261,8 @@ internal readonly partial struct ItemRef
         right.LeftOrigin == LastId &&
         Right == right &&
         right.RightOrigin == RightOrigin &&
-        Id.Client == right.Id.Client &&
-        Id.Clock + Length == right.Id.Clock &&
+        ClientIndex == right.ClientIndex &&
+        Clock + Length == right.Clock &&
         Deleted == right.Deleted &&
         Redone == null &&
         right.Redone == null &&
@@ -698,47 +698,62 @@ internal readonly partial struct ItemRef
     /// </summary>
     public ItemRef SplitItem(Transaction transaction, int diff)
     {
-        var client = Id.Client;
-        var clock = Id.Clock;
-
         var content = (IContentEx)Content.Splice(diff);
-        var rightItem = NewItem(_slab, new ID(client, clock + diff), this, new ID(client, clock + diff - 1), Right, RightOrigin, Parent, ParentSub, content);
+        var parent = Parent;
+        var parentSub = ParentSub;
+        var parentIndex = parent?.TableIndex(_slab.Types) ?? -1;
+        var handle = _slab.Allocate();
+        var rightItem = new ItemRef(_slab, handle);
+        _slab.SetKey(handle, parentSub);
+        _slab.SetRef(handle, content);
 
-        if (Deleted)
-        {
-            rightItem.MarkDeleted();
-        }
+        // Rule: both slots are taken here, after the method's only allocation, and no call below allocates.
+        ref var left = ref Write();
+        ref var right = ref _slab.Write(handle);
+        var clock = left.Clock + diff;
+        right.Clock = clock;
+        right.Client = left.Client;
+        right.Length = content.Length;
+        right.Info = (content.Countable ? Slot.CountableFlag : 0) | (content.Ref << 8) | (left.Info & (Slot.DeletedFlag | Slot.KeepFlag));
+        right.OriginClient = left.Client;
+        right.OriginClock = clock - 1;
+        right.ROriginClient = left.ROriginClient;
+        right.ROriginClock = left.ROriginClock;
+        right.Left = _handle;
+        right.Right = left.Right;
+        right.Parent = parentIndex;
 
-        if (Keep)
+        if ((left.Info & Slot.HasRedoneFlag) != 0)
         {
-            rightItem.Keep = true;
-        }
-
-        if (Redone != null)
-        {
-            rightItem.Redone = new ID(Redone.Value.Client, Redone.Value.Clock + diff);
+            var redone = _slab.GetRedone(_handle);
+            right.Info |= Slot.HasRedoneFlag;
+            _slab.SetRedone(handle, new ID(redone.Client, redone.Clock + diff));
         }
 
         // Update left (do not set leftItem.RightOrigin as it will lead to problems when syncing).
-        Right = rightItem;
+        var rightRight = right.Right;
+        left.Right = handle;
+        left.Length = diff;
 
         // Update right.
-        var rightRight = rightItem.Right;
-        if (rightRight.IsItem)
+        if (rightRight >= 0)
         {
-            rightRight.Left = rightItem;
+            ref var next = ref _slab.Write(rightRight);
+            if (next.Kind != 0)
+            {
+                next.Left = handle;
+            }
         }
 
         // Right is more specific.
-        transaction._mergeStructs.Add(rightItem.Id);
+        transaction._mergeStructs.Add(new ID(_slab.Clients[right.Client], clock));
 
         // Update parent._map.
-        if (rightItem.ParentSub != null && rightItem.Right.IsNull)
+        if (parentSub != null && rightRight < 0)
         {
-            rightItem.Parent._map[rightItem.ParentSub] = rightItem.Hold;
+            parent._map[parentSub] = rightItem.Hold;
         }
 
-        Length = diff;
         return rightItem;
     }
 }

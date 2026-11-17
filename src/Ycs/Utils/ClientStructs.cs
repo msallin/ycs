@@ -122,11 +122,11 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         // The last struct's length is unchanged: the new one starts where it ended.
         var offset = leaf.Count;
         leaf.Structs[offset] = str.Hold;
-        leaf.Starts[offset] = str.Id.Clock;
+        leaf.Starts[offset] = str.Clock;
         leaf.Flags[offset] = 0;
         leaf.Count++;
         _count++;
-        _end = str.Id.Clock + str.Length;
+        _end = str.Clock + str.Length;
         SetFlags(k, offset, FlagsAt(k, offset));
         AddSum(k, ValueAt(k, offset));
     }
@@ -134,7 +134,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
     /// <summary>Inserts the right part of a split at <paramref name="index"/>, right after its left part.</summary>
     public void InsertSplit(int index, ItemRef right)
     {
-        Debug.Assert(index > 0 && index <= _count && this[index - 1].Id.Clock + this[index - 1].Length == right.Id.Clock);
+        Debug.Assert(index > 0 && index <= _count && this[index - 1].Id.Clock + this[index - 1].Length == right.Clock);
 
         // The right part goes into its left part's leaf, right after it.
         var k = Locate(index - 1, out var offset);
@@ -166,7 +166,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         Array.Copy(leaf.Starts, offset, leaf.Starts, offset + 1, tail);
         Array.Copy(leaf.Flags, offset, leaf.Flags, offset + 1, tail);
         leaf.Structs[offset] = right.Hold;
-        leaf.Starts[offset] = right.Id.Clock;
+        leaf.Starts[offset] = right.Clock;
         leaf.Flags[offset] = 0;
         leaf.Count++;
         _count++;
@@ -301,7 +301,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         _end += length;
         var k = _leafCount - 1;
         var leaf = LeafAt(k);
-        Debug.Assert(_end == leaf.Structs[leaf.Count - 1].In(_slab).Id.Clock + leaf.Structs[leaf.Count - 1].In(_slab).Length);
+        Debug.Assert(_end == leaf.Structs[leaf.Count - 1].In(_slab).Clock + leaf.Structs[leaf.Count - 1].In(_slab).Length);
         if ((leaf.Flags[leaf.Count - 1] & Visible) != 0)
         {
             AddSum(k, length);
@@ -493,15 +493,15 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
             for (var i = 0; i < leaf.Count; i++, position++)
             {
                 var s = leaf.Structs[i].In(_slab);
-                if (leaf.Starts[i] != s.Id.Clock)
+                if (leaf.Starts[i] != s.Clock)
                 {
-                    return $"position {position} starts at {leaf.Starts[i]}, its struct at {s.Id.Clock}";
+                    return $"position {position} starts at {leaf.Starts[i]}, its struct at {s.Clock}";
                 }
 
                 var end = i + 1 < leaf.Count ? leaf.Starts[i + 1] : NextFirstStart(k);
-                if (s.Id.Clock + s.Length != end)
+                if (s.Clock + s.Length != end)
                 {
-                    return $"position {position} ends at {s.Id.Clock + s.Length}, the next starts at {end}";
+                    return $"position {position} ends at {s.Clock + s.Length}, the next starts at {end}";
                 }
             }
         }
