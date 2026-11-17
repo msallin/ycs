@@ -36,8 +36,9 @@ internal sealed class Arena<T>
 
     private const int MaxArrayLength = 0x7FFFFFC7;
 
-    private readonly List<Page?> _pages = [];
-    private readonly Stack<int> _released = [];
+    private Page?[] _pages = [];
+    private int _pageCount;
+    private Stack<int>? _released;
     private TailTable _tails;
     private readonly int _first;
     private readonly int _max;
@@ -63,7 +64,7 @@ internal sealed class Arena<T>
     public long Dead => _dead;
 
     /// <summary>The pages held.</summary>
-    public int PageCount => _pages.Count - _released.Count;
+    public int PageCount => _pageCount - (_released?.Count ?? 0);
 
     /// <summary>Compactions done.</summary>
     public int CompactionCount => _compactions;
@@ -86,11 +87,11 @@ internal sealed class Arena<T>
     public bool Holds(long offset, int length)
     {
         var number = PageOf(offset);
-        return offset >= 0 && length >= 0 && number < _pages.Count && _pages[number] is { } page && IndexOf(offset) + (long)length <= page.Used;
+        return offset >= 0 && length >= 0 && number < _pageCount && _pages[number] is { } page && IndexOf(offset) + (long)length <= page.Used;
     }
 
     /// <summary>The elements a page holds room for; 0 for a page that is not held.</summary>
-    public int PageCapacity(int page) => page < _pages.Count ? _pages[page]?.Data.Length ?? 0 : 0;
+    public int PageCapacity(int page) => page < _pageCount ? _pages[page]?.Data.Length ?? 0 : 0;
 
     public ReadOnlySpan<T> Slice(long offset, int length) => PageAt(offset).Data.AsSpan(IndexOf(offset), length);
 
@@ -206,7 +207,7 @@ internal sealed class Arena<T>
     /// </summary>
     public void Compact(IEnumerable<(long Offset, int Length, int Tag)> live, Action<int, long> relocate)
     {
-        var liveIn = new long[_pages.Count];
+        var liveIn = new long[_pageCount];
         long total = 0;
         foreach (var (offset, length, _) in live)
         {
@@ -215,7 +216,7 @@ internal sealed class Arena<T>
             total += length;
         }
 
-        var free = new bool[_pages.Count];
+        var free = new bool[_pageCount];
         for (var number = 0; number < free.Length; number++)
         {
             var page = _pages[number];
@@ -257,7 +258,7 @@ internal sealed class Arena<T>
         }
 
         long used = 0;
-        foreach (var page in _pages)
+        foreach (var page in _pages.AsSpan(0, _pageCount))
         {
             used += page?.Used ?? 0;
         }
@@ -281,7 +282,7 @@ internal sealed class Arena<T>
         var liveEnds = new HashSet<long>();
         foreach (var (offset, length) in live)
         {
-            var page = PageOf(offset) < _pages.Count && offset >= 0 ? _pages[PageOf(offset)] : null;
+            var page = PageOf(offset) < _pageCount && offset >= 0 ? _pages[PageOf(offset)] : null;
             if (page == null || length <= 0 || IndexOf(offset) + (long)length > page.Used)
             {
                 found.Add($"live range {offset:X}+{length} is not inside the used part of a held page");
@@ -295,7 +296,7 @@ internal sealed class Arena<T>
 
         foreach (var (end, reservedEnd) in _tails.Entries())
         {
-            var page = PageOf(end) < _pages.Count && end >= 0 ? _pages[PageOf(end)] : null;
+            var page = PageOf(end) < _pageCount && end >= 0 ? _pages[PageOf(end)] : null;
             if (page == null || PageOf(reservedEnd) != PageOf(end) || reservedEnd <= end || IndexOf(reservedEnd) > page.Used)
             {
                 found.Add($"tail {end:X} to {reservedEnd:X} is not inside the used part of a held page");
@@ -325,12 +326,12 @@ internal sealed class Arena<T>
         }
 
         long used = 0;
-        for (var number = 0; number < _pages.Count; number++)
+        for (var number = 0; number < _pageCount; number++)
         {
             var page = _pages[number];
             if (page == null)
             {
-                if (!_released.Contains(number))
+                if (_released?.Contains(number) != true)
                 {
                     found.Add($"page {number} is released but not listed as such");
                 }
@@ -363,22 +364,22 @@ internal sealed class Arena<T>
     /// <summary>The elements of a held page that are not default and lie in no live range: for an arena of references, what an exit of a range failed to clear.</summary>
     public int UnclearedOutside(IEnumerable<(long Offset, int Length)> live)
     {
-        var inRange = new List<bool[]?>(_pages.Count);
-        foreach (var page in _pages)
+        var inRange = new List<bool[]?>(_pageCount);
+        foreach (var page in _pages.AsSpan(0, _pageCount))
         {
             inRange.Add(page == null ? null : new bool[page.Used]);
         }
 
         foreach (var (offset, length) in live)
         {
-            if (PageOf(offset) < _pages.Count && offset >= 0 && inRange[PageOf(offset)] is { } marks && IndexOf(offset) + (long)length <= marks.Length)
+            if (PageOf(offset) < _pageCount && offset >= 0 && inRange[PageOf(offset)] is { } marks && IndexOf(offset) + (long)length <= marks.Length)
             {
                 Array.Fill(marks, true, IndexOf(offset), length);
             }
         }
 
         var found = 0;
-        for (var number = 0; number < _pages.Count; number++)
+        for (var number = 0; number < _pageCount; number++)
         {
             if (_pages[number] is not { } page)
             {
@@ -399,7 +400,7 @@ internal sealed class Arena<T>
     }
 
     /// <summary>The array of a held page, to see what a compaction left in it.</summary>
-    internal T[]? PageDataForTests(int number) => number < _pages.Count ? _pages[number]?.Data : null;
+    internal T[]? PageDataForTests(int number) => number < _pageCount ? _pages[number]?.Data : null;
 
     private long Reserved()
     {
@@ -467,10 +468,15 @@ internal sealed class Arena<T>
 
     private int Open(int size)
     {
-        var number = _released.Count > 0 ? _released.Pop() : _pages.Count;
-        if (number == _pages.Count)
+        var number = _released is { Count: > 0 } ? _released.Pop() : _pageCount;
+        if (number == _pageCount)
         {
-            _pages.Add(null);
+            if (_pageCount == _pages.Length)
+            {
+                Array.Resize(ref _pages, Math.Max(1, _pageCount * 2));
+            }
+
+            _pageCount++;
         }
 
         _pages[number] = new Page(new T[size]);
@@ -480,7 +486,7 @@ internal sealed class Arena<T>
     private Page PageAt(long offset)
     {
         var number = PageOf(offset);
-        var page = offset >= 0 && number < _pages.Count ? _pages[number] : null;
+        var page = offset >= 0 && number < _pageCount ? _pages[number] : null;
         if (page == null)
         {
             throw new ArgumentException("The offset names no page of this arena (a page freed by a compaction, or an offset never given).", nameof(offset));
@@ -493,7 +499,7 @@ internal sealed class Arena<T>
     {
         PoisonPage(_pages[number]!.Data);
         _pages[number] = null;
-        _released.Push(number);
+        (_released ??= []).Push(number);
     }
 
     // A span kept across a compaction points into the freed page: reading it shows these values.
