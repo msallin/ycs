@@ -67,6 +67,7 @@ public class ValueArenaTests
     [TestMethod]
     public void Pushing_ExtendingARun_KeepsTheOffsetAndCountsNothingDead()
     {
+        using var first64 = StaticScope.Set(ref Arena<object>.FirstPageForTests, 64);
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         array.Add(0);
@@ -81,6 +82,7 @@ public class ValueArenaTests
     [TestMethod]
     public void Pushing_RunOutgrowsItsRoom_CopiesWithSlackAndTheOldRangeIsDeadAndCleared()
     {
+        using var first64 = StaticScope.Set(ref Arena<object>.FirstPageForTests, 64);
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         AddRange(array, 0, 63);
@@ -156,6 +158,7 @@ public class ValueArenaTests
     [TestMethod]
     public void Split_RunWithAReservation_TheRightPartKeepsItAndNothingIsDeadBut64()
     {
+        using var first64 = StaticScope.Set(ref Arena<object>.FirstPageForTests, 64);
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         AddRange(array, 0, 63);

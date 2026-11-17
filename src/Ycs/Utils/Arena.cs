@@ -6,9 +6,9 @@ namespace Ycs;
 /// <summary>The page sizes the item layout gives its two arenas (the value arena's are the Ref ones).</summary>
 internal static class Arena
 {
-    internal const int CharFirstPage = 256;
+    internal const int CharFirstPage = 32;
     internal const int CharMaxPage = 32 * 1024;
-    internal const int RefFirstPage = 64;
+    internal const int RefFirstPage = 16;
     internal const int RefMaxPage = 8 * 1024;
 }
 

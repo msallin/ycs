@@ -56,6 +56,7 @@ public class CharArenaTests
     [TestMethod]
     public void Typing_ExtendingARun_KeepsTheOffsetAndCountsNothingDead()
     {
+        using var first256 = StaticScope.Set(ref Arena<char>.FirstPageForTests, 256);
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("t");
         text.Insert(0, "a");
