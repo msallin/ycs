@@ -137,17 +137,17 @@ public sealed class YTextEvent : YEvent
 
                     while (!item.IsNull)
                     {
-                        switch (item.Content)
+                        switch (item.Kind)
                         {
-                            case ContentType:
-                            case ContentEmbed:
+                            case SlotKind.Type:
+                            case SlotKind.Embed:
                                 if (Adds(item))
                                 {
                                     if (!Deletes(item))
                                     {
                                         addOp();
                                         action = ChangeType.Insert;
-                                        insert = YText.EmbedOf(item.Content);
+                                        insert = item.Embedded;
                                         addOp();
                                     }
                                 }
@@ -172,7 +172,7 @@ public sealed class YTextEvent : YEvent
                                     retain++;
                                 }
                                 break;
-                            case ContentString _:
+                            case SlotKind.String:
                                 if (Adds(item))
                                 {
                                     if (!Deletes(item))
@@ -183,7 +183,7 @@ public sealed class YTextEvent : YEvent
                                             action = ChangeType.Insert;
                                         }
 
-                                        insertText.Append(((ContentString)item.Content).GetString());
+                                        insertText.Append(item.Chars);
                                     }
                                 }
                                 else if (Deletes(item))
@@ -207,38 +207,38 @@ public sealed class YTextEvent : YEvent
                                     retain += item.Length;
                                 }
                                 break;
-                            case ContentFormat cf:
+                            case SlotKind.Format:
                                 if (Adds(item))
                                 {
                                     if (!Deletes(item))
                                     {
-                                        if (!currentAttributes.TryGetValue(cf.Key, out var curVal))
+                                        if (!currentAttributes.TryGetValue(item.FormatKey, out var curVal))
                                         {
                                             curVal = null;
                                         }
 
-                                        if (!YText.EqualAttrs(curVal, cf.Value))
+                                        if (!YText.EqualAttrs(curVal, item.FormatValue))
                                         {
                                             if (action == ChangeType.Retain)
                                             {
                                                 addOp();
                                             }
 
-                                            if (!oldAttributes.TryGetValue(cf.Key, out var oldVal))
+                                            if (!oldAttributes.TryGetValue(item.FormatKey, out var oldVal))
                                             {
                                                 oldVal = null;
                                             }
 
-                                            if (YText.EqualAttrs(cf.Value, oldVal))
+                                            if (YText.EqualAttrs(item.FormatValue, oldVal))
                                             {
-                                                attributes.Remove(cf.Key);
+                                                attributes.Remove(item.FormatKey);
                                             }
                                             else
                                             {
-                                                attributes[cf.Key] = cf.Value;
+                                                attributes[item.FormatKey] = item.FormatValue;
                                             }
                                         }
-                                        else if (cf.Value != null)
+                                        else if (item.FormatValue != null)
                                         {
                                             // In the delta's own transaction, not the event's: its observers are running.
                                             item.Delete(transaction);
@@ -247,43 +247,43 @@ public sealed class YTextEvent : YEvent
                                 }
                                 else if (Deletes(item))
                                 {
-                                    oldAttributes[cf.Key] = cf.Value;
+                                    oldAttributes[item.FormatKey] = item.FormatValue;
 
-                                    if (!currentAttributes.TryGetValue(cf.Key, out var curVal))
+                                    if (!currentAttributes.TryGetValue(item.FormatKey, out var curVal))
                                     {
                                         curVal = null;
                                     }
 
-                                    if (!YText.EqualAttrs(curVal, cf.Value))
+                                    if (!YText.EqualAttrs(curVal, item.FormatValue))
                                     {
                                         if (action == ChangeType.Retain)
                                         {
                                             addOp();
                                         }
 
-                                        attributes[cf.Key] = curVal;
+                                        attributes[item.FormatKey] = curVal;
                                     }
                                 }
                                 else if (!item.Deleted)
                                 {
-                                    oldAttributes[cf.Key] = cf.Value;
+                                    oldAttributes[item.FormatKey] = item.FormatValue;
 
-                                    if (attributes.TryGetValue(cf.Key, out var attr))
+                                    if (attributes.TryGetValue(item.FormatKey, out var attr))
                                     {
-                                        if (!YText.EqualAttrs(attr, cf.Value))
+                                        if (!YText.EqualAttrs(attr, item.FormatValue))
                                         {
                                             if (action == ChangeType.Retain)
                                             {
                                                 addOp();
                                             }
 
-                                            if (cf.Value == null)
+                                            if (item.FormatValue == null)
                                             {
-                                                attributes.Remove(cf.Key);
+                                                attributes.Remove(item.FormatKey);
                                             }
                                             else
                                             {
-                                                attributes[cf.Key] = cf.Value;
+                                                attributes[item.FormatKey] = item.FormatValue;
                                             }
                                         }
                                         else if (attr != null)
@@ -301,7 +301,7 @@ public sealed class YTextEvent : YEvent
                                         addOp();
                                     }
 
-                                    YText.UpdateCurrentAttributes(currentAttributes, (ContentFormat)item.Content);
+                                    YText.UpdateCurrentAttributes(currentAttributes, item.FormatKey, item.FormatValue);
                                 }
                                 break;
                         }
@@ -374,7 +374,7 @@ public partial class YText : YArrayBase
             {
                 if (slot.Kind == ContentFormat._ref)
                 {
-                    UpdateCurrentAttributes(ref CurrentAttributes, (ContentFormat)right.Content);
+                    UpdateCurrentAttributes(ref CurrentAttributes, right.FormatKey, right.FormatValue);
                 }
                 else
                 {
@@ -414,7 +414,7 @@ public partial class YText : YArrayBase
                 {
                     if (slot.Kind == ContentFormat._ref)
                     {
-                        UpdateCurrentAttributes(ref CurrentAttributes, (ContentFormat)right.Content);
+                        UpdateCurrentAttributes(ref CurrentAttributes, right.FormatKey, right.FormatValue);
                     }
                     else
                     {
@@ -446,10 +446,10 @@ public partial class YText : YArrayBase
             while (
                 !Right.IsNull && (
                     Right.Deleted || (
-                        Right.Content is ContentFormat cf &&
+                        Right.Kind == SlotKind.Format &&
                         negatedAttributes != null &&
-                        negatedAttributes.TryGetValue(cf.Key, out var negated) &&
-                        EqualAttrs(negated, cf.Value)
+                        negatedAttributes.TryGetValue(Right.FormatKey, out var negated) &&
+                        EqualAttrs(negated, Right.FormatValue)
                     )
                 )
             )
@@ -457,7 +457,7 @@ public partial class YText : YArrayBase
                 if (!Right.Deleted)
                 {
                     Debug.Assert(negatedAttributes != null);
-                    negatedAttributes.Remove(((ContentFormat)Right.Content).Key);
+                    negatedAttributes.Remove(Right.FormatKey);
                 }
 
                 Forward();
@@ -487,7 +487,7 @@ public partial class YText : YArrayBase
             // Go right while attributes[right.Key] == right.Value (or right is deleted).
             while (!Right.IsNull)
             {
-                if (Right.Deleted || (Right.Content is ContentFormat cf && EqualAttrs(attributes != null && attributes.TryGetValue(cf.Key, out var val) ? val : null, cf.Value)))
+                if (Right.Deleted || (Right.Kind == SlotKind.Format && EqualAttrs(attributes != null && attributes.TryGetValue(Right.FormatKey, out var val) ? val : null, Right.FormatValue)))
                 {
                     Forward();
                 }
@@ -742,7 +742,7 @@ public partial class YText : YArrayBase
         {
             // Typing on at the end of this client's run: the run takes the text in place of a new item.
             var left = currPos.Left;
-            ((ContentString)left.Content).Append(str);
+            left.AppendChars(str);
             left.ExtendRun(transaction, length);
             currPos.Index += length;
             currPos.InsertNegatedAttributes(transaction, this, null);
@@ -768,18 +768,18 @@ public partial class YText : YArrayBase
         // attributes[format.Key] != null. Also check the formats after the formatted range, so that
         // no redundant negated attributes are inserted there.
         while (!curPos.Right.IsNull &&
-            (length > 0 || (negatedAttributes.Count > 0 && (curPos.Right.Deleted || curPos.Right.Content is ContentFormat))))
+            (length > 0 || (negatedAttributes.Count > 0 && (curPos.Right.Deleted || curPos.Right.Kind == SlotKind.Format))))
         {
             if (!curPos.Right.Deleted)
             {
-                switch (curPos.Right.Content)
+                switch (curPos.Right.Kind)
                 {
-                    case ContentFormat cf:
-                        if (attributes.TryGetValue(cf.Key, out var attr))
+                    case SlotKind.Format:
+                        if (attributes.TryGetValue(curPos.Right.FormatKey, out var attr))
                         {
-                            if (EqualAttrs(attr, cf.Value))
+                            if (EqualAttrs(attr, curPos.Right.FormatValue))
                             {
-                                negatedAttributes.Remove(cf.Key);
+                                negatedAttributes.Remove(curPos.Right.FormatKey);
                             }
                             else
                             {
@@ -789,14 +789,14 @@ public partial class YText : YArrayBase
                                     goto InsertNegated;
                                 }
 
-                                negatedAttributes[cf.Key] = cf.Value;
+                                negatedAttributes[curPos.Right.FormatKey] = curPos.Right.FormatValue;
                             }
 
                             curPos.Right.Delete(transaction);
                         }
                         else
                         {
-                            (curPos.CurrentAttributes ??= new OrderedDictionary<string, object?>())[cf.Key] = cf.Value;
+                            (curPos.CurrentAttributes ??= new OrderedDictionary<string, object?>())[curPos.Right.FormatKey] = curPos.Right.FormatValue;
                         }
 
                         break;
@@ -841,12 +841,12 @@ public partial class YText : YArrayBase
     private static int CleanupFormattingGap(Transaction transaction, ItemRef start, ItemRef curr, OrderedDictionary<string, object?>? startAttributes, ref OrderedDictionary<string, object?>? currAttributes)
     {
         var end = start;
-        Dictionary<string, ContentFormat>? endFormats = null;
+        Dictionary<string, ItemRef>? endFormats = null;
         while (!end.IsNull && (!end.Countable || end.Deleted))
         {
-            if (!end.Deleted && end.Content is ContentFormat format)
+            if (!end.Deleted && end.Kind == SlotKind.Format)
             {
-                (endFormats ??= new Dictionary<string, ContentFormat>())[format.Key] = format;
+                (endFormats ??= new Dictionary<string, ItemRef>())[end.FormatKey] = end;
             }
 
             end = end.Right.AsItem;
@@ -861,12 +861,12 @@ public partial class YText : YArrayBase
                 reachedCurr = true;
             }
 
-            if (!start.Deleted && start.Content is ContentFormat cf)
+            if (!start.Deleted && start.Kind == SlotKind.Format)
             {
-                var key = cf.Key;
-                var value = cf.Value;
+                var key = start.FormatKey;
+                var value = start.FormatValue;
                 var startAttrValue = GetAttribute(startAttributes, key);
-                if (endFormats == null || !endFormats.TryGetValue(key, out var endFormat) || endFormat != cf || JsValue.StrictEquals(startAttrValue, value))
+                if (endFormats == null || !endFormats.TryGetValue(key, out var endFormat) || endFormat != start || JsValue.StrictEquals(startAttrValue, value))
                 {
                     // Either this format is overwritten or it is not necessary because the attribute already existed.
                     start.Delete(transaction);
@@ -886,7 +886,7 @@ public partial class YText : YArrayBase
 
                 if (!reachedCurr && !start.Deleted)
                 {
-                    UpdateCurrentAttributes(ref currAttributes, cf);
+                    UpdateCurrentAttributes(ref currAttributes, start.FormatKey, start.FormatValue);
                 }
             }
 
@@ -913,7 +913,7 @@ public partial class YText : YArrayBase
         // Iterate back until a content item is found.
         while (!item.IsNull && (item.Deleted || !item.Countable))
         {
-            if (!item.Deleted && item.Content is ContentFormat cf && !(attrs ??= new HashSet<string>()).Add(cf.Key))
+            if (!item.Deleted && item.Kind == SlotKind.Format && !(attrs ??= new HashSet<string>()).Add(item.FormatKey))
             {
                 item.Delete(transaction);
             }
@@ -948,7 +948,7 @@ public partial class YText : YArrayBase
             // As Yjs, with the end clock as the length: to the end of the client's structs.
             store.IterateStructs(transaction, store.Clients[client], clock, afterClock, str =>
             {
-                if (str.IsItem && !str.Deleted && str.Content is ContentFormat && str.Parent is YText text)
+                if (str.IsItem && !str.Deleted && str.Kind == SlotKind.Format && str.Parent is YText text)
                 {
                     AddOnce(ref needFullCleanup, text);
                 }
@@ -969,7 +969,7 @@ public partial class YText : YArrayBase
 
                 var item = str;
 
-                if (item.Content is ContentFormat)
+                if (item.Kind == SlotKind.Format)
                 {
                     AddOnce(ref needFullCleanup, parent);
                 }
@@ -1036,9 +1036,6 @@ public partial class YText : YArrayBase
             parent._searchMarkers.UpdateMarkerChanges(transaction, curPos.Index, -startLength + length);
         }
     }
-
-    /// <summary>The value an embed or an embedded shared type stands for in a delta.</summary>
-    internal static YValue EmbedOf(IContent content) => content is ContentEmbed embed ? YValue.FromStored(embed.Embed) : YValue.FromStored(((ContentType)content).Type);
 
     /// <summary>The attributes as a delta carries them; a change (<see cref="ChangeKey"/>) as the object it is in Yjs.</summary>
     internal static IReadOnlyDictionary<string, YValue> AttributeValues(Dictionary<string, object?> attributes, bool skipNull)
@@ -1238,27 +1235,27 @@ public partial class YText : YArrayBase
     }
 
     /// <summary>Applies <paramref name="format"/> to <paramref name="attributes"/>, which is created when a value is set.</summary>
-    private static void UpdateCurrentAttributes(ref OrderedDictionary<string, object?>? attributes, ContentFormat format)
+    private static void UpdateCurrentAttributes(ref OrderedDictionary<string, object?>? attributes, string key, object? value)
     {
-        if (format.Value == null)
+        if (value == null)
         {
-            attributes?.Remove(format.Key);
+            attributes?.Remove(key);
         }
         else
         {
-            (attributes ??= new OrderedDictionary<string, object?>())[format.Key] = format.Value;
+            (attributes ??= new OrderedDictionary<string, object?>())[key] = value;
         }
     }
 
-    internal static void UpdateCurrentAttributes(IDictionary<string, object?> attributes, ContentFormat format)
+    internal static void UpdateCurrentAttributes(IDictionary<string, object?> attributes, string key, object? value)
     {
-        if (format.Value == null)
+        if (value == null)
         {
-            attributes.Remove(format.Key);
+            attributes.Remove(key);
         }
         else
         {
-            attributes[format.Key] = format.Value;
+            attributes[key] = value;
         }
     }
 }
