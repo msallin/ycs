@@ -158,6 +158,18 @@ internal sealed class Arena<T>
         Forget(offset, length);
     }
 
+    /// <summary>Replaces the elements from <paramref name="offset"/> on by <paramref name="values"/>, which lie within the used part of the page; no run is added or ended.</summary>
+    public void Overwrite(long offset, ReadOnlySpan<T> values)
+    {
+        var page = PageAt(offset);
+        if (IndexOf(offset) + (long)values.Length > page.Used)
+        {
+            throw new ArgumentOutOfRangeException(nameof(values), "The values reach past what the page holds.");
+        }
+
+        values.CopyTo(page.Data.AsSpan(IndexOf(offset)));
+    }
+
     /// <summary>Sets a range to the default of <typeparamref name="T"/>, so a reference in it is not kept alive.</summary>
     public void Clear(long offset, int length) => PageAt(offset).Data.AsSpan(IndexOf(offset), length).Clear();
 
