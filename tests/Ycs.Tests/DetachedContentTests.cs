@@ -89,6 +89,28 @@ public class DetachedContentTests
     }
 
     [TestMethod]
+    public void Insert_DetachedArrayWithADeepMap_ThrowsBeforeIntegratingAnything()
+    {
+        var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 10 } });
+        var map = doc.GetMap("m");
+        var deepMap = new YMap();
+        var level = deepMap;
+        for (var i = 0; i < 12; i++)
+        {
+            var next = new YMap();
+            level["n"] = next;
+            level = next;
+        }
+
+        var updates = 0;
+        doc.Updated += (_, _) => updates++;
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => map["k"] = new YArray("x", deepMap, "y"));
+
+        Assert.AreEqual((false, 0), (map.ContainsKey("k"), updates));
+    }
+
+    [TestMethod]
     public void Insert_DetachedTextWithADeepEmbed_ThrowsBeforeIntegratingAnything()
     {
         var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 4 } });

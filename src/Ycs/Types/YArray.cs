@@ -43,6 +43,17 @@ public sealed partial class YArray : YArrayBase
         InsertRaw(0, prelimContent);
     }
 
+    internal override void CollectDetachedContent(ref List<object>? into)
+    {
+        if (_prelimContent != null)
+        {
+            foreach (var value in _prelimContent)
+            {
+                AddDetached(value, ref into);
+            }
+        }
+    }
+
     internal override YType InternalCopy()
     {
         return new YArray();
