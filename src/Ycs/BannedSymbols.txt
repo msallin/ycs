@@ -1,0 +1,14 @@
+T:System.Runtime.CompilerServices.Unsafe;No unsafe code. Find a safe Span-based alternative.
+T:System.Runtime.InteropServices.MemoryMarshal;No unsafe code. Find a safe Span-based alternative.
+T:System.Runtime.InteropServices.CollectionsMarshal;No unsafe code. Find a safe alternative.
+T:System.Runtime.InteropServices.Marshal;No unsafe code or interop.
+T:System.Runtime.InteropServices.NativeMemory;No unsafe code or native memory.
+T:System.Runtime.InteropServices.GCHandle;No unsafe code or pinning.
+T:System.Activator;No reflection. Generate the code at compile time (a source generator).
+// Not MemberInfo: Type.Name in an error message is metadata, kept under Native AOT, not reflection over members.
+T:System.Reflection.PropertyInfo;No reflection. Generate the code at compile time (a source generator).
+T:System.Reflection.FieldInfo;No reflection. Generate the code at compile time (a source generator).
+T:System.Reflection.MethodInfo;No reflection. Generate the code at compile time (a source generator).
+T:System.Reflection.ConstructorInfo;No reflection. Generate the code at compile time (a source generator).
+T:System.Reflection.CustomAttributeExtensions;No reflection. Generate the code at compile time (a source generator).
+N:System.Reflection.Emit;No runtime code generation. It breaks Native AOT.
