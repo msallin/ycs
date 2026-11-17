@@ -1,0 +1,40 @@
+name: Publish to GitHub Packages
+
+# Run by hand only: packs a prerelease of Ycs and pushes it to this repository owner's GitHub Packages NuGet feed.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Package version (a prerelease, e.g. 0.0.1-preview.1)
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Test
+        run: dotnet test tests/Ycs.Tests -c Release --filter "TestCategory!=Slow"
+
+      - name: Pack
+        run: >
+          dotnet pack src/Ycs -c Release -o out/pack
+          -p:Version=${{ inputs.version }}
+          -p:RepositoryUrl=${{ github.server_url }}/${{ github.repository }}
+          -p:PackageProjectUrl=${{ github.server_url }}/${{ github.repository }}
+
+      - name: Push
+        run: >
+          dotnet nuget push "out/pack/*.nupkg"
+          --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+          --api-key "${{ secrets.GITHUB_TOKEN }}"
