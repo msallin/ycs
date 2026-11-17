@@ -64,6 +64,7 @@ public class ArenaStringReadTests
     [TestMethod]
     public void WriteTo_WriterCompactsTheArenaInGetSpan_WritesTheText()
     {
+        using var first256 = StaticScope.Set(ref Arena<char>.FirstPageForTests, 256);
         var doc = NewDoc();
         var text = ThreeItems(doc);
         var other = doc.GetText("u");
@@ -84,6 +85,7 @@ public class ArenaStringReadTests
     [TestMethod]
     public void WriteTo_WriterEditsAnotherTextEnoughToCompact_WritesTheText()
     {
+        using var first256 = StaticScope.Set(ref Arena<char>.FirstPageForTests, 256);
         var doc = NewDoc();
         var text = ThreeItems(doc);
         var other = doc.GetText("u");

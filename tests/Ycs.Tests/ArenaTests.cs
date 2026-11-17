@@ -63,7 +63,7 @@ public class ArenaTests
         chars.Append(Text(1));
         refs.Append(new object[1]);
 
-        Assert.AreEqual((32, 16), (chars.PageCapacity(0), refs.PageCapacity(0)));
+        Assert.AreEqual((16, 16), (chars.PageCapacity(0), refs.PageCapacity(0)));
     }
 
     [TestMethod]

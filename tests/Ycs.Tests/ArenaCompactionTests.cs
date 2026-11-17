@@ -63,6 +63,7 @@ public class ArenaCompactionTests
     [TestMethod]
     public void EndOfBatch_DeadOutweighsLiveAndFillsAPage_Compacts()
     {
+        using var first256 = StaticScope.Set(ref Arena<char>.FirstPageForTests, 256);
         var doc = NewDoc();
         var expected = TypeAndDeleteMost(doc);
 
