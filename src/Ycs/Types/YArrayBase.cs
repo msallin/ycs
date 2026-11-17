@@ -188,7 +188,7 @@ public abstract partial class YArrayBase : YType
 
     private ItemRef _pushHint
     {
-        get => _pushHintHeld.IsNone ? default : _pushHintHeld.In(Doc!.Store.Slab);
+        get => _pushHintHeld.IsNone ? default : _pushHintHeld.In(_slab);
         set => _pushHintHeld = value.Hold;
     }
 

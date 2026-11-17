@@ -88,15 +88,25 @@ internal readonly partial struct ItemRef
     /// <summary>A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet).</summary>
     private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, IContentEx content)
     {
+        // Everything that can grow a table is done before the slot is taken: Allocate may move page 0 (see Slab.At).
+        var clients = slab.Clients;
+        var client = clients.GetOrAdd(id.Client);
+        var originClient = leftOrigin is { } lo ? clients.GetOrAdd(lo.Client) : -1;
+        var rightOriginClient = rightOrigin is { } ro ? clients.GetOrAdd(ro.Client) : -1;
+        var parentIndex = parent?.TableIndex(slab.Types) ?? -1;
         var item = new ItemRef(slab, slab.Allocate());
-        item.Id = id;
-        item.Length = content.Length;
-        item.Write().Info = (content.Countable ? Slot.CountableFlag : 0) | (content.Ref << 8);
-        item.LeftOrigin = leftOrigin;
-        item.RightOrigin = rightOrigin;
-        item.Left = left;
-        item.Right = right;
-        item.Parent = parent;
+        ref var slot = ref slab.Write(item._handle);
+        slot.Clock = id.Clock;
+        slot.Client = client;
+        slot.Length = content.Length;
+        slot.Info = (content.Countable ? Slot.CountableFlag : 0) | (content.Ref << 8);
+        slot.OriginClient = originClient;
+        slot.OriginClock = leftOrigin?.Clock ?? 0;
+        slot.ROriginClient = rightOriginClient;
+        slot.ROriginClock = rightOrigin?.Clock ?? 0;
+        slot.Left = left.Handle;
+        slot.Right = right.Handle;
+        slot.Parent = parentIndex;
         slab.SetKey(item._handle, parentSub);
         slab.SetRef(item._handle, content);
         return item;
@@ -445,15 +455,45 @@ internal readonly partial struct ItemRef
             Length -= offset;
         }
 
+        // Rule: no ref Slot is held across a call that can allocate a slot (a split, ResolveConflict's Find does not) or
+        // grow the slab; neighbours are read through the slab by handle, one ref at a time.
         var parent = Parent;
         if (parent != null)
         {
+            var slab = _slab;
             AbstractType mapParent = null;
             var previousCounted = false;
-
-            if ((Left.IsNull && (Right.IsNull || (Right.IsItem && !Right.Left.IsNull))) || (!Left.IsNull && (Left.IsItem ? Left.Right : default) != Right))
+            var parentSub = ParentSub;
+            int leftHandle;
+            int rightHandle;
             {
-                var left = Left;
+                ref readonly var self = ref Read();
+                leftHandle = self.Left;
+                rightHandle = self.Right;
+            }
+
+            bool conflicts;
+            if (leftHandle < 0)
+            {
+                if (rightHandle < 0)
+                {
+                    conflicts = true;
+                }
+                else
+                {
+                    ref readonly var r = ref slab.Read(rightHandle);
+                    conflicts = r.Kind != 0 && r.Left >= 0;
+                }
+            }
+            else
+            {
+                ref readonly var l = ref slab.Read(leftHandle);
+                conflicts = (l.Kind != 0 ? l.Right : -1) != rightHandle;
+            }
+
+            if (conflicts)
+            {
+                var left = leftHandle < 0 ? default : new ItemRef(slab, leftHandle);
                 ItemRef o;
 
                 // Set 'o' to the first conflicting item.
@@ -461,9 +501,9 @@ internal readonly partial struct ItemRef
                 {
                     o = left.IsItem ? left.Right : default;
                 }
-                else if (ParentSub != null)
+                else if (parentSub != null)
                 {
-                    parent.TryGetMapItem(ParentSub, out var item);
+                    parent.TryGetMapItem(parentSub, out var item);
                     o = item;
 
                     while (!o.IsNull && o.IsItem && !o.Left.IsNull)
@@ -476,31 +516,33 @@ internal readonly partial struct ItemRef
                     o = parent._start;
                 }
 
-                Left = transaction.Doc.Store.ResolveConflict(this, left, o);
+                leftHandle = transaction.Doc.Store.ResolveConflict(this, left, o).Handle;
+                Write().Left = leftHandle;
             }
 
             // Reconnect left/right + update parent map/start if necessary.
-            if (!Left.IsNull)
+            if (leftHandle >= 0)
             {
-                var leftItem = Left;
-                if (leftItem.IsItem)
+                ref var l = ref slab.Write(leftHandle);
+                if (l.Kind != 0)
                 {
-                    var right = leftItem.Right;
-                    Right = right;
-                    leftItem.Right = this;
+                    rightHandle = l.Right;
+                    l.Right = _handle;
                 }
                 else
                 {
-                    Right = default;
+                    rightHandle = -1;
                 }
+
+                Write().Right = rightHandle;
             }
             else
             {
                 ItemRef r;
 
-                if (ParentSub != null)
+                if (parentSub != null)
                 {
-                    parent.TryGetMapItem(ParentSub, out var item);
+                    parent.TryGetMapItem(parentSub, out var item);
                     r = item;
 
                     while (!r.IsNull && r.IsItem && !r.Left.IsNull)
@@ -514,43 +556,53 @@ internal readonly partial struct ItemRef
                     parent._start = this;
                 }
 
-                Right = r;
+                rightHandle = r.Handle;
+                Write().Right = rightHandle;
             }
 
-            var rightItem = Right;
-            if (!rightItem.IsNull)
+            if (rightHandle >= 0)
             {
-                if (rightItem.IsItem)
+                ref var rightSlot = ref slab.Write(rightHandle);
+                if (rightSlot.Kind != 0)
                 {
                     // Its left changes: when the old one is its predecessor by clock, it was linked in the run-head index and
                     // becomes a break, which StructStore.Refresh records.
-                    var oldLeft = rightItem.Left;
-                    var relinked = oldLeft.IsItem && oldLeft.Id.Client == rightItem.Id.Client && oldLeft.Id.Clock + oldLeft.Length == rightItem.Id.Clock;
-                    rightItem.Left = this;
+                    var relinked = false;
+                    if (rightSlot.Left >= 0)
+                    {
+                        ref readonly var oldLeft = ref slab.Read(rightSlot.Left);
+                        relinked = oldLeft.Kind != 0 && oldLeft.Client == rightSlot.Client && oldLeft.Clock + oldLeft.Length == rightSlot.Clock;
+                    }
+
+                    rightSlot.Left = _handle;
                     if (relinked)
                     {
-                        transaction.Doc.Store.Refresh(rightItem);
+                        transaction.Doc.Store.Refresh(new ItemRef(slab, rightHandle));
                     }
                 }
             }
-            else if (ParentSub != null)
+            else if (parentSub != null)
             {
                 // Set as current parent value if right == null and this is parentSub.
                 mapParent = parent;
-                previousCounted = mapParent.TryGetMapItem(ParentSub, out var previous) && !previous.Deleted;
-                mapParent._map[ParentSub] = Hold;
+                previousCounted = mapParent.TryGetMapItem(parentSub, out var previous) && !previous.Deleted;
+                mapParent._map[parentSub] = Hold;
 
                 // This is the current attribute value of parent. Delete right.
-                if (!Left.IsNull)
+                if (leftHandle >= 0)
                 {
-                    Left.Delete(transaction);
+                    new ItemRef(slab, leftHandle).Delete(transaction);
                 }
             }
 
             // Adjust length of parent.
-            if (ParentSub == null && Countable && !Deleted)
+            if (parentSub == null)
             {
-                parent.Length += Length;
+                ref readonly var self = ref Read();
+                if ((self.Info & (Slot.CountableFlag | Slot.DeletedFlag)) == Slot.CountableFlag)
+                {
+                    parent.Length += self.Length;
+                }
             }
 
             transaction.Doc.Store.AddStruct(this);
@@ -563,9 +615,9 @@ internal readonly partial struct ItemRef
             }
 
             // Add parent to transaction.changed.
-            transaction.AddChangedTypeToTransaction(parent, ParentSub);
+            transaction.AddChangedTypeToTransaction(parent, parentSub);
 
-            if (parent.ItemDeleted || (ParentSub != null && !Right.IsNull))
+            if (parent.ItemDeleted || (parentSub != null && !Right.IsNull))
             {
                 // Delete if parent is deleted or if this is not the current attribute value of parent.
                 Delete(transaction);

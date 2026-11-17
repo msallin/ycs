@@ -26,20 +26,24 @@ public abstract partial class YType
     internal ItemHandle _startHeld = ItemHandle.None;
     internal Dictionary<string, ItemHandle> _map = new Dictionary<string, ItemHandle>();
 
+    // The slab of the document's store, set when the type is integrated (a store's slab never changes); every holder
+    // below is none until then.
+    internal Slab _slab;
+
     internal ItemRef _item
     {
-        get => _itemHeld.IsNone ? default : _itemHeld.In(Doc.Store.Slab);
+        get => _itemHeld.IsNone ? default : _itemHeld.In(_slab);
         set => _itemHeld = value.Hold;
     }
 
     internal ItemRef _start
     {
-        get => _startHeld.IsNone ? default : _startHeld.In(Doc.Store.Slab);
+        get => _startHeld.IsNone ? default : _startHeld.In(_slab);
         set => _startHeld = value.Hold;
     }
 
     /// <summary>The struct a value of <see cref="_map"/> names.</summary>
-    internal ItemRef MapItem(ItemHandle held) => held.In(Doc.Store.Slab);
+    internal ItemRef MapItem(ItemHandle held) => held.In(_slab);
 
     internal bool TryGetMapItem(string key, out ItemRef item)
     {
@@ -195,6 +199,7 @@ public abstract partial class YType
     internal virtual void Integrate(YDoc doc, ItemRef item)
     {
         Doc = doc;
+        _slab = doc.Store.Slab;
         _item = item;
         _collected = false;
         Depth = !item.IsNull && item.Parent is YType parent ? parent.Depth + 1 : 0;
