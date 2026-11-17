@@ -362,7 +362,9 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   (`StructStore.ReplaceStruct`), which takes over the old struct's slot handle (`TakeSlotFrom`) and rewrites the slot;
   the old object's handle is reset to -1. An item that only loses its content (`Deleted`) stays, with its handle.
 * **Reuse**: a freed slot is reused only when the cleanup queue (`_transactionCleanups`) is empty: after the outermost
-  batch, nested transactions from observers and `Update` handlers included (H4). A page whose slots are all free is
+  batch, nested transactions from observers and `Update` handlers included (H4). The rule is defensive: a stricter
+  sabotage that reuses right after each transaction's merge pass, not at the batch end, found no reader that fails
+  (the full Debug suite ran clean, but for the unit test that pins the policy). A page whose slots are all free is
   released (M4: 1,000,000 merged items would otherwise leave 64 MB of free slots).
 * **No generation counters.** A generation per slot (4 bytes, 6% of a slot) tells that a slot changed; what a holder
   outside the store needs to know is whether the slot still holds *its* struct, and "the slot is live and its id is
@@ -398,7 +400,9 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   is pinned: a pin would keep the old struct's links, which name neighbours whose slots are freed and reused in turn, so
   it would need the neighbours pinned too; an id names one struct start whatever is freed. The deviation from Yjs: its
   orphaned item keeps the links it had when it left the list, ours answers from the store now (a sibling inserted
-  after the merge shows). A Debug read of a slot checks that the slot's owner is the struct that reads (`Slab.CheckOwner`,
+  after the merge shows). Answering by id is also the only correct way for `InsertAfter`: in yjs 13.6.32
+  `insertAfter(orphan, x)` does not merely work from stale siblings, it corrupts the local list (the local doc
+  shows `right` while a peer decoding the update sees `x, right`), so local and remote diverge. A Debug read of a slot checks that the slot's owner is the struct that reads (`Slab.CheckOwner`,
   `CheckLinked` for a link), and a slot is poisoned when it goes on the free list.
 
 ### 2.5 Decoding, and the operations without a document
