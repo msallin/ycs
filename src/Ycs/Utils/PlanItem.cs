@@ -9,7 +9,7 @@ namespace Ycs;
 /// index of the same table, never one of each. A staged item is valid while its table is (the plan clears everything
 /// that holds one before the table is reset or reused). <c>default</c> is none (<see cref="IsNull"/>).
 /// </summary>
-internal readonly struct PlanItem : IEquatable<PlanItem>
+internal readonly partial struct PlanItem : IEquatable<PlanItem>
 {
     private readonly StagingTable _table;
     private readonly int _index;
