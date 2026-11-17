@@ -104,7 +104,7 @@ public class ArenaStringReadTests
     }
 
     [TestMethod]
-    public void WriteTo_WriterSplitsTheItemItIsWriting_WritesNothingForItAndContinues()
+    public void WriteTo_WriterSplitsTheItemItIsWriting_WritesTheTextAsItIs()
     {
         var doc = NewDoc();
         var text = ThreeItems(doc);
@@ -118,7 +118,40 @@ public class ArenaStringReadTests
 
         text.WriteTo(writer);
 
-        Assert.AreEqual(("ccc-bbaaa", "cccb-bbaaa"), (writer.Text, text.ToString()));
+        Assert.AreEqual((text.ToString(), "cccb-bbaaa"), (writer.Text, "cccb-bbaaa"));
+    }
+
+    [TestMethod]
+    public void WriteTo_WriterExtendsTheItemItIsWriting_WritesTheRestInAnotherPiece()
+    {
+        var doc = NewDoc();
+        var text = ThreeItems(doc);
+        var writer = new EditingWriter(spans =>
+        {
+            if (spans == 3)
+            {
+                text.Insert(9, "dd");
+            }
+        });
+
+        text.WriteTo(writer);
+
+        Assert.AreEqual((text.ToString(), "cccbbbaaadd"), (writer.Text, "cccbbbaaadd"));
+    }
+
+    [TestMethod]
+    public void WriteTo_WriterCollectsTheTextItIsWriting_WritesNothingMore()
+    {
+        var doc = NewDoc();
+        var map = doc.GetMap("m");
+        var inner = new YText();
+        map["t"] = inner;
+        inner.Insert(0, "abc");
+        var writer = new EditingWriter(spans => map.Remove("t"));
+
+        inner.WriteTo(writer);
+
+        Assert.AreEqual("", writer.Text);
     }
 
     [TestMethod]

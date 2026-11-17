@@ -120,25 +120,44 @@ internal readonly partial struct ItemRef
     internal void CopyCharsTo(Span<char> destination) => Chars.CopyTo(destination);
 
     /// <summary>
-    /// Writes the text of a <see cref="SlotKind.String"/> item to <paramref name="writer"/>. The writer is asked for its
-    /// span first: user code in <c>GetSpan</c> may edit the document, the end of its batch may compact the arena and a
-    /// struct that left the list may have freed this item's slot. The item is looked up again by its id after it, and
-    /// must still be a live String of the length it had; otherwise nothing is written for it and the caller walks on
-    /// from its id (<see cref="StructStore.NextAfter"/>).
+    /// Writes the text of a <see cref="SlotKind.String"/> item to <paramref name="writer"/> and returns the item the walk
+    /// goes on with (default at the end of the list). The writer is asked for its span first: user code in <c>GetSpan</c>
+    /// may edit the document, the end of its batch may compact the arena and a struct that left the list may have freed
+    /// this item's slot. The struct that holds the item's id is looked up again after it, and its current text is
+    /// sliced from that id, a piece at a time while it is longer than the span asked for; a struct that is not a live
+    /// String now writes nothing.
     /// </summary>
-    internal void WriteCharsTo(IBufferWriter<char> writer, StructStore store)
+    internal ItemRef WriteCharsTo(IBufferWriter<char> writer, StructStore store)
     {
         var id = Id;
         var length = Length;
-        var departures = store.Departures;
-        var span = writer.GetSpan(length);
-        var held = store.Resolve(this, id, departures);
-        if (held.IsNull || held.Kind != SlotKind.String || held.Length != length || held.Deleted)
+        var held = this;
+        while (true)
         {
-            return;
-        }
+            var departures = store.Departures;
+            var span = writer.GetSpan(length);
+            held = store.Resolve(held, id, departures);
+            if (held.IsNull)
+            {
+                return default;
+            }
 
-        held.Chars.CopyTo(span);
-        writer.Advance(length);
+            if (held.Kind != SlotKind.String || held.Deleted)
+            {
+                return held.Right.AsItem;
+            }
+
+            var offset = (int)(id.Clock - held.Id.Clock);
+            var count = Math.Min(length, held.Length - offset);
+            held.Chars.Slice(offset, count).CopyTo(span);
+            writer.Advance(count);
+            if (offset + count == held.Length)
+            {
+                return held.Right.AsItem;
+            }
+
+            id = new ID(id.Client, id.Clock + count);
+            length = held.Length - offset - count;
+        }
     }
 }
