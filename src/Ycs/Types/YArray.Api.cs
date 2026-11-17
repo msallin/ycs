@@ -91,6 +91,42 @@ public sealed partial class YArray : IReadOnlyList<YValue>
         Release(content);
     }
 
+    /// <summary>
+    /// The index of the first value equal to <paramref name="value"/>, or -1. Values compare by value; a shared type is
+    /// equal only to itself (the same instance).
+    /// </summary>
+    public int IndexOf(YValue value)
+    {
+        var index = 0;
+        foreach (var raw in EnumerateValues())
+        {
+            if (YValue.FromStored(raw).Equals(value))
+            {
+                return index;
+            }
+
+            index++;
+        }
+
+        return -1;
+    }
+
+    /// <summary>Whether <see cref="IndexOf"/> finds <paramref name="value"/>.</summary>
+    public bool Contains(YValue value) => IndexOf(value) >= 0;
+
+    /// <summary>Removes the first value equal to <paramref name="value"/> (see <see cref="IndexOf"/>); false when there is none.</summary>
+    public bool Remove(YValue value)
+    {
+        var index = IndexOf(value);
+        if (index < 0)
+        {
+            return false;
+        }
+
+        RemoveRangeCore(index, 1);
+        return true;
+    }
+
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not in 0 to <see cref="Count"/> - 1.</exception>
     public void RemoveAt(int index)
     {
