@@ -421,7 +421,7 @@ public class YMapTests : YTestBase
         map0["a"] = 1;
         Assert.IsTrue(changes.Keys.TryGetValue("a", out keyChange));
         Assert.AreEqual(KeyChangeAction.Add, keyChange.Action);
-        Assert.IsNull(keyChange.OldValue);
+        Assert.IsTrue(keyChange.OldValue.IsNull);
         changes = null;
 
         map0["a"] = 2;
@@ -449,7 +449,7 @@ public class YMapTests : YTestBase
 
         Assert.IsTrue(changes.Keys.TryGetValue("b", out keyChange));
         Assert.AreEqual(KeyChangeAction.Add, keyChange.Action);
-        Assert.IsNull(keyChange.OldValue);
+        Assert.IsTrue(keyChange.OldValue.IsNull);
         changes = null;
 
         Users[0].Transact(tr =>
@@ -469,7 +469,7 @@ public class YMapTests : YTestBase
 
         Assert.IsTrue(changes.Keys.TryGetValue("d", out keyChange));
         Assert.AreEqual(KeyChangeAction.Add, keyChange.Action);
-        Assert.IsNull(keyChange.OldValue);
+        Assert.IsTrue(keyChange.OldValue.IsNull);
         changes = null;
 
         CompareUsers();

@@ -8,13 +8,19 @@ namespace Ycs;
 
 /// <summary>
 /// What a transaction changed in one shared type. The sealed subclasses are <see cref="YArrayEvent"/>,
-/// <see cref="YMapEvent"/>, <see cref="YTextEvent"/> and <see cref="YXmlEvent"/>. An event is readable while its
+/// <see cref="YMapEvent"/>, <see cref="YTextEvent"/> and <see cref="YXmlEvent"/>, each with <c>Target</c> as its own type. An event is readable while its
 /// transaction runs: after the transaction ended, reading what it did not compute yet throws.
 /// </summary>
 public abstract partial class YEvent
 {
     /// <summary>The type that changed.</summary>
     public YType Target { get; }
+
+    /// <summary>
+    /// The document of the transaction, which is never null (<c>Target.Doc</c> is null once the type was removed from its
+    /// document). Readable while the transaction runs, like <see cref="Transaction"/>.
+    /// </summary>
+    public YDoc Doc => Transaction.Doc;
 
     /// <summary>The type whose observer is running: <see cref="Target"/> or, for a deep observer, one of its ancestors.</summary>
     public YType CurrentTarget { get; internal set; }

@@ -52,7 +52,7 @@ internal static class YJson
         }
     }
 
-    private static object? ParseCore(ReadOnlySpan<byte> utf8Json, int maxDepth)
+    internal static object? ParseCore(ReadOnlySpan<byte> utf8Json, int maxDepth)
     {
         // Utf8JsonReader counts the open lists and objects and rejects a deeper one (as a JsonException); a value at
         // depth maxDepth may itself be a list or an object, as in AnyEncoding.

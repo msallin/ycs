@@ -135,14 +135,14 @@ public class TraceReplayTests
         protected static string StateHash(YDoc doc) => CanonicalJson.Hash(doc.EncodeStateAsUpdate());
 
         /// <summary>The attributes at <paramref name="i"/> of <paramref name="op"/>; null when absent or null.</summary>
-        internal static IReadOnlyDictionary<string, YValue> AttrsOf(JsonElement op, int i) =>
+        internal static YAttributes AttrsOf(JsonElement op, int i) =>
             i >= op.GetArrayLength() || op[i].ValueKind == JsonValueKind.Null
                 ? null
                 : ((IDictionary<string, object>)CanonicalJson.FromJson(op[i])).ToDictionary(kv => kv.Key, kv => YValue.FromObject(kv.Value));
 
         protected static List<object> KeysOf(YEvent e) =>
             e.Keys.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                .Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue })
+                .Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue.ToObject() })
                 .ToList();
 
         protected static Dictionary<string, object> Describe(YEvent e)
@@ -394,8 +394,8 @@ public class TraceReplayTests
         {
             var got = new Dictionary<string, object>
             {
-                ["m"] = Doc.GetMap("m").ToJson(),
-                ["a"] = Doc.GetArray("a").ToJson(),
+                ["m"] = Doc.GetMap("m").ToJsonObject(),
+                ["a"] = Doc.GetArray("a").ToJsonObject(),
                 ["sizes"] = Walk().Select(w => (object)(w.Type is YMap m ? m.Count : w.Type.Length)).ToList(),
                 ["state"] = StateHash(Doc),
                 ["log"] = Log.ToList(),
@@ -508,12 +508,12 @@ public class TraceReplayTests
             var got = new Dictionary<string, object>
             {
                 ["str"] = _root.ToString(),
-                ["json"] = _root.ToJson(),
+                ["json"] = _root.ToJsonObject(),
                 ["nodes"] = Walk().Select(t => (object)(t switch
                 {
                     YXmlElement el => new Dictionary<string, object> { ["name"] = el.NodeName, ["attrs"] = el.GetAttributes().ToDictionary(kv => kv.Key, kv => kv.Value.ToObject()), ["len"] = el.Length },
                     YXmlText xt => new Dictionary<string, object> { ["delta"] = xt.ToDelta(), ["len"] = xt.Length },
-                    YXmlHook h => new Dictionary<string, object> { ["hook"] = h.ToJson() },
+                    YXmlHook h => new Dictionary<string, object> { ["hook"] = h.ToJsonObject() },
                     _ => new Dictionary<string, object> { ["len"] = t.Length },
                 })).ToList(),
                 ["state"] = StateHash(Doc),

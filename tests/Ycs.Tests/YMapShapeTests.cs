@@ -120,4 +120,12 @@ public class YMapShapeTests
 
         Assert.AreEqual(1, map["l"].Length);
     }
+
+    [TestMethod]
+    public void CollectionExpression_OfPairs_BuildsTheMap()
+    {
+        YMap map = [new("k", 1), new("j", "x")];
+
+        Assert.AreEqual((2, (YValue)1, (YValue)"x"), (map.Count, map["k"], map["j"]));
+    }
 }

@@ -625,7 +625,7 @@ namespace Ycs.Properties
                 {
                     kd[key] = ch.Action == KeyChangeAction.Add
                         ? Obj(("action", "add"))
-                        : Obj(("action", ch.Action == KeyChangeAction.Update ? "update" : "delete"), ("old", Replica.View(ch.OldValue)));
+                        : Obj(("action", ch.Action == KeyChangeAction.Update ? "update" : "delete"), ("old", Replica.View(ch.OldValue.ToObject())));
                 }
 
                 o["keys"] = kd;
@@ -716,7 +716,7 @@ namespace Ycs.Properties
                             return "skip";
                         }
 
-                        var rp = RelativePosition.FromIndex(t, Clamp(s.Int("at"), TypeLength.Of(t)), (int)s.Int("assoc"));
+                        var rp = RelativePosition.FromIndex(t, Clamp(s.Int("at"), TypeLength.Of(t)), s.Int("assoc") < 0 ? Assoc.Before : Assoc.After);
                         var bytes = rp.Encode();
                         _run.RelativePositions[ScriptRun.IdText(s.Get("id"))] = bytes;
                         return Obj(("b", ScriptRun.B64(bytes)), ("j", Replica.View(Replica.JsonOf(rp))));
@@ -1075,7 +1075,7 @@ namespace Ycs.Properties
 
         private static int Clamp(long i, int n) => (int)Math.Max(0, Math.Min(i, n));
 
-        private static IReadOnlyDictionary<string, YValue> AttrsOf(object a) =>
+        private static YAttributes AttrsOf(object a) =>
             a == null ? null : ((IDictionary<string, object>)Val(a)).ToDictionary(kv => kv.Key, kv => YValue.FromObject(kv.Value));
 
         /// <summary>A script delta (docs/testing.md) as a Ycs delta.</summary>
@@ -1323,13 +1323,24 @@ namespace Ycs.Properties
         {
             try
             {
-                return View(t.ToJson());
+                _ = t.ToJsonString(); // the refusal of a root nobody defined by its kind
+                return View(JsonTree(t));
             }
             catch (Exception)
             {
                 return Obj(("$err", "toJSON"));
             }
         }
+
+        // What Yjs' toJSON() returns, in objects that keep what a JSON text cannot (bytes, NaN, the infinities).
+        private static object JsonTree(YType t) => t switch
+        {
+            YMap m => m.ToDictionary(kv => kv.Key, kv => JsonTreeOf(kv.Value)),
+            YArray a => a.Select(JsonTreeOf).ToList(),
+            _ => t.ToString(),
+        };
+
+        private static object JsonTreeOf(YValue v) => v.TryGetSharedType<YType>(out var type) ? JsonTree(type) : v.ToObject();
 
         /// <summary>The delete set of an update, merged and sorted, as plain values.</summary>
         public static Dictionary<string, object> DeleteSetOf(byte[] update, bool v2) =>

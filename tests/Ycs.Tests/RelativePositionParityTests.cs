@@ -77,12 +77,12 @@ public class RelativePositionParityTests
         var type = typeName == "text" ? (YType)doc.GetText("text") : doc.GetArray("array");
 
         var rpos = RelativePosition.Decode(B(base64));
-        Assert.AreEqual(expectedAssoc, rpos.Assoc);
+        Assert.AreEqual(expectedAssoc, (int)rpos.Assoc);
 
         Assert.IsTrue(rpos.TryResolve(doc, out var abs));
         Assert.AreSame(type, abs.Type);
         Assert.AreEqual(expectedIndex, abs.Index);
-        Assert.AreEqual(expectedAssoc, abs.Assoc);
+        Assert.AreEqual(expectedAssoc, (int)abs.Assoc);
     }
 
     [TestMethod]
@@ -124,12 +124,12 @@ public class RelativePositionParityTests
     }
 
     [TestMethod]
-    public void WriteJson_PositionInRootText_NamesItemAndRoot()
+    public void WriteJson_PositionInRootText_NamesTheItemOnly()
     {
-        // createRelativePosition fills tname for a root type in addition to the item.
+        // Yjs' createRelativePosition fills tname for a root type in addition to the item, which the bytes drop.
         var rpos = RelativePosition.FromIndex(BuildDoc().GetText("text"), 5);
 
-        Assert.AreEqual("""{"tname":"text","item":{"client":1,"clock":8},"assoc":0}""", JsonOf(rpos));
+        Assert.AreEqual("""{"item":{"client":1,"clock":8},"assoc":0}""", JsonOf(rpos));
     }
 
     [TestMethod]
@@ -161,7 +161,7 @@ public class RelativePositionParityTests
     {
         var text = BuildDoc().GetText("text");
 
-        CollectionAssert.AreEqual(B(TextLeft5), RelativePosition.FromIndex(text, 5, -1).Encode());
+        CollectionAssert.AreEqual(B(TextLeft5), RelativePosition.FromIndex(text, 5, Assoc.Before).Encode());
     }
 
     [TestMethod]

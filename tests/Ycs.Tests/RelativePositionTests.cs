@@ -91,8 +91,8 @@ public class RelativePositionTests : YTestBase
         yText.Insert(0, "2");
         yText.Insert(0, "1");
 
-        var rposRight = RelativePosition.FromIndex(yText, 1, 0);
-        var rposLeft = RelativePosition.FromIndex(yText, 1, -1);
+        var rposRight = RelativePosition.FromIndex(yText, 1, Assoc.After);
+        var rposLeft = RelativePosition.FromIndex(yText, 1, Assoc.Before);
 
         yText.Insert(1, "x");
 
@@ -108,9 +108,10 @@ public class RelativePositionTests : YTestBase
         for (int i = 0; i < yText.Length; i++)
         {
             // For all types of assotiations.
-            for (int assoc = -1; assoc < 2; assoc++)
+            foreach (var assoc in new[] { Assoc.Before, Assoc.After })
             {
                 var rpos = RelativePosition.FromIndex(yText, i, assoc);
+                Assert.AreEqual(rpos, RelativePosition.Decode(rpos.Encode()));
                 var encodedRpos = rpos.Encode();
                 var decodedRpos = RelativePosition.Decode(encodedRpos);
                 Assert.IsTrue(decodedRpos.TryResolve(yText.Doc, out var absPos));
@@ -119,5 +120,43 @@ public class RelativePositionTests : YTestBase
                 Assert.AreEqual(assoc, absPos.Assoc);
             }
         }
+    }
+
+    [TestMethod]
+    [DataRow(0, Assoc.After)]
+    [DataRow(0, Assoc.Before)]
+    [DataRow(2, Assoc.After)]
+    [DataRow(2, Assoc.Before)]
+    [DataRow(5, Assoc.After)]
+    [DataRow(5, Assoc.Before)]
+    public void FromIndex_DecodeOfEncode_IsEqual(int index, Assoc assoc)
+    {
+        Init(users: 1);
+        var yText = Texts[Users[0]];
+        yText.Insert(0, "hello");
+        var rpos = RelativePosition.FromIndex(yText, index, assoc);
+
+        Assert.AreEqual(rpos, RelativePosition.Decode(rpos.Encode()));
+    }
+
+    [TestMethod]
+    public void ToJsonString_FromJsonString_RoundTrips()
+    {
+        Init(users: 1);
+        var yText = Texts[Users[0]];
+        yText.Insert(0, "hello");
+        var rpos = RelativePosition.FromIndex(yText, 2, Assoc.Before);
+
+        Assert.AreEqual((rpos, "{\"item\":{\"client\":" + rpos.Item!.Value.Client + ",\"clock\":" + (rpos.Item!.Value.Clock) + "},\"assoc\":-1}"),
+            (RelativePosition.FromJson(rpos.ToJsonString()), rpos.ToJsonString()));
+    }
+
+    [TestMethod]
+    [DataRow("{")]
+    [DataRow("[]")]
+    [DataRow("{\"assoc\":0}")]
+    public void FromJson_NotAPosition_ThrowsYUpdateException(string json)
+    {
+        Assert.ThrowsExactly<YUpdateException>(() => RelativePosition.FromJson(json));
     }
 }

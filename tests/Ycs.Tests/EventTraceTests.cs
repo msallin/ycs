@@ -66,8 +66,8 @@ public class EventTraceTests
             var expect = step.GetProperty("expect");
             var at = $"trace {index}, step {stepIndex}";
 
-            Assert.AreEqual(Canon(Convert(expect.GetProperty("m"))), Canon(doc.GetMap("m").ToJson()), $"{at}: map");
-            Assert.AreEqual(Canon(Convert(expect.GetProperty("a"))), Canon(doc.GetArray("a").ToJson()), $"{at}: array");
+            Assert.AreEqual(Canon(Convert(expect.GetProperty("m"))), Canon(doc.GetMap("m").ToJsonObject()), $"{at}: map");
+            Assert.AreEqual(Canon(Convert(expect.GetProperty("a"))), Canon(doc.GetArray("a").ToJsonObject()), $"{at}: array");
             Assert.AreEqual(
                 Canon(Convert(expect.GetProperty("sizes"))),
                 Canon(Walk(doc).Select(w => (object)(w.Type is YMap m ? m.Count : w.Type.Length)).ToList()),
@@ -200,7 +200,7 @@ public class EventTraceTests
     private static object Describe(YEvent e) => new Dictionary<string, object>
     {
         ["path"] = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(),
-        ["keys"] = e.Keys.Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue }).ToList(),
+        ["keys"] = e.Keys.Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue.ToObject() }).ToList(),
         ["delta"] = e.Changes.Delta,
         ["added"] = e.Changes.Added.Count,
         ["deleted"] = e.Changes.Deleted.Count,

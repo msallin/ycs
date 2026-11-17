@@ -175,7 +175,7 @@ public class SubdocumentParityTests
     }
 
     [TestMethod]
-    public void Set_SubdocumentInsertedTwice_DoesNotThrow()
+    public void Set_SubdocumentInsertedTwice_KeepsTheSameDocument()
     {
         var doc = new YDoc();
         var subdoc = new YDoc();

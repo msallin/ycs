@@ -69,7 +69,7 @@ public class SyncProtocolTests
         var first = SyncProtocol.ReadSyncMessage(step1.WrittenSpan, reply, server, "peer");
         var second = SyncProtocol.ReadSyncMessage(reply.WrittenSpan, new ArrayBufferWriter<byte>(), client, "server");
 
-        Assert.AreEqual((SyncMessageType.SyncStep1, SyncMessageType.SyncStep2, "ok"), (first, second, client.GetText("t").ToString()));
+        Assert.AreEqual((new SyncReadResult(SyncMessageType.SyncStep1, true), new SyncReadResult(SyncMessageType.SyncStep2, false), "ok"), (first, second, client.GetText("t").ToString()));
     }
 
     [TestMethod]
@@ -83,7 +83,7 @@ public class SyncProtocolTests
 
         var type = SyncProtocol.ReadSyncMessage(message, reply, doc, null, format: UpdateFormat.V2);
 
-        Assert.AreEqual((SyncMessageType.Update, 0, "v2"), (type, reply.WrittenCount, doc.GetText("t").ToString()));
+        Assert.AreEqual((new SyncReadResult(SyncMessageType.Update, false), 0, "v2"), (type, reply.WrittenCount, doc.GetText("t").ToString()));
     }
 
     [TestMethod]
@@ -160,6 +160,24 @@ public class SyncProtocolTests
         SyncProtocol.WriteUpdate(writer, new byte[] { 1, 2 });
 
         CollectionAssert.AreEqual(new byte[] { 7, 2, 2, 1, 2 }, writer.WrittenSpan.ToArray());
+    }
+
+    [TestMethod]
+    public void MessageType_WrittenThenRead_StripsItAndKeepsTheBody()
+    {
+        var frame = new ArrayBufferWriter<byte>();
+        SyncProtocol.WriteMessageType(frame, SyncProtocol.MessageAwareness);
+        SyncProtocol.WriteMessageType(frame, 300);
+
+        var type = SyncProtocol.ReadMessageType(frame.WrittenSpan, out var body);
+
+        Assert.AreEqual((SyncProtocol.MessageAwareness, "AC02"), (type, Convert.ToHexString(body)));
+    }
+
+    [TestMethod]
+    public void ReadMessageType_Empty_Throws()
+    {
+        Assert.ThrowsExactly<YUpdateException>(() => SyncProtocol.ReadMessageType([], out _));
     }
 
     private sealed class Segment : ReadOnlySequenceSegment<byte>

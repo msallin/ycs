@@ -105,15 +105,14 @@ internal sealed class Session : IDisposable
 
         try
         {
-            var reader = new MemoryStream(message, writable: false);
-            var type = VarUint.Read(reader);
+            var type = SyncProtocol.ReadMessageType(message, out var body);
             switch (type)
             {
                 case MessageType.Sync:
-                    room.ReceiveSync(this, message.AsSpan((int)reader.Position));
+                    room.ReceiveSync(this, body);
                     break;
                 case MessageType.Awareness:
-                    room.ReceiveAwareness(this, reader);
+                    room.ReceiveAwareness(this, new MemoryStream(message, message.Length - body.Length, body.Length, writable: false));
                     break;
                 case MessageType.QueryAwareness:
                     // y-websocket's server ignores it (its messageListener has no case for it); clients never send it.

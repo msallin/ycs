@@ -20,6 +20,9 @@ public sealed class YXmlEvent : YEvent
         _subs = subs;
     }
 
+    /// <summary>The element or fragment that changed.</summary>
+    public new YXmlFragment Target => (YXmlFragment)base.Target;
+
     /// <summary>
     /// Whether the children changed.
     /// </summary>

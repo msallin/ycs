@@ -124,8 +124,8 @@ internal sealed class CorpusDoc
     /// <summary>toJSON() of a root type ("map" or "array") as plain values.</summary>
     public object Json(string root, string type) => type switch
     {
-        "map" => Plain(_doc.GetMap(root).ToJson()),
-        "array" => Plain(_doc.GetArray(root).ToJson()),
+        "map" => Plain(_doc.GetMap(root)),
+        "array" => Plain(_doc.GetArray(root)),
         "text" => _doc.GetText(root).ToString(),
         _ => throw new ArgumentException($"Unknown root type '{type}'.", nameof(type)),
     };
@@ -225,7 +225,9 @@ internal sealed class CorpusDoc
     private static object Plain(object value) => value switch
     {
         null => null,
-        YType t => Plain(t.ToJson()),
+        YMap m => m.ToDictionary(kv => kv.Key, kv => Plain(kv.Value.ToObject())),
+        YArray a => a.Select(v => Plain(v.ToObject())).ToList(),
+        YType t => t.ToString(),
         string or bool or byte[] => value,
         IDictionary<string, object> map => map.ToDictionary(kv => kv.Key, kv => Plain(kv.Value)),
         IDictionary dict => dict.Keys.Cast<object>().ToDictionary(k => (string)k, k => Plain(dict[k])),

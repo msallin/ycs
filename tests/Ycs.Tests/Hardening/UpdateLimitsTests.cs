@@ -145,6 +145,7 @@ public class UpdateLimitsTests
     }
 
     [TestMethod]
+    [TestCategory("Slow")]
     public void ApplyUpdate_TrustedMillionStructDocument_AppliesWithUnlimitedLimits()
     {
         // Each character prepended is an item of its own (it cannot merge with the one after it).

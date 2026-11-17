@@ -11,6 +11,19 @@ namespace Ycs;
 [TestClass]
 public class CollectedXmlSiblingTests
 {
+    private bool _poisonBefore;
+
+    // These tests need the slot to be reused for real, which the poison of YCS_POISON replaces by another struct's handle.
+    [TestInitialize]
+    public void SwitchPoisonOff()
+    {
+        _poisonBefore = YType.PoisonCollectedHandleForTests;
+        YType.PoisonCollectedHandleForTests = false;
+    }
+
+    [TestCleanup]
+    public void RestorePoison() => YType.PoisonCollectedHandleForTests = _poisonBefore;
+
     private static bool IsFree(YDoc doc, int handle) => doc.Store.Slab.TryRead(handle, out var slot) && slot.IsFree;
 
     // Reuse happens at the end of the batch that freed the slots; this inserts and removes until the slot of the

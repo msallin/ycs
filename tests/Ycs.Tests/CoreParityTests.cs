@@ -428,12 +428,12 @@ public class CoreParityTests
     }
 
     [TestMethod]
-    public void Get_RootDefinedAsASubclass_Throws()
+    public void Get_RootDefinedAsAnotherType_Throws()
     {
         var doc = new YDoc();
-        doc.GetXmlElement("x");
+        doc.GetXmlFragment("x");
 
-        Assert.ThrowsExactly<InvalidOperationException>(() => doc.GetXmlFragment("x"));
+        Assert.ThrowsExactly<InvalidOperationException>(() => doc.GetXmlText("x"));
     }
 
     [TestMethod]

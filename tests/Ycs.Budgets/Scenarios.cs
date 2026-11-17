@@ -118,7 +118,7 @@ internal static class Scenarios
         new("text.insert-formatted-char-100k", 500, () =>
         {
             var (_, text) = LargeText();
-            var bold = new Dictionary<string, YValue> { ["bold"] = true };
+            YAttributes bold = [new("bold", true)];
             var caret = TextLength / 2;
             return _ => text.Insert(caret++, "x", bold);
         }),

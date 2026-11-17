@@ -11,9 +11,6 @@ namespace Ycs;
 [TestClass]
 public class PlanItemKeysTests
 {
-    [TestCleanup]
-    public void ClearPoison() => YType.PoisonCollectedHandleForTests = Environment.GetEnvironmentVariable("YCS_POISON") == "1";
-
     // client 9: root map "r9", key "s", a string value of two items' length ("ab"); then a range that deletes its
     // second half, which splits the value: the store's MaySplitMapValues is set, so the plan runs every pre-check.
     private static byte[] SplitValueSetup()
@@ -91,7 +88,7 @@ public class PlanItemKeysTests
     [TestMethod]
     public void ApplyUpdate_PeerItemNextToItemInCollectedType_AppliesWithPoisonedHandles()
     {
-        YType.PoisonCollectedHandleForTests = true;
+        using var _ = StaticScope.Set(ref YType.PoisonCollectedHandleForTests, true);
         var (doc, update) = Scenario();
 
         doc.ApplyUpdate(update);

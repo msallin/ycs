@@ -26,10 +26,12 @@ coordinator merges the rows).
   largest page; never mid-batch outside the test modes.
 * **D4**: a run copied away (a merge that cannot extend) has its old values nulled at once, so the weak-reference
   proof holds before any compaction.
-* **D5, `Keys` into `Refs` (8.11): dropped.** The `Keys` page costs 8 bytes per slot on a page that holds a map item;
-  on `map-set-distinct` (100,000 keys, 33 MiB held) that is about 0.8 MiB, 2.4 %, under the 3 % the decision asked for,
-  and after 8.8 the `Refs` page is not allocated at all on a page of hot kinds, so folding would cost a wrapper object
-  per cold map item. Not built.
+* **D5, `Keys` into `Refs` (8.11): decided after 8.8.** Any measurable gain counts, without a percentage bar, unless it
+  makes the code markedly more complex. The `Keys` page costs 8 bytes per slot on a page that holds a map item: on
+  `map-set-distinct` (100,000 keys, 33 MiB held) about 0.8 MiB, 2.4 %, in the layout before 8.8. After 8.8 a page of hot
+  kinds has no `Refs` page, so folding saves nothing there, and a cold map item would need a wrapper object for content
+  and key. Re-measure `map-set-distinct` after 8.8; build 8.11 if folding still saves held memory without a wrapper per
+  item.
 * **D6**: an internal `SlotKind` (with Skip and Free = `Slab.FreeKind`) mapped to the public `ItemKind`.
 * **D7**: a detached view's hint is (staging table, index, version) from 9.4b; after the staging is released or reused
   the view looks its id up in the store and throws if the struct is not there.
@@ -80,7 +82,7 @@ tail entry, so typing into a run longer than a page costs two or three dictionar
 | 8.13 | performance pass (below) | `ItemRef.Write.cs`, `ItemRef.Runs.cs`, `ItemRef.Operations.cs`, `Utils/Arena.cs`, `Utils/Slab.cs`, `Utils/DeleteSet.cs`, `Utils/EncodingUtils.cs`, `Utils/ClientStructs*.cs`, `Utils/Transaction.cs`, `Types/YText.cs`, `Types/YArrayBase.cs`; `bench/Ycs.Compare/README.md`, `results/`; budget rows | no semantic change: corpus byte for byte, every suite; each commit one hypothesis, kept when `ab.py` shows ≥ 3 % on its workload (or the code is simpler) | `ab.py 4 6` on a quiet machine (load under 1.5), 044bb73 against the branch; the budgets re-baselined | low |
 | 8.12 | measurements and docs for steps 8 and 9 (9.7 merged into it) | `docs/*`, `bench/Ycs.Compare/README.md`, `Budgets.cs` | design 1.8/1.9 describe the code as it is; the corrections owed below are made; the held-memory table against 044bb73 | `ab.py`; `bench/Ycs.Layout small` rerun on the built layout | low |
 
-8.11 is dropped (D5). 8.9 and 8.10 are done.
+8.11 is decided after 8.8 (D5). 8.9 and 8.10 are done.
 
 ## Step 9: decoding into staging tables
 
@@ -242,7 +244,7 @@ removal); the design's `AbstractType` is `YType` in the code; a new 1.8 and 1.9 
    (530 KB against 218 KB) because a run longer than a page doubles by copy, or chunk oversized runs across pages (which
    breaks "a run lies in one page" for every reader)? Recommendation: accept, held memory and time are what the layout is
    for; the budget row's comment says so.
-2. **8.11 dropped** (D5, the estimate is 2.4 % on `map-set-distinct`): confirm.
+2. **8.11** (D5): decided after 8.8 by a measurement; no percentage bar.
 3. **The reader's shadow always on from 9.4a** raises the remote-update allocation until 9.6 (objects and table both
    filled): accept the temporary budget raise (D11) or start 9.4a only after 8.8 so that 9.5 follows at once?
    Recommendation: start now; the raise is one row with a comment, and lane C is otherwise idle.
