@@ -6,7 +6,9 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # A fork's pull request never runs on the self-hosted runner.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, ycs-bench]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
@@ -102,7 +104,9 @@ jobs:
           bash interop/corpus/roundtrip.sh
 
   browser:
-    runs-on: ubuntu-latest
+    # A fork's pull request never runs on the self-hosted runner.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: [self-hosted, ycs-bench]
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7

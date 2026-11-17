@@ -9,15 +9,17 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: 'Runner labels, as JSON (e.g. ["self-hosted", "linux"])'
-        default: '["self-hosted"]'
+        description: 'Runner labels, as JSON (e.g. ["self-hosted", "ycs-bench"])'
+        default: '["self-hosted", "ycs-bench"]'
       baseline:
         description: 'The commit the ab.py step compares against'
         default: '044bb73'
 
 jobs:
   round:
-    runs-on: ${{ fromJSON(inputs.runner || '["self-hosted"]') }}
+    # Only the owner starts a round, by hand or by pushing bench-run.
+    if: github.actor == 'msallin'
+    runs-on: ${{ fromJSON(inputs.runner || '["self-hosted", "ycs-bench"]') }}
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v7
