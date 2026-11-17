@@ -1,7 +1,7 @@
 # Design: items as structs in a slab, linked by handles
 
-Status: steps 1 to 7 built (section 1); steps 8 and 9 are the design for the remaining work (sections 2 to 5), revised
-after the design review and the review of steps 1 and 2 (2026-11-15). Parity target unchanged: Yjs 13.6.32, the same
+Status: steps 1 to 9 built (section 1); sections 2 and 3 describe the layout as it is, section 4 the steps and the files
+each one changed. Parity target unchanged: Yjs 13.6.32, the same
 content, events and update bytes. No unsafe code: arrays of structs and `ref` to their elements only. Numbers come
 from `bench/Ycs.Layout` (the model; README and `results/`), `bench/Ycs.Compare` (README, "After layout steps 1 and 2")
 and the two reviews (findings H, M, L: the design review's; N: the review of steps 1 and 2, also "review" alone).
@@ -10,20 +10,22 @@ and the two reviews (findings H, M, L: the design review's; N: the review of ste
 
 Before step 7 an item was a 128-byte object plus a content object (40 bytes for a string, 88 for a single array value),
 held by its client's list. Step 7 replaced the item object by a 64-byte slot of a slab, linked to its neighbours by
-32-bit handles; the content is still an object beside the slot (1.7). Steps 8 and 9 keep characters and values in
-append-only arenas, the rare fields in side tables, and decode into staging tables (4). The model holds 35-45% of
-the memory of the object layout on the six workloads measured, and at most about 400 bytes more on the smallest
-document (section 2.2). Built before step 7, on the objects: start clocks beside each client's structs, the run-head
+32-bit handles (1.7). Step 8 moved the characters and the values into append-only arenas, with compaction (1.8); step 9
+made an update decode into a staging table and removed every decoded struct object (1.9). The model of section 2.2 held
+35-45% of the memory of the object layout on the six workloads measured; the built layout holds 49-64% of the object layout's
+(bench/Ycs.Compare/README.md, "Step 8 and 9 against the object layout") and, on documents of fewer than about 20 structs,
+as much as it or more (2.2). Built before step 7, on the objects: start clocks beside each client's structs, the run-head
 index that makes Yjs' marker walks jump within a chain (`array-delete-random` 57 s to 0.9 s), the leaf order of step 3,
 which took back the 15-19% steps 1 and 2 cost on the two split-heavy workloads and made the walks' lookups logarithmic,
 and the internal reference layer `ItemRef` of step 4, which enumerated the public boundaries and the holders across free
-points (1.4). Step 5 gave those holders ids (1.5), step 6 broke the public API once (1.6), and step 7 put every struct of
-the store in a slot of a slab, linked by handles, content still an object beside it (1.7).
+points (1.4). Step 5 gave those holders ids (1.5), step 6 broke the public API once (1.6), step 7 put every struct of
+the store in a slot of a slab, linked by handles (1.7), step 8 put the content in the slab's arenas (1.8) and step 9
+decoded into staging tables (1.9).
 
 ## 1. What is built
 
-1.1 to 1.6 record each step as it was built, on the objects of its time; 1.7 and sections 2 and 3 describe the code as it
-is.
+1.1 to 1.6 record each step as it was built, on the objects of its time; 1.7 to 1.9 and sections 2 and 3 describe the code as
+it is.
 
 ### 1.1 Step 1: start clocks beside the structs
 
@@ -254,7 +256,7 @@ struct without its id; no public API changed (`PublicApi.txt`).
 
 | holder | holds now |
 | --- | --- |
-| `Transaction._mergeStructs` | `List<ID>`: the id a split or a collection added; the merge pass finds the struct that holds it by the clock |
+| `Transaction._mergeStructs` | `List<ItemId>`: the id a split or a collection added; the merge pass finds the struct that holds it by the clock |
 | `YArrayBase.EnumerateContent`, `YArray.EnumerateList` (`Map`, `ForEach`), `YArrayBase.ForEach` (`YXmlFragment.ForEach`), `YText.WriteTo` | the item it stands on, its id and `StructStore.Departures` read before the caller's code runs; `StructStore.NextAfter` goes on from the item when the count is unchanged, else from the struct that holds the id now (one lookup by id) |
 | `YXmlTreeWalker` | the current node, its id and the count, the same way |
 | `YArrayBase._searchMarkers` of a collected type | cleared with the push hint when the type is collected (`ForgetList`) |
@@ -297,19 +299,19 @@ replaced by a GC struct (`StructStore.ReplaceWithGC`). It is the enumerators' va
 
 `Utils/Slab.cs`, `Utils/TypeTable.cs`, `Utils/ClientTable.cs`, `Structs/ItemHandle.cs`, `Structs/ItemRef*.cs`. Every struct
 of a store (an item or a GC struct) is a slot of its document's `Slab`; no `Item` or `GC` object is allocated for one.
-The content of the other kinds stays an object, beside the slot; a Deleted slot holds none and a Type slot holds the index of its type. What a reader needs:
+The content of a String or an Any item is a range of an arena (1.8), a Deleted slot holds none and a Type slot holds the index of its type; only the cold kinds (Json, Binary, Embed, Format, Doc) keep a content object beside the slot. What a reader needs:
 
 * **A slot** is the 64-byte sequential struct of 2.1 with no reference field. Its kind (`Info`, bits 8 to 15) is the
   content's wire reference number: 0 for a GC struct, `Slot.FreeKind` (0xFF) for a slot on a free list. `Payload` holds
-  the free-list link of a free slot and the type-table index of a Type slot; a Deleted and a GC slot hold 0 (step 8 adds
-  the arena offsets).
+  the free-list link of a free slot, the type-table index of a Type slot and the arena offset of a String or Any slot
+  (1.8); a Deleted and a GC slot hold 0.
 * **Pages** (2.2): page 0 starts at 16 slots (`Slab.FirstPageSlotsForTests` changes it for the test runs; 1 makes every
   allocation copy) and doubles by copy up to 1,024; the next pages hold 1,024 and never move. A handle is
   `page << 10 | index`; a read is two array indexes (the slab publishes the pages' arrays by number). Beside each page
-  two `object[]` pages, `Refs` (the content) and `Keys` (a map item's key), are allocated on first use, null for a
-  free slot; beside the slab, `Redone` (`Dictionary<int, ID>`, flag `HasRedone`) holds the id each redone item names.
-  `Keys` is a second page set, not a `KeyedRef` allocation per map item; step 8 may fold it into `Refs`
-  (docs/plan-layout-8-9.md, D5).
+  two `object[]` pages, `Refs` (the content object of a cold kind) and `Keys` (a map item's key), are allocated on first use, null for a
+  free slot; beside the slab, `Redone` (`Dictionary<int, ItemId>`, flag `HasRedone`) holds the id each redone item names.
+  `Keys` is a second page set, not a `KeyedRef` allocation per map item; folding it into `Refs` was measured and saves
+  nothing (1.8).
 * **`ItemRef`** is (slab, handle), two fields in Release (a test asserts them); `default` is Yjs' null. Two references
   are equal when they name the same slot of the same slab. A member reads the slot; a write goes to the slot. In Debug
   it also keeps the slot's generation (below). Code that reads several fields of a slot takes one `ref Slot` or
@@ -350,9 +352,110 @@ allocation of it copies) and, with `YCS_POISON=1`, poison the handle of a collec
 reuse, the corpus byte for byte. **Measured**: bench/Ycs.Compare/README.md, "Step 7 against the object layout" (held
 memory and time) and "The slab, performance pass".
 
-## 2. The layout: built in step 7, to complete in steps 8 and 9
+### 1.8 Step 8: the arenas
 
-2.1 to 2.4 and 2.6 describe the slab as it is; where a part waits for step 8 or 9 the text says so.
+`Utils/Arena.cs`, `Utils/Slab.Compaction.cs`, `Utils/StructStore.Compaction.cs`, `Utils/SlotKind.cs`, `Structs/ItemRef.Content.cs` and the
+partials it dispatches to (`ItemRef.Chars.cs`, `ItemRef.Values.cs`, `ItemRef.Content.Collections.cs`, `ItemRef.Content.Other.cs`,
+`ItemRef.Content.Text.cs`, `ItemRef.Runs.cs`, `ItemRef.Write.cs`). The content of an item is in its slot or in the slab beside it,
+by kind (`SlotKind`: the wire's reference numbers, with `Skip` for the staged form only and `Free` for a slot on a free list):
+
+| kind | where the content is | the slot's `Payload` |
+| --- | --- | --- |
+| `String` | `Slab.Chars`, an `Arena<char>`: UTF-16 code units | the offset of the range; `Length` is its length |
+| `Any` | `Slab.Values`, an `Arena<object?>`: the caller's objects, one per element | the offset of the range; `Length` is its length |
+| `Deleted`, `GC` | nothing | 0 |
+| `Type` | the type table; one element | the table index (`ItemRef.TypeOf` throws for a collected type) |
+| `Json`, `Binary`, `Embed`, `Format`, `Doc` | an object in `Refs` (`ItemRef.Cold`; `SlotKinds.HasObject`, `IsCold`) | 0 |
+
+* **The arena** (2.3) knows runs only as the (offset, length) pairs its caller holds. An offset is `page << 32 | index`. The slab is
+  the caller: a String or Any slot owns the range its `Payload` and `Length` name, and no other structure keeps an offset.
+* **One dispatcher per event, one partial per kind.** `ItemRef.Operations.cs` (integrate, split, merge, free, collect) reaches
+  content only through the hooks of `ItemRef.Content.cs`: store at `NewItem`, split (`SplitContent`), merge (`MergeContent`),
+  release (`ReleaseContent`), write, copy, delete, collect, integrate. A String's work is in `ItemRef.Chars.cs`, an Any's in
+  `ItemRef.Values.cs`, the cold kinds' through their `IContentEx` object, a Type's in `TypeContent.cs`, a Deleted's in the hub.
+* **Split** gives the right part the range from `payload + diff`: no copy, no allocation, for a String and an Any. A cut
+  between the two halves of a surrogate pair writes U+FFFD over both in place (the ranges of an arena are disjoint, so no
+  other item reads them). The right part holds the end of the left's reservation, if the run had one (2.3). A Type cannot be
+  split (it has one clock).
+* **Merge** (the right neighbour's range joins the left's): when the right range follows the left in the arena nothing
+  moves; else the left run is extended (`Arena.Extend`: in place, in its reservation, or copied away with slack) and the
+  right range is marked dead. A merge of Any values clears the right range and, when the run moved, the old left range, so the
+  caller's objects are collectible at once. `Length` is the sum only after the content merged: two windows (`AppendChars` and
+  `AppendValues` before the caller adds to `Length`, `MergeItemWith` before `Length += right.Length`) have a slot whose
+  `Length` lags its range, and no compaction hook sits in them.
+* **Release.** A range ends when its item is collected (`BecomeGC`, `BecomeDeletedContent`), when its slot is freed (`FreeSlot`;
+  after a merge `FreeSlotKeepingChars`, because the left run took the range over) or when the run was copied away. Release marks
+  the range dead (`Arena.MarkDead`) and, for Any, clears its elements (`Arena.Clear`). A deleted item that is not collected keeps
+  its kind and its range: its encoding reads them (gc off, kept items, snapshots). `BecomeDeletedContent` keeps the item's
+  `Countable` bit, as Yjs does; the right part of a split takes it from its own kind (`SlotKinds.IsCountable`), as Yjs
+  takes it from the spliced content.
+* **Reads.** `ItemRef.Chars` and `ItemRef.ValueSpan` are spans of the arena, valid until user code runs or a batch ends. What
+  outlives that is a copy: `Elements` and `Values` (an `ItemView`'s and an event's content), and `Stored`, which the list
+  enumerators read through an array rented from `ArrayPool<object>` that the enumerator returns in its `finally`.
+  `WriteCharsTo` asks the writer for its span first and reads the arena after, from the struct that holds the item's id then.
+  `ValueFreezer.OnRead` wraps what leaves the arena as a read-only value.
+* **Writes.** `WriteItem` reads the slot once and encodes a String from the arena span, an Any value by value
+  (`WriteValues`), a cold kind through its object. `NewCopyOf` (the undo manager's redo) gives the copy a range of its own.
+* **`Keys` stays a page set beside `Refs`.** Folding a map item's key into `Refs` was measured on `map-set-distinct` (100,000
+  keys, 24.9 MiB held, the `Keys` page 0.77 MiB, 3 %): a map item of a hot kind holds no `Refs` entry, so the fold would turn
+  one 8-byte page into another and save nothing.
+* **Checks.** Every test transaction runs `StructStore.CheckForTests`, which, for the arenas, recounts (`Arena.Violations`): every
+  String and Any slot's range lies in the used part of a held page, live ranges are disjoint from each other and from the tail
+  reservations, `Live`, `Dead` and the tail table agree with a recount, and no element outside a live range of the value arena
+  holds a value (`Arena.UnclearedOutside`: every exit of a range clears it). Debug fills the pages a compaction frees with a
+  marker, so a span held across one reads it. The test modes force compaction (2.3).
+
+**Proof**: the store check after every test transaction, in Release and Debug, with leaves of 2 and 4, page 0 of the slab at
+one slot and tiny arena pages (`Arena<T>.FirstPageForTests`, `MaxPageForTests`); forced compaction after every transaction
+and in the middle of a batch; the corpus byte for byte; weak references showing that a collected item's values are
+collectible before any compaction. **Measured**: bench/Ycs.Compare/README.md, "The Any values" and "Step 8 and 9 against the
+object layout".
+
+### 1.9 Step 9: staging tables
+
+`Utils/StagingTable.cs`, `Utils/StructStaging.cs`, `Utils/UpdateReader.cs`, `Utils/LazyStructReader.cs`, `Utils/LazyStructWriter.cs`,
+`Utils/EncodingUtils.cs` (`StructCursor`), `Utils/UpdateOperations.cs`, `Utils/StructStore.IntegrationPlan*.cs`,
+`Utils/StructStore.Pending.cs`, `Utils/PlanItem.cs`, `Utils/ItemView.cs`, `Structs/ItemRef.Adopt.cs`. An update is read into a
+`StagingTable` and nowhere else: no `Item`, `GC`, `Skip`, `ContentString`, `ContentAny` or `ContentDeleted` class exists. The
+table is described in 2.5; what reads and writes it:
+
+* **The read.** `UpdateReader.Read` (one reader per thread and open lease, two kept: the pending update's retry reads inside the
+  lease of the update that set it aside) decodes with a `StructCursor`, whose `NextStaged` stages one struct at a time and makes
+  the checks that need no document (ranges, no empty struct, no client twice, the struct limit, an origin or parent of the
+  same client only at an earlier clock). A String's characters come from the decoder as a span (`IUpdateDecoder.ReadStringSpan`)
+  and are copied into the table once; a Type's reference and name are read by `ContentType.ReadHeader`; a cold kind is read as
+  its object. Disposing the lease resets the table.
+* **The apply.** `YDoc.ApplyUpdate` decodes the whole update before it touches the document, then `StructStore.ApplyUpdate` plans
+  on the staged fields: `IntegrationPlan` works on `PlanItem`s (a store item by id, or a staged one by table and index, never
+  equal to each other), keeps Yjs' order, checks nesting and garbage collection on the staged fields (a staged Type is its
+  kind; no `YType` exists yet), and `EncodeRest` writes what cannot integrate yet as a v2 update (`LazyStructWriter`) for the
+  pending store, which is read again, into a table, when it is retried. `Execute` calls `ItemRef.Adopt` per struct.
+* **Adoption** (`ItemRef.Adopt(table, i, transaction, offset, integrate)`, the one entry from staged to store; it reads the
+  table and never changes it) resolves the references in Yjs' order (the origins' structs split where an origin points into
+  one; the parent from a root name, the left's or right's, or an id found in the store as a Type slot), then makes the slot:
+  characters and values are copied into the arenas from `offset`, a cold object becomes the slot's (`ContentJson.Tail` builds
+  the right part of an offset adoption without changing the table), a Type's `YType` is created here and given its table
+  index, a GC struct is trimmed. A neighbour that is a GC struct, or a collected parent, makes the item enter as a GC struct.
+  A failed integration frees the slot.
+* **`UpdateOperations`** (`MergeUpdates`, `DiffUpdate`, `ConvertUpdateFormat`, `EncodeStateVectorFromUpdate`, `ParseUpdateMeta`,
+  `DecodeUpdate`, `DescribeUpdate`) works on tables rented from the thread's pool (`StagingTable.Rent`, `Return`). A merge of k
+  updates holds k + 1 tables: a `LazyStructReader` per update, holding its current struct only (`Truncate` before every read),
+  and the pending struct, which takes the reader's table when the struct moves whole and is `Truncate`d and copied into
+  (`StructStaging.CopyFrom`: the cut as Yjs' `splice` makes it) when it is cut. `LazyStructWriter.WriteStruct` writes a staged
+  struct as `ItemRef.Write` writes a slot, both through `ItemRef.WriteItemHeader`.
+* **`DecodeUpdate`** keeps a table of its own in the public `DecodedUpdate`; `DecodedUpdate.Structs` builds the public
+  `DecodedStruct` records from it on first use (`StructStaging.Decoded`).
+* **`ItemView.Detached`** is the view of a staged struct that the integration plan hands to `GcFilter`: (table, index, version).
+  While the table's version matches it reads the staged fields; after a reset or truncate it looks its id up in the store and
+  throws `InvalidOperationException` when the store has no such struct.
+
+**Proof**: the corpus byte for byte, the fuzzer (it also checks that the staged decoding agrees with `DecodedStruct`), the
+update-operation differentials against Yjs, the budgets (the remote-update row allocates 0 bytes beyond the reused table).
+**Measured**: bench/Ycs.Compare/README.md, "The decoded objects" and "Step 8 and 9 against the object layout".
+
+## 2. The layout
+
+Section 2 describes the layout as it is.
 
 ### 2.1 A slot
 
@@ -367,15 +470,14 @@ client a hostile update pushes past 2^32 in three structs (M8); see open questio
 | `Left`, `Right` (handles, -1 none) | 8 |
 | `Parent` (index into the type table; -1: a GC struct) | 4 |
 | `Info` (keep, countable, deleted, marker, has-redone; the kind in bits 8..15) | 4 |
-| `Payload` (step 8: an arena offset or a type index; today a free slot's list link and a Type slot's table index) | 8 |
+| `Payload` (an arena offset, a type index, or a free slot's list link) | 8 |
 | **total** | **64** (the model measured 52 with 32-bit clocks) |
 
-Beside the slab, by handle: `Refs` (`object[]` pages allocated on first use: the content object, until step 8 moves
-`String` and `Any` out, and for good the cold kinds), `Keys` (a map item's key; a second page set, 1.7), `Redone`
-(`Dictionary<int, ID>`, flag `HasRedone`). Origins stay ids: Yjs compares and
+Beside the slab, by handle: `Refs` (`object[]` pages allocated on first use: the content object of a cold kind), `Keys` (a map item's key; a second page set, 1.7), `Redone`
+(`Dictionary<int, ItemId>`, flag `HasRedone`). Origins stay ids: Yjs compares and
 encodes them as ids, a split changes which struct holds an origin, and an origin may name a GC struct.
 
-Content kinds: `String` (the char arena), `Any` (the value arena: the caller's objects, shared), `Deleted` and `GC`
+Content kinds (1.8): `String` (the char arena), `Any` (the value arena: the caller's objects, shared), `Deleted` and `GC`
 (nothing), `Type` (the type table), `Skip` (staging only, 2.5), and the cold kinds `Format`, `Embed`, `Binary`, `Json`,
 `Doc` (their object in `Refs`). A collected item keeps its `Countable` bit when it becomes `Deleted` in place, as in
 Yjs.
@@ -411,23 +513,47 @@ below that it costs at most 215 bytes more (one struct: 3,176 against 2,961 byte
 more for each of page 0's 16 slots: 1.14 of today; 20 structs 0.57). So there is no separate representation for small
 documents.
 
+The built layout, measured the same way (`bench/Ycs.Layout small`, `results/2026-11-17-8-12-small.md`; the object layout from the
+same bench built at 044bb73, `results/2026-11-17-8-12-small-044bb73.md`; bytes per document, the machine shared but the figures
+deterministic). The last column is the model of the table above (today's empty document plus what the model's store holds).
+
+| document | object layout | built layout | built / object | model |
+| --- | ---: | ---: | ---: | ---: |
+| empty, a root text | 1,296 | 2,068 | 1.60 | 2,068 |
+| text "hello" (1 struct) | 3,113 | 6,025 | 1.94 | 4,020 |
+| 20 characters typed at random positions, 2 deleted (20 structs) | 8,576 | 8,696 | 1.01 | 5,204 |
+| 200 typed, 20 deleted (198 structs) | 49,888 | 28,592 | 0.57 | 20,436 |
+| 1,000 typed, 100 deleted | 227,216 | 97,128 | 0.43 | 75,780 |
+| 5,000 typed, 500 deleted | 1,086,745 | 431,169 | 0.40 | 391,253 |
+| 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,986 | 0.39 | 1,558,665 |
+| empty, a root map | 1,184 | 1,944 | 1.64 | 1,944 |
+| map, 20 keys | 10,179 | 9,523 | 0.94 | 6,496 |
+| map, 1,000 keys | 355,906 | 195,242 | 0.55 | 151,040 |
+
+Many clients (20,000, one map entry each): 665 bytes per client in the object layout, 611 built, 348 in the model. The built
+layout pays from about 20 structs, not from about 10; below that it holds more than the object layout (the first struct of a
+document costs about 3.9 KB: the first slab page of 16 slots is 1 KB and the arena's first page 0.5 KB; the rest is not
+attributed), and a document with no struct holds 770 bytes more than before (not attributed either). There is still no separate representation for small documents.
+
 ### 2.3 The arenas
 
-The character arena lives on `Slab` (`Slab.Chars`), the value arena beside it; a String slot's `Payload` is the offset
-of its range, `Length` the range's length. A split gives the right part `offset + diff` (no copy). Typing at a run's end
+The character arena lives on `Slab` (`Slab.Chars`), the value arena beside it (`Slab.Values`); each is made on first use. A
+String or Any slot's `Payload` is the offset of its range, `Length` the range's length. A split gives the right part `offset + diff` (no copy). Typing at a run's end
 appends in place when the run ends at its page's used part or inside its reservation; otherwise the merged run is
 copied to the write end with as much slack again, kept in a tail table (run end to reservation end), so two runs growing
 alternately copy each other O(log n) times, not once per keystroke (M3). A run longer than a page has a page of its own,
-twice its length, and no table entry.
+twice its length, and no table entry (a transaction that types 100,000 characters in one run allocates about 2.4 times what
+the object layout did, 530 KB against 218 KB, because that run doubles by copy; the budget row says so).
 
-Garbage is collected content and copied-away runs. A deleted item that is not collected keeps its kind and its range:
+Garbage is collected content and copied-away runs only. A deleted item that is not collected keeps its kind and its range:
 its encoding reads them (gc off, kept items, snapshots).
 
-Compaction is document-wide (`Slab.CompactChars`, started by `StructStore.CompactIfWorthwhile`). It runs at the end of
-the outermost batch, beside `Slab.AllowReuse`, when the dead characters exceed the live ones and the garbage made since
-the last compaction amounts to a largest page and to the number of slots (the walk costs O(slots), so each compaction is
-paid for by that much new garbage, whatever it freed); never in the middle of a batch outside the test modes. One walk of the slab's pages lists the ranges of every slot
-of kind String (a free slot, pending reuse included, holds none; a deleted but uncollected one is listed). The arena
+Compaction is document-wide (`Slab.CompactChars` and `Slab.CompactValues`, started by `StructStore.CompactIfWorthwhile`). It
+runs at the end of the outermost batch, beside `Slab.AllowReuse`, for each arena whose dead elements exceed its live ones
+and whose garbage made since its last compaction amounts to a largest page and to the number of slots
+(`Arena.WorthCompacting`: the walk costs O(slots), so each compaction is paid for by that much new garbage, whatever it
+freed); never in the middle of a batch outside the test modes. One walk of the slab's pages lists the ranges of every slot
+of the arena's kind, String or Any (a free slot, pending reuse included, holds none; a deleted but uncollected one is listed). The arena
 copies the runs of every page less than half live (the write page included) to a new write end, tells the slab each
 run's new offset, frees those pages (Debug fills them with a marker character) and drops the tail table. Only the slots
 and the tail table hold an offset: the readers of a text (enumerators, `YText` positions, `ItemTextListPosition`,
@@ -435,8 +561,8 @@ events) hold handles and read the slot's range in the moment they use it (`ItemR
 the elements of a String, the encoding of an item; a String slot holds no object: the arena is the one source of its text). A
 span of the arena is consumed before any call that runs user code or ends a batch; `WriteCharsTo` asks the writer for its
 span first and slices the arena after, from the item it re-reads (an item that is no longer a live String of its
-length writes nothing). The offsets the item operations hold in locals do not live across a call that can compact. A collected item's values are nulled in the value arena at GC, so it
-does not keep the caller's objects alive until a compaction.
+length writes nothing). The offsets the item operations hold in locals do not live across a call that can compact. Every exit of an Any range clears its values (the item is collected or freed, a merge or an extension copies the run away,
+a compaction moves it), so the arena does not keep the caller's objects alive until a compaction.
 
 The test modes (`YCS_COMPACT=always|midbatch`) compact after every transaction's cleanup, and mid-batch at each struct
 added, each item made, each append to a run and between gc and merge; a store of more than 2,048 slots compacts every
@@ -504,16 +630,31 @@ count/64th time (`YCS_COMPACT_EVERY=1` lifts that), so that a test stays linear 
 
 ### 2.5 Decoding, and the operations without a document
 
-The decoder writes an update's structs into a staging table (`StagingTable`) of the same fields as the slots (plus, per
-struct, the parent as a root name or an id, and the `Skip` kind), with its own geometric arenas: a String's characters
-and an Any's values are copied out of the decoder, a Type is its reference and name, the cold kinds (Json, Binary, Embed,
-Format, Doc) are the content object read from the decoder. No struct is an object: nothing the update holds is an
-`Item`, a `GC`, a `Skip` or a content object of a hot kind. A table belongs to one reader (`UpdateReader`, one per thread
-and open lease) and is reset when its lease is released. The integration plan, the pending rest, the detached views and
-the garbage-collection pre-check read the staged fields, and `ItemRef.Adopt` is where a staged struct gets its slab slot
-(it reads the table and never changes it). `UpdateOperations` (`MergeUpdates`, `DiffUpdate`, `DecodeUpdate`) works on
-staging tables, so there is one representation and one encoder (M6): `LazyStructWriter` writes a struct from its staged
-fields, `ItemRef.Write` from its slot, both through `ItemRef.WriteItemHeader`.
+The decoder writes an update's structs into a `StagingTable` (1.9). A staged struct is not a slot: it has the slot's size (64
+bytes: four 64-bit and eight 32-bit fields) and a similar shape, but its fields mean other things, because it belongs to no
+store yet. It has no handles (its neighbours are the structs before and after it in the table), its client is an index into
+the table's own client list, not the store's client table, its parent is a root name or the id of the parent's item (there
+is no type-table index, and no `YType` exists before adoption), and its kind is `StagedKind`, which includes `Skip` (a gap
+`mergeUpdates` writes) and has no Free. `Payload` is an offset into the table's own character or value buffer for a String or an
+Any, an index into its object list for a cold kind or a Type's node name, and -1 for none. The kind, the parent kind and a
+Type's reference number sit in `Info`.
+
+The table is a set of flat buffers that double when full (`StagedStruct[]`, `char[]`, `object?[]` for values, `object?[]` for
+everything else an update holds as an object: parent names, keys, cold objects, type names), not pages: nothing is addressed
+by a handle that must stay valid while it grows. A client's structs are one contiguous range in clock order
+(`BeginClient`, `RangeOf`, `FindByClock`, which keeps the last hit as its hint). No struct is an object: nothing the update
+holds is an `Item`, a `GC`, a `Skip` or a content object of a hot kind. A table belongs to one owner (`UpdateReader`, one per
+thread and open lease; `UpdateOperations` rents others from the thread's pool) and is reset when it is released, keeping at
+most 256 KiB of buffers between all the tables kept; `Version` changes at every reset and truncate, so a reader that kept an
+index can tell. Indexes, spans and refs are valid until the next add or reset (Debug poisons the buffers on a reset).
+
+The integration plan, the pending rest, the detached views and the garbage-collection pre-check read the staged fields, and
+`ItemRef.Adopt` is where a staged struct gets its slab slot (it reads the table and never changes it). `UpdateOperations`
+(`MergeUpdates`, `DiffUpdate`, `DecodeUpdate`) works on staging tables, so there is one representation and one encoder (M6):
+`LazyStructWriter` writes a struct from its staged fields, `ItemRef.Write` from its slot, both through
+`ItemRef.WriteItemHeader`. A String's characters are copied twice after the decoder
+has them (into the table, then into the arena), so a load allocates more than the document holds: ten loads of the trace's
+final state allocate 38.1 MiB, against 33.1 MiB on the object layout.
 
 ### 2.6 Clients
 
@@ -576,14 +717,14 @@ From `tests/Ycs.Tests/PublicApi.txt`, every member that exposes a struct changes
 * `AbstractStruct`, `GC`, `Skip`, `IContent` and the `Content*` classes become internal. `DecodedUpdate.Structs`
   becomes `IReadOnlyList<DecodedStruct>`: a record (`Id`, `Length`, `Kind` including `Skip` and `GC`, `LeftOrigin`,
   `RightOrigin`, `Parent` as a root name or an id, `ParentSub`, `Content`), detached from any store. It covers the one
-  consumer use known (Plenum's `SharedText.cs`: `is Skip`, `is Item`, `Id`, the origins, `Parent as ID?`; L3).
+  consumer use known (Plenum's `SharedText.cs`: `is Skip`, `is Item`, `Id`, the origins, `Parent as ItemId?`; L3).
 
 Announced as `feat!:` (ycs is before 1.0); the commit body gives the migration (`item.Left as Item` becomes
 `item.Left`, an `ItemView?`; `e.Changes.Added.Contains(x)` and filter lambdas keep their bodies; `is Skip` becomes
 `Kind == ItemKind.Skip`; no replacement for `SplitItem` and `Marker`). `PublicApi.txt` (regenerated with
 `YCS_ACCEPT_API=1`) and `docs/api.md` change in the same commit. No other step changes the public API.
 
-## 4. The remaining steps
+## 4. The steps
 
 Each step is one concern, leaves every suite green (unit, properties, corpus, fuzz, budgets, coverage) and can be
 reviewed alone. Effects: *measured* where a source is named, otherwise estimates.
@@ -596,8 +737,8 @@ reviewed alone. Effects: *measured* where a source is named, otherwise estimates
 | 5 | ids wherever a struct is held across a free point: built (1.5) | none beyond noise (measured) | low-medium |
 | 6 | the public API break: built (1.6) | none inside; a view read costs a hint check | medium |
 | 7 | the slab, content still as objects: built (1.7) | held memory -15 to -27 %, allocation lower, typing slower (measured) | high |
-| 8 | inline content and the arenas | the rest of the saving; no allocation per edit (est.) | medium-high |
-| 9 | the decoder and the update operations on staging tables | a load allocates about what it holds (est.) | medium |
+| 8 | inline content and the arenas: built (1.8) | held memory 36-51 % below the object layout on the six workloads the model measured; allocation 38-87 % lower on most editing workloads (measured) | medium-high |
+| 9 | the decoder and the update operations on staging tables: built (1.9) | no struct object on a load; `apply-updates` allocates 12 MiB against 59 (measured) | medium |
 
 **Step 3, the leaf order: built** (1.3). `apply-updates` and `trace-replay` are below 53a35de again; the slab
 inherits the order.
@@ -634,7 +775,7 @@ enumerators hold an id and a hint; a collected type's search markers are cleared
 **Step 6, the public API break** (3.3), on today's storage.
 
 * *Files*: new `Utils/ItemView.cs`, `Utils/DecodedStruct.cs`; `YEvent.cs`, `YDoc.cs`, `UndoManager.cs`,
-  `AbstractType.cs`, `YArrayBase.cs`, `UpdateOperations.cs`, the visibility of `Structs/*`; `PublicApi.txt`;
+  `YType.cs`, `YArrayBase.cs`, `UpdateOperations.cs`, the visibility of `Structs/*`; `PublicApi.txt`;
   `docs/api.md`; the tests that use `Item`.
 * *Proof*: `PublicApiTests`; a property that, in every observer call, compares each view's fields with the object's
   (identical inside the transaction); tests for the post-merge rule (a, b, c above), views of GC structs, default
@@ -647,8 +788,8 @@ and `Keys` pages on first use, per-page free lists with reuse at the batch end a
 (bench/Ycs.Layout README, "Editing").
 
 * *Files*: new `Utils/Slab.cs`, `Utils/TypeTable.cs`, `Utils/ClientTable.cs`, `Structs/ItemHandle.cs`; `ItemRef*.cs`;
-  `StructStore*.cs`, `ClientStructs*.cs`, `Transaction.cs`, `DeleteSet.cs`; `Structs/Item.cs`, `GC.cs` (decoded form
-  only now), `Skip.cs`, `ContentType.cs`; `YType.cs` (`_start`, `_item`, `_map` as handles), `YArrayBase.cs`;
+  `StructStore*.cs`, `ClientStructs*.cs`, `Transaction.cs`, `DeleteSet.cs`; `Structs/Item.cs`, `GC.cs`, `Skip.cs`
+  (their decoded form lived on until step 9), `ContentType.cs`; `YType.cs` (`_start`, `_item`, `_map` as handles), `YArrayBase.cs`;
   `UpdateOperations.cs`, `EncodingUtils.cs`, `LazyStructWriter.cs` (the decoded form has its own merge, split and write, so
   that `ItemRef` serves the store's structs only).
 * *Invariant*: 2.4; the store check after every test transaction (links mirror, orders contiguous and equal to the
@@ -660,29 +801,41 @@ and `Keys` pages on first use, per-page free lists with reuse at the batch end a
 * *Effect*: measured, bench/Ycs.Compare/README.md, "Step 7 against the object layout": held memory 15 to 27 % below the object layout on the struct-heavy workloads, allocation 15-60 % lower on editing, time +10 to +43 % on typing and observed appends and equal or faster on random-position array and map workloads (044bb73 against 5464252). *Risk*: was
   high (stale handles; the largest diff).
 
-**Step 8, inline content.** `String` and `Any` in the arenas (2.3), `Deleted` and `Type` inline; cold kinds stay in
+**Step 8, inline content: built** (1.8, 2.3). `String` and `Any` in the arenas, `Deleted` and `Type` inline; the cold kinds stay in
 `Refs`.
 
-* *Files*: new `Utils/Arena.cs`; `Structs/Content*.cs` (string, any, deleted, type become kinds), `Item` accessors,
-  `YText.cs`, `YArrayBase.cs`, the GC paths.
+* *Files*: new `Utils/Arena.cs`, `Slab.Compaction.cs`, `SlotKind.cs`, `StructStore.Compaction.cs`, `StructStore.Checks.Values.cs`,
+  `Structs/ItemRef.Content.cs` with `ItemRef.Chars.cs`, `ItemRef.Values.cs`, `ItemRef.Content.Collections.cs`,
+  `ItemRef.Content.Other.cs`, `ItemRef.Content.Text.cs`, `ItemRef.Runs.cs`, `ItemRef.Write.cs`, `Structs/TypeContent.cs`;
+  changed `ItemRef.Operations.cs`, `ItemRef.cs`, `Slab.cs`, `TypeTable.cs`, `Transaction.cs` (the compaction trigger),
+  `StructStore.Checks.cs`, `StructStore.ForTests.cs`, `StructStore.IntegrationPlan.cs`, `ContentType.cs`, `ItemView.cs`; and
+  the code that reads content through the accessors: `YText.cs`, `YArray.cs`, `YArrayBase.cs`, `YMap.cs`, `YXmlFragment.cs`, `YType*.cs`,
+  `YEvent.cs`, `UndoManager.cs`, `PermanentUserData.cs`, `AbsolutePosition.cs`, `YDoc.cs`; `Structs/ContentString.cs`,
+  `ContentAny.cs` and `ContentDeleted.cs` ended as decoded forms and went in step 9.
 * *Proof*: forced compaction after every transaction and in the middle of a batch in a test mode; runs longer than a
   page; two runs growing alternately; content and encoded bytes before and after a compaction; a weak reference shows
   a collected item's value is collectible before any compaction. Sabotage: a compaction that misses one payload.
-* *Effect*: held memory the model's 0.35-0.45 of today with 52-byte slots, about 0.40-0.50 with 64-byte slots (est.:
-  +12 bytes a struct); no allocation per edit, observed types included. *Risk*: medium-high: an arena bug corrupts
-  content; the content checks are strong.
+* *Effect*: measured (bench/Ycs.Compare/README.md, "Step 8 and 9 against the object layout"): held memory 49-64 % of the object
+  layout's on the six workloads the model measured (the model: 35-45 % with 52-byte slots), allocation 38-87 % lower on the editing
+  workloads but `text-append` (0.20 to 0.51 MiB); array pushes hold 10 to 15 % more (8 bytes a value in the arena, with the run's doubling). *Risk*: medium-high: an
+  arena bug corrupts content; the content checks are strong.
 
-**Step 9, decoding into staging tables** (2.5), and `UpdateOperations` on them.
+**Step 9, decoding into staging tables: built** (1.9, 2.5), and `UpdateOperations` on them.
 
-* *Files*: `UpdateDecoderV1/V2.cs`, `LazyStructReader.cs`, `UpdateReader.cs`, `UpdateOperations.cs`, the integration
-  plan in `StructStore.IntegrationPlan.cs`; `DecodedStruct` read from a staging table.
-* *Proof*: the corpus byte for byte, the fuzzer, the update-operation differentials against Yjs; the load budgets
-  tighten. Sabotage: a `Skip` read as a GC struct in a merge.
-* *Effect*: est. a load allocates about what the document holds (the trace: about 1 MiB instead of 3.2); `apply-state`
-  1.5-2× is plausible, not measured. *Risk*: medium.
+* *Files*: new `Utils/StagingTable.cs`, `StructStaging.cs`, `StructStore.IntegrationPlan.GcCheck.cs`, `Structs/ItemRef.Adopt.cs`;
+  changed `UpdateDecoderV1/V2.cs`, `IUpdateDecoder.cs`, `Lib0Reader.cs`, `lib0/Decoding/StringDecoder.cs` (strings as spans),
+  `EncodingUtils.cs`, `LazyStructReader.cs`, `LazyStructWriter.cs`, `UpdateReader.cs`, `UpdateOperations.cs`,
+  `StructStore.IntegrationPlan.cs`, `StructStore.Pending.cs`, `StructStore.cs`, `PlanItem.cs`, `ItemView.cs`, `DecodedStruct.cs`,
+  `UpdateTypes.cs`; removed `Structs/Item.cs`, `GC.cs`, `Skip.cs`, `AbstractStruct.cs`, `ContentString.cs`, `ContentAny.cs`,
+  `ContentDeleted.cs`.
+* *Proof*: the corpus byte for byte, the fuzzer, the update-operation differentials against Yjs; the load budgets tightened (the
+  remote-update row to 0 bytes). Sabotage: a `Skip` read as a GC struct in a merge.
+* *Effect*: measured: a load allocates no struct object (`apply-updates` 59.3 to 11.9 MiB, 259,778 updates); `apply-state-*` allocates
+  more than the object layout (38 against 33 MiB for ten loads of the trace) because of the table; `apply-state` timing is not
+  better yet. *Risk*: medium.
 
-Order: 3 is built; 4a, 4b and 5 pay nothing but are safe and enumerate the holders; 6 once the slab is
-decided (it is: open question 2), right before 7; 7 to 9 are the rewrite (7 alone gives about half the saving).
+Order: 3 is built; 4a, 4b and 5 pay nothing but are safe and enumerate the holders; 6 once the slab was
+decided (open question 2), right before 7; 7 to 9 are the rewrite (7 alone gave about half the saving).
 
 ## 5. Not done, and why
 
@@ -692,7 +845,7 @@ decided (it is: open question 2), right before 7; 7 to 9 are the rewrite (7 alon
 * Generation counters in Release: the id check is exact (2.4); Debug has them (1.7).
 * A separate small-document representation: geometric pages cost at most about 400 bytes a document (2.2).
 * Inline scalars and a rope per text: every read would box, every offset would shift.
-* A struct of arrays or a hot/cold split of the slot: measure after step 8, not before.
+* A struct of arrays or a hot/cold split of the slot: not measured; step 8 is built and its performance pass did not ask for it.
 * Shrunken or pooled `Item` objects: 30% instead of 60%, and pooled objects make stale references worse.
 
 ## 6. Open questions
