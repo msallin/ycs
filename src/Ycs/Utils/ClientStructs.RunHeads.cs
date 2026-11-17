@@ -39,13 +39,13 @@ internal sealed partial class ClientStructs
     private byte FlagsAt(int k, int i)
     {
         var leaf = LeafAt(k);
-        var item = leaf.Structs[i];
+        var item = leaf.Structs[i].In(_slab);
         if (!item.IsItem)
         {
             return Break;
         }
 
-        var before = i > 0 ? leaf.Structs[i - 1] : k > 0 ? _leaves[k - 1].Structs[_leaves[k - 1].Count - 1] : default;
+        var before = i > 0 ? leaf.Structs[i - 1].In(_slab) : k > 0 ? _leaves[k - 1].Structs[_leaves[k - 1].Count - 1].In(_slab) : default;
         var flags = before.IsItem && item.Left == before ? (byte)0 : Break;
         if (!item.Deleted)
         {
@@ -345,10 +345,10 @@ internal sealed partial class ClientStructs
             {
                 if (leaf.Flags[i] != FlagsAt(k, i))
                 {
-                    return $"position {position} ({leaf.Structs[i].Id.Client}:{leaf.Structs[i].Id.Clock}) has flags {leaf.Flags[i]}, a recount gives {FlagsAt(k, i)}";
+                    return $"position {position} ({leaf.Structs[i].In(_slab).Id.Client}:{leaf.Structs[i].In(_slab).Id.Clock}) has flags {leaf.Flags[i]}, a recount gives {FlagsAt(k, i)}";
                 }
 
-                if (position > 0 && (leaf.Flags[i] & Break) == 0 && this[position - 1].Right != leaf.Structs[i])
+                if (position > 0 && (leaf.Flags[i] & Break) == 0 && this[position - 1].Right != leaf.Structs[i].In(_slab))
                 {
                     return $"position {position} is linked to its left, which does not have it on its right";
                 }

@@ -654,7 +654,7 @@ internal sealed partial class StructStore
                     AbstractType root => root,
                     _ => null,
                 };
-                if (type != null && type._map.TryGetValue(key, out var value))
+                if (type != null && type.TryGetMapItem(key, out var value))
                 {
                     var head = value;
                     while (head.Left.IsItem)
@@ -807,7 +807,7 @@ internal sealed partial class StructStore
             {
                 var (t, c) = stack[^1];
                 stack.RemoveAt(stack.Count - 1);
-                foreach (var value in t._map.Values)
+                foreach (var value in t.MapItems())
                 {
                     for (var item = value; !item.IsNull; item = item.Left.AsItem)
                     {

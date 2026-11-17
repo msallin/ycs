@@ -35,7 +35,7 @@ public readonly partial struct ItemView
             Check(doc, n);
         }
 
-        foreach (var value in target._map.Values)
+        foreach (var value in target.MapItems())
         {
             listed = 0;
             for (var n = value; !n.IsNull && listed++ < MaxListed; n = n.Left.AsItem)

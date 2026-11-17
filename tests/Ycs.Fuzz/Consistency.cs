@@ -119,9 +119,9 @@ internal static class Consistency
                 }
             }
 
-            foreach (var (key, value) in type._map)
+            foreach (var (key, held) in type._map)
             {
-                for (var item = value; item.IsItem; item = item.Left)
+                for (var item = type.MapItem(held); item.IsItem; item = item.Left)
                 {
                     if (item.Content is ContentType nested)
                     {

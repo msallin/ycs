@@ -12,15 +12,27 @@ public abstract partial class YArrayBase : YType
 {
     internal sealed class ArraySearchMarker
     {
+        // The marker's item as a handle into the slab of its item's store; Debug keeps the slot's generation with it.
+        private ItemHandle _held;
+        private readonly Slab _slab;
+
         public ArraySearchMarker(ItemRef p, int index, long timestamp)
         {
+            _slab = p.Slab;
             P = p;
             Index = index;
             p.Marker = true;
             Timestamp = timestamp;
         }
 
-        public ItemRef P { get; internal set; }
+        internal ItemHandle Held => _held;
+
+        public ItemRef P
+        {
+            get => _held.In(_slab);
+            internal set => _held = value.Hold;
+        }
+
         public int Index { get; internal set; }
         public long Timestamp { get; internal set; }
 
@@ -172,7 +184,13 @@ public abstract partial class YArrayBase : YType
 
     // An item of this list (any: a push walks from it to the end), or null. Items leave a list only by merging into
     // their left neighbour (OnMerge moves the hint there) or when the whole type is collected (ForgetList).
-    private ItemRef _pushHint;
+    private ItemHandle _pushHintHeld = ItemHandle.None;
+
+    private ItemRef _pushHint
+    {
+        get => _pushHintHeld.IsNone ? default : _pushHintHeld.In(Doc!.Store.Slab);
+        set => _pushHintHeld = value.Hold;
+    }
 
     // An empty list for the values of the next insert (see InsertGenericsAfterReturningLast), or null.
     private List<object?>? _spareValues;

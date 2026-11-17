@@ -12,6 +12,23 @@ internal sealed partial class StructStore
 
     private long _checks;
 
+    /// <summary>A live item of the store other than <paramref name="except"/> (<paramref name="except"/> itself when there is none).</summary>
+    internal ItemRef OtherItemForTests(ItemRef except)
+    {
+        foreach (var list in Clients.Values)
+        {
+            foreach (var str in list)
+            {
+                if (str.IsItem && str != except)
+                {
+                    return str;
+                }
+            }
+        }
+
+        return except;
+    }
+
     /// <summary>Adds a GC struct of <paramref name="length"/> from <paramref name="id"/> to its client's list, outside any transaction.</summary>
     internal ItemRef AddGcForTests(ID id, int length)
     {

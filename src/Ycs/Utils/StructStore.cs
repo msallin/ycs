@@ -140,7 +140,7 @@ internal sealed partial class StructStore
 
         if (!known)
         {
-            structs = _capacityHints != null && _capacityHints.Remove(str.Id.Client, out var capacity) ? new ClientStructs(capacity) : new ClientStructs();
+            structs = _capacityHints != null && _capacityHints.Remove(str.Id.Client, out var capacity) ? new ClientStructs(Slab, capacity) : new ClientStructs(Slab);
             Clients[str.Id.Client] = structs;
         }
 

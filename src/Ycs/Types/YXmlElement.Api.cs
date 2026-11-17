@@ -93,7 +93,7 @@ public sealed partial class YXmlElement
     /// Returns whether an attribute exists.
     /// </summary>
     public bool HasAttribute(string attributeName) =>
-        _prelimAttrs != null ? _prelimAttrs.ContainsKey(attributeName) : _map.TryGetValue(attributeName, out var item) && !item.Deleted;
+        _prelimAttrs != null ? _prelimAttrs.ContainsKey(attributeName) : TryGetMapItem(attributeName, out var item) && !item.Deleted;
 
     /// <summary>
     /// Returns all attribute name/value pairs (null values included), as of <paramref name="snapshot"/> when it is given

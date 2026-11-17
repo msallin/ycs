@@ -282,15 +282,15 @@ public partial class YDoc
 
                 foreach (var kvp in type._map)
                 {
-                    var n = kvp.Value;
+                    var n = type.MapItem(kvp.Value);
                     for (; !n.IsNull; n = n.Left.AsItem)
                     {
                         n.Parent = t;
                     }
                 }
 
-                t._start = type._start;
-                for (var n = t._start; !n.IsNull; n = n.Right.AsItem)
+                t._startHeld = type._startHeld;
+                for (var n = type._start; !n.IsNull; n = n.Right.AsItem)
                 {
                     n.Parent = t;
                 }

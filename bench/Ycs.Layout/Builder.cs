@@ -140,7 +140,7 @@ internal static class Builder
                 e.Map = new Dictionary<string, int>(t._map.Count);
                 foreach (var (k, v) in t._map)
                 {
-                    e.Map[k] = Handle(v);
+                    e.Map[k] = Handle(t.MapItem(v));
                 }
             }
 

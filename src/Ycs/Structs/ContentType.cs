@@ -49,7 +49,7 @@ internal class ContentType : IContentEx
         public readonly ItemRef Owner = owner;
         public ItemRef Next = type._start;
         public bool InMap;
-        public Dictionary<string, ItemRef>.Enumerator Keys;
+        public Dictionary<string, ItemHandle>.Enumerator Keys;
         public ItemRef Value;
 
         /// <summary>Starts on the keys' values, once the list is done.</summary>
@@ -86,7 +86,7 @@ internal class ContentType : IContentEx
                     continue;
                 }
 
-                item = frame.Keys.Current.Value;
+                item = frame.Type.MapItem(frame.Keys.Current.Value);
             }
 
             if (item.MarkDeleted(transaction))
@@ -138,7 +138,7 @@ internal class ContentType : IContentEx
 
                 if (frame.Keys.MoveNext())
                 {
-                    frame.Value = frame.Keys.Current.Value;
+                    frame.Value = frame.Type.MapItem(frame.Keys.Current.Value);
                     continue;
                 }
 

@@ -29,8 +29,12 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
     private int _count;
     private long _end;
 
-    public ClientStructs(int capacity = 4)
+    // The slab the handles of the leaves name; the structs of one client list are in one store.
+    private readonly Slab _slab;
+
+    public ClientStructs(Slab slab, int capacity = 4)
     {
+        _slab = slab;
         _single = new Leaf(Math.Clamp(capacity, 1, _leafCapacity));
     }
 
@@ -50,17 +54,17 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
 
             if (_leaves == null)
             {
-                return _single.Structs[index];
+                return _single.Structs[index].In(_slab);
             }
 
             var offset = index - _cursorFirst;
             if (unchecked((uint)offset) < (uint)_cursorCount)
             {
-                return _cursorStructs[offset];
+                return _cursorStructs[offset].In(_slab);
             }
 
             var k = LeafOf(index);
-            return _leaves[k].Structs[index - _firstPositions[k]];
+            return _leaves[k].Structs[index - _firstPositions[k]].In(_slab);
         }
     }
 
@@ -73,7 +77,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
             var leaf = LeafAt(k);
             for (var i = 0; i < leaf.Count; i++)
             {
-                yield return leaf.Structs[i];
+                yield return leaf.Structs[i].In(_slab);
             }
         }
     }
@@ -117,7 +121,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
 
         // The last struct's length is unchanged: the new one starts where it ended.
         var offset = leaf.Count;
-        leaf.Structs[offset] = str;
+        leaf.Structs[offset] = str.Hold;
         leaf.Starts[offset] = str.Id.Clock;
         leaf.Flags[offset] = 0;
         leaf.Count++;
@@ -161,7 +165,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         Array.Copy(leaf.Structs, offset, leaf.Structs, offset + 1, tail);
         Array.Copy(leaf.Starts, offset, leaf.Starts, offset + 1, tail);
         Array.Copy(leaf.Flags, offset, leaf.Flags, offset + 1, tail);
-        leaf.Structs[offset] = right;
+        leaf.Structs[offset] = right.Hold;
         leaf.Starts[offset] = right.Id.Clock;
         leaf.Flags[offset] = 0;
         leaf.Count++;
@@ -232,7 +236,6 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
             Array.Copy(leaf.Structs, offset + n, leaf.Structs, offset, tail);
             Array.Copy(leaf.Starts, offset + n, leaf.Starts, offset, tail);
             Array.Copy(leaf.Flags, offset + n, leaf.Flags, offset, tail);
-            Array.Clear(leaf.Structs, leaf.Count - n, n);
             leaf.Count -= n;
             emptied |= leaf.Count == 0;
             remaining -= n;
@@ -286,8 +289,8 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
     {
         var k = Locate(index, out var offset);
         var leaf = LeafAt(k);
-        Debug.Assert(leaf.Structs[offset].Id.Equals(str.Id) && leaf.Structs[offset].Length == str.Length && ValueAt(k, offset) == 0);
-        leaf.Structs[offset] = str;
+        Debug.Assert(leaf.Structs[offset].In(_slab).Id.Equals(str.Id) && leaf.Structs[offset].In(_slab).Length == str.Length && ValueAt(k, offset) == 0);
+        leaf.Structs[offset] = str.Hold;
         SetFlags(k, offset, FlagsAt(k, offset));
         RefreshSuccessor(k, offset);
     }
@@ -298,7 +301,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         _end += length;
         var k = _leafCount - 1;
         var leaf = LeafAt(k);
-        Debug.Assert(_end == leaf.Structs[leaf.Count - 1].Id.Clock + leaf.Structs[leaf.Count - 1].Length);
+        Debug.Assert(_end == leaf.Structs[leaf.Count - 1].In(_slab).Id.Clock + leaf.Structs[leaf.Count - 1].In(_slab).Length);
         if ((leaf.Flags[leaf.Count - 1] & Visible) != 0)
         {
             AddSum(k, length);
@@ -489,7 +492,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
             var leaf = LeafAt(k);
             for (var i = 0; i < leaf.Count; i++, position++)
             {
-                var s = leaf.Structs[i];
+                var s = leaf.Structs[i].In(_slab);
                 if (leaf.Starts[i] != s.Id.Clock)
                 {
                     return $"position {position} starts at {leaf.Starts[i]}, its struct at {s.Id.Clock}";
@@ -541,7 +544,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         private int _leaf;
         private int _offset = -1;
 
-        public readonly ItemRef Current => list.LeafAt(_leaf).Structs[_offset];
+        public readonly ItemRef Current => list.LeafAt(_leaf).Structs[_offset].In(list._slab);
 
         public bool MoveNext()
         {

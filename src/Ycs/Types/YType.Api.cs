@@ -42,7 +42,7 @@ public abstract partial class YType
 
     private protected void TypeMapDelete(Transaction transaction, string key)
     {
-        if (_map.TryGetValue(key, out var c))
+        if (TryGetMapItem(key, out var c))
         {
             c.Delete(transaction);
         }
@@ -50,7 +50,7 @@ public abstract partial class YType
 
     private protected void TypeMapSet(Transaction transaction, string key, object? value)
     {
-        if (!_map.TryGetValue(key, out var left))
+        if (!TryGetMapItem(key, out var left))
         {
             left = default;
         }
@@ -89,7 +89,7 @@ public abstract partial class YType
 
     private protected bool TryTypeMapGet(string key, out object? value)
     {
-        if (_map.TryGetValue(key, out var val) && !val.Deleted)
+        if (TryGetMapItem(key, out var val) && !val.Deleted)
         {
             value = ValueAt(val.Content, val.Length - 1);
             return true;
@@ -103,13 +103,14 @@ public abstract partial class YType
     {
         foreach (var kvp in _map)
         {
-            if (kvp.Value.Deleted)
+            var item = MapItem(kvp.Value);
+            if (item.Deleted)
             {
                 continue;
             }
 
             var key = kvp.Key;
-            var value = ValueAt(kvp.Value.Content, kvp.Value.Length - 1);
+            var value = ValueAt(item.Content, item.Length - 1);
             yield return new KeyValuePair<string, object?>(key, value);
         }
     }

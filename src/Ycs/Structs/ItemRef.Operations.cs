@@ -410,7 +410,7 @@ internal readonly partial struct ItemRef
             parent.Length -= Length;
         }
 
-        if (ParentSub != null && parent._map.TryGetValue(ParentSub, out var current) && current == this)
+        if (ParentSub != null && parent.TryGetMapItem(ParentSub, out var current) && current == this)
         {
             parent._mapCount--;
         }
@@ -463,7 +463,7 @@ internal readonly partial struct ItemRef
                 }
                 else if (ParentSub != null)
                 {
-                    parent._map.TryGetValue(ParentSub, out var item);
+                    parent.TryGetMapItem(ParentSub, out var item);
                     o = item;
 
                     while (!o.IsNull && o.IsItem && !o.Left.IsNull)
@@ -500,7 +500,7 @@ internal readonly partial struct ItemRef
 
                 if (ParentSub != null)
                 {
-                    parent._map.TryGetValue(ParentSub, out var item);
+                    parent.TryGetMapItem(ParentSub, out var item);
                     r = item;
 
                     while (!r.IsNull && r.IsItem && !r.Left.IsNull)
@@ -537,8 +537,8 @@ internal readonly partial struct ItemRef
             {
                 // Set as current parent value if right == null and this is parentSub.
                 mapParent = parent;
-                previousCounted = mapParent._map.TryGetValue(ParentSub, out var previous) && !previous.Deleted;
-                mapParent._map[ParentSub] = this;
+                previousCounted = mapParent.TryGetMapItem(ParentSub, out var previous) && !previous.Deleted;
+                mapParent._map[ParentSub] = Hold;
 
                 // This is the current attribute value of parent. Delete right.
                 if (!Left.IsNull)
@@ -683,7 +683,7 @@ internal readonly partial struct ItemRef
         // Update parent._map.
         if (rightItem.ParentSub != null && rightItem.Right.IsNull)
         {
-            rightItem.Parent._map[rightItem.ParentSub] = rightItem;
+            rightItem.Parent._map[rightItem.ParentSub] = rightItem.Hold;
         }
 
         Length = diff;

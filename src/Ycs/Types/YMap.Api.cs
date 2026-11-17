@@ -101,7 +101,7 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
     public bool ContainsKey(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
-        return _prelimContent != null ? _prelimContent.ContainsKey(key) : _map.TryGetValue(key, out var val) && !val.Deleted;
+        return _prelimContent != null ? _prelimContent.ContainsKey(key) : TryGetMapItem(key, out var val) && !val.Deleted;
     }
 
     /// <summary>Adds <paramref name="key"/> for a collection initializer.</summary>
@@ -180,9 +180,10 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
 
         foreach (var kvp in _map)
         {
-            if (!kvp.Value.Deleted)
+            var item = MapItem(kvp.Value);
+            if (!item.Deleted)
             {
-                yield return new KeyValuePair<string, YValue>(kvp.Key, YValue.FromStored(ValueAt(kvp.Value.Content, kvp.Value.Length - 1)));
+                yield return new KeyValuePair<string, YValue>(kvp.Key, YValue.FromStored(ValueAt(item.Content, item.Length - 1)));
             }
         }
     }

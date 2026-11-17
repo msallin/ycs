@@ -176,7 +176,7 @@ public abstract partial class YEvent
                 {
                     KeyChangeAction action;
                     object? oldValue;
-                    var item = target._map[key];
+                    var item = target.MapItem(target._map[key]);
 
                     if (Adds(item))
                     {

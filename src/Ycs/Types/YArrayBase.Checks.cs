@@ -5,8 +5,8 @@ namespace Ycs;
 public abstract partial class YArrayBase
 {
     /// <summary>The push hint, for <see cref="StructStore.CheckForTests"/>.</summary>
-    internal ItemRef PushHintForTests => _pushHint;
+    internal ItemHandle PushHintForTests => _pushHintHeld;
 
     /// <summary>The structs the search markers sit on, for <see cref="StructStore.CheckForTests"/>.</summary>
-    internal IEnumerable<ItemRef> MarkerItemsForTests => _searchMarkers == null ? [] : _searchMarkers._searchMarkers.Select(m => m.P);
+    internal IEnumerable<ItemHandle> MarkerItemsForTests => _searchMarkers == null ? [] : _searchMarkers._searchMarkers.Select(m => m.Held);
 }

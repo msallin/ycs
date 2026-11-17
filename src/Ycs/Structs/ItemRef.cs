@@ -47,6 +47,37 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
 #endif
     }
 
+#if DEBUG
+    private ItemRef(Slab slab, int handle, int generation)
+    {
+        _slab = slab;
+        _handle = handle;
+        _generation = generation;
+    }
+#endif
+
+    /// <summary>The reference a holder's <paramref name="held"/> names in <paramref name="slab"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static ItemRef Held(Slab slab, ItemHandle held) =>
+#if DEBUG
+        new(slab, held.Value, held.Generation);
+#else
+        new(slab, held.Value);
+#endif
+
+    /// <summary>What a holder keeps of this reference: its handle (and in Debug its generation), none for <c>default</c>.</summary>
+    internal ItemHandle Hold
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get =>
+            _slab is null ? ItemHandle.None :
+#if DEBUG
+            new(_handle, _generation);
+#else
+            new(_handle);
+#endif
+    }
+
     /// <summary>The slab whose slot the reference names; null for <c>default</c>.</summary>
     internal Slab Slab => _slab;
 

@@ -443,9 +443,9 @@ internal static class Editing
             list.Add(new(null, s.Id.Client, s.Id.Clock, s.Length, s.Deleted));
         }
 
-        foreach (var (key, last) in type._map.OrderBy(kv => kv.Key, StringComparer.Ordinal))
+        foreach (var (key, held) in type._map.OrderBy(kv => kv.Key, StringComparer.Ordinal))
         {
-            for (var s = last; !s.IsNull; s = s.AsItem.Left)
+            for (var s = type.MapItem(held); !s.IsNull; s = s.AsItem.Left)
             {
                 list.Add(new(key, s.Id.Client, s.Id.Clock, s.Length, s.Deleted));
             }

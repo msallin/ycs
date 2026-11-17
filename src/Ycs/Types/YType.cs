@@ -19,9 +19,47 @@ public abstract partial class YType
     {
     }
 
-    internal ItemRef _item;
-    internal ItemRef _start;
-    internal Dictionary<string, ItemRef> _map = new Dictionary<string, ItemRef>();
+    // The holders of the type's structs are handles into its document's slab (ItemHandle): the item, the start of the
+    // list and the last item of each key. Debug keeps the generation of the slot with each, so a read through a stale
+    // one throws; a collected type's handles are not read (the facts below are).
+    internal ItemHandle _itemHeld = ItemHandle.None;
+    internal ItemHandle _startHeld = ItemHandle.None;
+    internal Dictionary<string, ItemHandle> _map = new Dictionary<string, ItemHandle>();
+
+    internal ItemRef _item
+    {
+        get => _itemHeld.IsNone ? default : _itemHeld.In(Doc.Store.Slab);
+        set => _itemHeld = value.Hold;
+    }
+
+    internal ItemRef _start
+    {
+        get => _startHeld.IsNone ? default : _startHeld.In(Doc.Store.Slab);
+        set => _startHeld = value.Hold;
+    }
+
+    /// <summary>The struct a value of <see cref="_map"/> names.</summary>
+    internal ItemRef MapItem(ItemHandle held) => held.In(Doc.Store.Slab);
+
+    internal bool TryGetMapItem(string key, out ItemRef item)
+    {
+        if (_map.TryGetValue(key, out var held))
+        {
+            item = MapItem(held);
+            return true;
+        }
+
+        item = default;
+        return false;
+    }
+
+    internal IEnumerable<ItemRef> MapItems()
+    {
+        foreach (var held in _map.Values)
+        {
+            yield return MapItem(held);
+        }
+    }
 
     // The facts of the item a collected type was in. Its struct can merge away once the type is collected, and its slot
     // be reused, while user code still holds the type: Collect sets them before the struct is replaced; none changes later.
@@ -102,7 +140,8 @@ public abstract partial class YType
             }
             else
             {
-                _item.Keep = value;
+                var item = _item;
+                item.Keep = value;
             }
         }
     }
@@ -135,7 +174,7 @@ public abstract partial class YType
 
         if (PoisonCollectedHandleForTests)
         {
-            _item = PoisonItem();
+            _item = Doc.Store.OtherItemForTests(_item);
         }
     }
 
@@ -379,7 +418,7 @@ public abstract partial class YType
         return _rootTypeKey ??= Doc.FindRootTypeKey(this);
     }
 
-    private protected IEnumerable<KeyValuePair<string, ItemRef>> TypeMapEnumerate() => _map.Where(kvp => !kvp.Value.Deleted);
+    private protected IEnumerable<KeyValuePair<string, ItemRef>> TypeMapEnumerate() => _map.Select(kvp => new KeyValuePair<string, ItemRef>(kvp.Key, MapItem(kvp.Value))).Where(kvp => !kvp.Value.Deleted);
 
     /// <summary>
     /// The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.
@@ -397,9 +436,9 @@ public abstract partial class YType
     internal int TypeMapCount()
     {
         var count = 0;
-        foreach (var value in _map.Values)
+        foreach (var held in _map.Values)
         {
-            if (!value.Deleted)
+            if (!MapItem(held).Deleted)
             {
                 count++;
             }

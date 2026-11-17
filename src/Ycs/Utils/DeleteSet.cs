@@ -404,9 +404,9 @@ internal class DeleteSet
 
     private static void RetargetMapEntry((AbstractType Parent, string Key) map, ItemRef left, ItemRef right)
     {
-        if (map.Key != null && map.Parent._map.TryGetValue(map.Key, out var value) && value == right)
+        if (map.Key != null && map.Parent.TryGetMapItem(map.Key, out var value) && value == right)
         {
-            map.Parent._map[map.Key] = left;
+            map.Parent._map[map.Key] = left.Hold;
         }
     }
 

@@ -10,7 +10,7 @@ public abstract partial class YType
     internal ID? OwnerIdForTests => IsRoot ? null : ItemId;
 
     /// <summary>The key and the item id of every entry of the type's map.</summary>
-    internal IEnumerable<KeyValuePair<string, ID>> MapIdsForTests() => _map.Select(kv => new KeyValuePair<string, ID>(kv.Key, kv.Value.Id));
+    internal IEnumerable<KeyValuePair<string, ID>> MapIdsForTests() => _map.Select(kv => new KeyValuePair<string, ID>(kv.Key, MapItem(kv.Value).Id));
 
     /// <summary>Whether this type, or the type that holds it, or the one above, is deleted.</summary>
     internal bool InDeletedTypeForTests()

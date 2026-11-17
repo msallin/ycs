@@ -113,13 +113,13 @@ internal sealed partial class StructStore
 
     private string TypeViolation(AbstractType type)
     {
-        if (!type.IsCollected && !type._item.IsNull && !IsAttached(type._item))
+        if (!type.IsCollected && !type._itemHeld.IsNone && !IsHeld(type._itemHeld))
         {
             return "the item of a live type is freed";
         }
 
-        var start = type._start;
-        if (!start.IsNull && (!IsAttached(start) || !start.Left.IsNull))
+        var start = type._startHeld;
+        if (!start.IsNone && (!IsHeld(start) || Slab.Read(start.Value).Left >= 0))
         {
             return "the start of a type is freed or has a left";
         }
@@ -128,7 +128,7 @@ internal sealed partial class StructStore
         {
             foreach (var (key, value) in type._map)
             {
-                if (!IsAttached(value) || !value.Right.IsNull || value.ParentSub != key)
+                if (!IsHeld(value) || Slab.Read(value.Value).Right >= 0 || (string)Slab.GetKey(value.Value) != key)
                 {
                     return $"the map value of key {key.Length} chars long is freed, has a right or names another key";
                 }
@@ -137,14 +137,14 @@ internal sealed partial class StructStore
 
         if (type is YArrayBase list)
         {
-            if (!list.PushHintForTests.IsNull && !IsAttached(list.PushHintForTests))
+            if (!list.PushHintForTests.IsNone && !IsHeld(list.PushHintForTests))
             {
                 return "the push hint is freed";
             }
 
             foreach (var marker in list.MarkerItemsForTests)
             {
-                if (!IsAttached(marker))
+                if (!IsHeld(marker))
                 {
                     return "a search marker is freed";
                 }
@@ -287,6 +287,15 @@ internal sealed partial class StructStore
     // Debug read would throw. A holder of a slot that was freed and then reused names another struct of the list, which
     // only the Debug generation check of its next read finds.
     private bool IsAttached(ItemRef held) => !held.IsNull && ReferenceEquals(held.Slab, Slab) && IsAttached(held.Handle);
+
+    // A holder's handle: attached, and in Debug the slot still has the generation the holder was made with, which finds a
+    // holder of a slot that was freed and reused (it is attached, as another struct).
+    private bool IsHeld(ItemHandle held) =>
+        IsAttached(held.Value)
+#if DEBUG
+        && Slab.Generation(held.Value) == held.Generation
+#endif
+        ;
 
     private bool IsAttached(int handle)
     {

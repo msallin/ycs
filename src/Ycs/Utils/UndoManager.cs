@@ -431,13 +431,13 @@ public sealed partial class UndoManager
             }
             else
             {
-                left = parentType._map.GetValueOrDefault(item.ParentSub);
+                parentType.TryGetMapItem(item.ParentSub, out left);
             }
 
             // A left neighbour in another parent would give the copy an origin that misleads remote peers.
             if (!left.IsNull && left.Parent != parentType)
             {
-                left = parentType._map.GetValueOrDefault(item.ParentSub);
+                parentType.TryGetMapItem(item.ParentSub, out left);
             }
         }
 

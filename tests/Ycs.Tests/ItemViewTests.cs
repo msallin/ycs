@@ -42,7 +42,7 @@ public class ItemViewTests
         map["a"] = "x";
         map["b"] = "y";
         map["c"] = "z";
-        return (array, new[] { "a", "b", "c" }.Select(key => ItemView.Of(doc, map._map[key])).ToArray());
+        return (array, new[] { "a", "b", "c" }.Select(key => ItemView.Of(doc, map.MapItem(map._map[key]))).ToArray());
     }
 
     private static string Text(IReadOnlyList<object> content) => string.Concat(content.Select(c => (string)c));
@@ -264,7 +264,8 @@ public class ItemViewTests
         var doc = NewDoc();
         var text = doc.GetText("t");
         text.Insert(0, "abc");
-        text._start.Redone = new ItemId(9, 10);
+        var start = text._start;
+        start.Redone = new ItemId(9, 10);
         var view = ItemView.At(doc, new ItemId(1, 2));
 
         Assert.AreEqual((9L, 12L), (view.Redone.Value.Client, view.Redone.Value.Clock));

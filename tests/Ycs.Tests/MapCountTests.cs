@@ -195,7 +195,7 @@ public class MapCountTests
             return $"Count {map.Count}, walked {map.TypeMapCount()}";
         }
 
-        foreach (var item in map._map.Values)
+        foreach (var item in map.MapItems())
         {
             if (item.Content is ContentType { Type: YMap nested })
             {

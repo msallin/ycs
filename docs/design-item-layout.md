@@ -376,7 +376,12 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   nested transaction's merge pass reads a reused slot and merges at a position Yjs does not, so the update bytes
   differ), the public enumerators, and `ItemView` (section 3). Handles without ids are held only by what split and merge
   keep current: type starts, map entries, search markers, the push hint, the clock order. A Debug check after every
-  test transaction walks them: none points at a `Free` slot.
+  test transaction walks them: none points at a `Free` slot. These holders keep an `ItemHandle` (7.5b): the `int`
+  handle alone in Release (a test asserts the one field), and in Debug the handle with the slot's generation. The
+  slab is the owner's: the document's for a type, the list's for the leaves of `ClientStructs`, the marker's own. A
+  read rebuilds the `ItemRef` with that generation, so a holder that outlived its struct throws in Debug, and the
+  store check also compares the generation. `YDoc._item` stays an `ItemRef`: a subdocument's item is in its parent's
+  slab, which the subdocument does not hold.
 * **Type table**: an entry is never reused; a collected type's `AbstractType` gets index -1, and its search markers
   are cleared at collection (`_start` and the markers are, since step 5: `ContentType.cs`), so a user-held collected `YArray` writes no
   marker flag through a handle that now names another type's item (H5).

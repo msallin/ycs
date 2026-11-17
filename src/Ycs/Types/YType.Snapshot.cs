@@ -18,7 +18,7 @@ public abstract partial class YType
     internal bool TryMapGetSnapshot(string key, Snapshot snapshot, out object? value)
     {
         value = null;
-        if (!_map.TryGetValue(key, out var v))
+        if (!TryGetMapItem(key, out var v))
         {
             return false;
         }
@@ -40,7 +40,7 @@ public abstract partial class YType
 
         foreach (var kvp in _map)
         {
-            var v = MapItemAt(kvp.Value, snapshot);
+            var v = MapItemAt(MapItem(kvp.Value), snapshot);
             if (!v.IsNull && v.IsVisible(snapshot))
             {
                 res[kvp.Key] = YValue.FromStored(ValueAt(v.Content, v.Length - 1));

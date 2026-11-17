@@ -65,7 +65,7 @@ internal sealed partial class ClientStructs
     // The cursor's leaf's structs, first position and count, for the lookup by position (the indexer): valid while
     // _cursorCount is not 0. A change of the leaves' positions sets it to 0 (ForgetCursor); one that only appends
     // leaves it valid, the count it holds then being at most the leaf's.
-    private ItemRef[] _cursorStructs;
+    private ItemHandle[] _cursorStructs;
     private int _cursorFirst;
     private int _cursorCount;
 
@@ -324,7 +324,6 @@ internal sealed partial class ClientStructs
         Array.Copy(leaf.Structs, half, right.Structs, 0, moved);
         Array.Copy(leaf.Starts, half, right.Starts, 0, moved);
         Array.Copy(leaf.Flags, half, right.Flags, 0, moved);
-        Array.Clear(leaf.Structs, half, moved);
         leaf.Count = half;
         right.Count = moved;
         InsertLeaf(k + 1, right);
@@ -341,7 +340,7 @@ internal sealed partial class ClientStructs
     {
         var leaf = new Leaf(_leafCapacity);
         ReserveLeaves(_leafCount + 1);
-        leaf.Structs[0] = str;
+        leaf.Structs[0] = str.Hold;
         leaf.Starts[0] = str.Id.Clock;
         leaf.Count = 1;
         InsertLeaf(_leafCount, leaf);
@@ -642,11 +641,6 @@ internal sealed partial class ClientStructs
         {
             if (i >= leaf.Count)
             {
-                if (!leaf.Structs[i].IsNull)
-                {
-                    return $"leaf {k} holds a struct at {i}, beyond its {leaf.Count}";
-                }
-
                 continue;
             }
 
@@ -665,7 +659,8 @@ internal sealed partial class ClientStructs
     /// <summary>A run of positions of one client's list, and what the run-head index holds of them.</summary>
     private sealed class Leaf(int capacity)
     {
-        public readonly ItemRef[] Structs = new ItemRef[capacity];
+        // The entries from Count on are unspecified.
+        public readonly ItemHandle[] Structs = new ItemHandle[capacity];
 
         public readonly long[] Starts = new long[capacity];
 

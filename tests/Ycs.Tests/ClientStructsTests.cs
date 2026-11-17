@@ -152,7 +152,7 @@ public class ClientStructsTests
         }
 
         // From clock 10: clocks far below the first start, as well as just below it.
-        var rest = new ClientStructs(2 * leaves);
+        var rest = new ClientStructs(doc.Store.Slab, 2 * leaves);
         foreach (var str in doc.Store.Clients[doc.ClientId].Skip(10).Take(2 * leaves))
         {
             rest.Add(str);
