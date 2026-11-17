@@ -10,6 +10,12 @@ namespace Ycs;
 public partial class YDoc
 {
     private readonly YDocOptions _opts;
+
+    // The handlers, made by the first one added: a document nobody listens to holds none of the eleven fields.
+    private YDocEvents? _events;
+
+    private YDocEvents Events => _events ?? Interlocked.CompareExchange(ref _events, new YDocEvents(), null) ?? _events!;
+
     private string? _guid;
 
     internal List<Transaction> _transactionCleanups;
@@ -221,54 +227,54 @@ public partial class YDoc
 
     internal void InvokeSubdocsChanged(IReadOnlySet<YDoc> loaded, IReadOnlySet<YDoc> added, IReadOnlySet<YDoc> removed)
     {
-        SubdocsChanged?.Invoke(this, new SubdocsEventArgs(loaded, added, removed));
+        _events?.SubdocsChanged?.Invoke(this, new SubdocsEventArgs(loaded, added, removed));
     }
 
-    internal bool HasBeforeObserverCallsListeners => BeforeObserverCalls != null;
+    internal bool HasBeforeObserverCallsListeners => _events?.BeforeObserverCalls != null;
 
     /// <summary>Before the store is read as structs (encoded) in a transaction: the runs it extended in place are split (<see cref="Transaction.MaterializeRunExtensions"/>).</summary>
     internal void MaterializeRunExtensions() => _transaction?.MaterializeRunExtensions();
 
     internal void InvokeOnBeforeObserverCalls(Transaction transaction)
     {
-        BeforeObserverCalls?.Invoke(this, transaction);
+        _events?.BeforeObserverCalls?.Invoke(this, transaction);
     }
 
     internal void InvokeAfterAllTransactions(IReadOnlyList<Transaction> transactions)
     {
-        AfterAllTransactions?.Invoke(this, transactions);
+        _events?.AfterAllTransactions?.Invoke(this, transactions);
     }
 
     internal void InvokeOnBeforeTransaction(Transaction transaction)
     {
-        BeforeTransaction?.Invoke(this, transaction);
+        _events?.BeforeTransaction?.Invoke(this, transaction);
     }
 
-    internal void InvokeOnPendingDropped(PendingDrop args) => PendingDropped?.Invoke(this, args);
+    internal void InvokeOnPendingDropped(PendingDrop args) => _events?.PendingDropped?.Invoke(this, args);
 
     internal void InvokeOnAfterTransaction(Transaction transaction)
     {
-        AfterTransaction?.Invoke(this, transaction);
+        _events?.AfterTransaction?.Invoke(this, transaction);
     }
 
     internal void InvokeOnAfterTransactionCleanup(Transaction transaction)
     {
-        AfterTransactionCleanup?.Invoke(this, transaction);
+        _events?.AfterTransactionCleanup?.Invoke(this, transaction);
     }
 
     internal void InvokeBeforeAllTransactions()
     {
-        BeforeAllTransactions?.Invoke(this, EventArgs.Empty);
+        _events?.BeforeAllTransactions?.Invoke(this, EventArgs.Empty);
     }
 
     internal void InvokeDestroyed()
     {
-        Destroyed?.Invoke(this, EventArgs.Empty);
+        _events?.Destroyed?.Invoke(this, EventArgs.Empty);
     }
 
     internal void InvokeUpdateV1(Transaction transaction)
     {
-        var handler = Updated;
+        var handler = _events?.Updated;
         if (handler != null)
         {
             // The encoder goes back before the handler runs, which may encode updates itself.
@@ -295,7 +301,7 @@ public partial class YDoc
 
     internal void InvokeUpdateV2(Transaction transaction)
     {
-        var handler = UpdatedV2;
+        var handler = _events?.UpdatedV2;
         if (handler != null)
         {
             // The encoder goes back before the handler runs, which may encode updates itself.

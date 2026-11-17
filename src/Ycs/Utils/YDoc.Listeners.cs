@@ -8,5 +8,5 @@ public partial class YDoc
     /// is such a handler). Without one, a changed type builds its event only when it or an ancestor
     /// is observed (<see cref="YType.IsObserved"/>).
     /// </summary>
-    internal bool HasTransactionListeners => AfterTransaction != null || AfterTransactionCleanup != null || AfterAllTransactions != null;
+    internal bool HasTransactionListeners => _events is { } e && (e.AfterTransaction != null || e.AfterTransactionCleanup != null || e.AfterAllTransactions != null);
 }

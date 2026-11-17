@@ -93,12 +93,72 @@ public partial class YDoc
         InvokeDestroyed();
     }
 
-    public event EventHandler<Transaction>? BeforeObserverCalls;
-    public event EventHandler<Transaction>? BeforeTransaction;
-    public event EventHandler<Transaction>? AfterTransaction;
-    public event EventHandler<Transaction>? AfterTransactionCleanup;
-    public event EventHandler? BeforeAllTransactions;
-    public event EventHandler<IReadOnlyList<Transaction>>? AfterAllTransactions;
+    public event EventHandler<Transaction>? BeforeObserverCalls
+    {
+        add => YDocEvents.Add(ref Events.BeforeObserverCalls, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.BeforeObserverCalls, value);
+            }
+        }
+    }
+    public event EventHandler<Transaction>? BeforeTransaction
+    {
+        add => YDocEvents.Add(ref Events.BeforeTransaction, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.BeforeTransaction, value);
+            }
+        }
+    }
+    public event EventHandler<Transaction>? AfterTransaction
+    {
+        add => YDocEvents.Add(ref Events.AfterTransaction, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.AfterTransaction, value);
+            }
+        }
+    }
+    public event EventHandler<Transaction>? AfterTransactionCleanup
+    {
+        add => YDocEvents.Add(ref Events.AfterTransactionCleanup, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.AfterTransactionCleanup, value);
+            }
+        }
+    }
+    public event EventHandler? BeforeAllTransactions
+    {
+        add => YDocEvents.Add(ref Events.BeforeAllTransactions, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.BeforeAllTransactions, value);
+            }
+        }
+    }
+    public event EventHandler<IReadOnlyList<Transaction>>? AfterAllTransactions
+    {
+        add => YDocEvents.Add(ref Events.AfterAllTransactions, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.AfterAllTransactions, value);
+            }
+        }
+    }
     /// <summary>
     /// Fires after each transaction that changed the document, with the change as an update in the
     /// original ('v1') format: Yjs' <c>doc.on('update')</c>, what every y-protocols provider sends.
@@ -106,13 +166,43 @@ public partial class YDoc
     /// resync (send the state, or a diff by state vector). Unlike Yjs, the document still finishes the cleanup and
     /// stays usable; the exception escapes from the outermost <c>Transact</c> or <c>ApplyUpdate</c> afterwards.
     /// </summary>
-    public event EventHandler<UpdateEventArgs>? Updated;
+    public event EventHandler<UpdateEventArgs>? Updated
+    {
+        add => YDocEvents.Add(ref Events.Updated, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.Updated, value);
+            }
+        }
+    }
 
     /// <summary>
     /// Like <see cref="Updated"/>, with the update in the v2 format: Yjs' <c>doc.on('updateV2')</c>.
     /// </summary>
-    public event EventHandler<UpdateEventArgs>? UpdatedV2;
-    public event EventHandler? Destroyed;
+    public event EventHandler<UpdateEventArgs>? UpdatedV2
+    {
+        add => YDocEvents.Add(ref Events.UpdatedV2, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.UpdatedV2, value);
+            }
+        }
+    }
+    public event EventHandler? Destroyed
+    {
+        add => YDocEvents.Add(ref Events.Destroyed, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.Destroyed, value);
+            }
+        }
+    }
 
     /// <summary>
     /// Raised, inside the transaction of an <c>ApplyUpdate</c> that returns normally, when that update let waiting
@@ -120,8 +210,28 @@ public partial class YDoc
     /// (kept, every later retry would fail again), the update itself stands whole. Clients that were handed them as
     /// waiting structs may integrate them under other limits. No user content is passed.
     /// </summary>
-    public event EventHandler<PendingDrop>? PendingDropped;
-    public event EventHandler<SubdocsEventArgs>? SubdocsChanged;
+    public event EventHandler<PendingDrop>? PendingDropped
+    {
+        add => YDocEvents.Add(ref Events.PendingDropped, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.PendingDropped, value);
+            }
+        }
+    }
+    public event EventHandler<SubdocsEventArgs>? SubdocsChanged
+    {
+        add => YDocEvents.Add(ref Events.SubdocsChanged, value);
+        remove
+        {
+            if (_events != null)
+            {
+                YDocEvents.Remove(ref _events.SubdocsChanged, value);
+            }
+        }
+    }
 
     public long ClientId { get; internal set; }
 
