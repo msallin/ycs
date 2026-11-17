@@ -45,7 +45,8 @@ public sealed partial class Transaction
     // AfterTransaction handlers.
     internal bool _needFormattingCleanup;
 
-    private DeleteSet _deleteSet = new();
+    // Made by the first delete: an insert-only document never holds one.
+    private DeleteSet? _deleteSet;
     private Dictionary<long, long> _beforeState = new();
     private Dictionary<long, long> _afterState = new();
 
@@ -133,13 +134,13 @@ public sealed partial class Transaction
     /// <summary>
     /// Describes the set of deleted items by Ids.
     /// </summary>
-    internal DeleteSet DeleteSet => _ended ? throw EndedException() : _deleteSet;
+    internal DeleteSet DeleteSet => _ended ? throw EndedException() : _deleteSet ??= new DeleteSet();
 
     /// <summary>The delete set, which the caller keeps beyond the transaction (the undo manager's stack item).</summary>
     internal DeleteSet TakeDeleteSet()
     {
         _deleteSetTaken = true;
-        return _deleteSet;
+        return _deleteSet ??= new DeleteSet();
     }
 
     /// <summary>The state before the transaction, which the caller keeps beyond it.</summary>
@@ -213,14 +214,17 @@ public sealed partial class Transaction
 
         _deepCalls.Clear();
 
-        if (_deleteSetTaken || _deleteSet.Clients.Count > KeepCapacity)
+        if (_deleteSet != null)
         {
-            _deleteSet = new DeleteSet();
-        }
-        else
-        {
-            // Not taken: nobody else holds the set or its lists.
-            _deleteSet.ClearForReuse();
+            if (_deleteSetTaken || _deleteSet.Clients.Count > KeepCapacity)
+            {
+                _deleteSet = null;
+            }
+            else
+            {
+                // Not taken: nobody else holds the set or its lists.
+                _deleteSet.ClearForReuse();
+            }
         }
 
         _beforeState = _beforeStateTaken || _beforeState.Count > KeepCapacity ? new Dictionary<long, long>() : Cleared(_beforeState);
@@ -461,7 +465,7 @@ public sealed partial class Transaction
             // collection filter (once per item); when nobody is, the runs stay as they are, which is what the merge
             // below would make of them.
             if (doc.HasTransactionListeners || doc.HasBeforeObserverCallsListeners || AnyObserved(transaction)
-                || (doc.GarbageCollection && doc.GcFilter != YDocOptions.DefaultGcFilter && ds.Clients.Count > 0))
+                || (doc.GarbageCollection && doc.GcFilter != YDocOptions.DefaultGcFilter && ds is { Clients.Count: > 0 }))
             {
                 transaction.MaterializeRunExtensions();
             }
@@ -473,7 +477,7 @@ public sealed partial class Transaction
 
         try
         {
-            ds.SortAndMergeDeleteSet();
+            ds?.SortAndMergeDeleteSet();
             store.GetStateVector(transaction._afterState);
 
             // An exception here skips every observer call, as in Yjs.
@@ -614,11 +618,11 @@ public sealed partial class Transaction
         // This is where content is actually removed from the Yjs Doc.
         if (doc.GarbageCollection)
         {
-            ds.TryGcDeleteSet(store, doc);
+            ds?.TryGcDeleteSet(store, doc);
         }
 
         StructStore.CompactForTests(store.Slab, true);
-        ds.TryMergeDeleteSet(store);
+        ds?.TryMergeDeleteSet(store);
 
         // On all affected store.clients props, try to merge.
         var beforeState = transaction._beforeState;
@@ -769,14 +773,15 @@ public sealed partial class Transaction
     /// <returns>Whether the data was written.</returns>
     internal bool WriteUpdateMessageFromTransaction(IUpdateEncoder encoder)
     {
-        if (_deleteSet.Clients.Count == 0 && !StateChanged())
+        if (_deleteSet is not { Clients.Count: > 0 } && !StateChanged())
         {
             return false;
         }
 
-        _deleteSet.SortAndMergeDeleteSet();
+        var deleteSet = DeleteSet;
+        deleteSet.SortAndMergeDeleteSet();
         EncodingUtils.WriteClientsStructs(encoder, _doc.Store, _beforeState);
-        _deleteSet.Write(encoder);
+        deleteSet.Write(encoder);
 
         return true;
     }
