@@ -4,8 +4,8 @@ namespace Ycs;
 
 /// <summary>
 /// Which side of a position's neighbours a <see cref="RelativePosition"/> sticks to when text is inserted at it.
-/// The values are those Yjs writes (its <c>assoc</c> is any integer; a peer's negative one reads as
-/// <see cref="Before"/>, any other as <see cref="After"/>).
+/// The values are those Yjs writes. A peer's <c>assoc</c> may be any integer and is kept as it is: a negative one means
+/// <see cref="Before"/>, any other <see cref="After"/>.
 /// </summary>
 public enum Assoc
 {

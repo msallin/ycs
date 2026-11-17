@@ -71,7 +71,20 @@ public class RelativePositionYjsTests
     {
         using var document = JsonDocument.Parse("""{"tname":"t","assoc":-1e15}""");
 
-        Assert.AreEqual(Assoc.Before, RelativePosition.FromJson(document.RootElement).Assoc);
+        Assert.IsLessThan(0, (int)RelativePosition.FromJson(document.RootElement).Assoc);
+    }
+
+    [TestMethod]
+    public void Decode_AssocOfAnotherPeer_IsWrittenBackUnchanged()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        doc.GetText("t").Insert(0, "ab");
+        var encoded = RelativePosition.FromIndex(doc.GetText("t"), 1).Encode();
+        encoded[^1] = 1; // Yjs writes assoc as a varint, the last byte here, and keeps any value.
+
+        var decoded = RelativePosition.Decode(encoded);
+
+        Assert.AreEqual((1, Convert.ToHexString(encoded)), ((int)decoded.Assoc, Convert.ToHexString(decoded.Encode())));
     }
 
     [TestMethod]
