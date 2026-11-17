@@ -349,6 +349,41 @@ public class HardeningTests
             TestContext);
     }
 
+    /// <summary>A v1 update of <paramref name="clients"/> clients (ids 1 to n), each one character after the item of the client below it: the walk stacks all of them and hits the wall at client 0.</summary>
+    private static byte[] ChainOfWaitingClients(int clients)
+    {
+        var writer = new Lib0Writer();
+        writer.WriteVarUint((ulong)clients);
+        for (var client = clients; client >= 1; client--)
+        {
+            writer.WriteVarUint(1);
+            writer.WriteVarUint((ulong)client);
+            writer.WriteVarUint(0);
+            writer.WriteByte(0x84); // string, left origin
+            writer.WriteVarUint((ulong)(client - 1));
+            writer.WriteVarUint(0);
+            writer.WriteVarString("c");
+        }
+
+        writer.WriteVarUint(0);
+        return writer.ToArray();
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_ManyClientsHittingTheWallAtOnce_IsLinear()
+    {
+        ScalingProbe.AssertNotQuadratic(
+            n =>
+            {
+                var update = ChainOfWaitingClients(n);
+                var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxStructsPerUpdate = 1_000_000, MaxPendingStructs = 1_000_000, MaxPendingBytes = 1 << 30 } });
+                return () => doc.ApplyUpdate(update);
+            },
+            160_000,
+            TestContext,
+            maxRatio: 3.5);
+    }
+
     [TestMethod]
     public void ApplyUpdate_PendingBeyondLimit_IsRejected()
     {
