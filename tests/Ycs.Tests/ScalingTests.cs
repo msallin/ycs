@@ -88,7 +88,7 @@ public class ScalingTests
                 array.ObserveDeep((deepEvents, _) => events += deepEvents.Count);
                 return () => doc.Transact(_ => maps.ForEach(map => map["k"] = 1));
             },
-            16_000,
+            64_000,
             TestContext);
     }
 
