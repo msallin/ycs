@@ -237,8 +237,8 @@ converts to a span implicitly.
 | --- | --- |
 | `YDoc` | `ApplyUpdate(update, origin = null, format = V1, limits = null)` and `TryApplyUpdate` (the same, returning false for a malformed update); `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
 | `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client; clocks count the positions of the id space, not structs, so a struct of a run covers several), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
-| `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`, `Snapshot.Empty`; equality is `Equals` |
-| `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree) |
+| `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`, `Snapshot.Empty`; equality is `Equals`, `==` and `!=` (a decoded snapshot equals the one it was encoded from) |
+| `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree); `ReadSyncMessage` takes `origin = null` as `ApplyUpdate` does |
 
 `Merge` of a single update returns a copy of it, unchecked, as Yjs returns it.
 
@@ -255,10 +255,12 @@ input](#limits-and-untrusted-input)).
 
 `RelativePosition` is a `readonly record struct` that keeps pointing at the same character (or the end of the same
 type) while the document changes; `AbsolutePosition(Type, Index, Assoc)` is the index it resolves to at a moment. Both
-are values: equal positions are equal keys of a `HashSet` or `Dictionary`.
+are values: equal positions are equal keys of a `HashSet` or `Dictionary`. `Assoc` is an enum: `After` (0, the position
+sticks to the character after it) or `Before` (-1, to the one before); a peer's integer reads as `Before` when negative,
+else as `After`.
 
 ```csharp
-var position = RelativePosition.FromIndex(text, 3);          // assoc 0: the character after, -1: before
+var position = RelativePosition.FromIndex(text, 3);          // Assoc.After by default, or Assoc.Before
 text.Insert(0, "abc");
 if (position.TryResolve(doc, out var absolute))              // false: names a struct the document lacks or collected
 {
@@ -266,12 +268,16 @@ if (position.TryResolve(doc, out var absolute))              // false: names a s
 }
 
 byte[] bytes = position.Encode();                            // Yjs' encodeRelativePosition; awareness carries it
-var same = RelativePosition.Decode(bytes);                   // YUpdateException for malformed bytes
+var same = RelativePosition.Decode(bytes);                   // YUpdateException for malformed bytes; same == position
 ```
+
+A position carries only what the bytes carry: the item when there is one, else the root type's name, else the id of the
+type. Yjs' `createRelativePositionFromTypeIndex` sets the type or root name as well and drops it on encoding; here
+`FromIndex` does not set it, so `Decode(Encode(p)) == p` and `FromJson(p.ToJsonString()) == p`.
 
 `Encode(IBufferWriter<byte>)` writes into a buffer. `WriteJson(Utf8JsonWriter)` and `FromJson(JsonElement)` are Yjs'
 `relativePositionToJSON` object (`{"item":{"client":1,"clock":0},"assoc":0}`; `type`, `tname` and `item` only where
-set). `TryResolve(doc, out position, followUndoneDeletions: false)` gives the same result on every client; the
+set); `ToJsonString()` and `FromJson(string)` are the one-line form, for an awareness state. `TryResolve(doc, out position, followUndoneDeletions: false)` gives the same result on every client; the
 default follows undone deletions, which suits the user who undid. `default(RelativePosition)` names nothing: it does
 not resolve and does not encode.
 
@@ -310,11 +316,14 @@ ChangedParentTypes, Origin)` (`Operation` is an `UndoOperation`, `Undo` or `Redo
 - `WriteSyncStep2(destination, doc, encodedStateVector, format)`: what a peer with that state vector lacks.
 - `WriteUpdate(destination, update)`: one update.
 
-`ReadSyncMessage(message, reply, doc, origin, format)` handles one whole message (a `ReadOnlySpan<byte>` or a
-`ReadOnlySequence<byte>`; bytes after it are ignored) and returns its type. A step 1 appends the answer, a step 2, to
+`ReadSyncMessage(message, reply, doc, origin = null, format = V1)` handles one whole message (a `ReadOnlySpan<byte>` or a
+`ReadOnlySequence<byte>`; bytes after it are ignored) and returns a `SyncReadResult(Type, Replied)`. A step 1 appends the answer, a step 2, to
 `reply`; a step 2 or an update is applied to `doc` with `origin` and writes nothing. A truncated message, an unknown
 type, or an update that is malformed or beyond a limit throws `YUpdateException`, with the document as it was. Both ends
-must agree on `format`. [Networking](networking.md) shows a server and a client built on it. Awareness is not part of the
+must agree on `format`.
+
+y-websocket puts a message type in front of every message: `SyncProtocol.MessageSync` (0) or `MessageAwareness` (1).
+`WriteMessageType(destination, type)` appends it and `ReadMessageType(message, out body)` strips it. [Networking](networking.md) shows a server and a client built on it. Awareness is not part of the
 library.
 
 ## Item views and decoded structs
@@ -339,6 +348,9 @@ exposes the storage, which is internal.
 `ParentId`, `ParentSub`, and what the kind carries, in exactly one place: `Content` (Any, Json, Binary, Embed), `Text`
 (String), `FormatKey` and `FormatValue` (Format), `TypeRef` and `TypeName` (Type), `DocGuid` (Doc). The others are
 empty, null or -1.
+
+`ParentName` and `ParentId` are both null for an item with an origin: the update leaves the parent out, because the
+origin's item says it. An item has them only when it has neither origin.
 
 | Where | Gets |
 | --- | --- |

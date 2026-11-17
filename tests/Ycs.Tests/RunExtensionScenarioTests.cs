@@ -381,7 +381,7 @@ public class RunExtensionScenarioTests
             doc.Transact(tr =>
             {
                 t.Insert(2, "c"); t.Insert(3, "d"); t.Insert(4, "e");
-                for (var i = 0; i <= t.Length; i++) { rs.Add(RelativePosition.FromIndex(t, i, 0)); rs.Add(RelativePosition.FromIndex(t, i, -1)); }
+                for (var i = 0; i <= t.Length; i++) { rs.Add(RelativePosition.FromIndex(t, i, Assoc.After)); rs.Add(RelativePosition.FromIndex(t, i, Assoc.Before)); }
                 t.Insert(5, "f"); t.Remove(3, 1);
             });
             foreach (var r in rs) { var found = r.TryResolve(doc, out var abs); c.L(ReferenceRun.Hex(r.Encode()) + " -> " + (found ? abs.Index : null)); }

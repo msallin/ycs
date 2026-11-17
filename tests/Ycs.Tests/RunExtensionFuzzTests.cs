@@ -472,8 +472,8 @@ public class RunExtensionFuzzTests
             }
             else if (r < 87)
             {
-                relpos.Add(RelativePosition.FromIndex(t, rng.Int(t.Length + 1), rng.Chance(0.5) ? 0 : -1));
-                relpos.Add(RelativePosition.FromIndex(a, rng.Int(a.Length + 1), rng.Chance(0.5) ? 0 : -1));
+                relpos.Add(RelativePosition.FromIndex(t, rng.Int(t.Length + 1), rng.Chance(0.5) ? Assoc.After : Assoc.Before));
+                relpos.Add(RelativePosition.FromIndex(a, rng.Int(a.Length + 1), rng.Chance(0.5) ? Assoc.After : Assoc.Before));
                 c.L("rp " + ReferenceRun.Hex(relpos[^2].Encode()) + " " + ReferenceRun.Hex(relpos[^1].Encode()));
             }
             else if (r < 89)

@@ -17,16 +17,53 @@ public enum SyncMessageType : uint
     Update = 2,
 }
 
+/// <summary>What <see cref="SyncProtocol.ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, UpdateFormat)"/> did with a message.</summary>
+/// <param name="Type">The type of the message.</param>
+/// <param name="Replied">Whether an answer was appended to the reply buffer: true for a step 1, false for the others.</param>
+public readonly record struct SyncReadResult(SyncMessageType Type, bool Replied);
+
 /// <summary>
 /// The y-protocols 'sync' message format, which y-websocket and every other Yjs provider puts on the wire: a
 /// <see cref="SyncMessageType"/> as a variable-length integer, then the payload as a length-prefixed byte array.
 /// The messages carry updates in the original ('v1') encoding; <see cref="UpdateFormat.V2"/> uses the denser v2 encoding, which
 /// both ends must then agree on. The writers append to a buffer writer and keep nothing; a reader takes one whole
 /// message, and bytes after it are ignored. A message that is malformed throws <see cref="YUpdateException"/>.
+/// <br/>
+/// y-websocket puts one more variable-length integer in front of every message, which says what the message is
+/// (<see cref="MessageSync"/>, <see cref="MessageAwareness"/>; y-websocket also has 2, auth, and 3, query awareness):
+/// <see cref="WriteMessageType"/> and <see cref="ReadMessageType"/> write and strip it. What follows the type of an
+/// awareness message is not part of this class.
 /// </summary>
 public static class SyncProtocol
 {
+    /// <summary>The y-websocket message type of a sync message.</summary>
+    public const uint MessageSync = 0;
+
+    /// <summary>The y-websocket message type of an awareness message.</summary>
+    public const uint MessageAwareness = 1;
+
     private const int MaxVarUintBytes = 5;
+
+    /// <summary>Appends the y-websocket message type that starts a message.</summary>
+    public static void WriteMessageType(IBufferWriter<byte> destination, uint messageType)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        var header = destination.GetSpan(MaxVarUintBytes);
+        destination.Advance(WriteVarUint(header, messageType));
+    }
+
+    /// <summary>
+    /// Reads the y-websocket message type a message starts with; <paramref name="body"/> is what follows it, such as
+    /// the sync message <see cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, UpdateFormat)"/> takes.
+    /// </summary>
+    /// <exception cref="YUpdateException">The message is empty or its type is truncated.</exception>
+    public static uint ReadMessageType(ReadOnlySpan<byte> message, out ReadOnlySpan<byte> body)
+    {
+        var position = 0;
+        var type = ReadVarUint(message, ref position);
+        body = message[position..];
+        return type;
+    }
 
     /// <summary>Appends sync step 1: the document's state vector, which asks the peer for what the document lacks.</summary>
     public static void WriteSyncStep1(IBufferWriter<byte> destination, YDoc doc)
@@ -57,16 +94,17 @@ public static class SyncProtocol
     }
 
     /// <summary>
-    /// Handles one sync message and returns its type: a step 1 appends the answer (a step 2) to
+    /// Handles one sync message, as the y-websocket message type has been stripped from it: a step 1 appends the answer (a step 2) to
     /// <paramref name="reply"/>; a step 2 or an update is applied to <paramref name="doc"/> with
-    /// <paramref name="origin"/> as the transaction origin, and writes nothing.
+    /// <paramref name="origin"/> as the transaction origin, and writes nothing. The result tells the type and whether
+    /// <paramref name="reply"/> got an answer.
     /// </summary>
     /// <exception cref="YUpdateException">
     /// The message is truncated or of an unknown type, or its update is malformed or beyond a limit of the
     /// document (<see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, object, UpdateFormat, UpdateLimits)"/>; the document is then as
     /// it was). An exception of an observer propagates as it is.
     /// </exception>
-    public static SyncMessageType ReadSyncMessage(ReadOnlySpan<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin, UpdateFormat format = UpdateFormat.V1)
+    public static SyncReadResult ReadSyncMessage(ReadOnlySpan<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin = null, UpdateFormat format = UpdateFormat.V1)
     {
         ArgumentNullException.ThrowIfNull(reply);
         ArgumentNullException.ThrowIfNull(doc);
@@ -92,11 +130,11 @@ public static class SyncProtocol
                 throw new YUpdateException($"Unknown sync message type: {type}.");
         }
 
-        return (SyncMessageType)type;
+        return new SyncReadResult((SyncMessageType)type, type == (uint)SyncMessageType.SyncStep1);
     }
 
     /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, UpdateFormat)"/>
-    public static SyncMessageType ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin, UpdateFormat format = UpdateFormat.V1)
+    public static SyncReadResult ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin = null, UpdateFormat format = UpdateFormat.V1)
     {
         if (message.IsSingleSegment)
         {

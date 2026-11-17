@@ -77,7 +77,7 @@ internal sealed partial class Room
             {
                 sessions = [.. sessions, session];
                 var message = new ArrayBufferWriter<byte>();
-                message.Write([(byte)MessageType.Sync]);
+                SyncProtocol.WriteMessageType(message, SyncProtocol.MessageSync);
                 SyncProtocol.WriteSyncStep1(message, doc);
                 Send(session, message.WrittenSpan.ToArray());
 
@@ -226,15 +226,13 @@ internal sealed partial class Room
                 }
 
                 var reply = new ArrayBufferWriter<byte>();
-                reply.Write([(byte)MessageType.Sync]);
+                SyncProtocol.WriteMessageType(reply, SyncProtocol.MessageSync);
 
                 // Structs and deletions waiting for this session's structs integrate in its transaction, so the update
                 // then holds more than the session sent; without anything pending it holds only what the session sent.
                 updateReachesOrigin = doc.HasPending;
-                SyncProtocol.ReadSyncMessage(message, reply, doc, session);
-
-                // Only a step 1 writes a reply; the outer type alone is one byte.
-                if (reply.WrittenCount > 1 && !session.TryEnqueueReply(reply.WrittenSpan.ToArray()))
+                var result = SyncProtocol.ReadSyncMessage(message, reply, doc, session);
+                if (result.Replied && !session.TryEnqueueReply(reply.WrittenSpan.ToArray()))
                 {
                     overflowing.Add(session);
                 }
@@ -349,7 +347,7 @@ internal sealed partial class Room
     private void OnUpdate(object? sender, UpdateEventArgs e)
     {
         var message = new ArrayBufferWriter<byte>(e.Update.Length + 16);
-        message.Write([(byte)MessageType.Sync]);
+        SyncProtocol.WriteMessageType(message, SyncProtocol.MessageSync);
         SyncProtocol.WriteUpdate(message, e.Update.Span);
 
         // One array for every session: readers must not modify it.

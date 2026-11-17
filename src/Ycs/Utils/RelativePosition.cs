@@ -7,6 +7,7 @@
 #nullable enable
 
 using System.Buffers;
+using System.Text;
 using System.Text.Json;
 
 namespace Ycs;
@@ -24,18 +25,20 @@ namespace Ycs;
 /// <param name="TypeId">The id of the type that holds the position, when that type is not a root type.</param>
 /// <param name="RootName">The name of the root type that holds the position.</param>
 /// <param name="Item">The id of the character the position is associated with.</param>
-/// <param name="Assoc">
-/// <c>&gt;= 0</c>: associated with the character after the position (position 1 in <c>'ab'</c> is associated with
-/// <c>'b'</c>); <c>&lt; 0</c>: with the character before it.
-/// </param>
-public readonly record struct RelativePosition(ItemId? TypeId, string? RootName, ItemId? Item, int Assoc = 0)
+/// <param name="Assoc">The side the position sticks to.</param>
+public readonly record struct RelativePosition(ItemId? TypeId, string? RootName, ItemId? Item, Assoc Assoc = Assoc.After)
 {
-    /// <summary>The position of <paramref name="index"/> in <paramref name="type"/>.</summary>
-    public static RelativePosition FromIndex(AbstractType type, int index, int assoc = 0)
+    /// <summary>
+    /// The position of <paramref name="index"/> in <paramref name="type"/>. It carries only what the binary form
+    /// does (as Yjs' <c>createRelativePositionFromTypeIndex</c> sets all three but encodes one), so it equals what
+    /// <see cref="Decode"/> reads back from <see cref="Encode()"/>: the item when there is one, else the root type's
+    /// name, else the id of the type.
+    /// </summary>
+    public static RelativePosition FromIndex(AbstractType type, int index, Assoc assoc = Assoc.After)
     {
         ArgumentNullException.ThrowIfNull(type);
 
-        if (assoc < 0)
+        if (assoc == Assoc.Before)
         {
             // Associated with the left character or the beginning of a type, decrement index if possible.
             if (index == 0)
@@ -61,7 +64,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
                 index -= slot.Length;
             }
 
-            if (slot.Right < 0 && assoc < 0)
+            if (slot.Right < 0 && assoc == Assoc.Before)
             {
                 // Left-associated position, return last available id.
                 return In(type, t.LastId, assoc);
@@ -134,13 +137,42 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
             WriteJsonId(writer, "item", item);
         }
 
-        writer.WriteNumber("assoc", Assoc);
+        writer.WriteNumber("assoc", (int)Assoc);
         writer.WriteEndObject();
+    }
+
+    /// <summary>The JSON text of <see cref="WriteJson"/>, for a peer's awareness state.</summary>
+    public string ToJsonString()
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            WriteJson(writer);
+        }
+
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    /// <summary><see cref="FromJson(JsonElement)"/> of JSON text.</summary>
+    /// <exception cref="YUpdateException">As <see cref="FromJson(JsonElement)"/>, or the text is not JSON.</exception>
+    public static RelativePosition FromJson(string json)
+    {
+        ArgumentNullException.ThrowIfNull(json);
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            return FromJson(document.RootElement);
+        }
+        catch (JsonException e)
+        {
+            throw new YUpdateException("A relative position is not valid JSON.", e);
+        }
     }
 
     /// <summary>
     /// Reads the object of Yjs' <c>relativePositionToJSON</c>. The JSON may come from another peer: <c>null</c>
-    /// members count as absent, <c>assoc</c> is clamped to the range of an <see cref="int"/>.
+    /// members count as absent, a negative <c>assoc</c> reads as <see cref="Assoc.Before"/>, any other as
+    /// <see cref="Assoc.After"/>.
     /// </summary>
     /// <exception cref="YUpdateException">
     /// Not an object; an id that is not an object of two integers from 0 to 2^53 - 1; an <c>assoc</c> that is
@@ -158,7 +190,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
             ? tname.ValueKind == JsonValueKind.String ? tname.GetString() : throw new YUpdateException("The tname of a relative position is not a string.")
             : null;
         ItemId? item = Member(json, "item", out var itemJson) ? JsonToId(itemJson, "item") : null;
-        var assoc = Member(json, "assoc", out var assocJson) ? (int)Math.Clamp(JsonInteger(assocJson, "assoc"), int.MinValue, int.MaxValue) : 0;
+        var assoc = Member(json, "assoc", out var assocJson) && JsonInteger(assocJson, "assoc") < 0 ? Assoc.Before : Assoc.After;
 
         if (item == null && rootName == null && typeId == null)
         {
@@ -168,15 +200,20 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
         return new RelativePosition(typeId, rootName, item, assoc);
     }
 
-    private static RelativePosition In(AbstractType type, ItemId? item, int assoc)
+    private static RelativePosition In(AbstractType type, ItemId? item, Assoc assoc)
     {
+        if (item != null)
+        {
+            return new RelativePosition(null, null, item, assoc);
+        }
+
         if (type.IsRoot)
         {
-            return new RelativePosition(null, type.FindRootTypeKey(), item, assoc);
+            return new RelativePosition(null, type.FindRootTypeKey(), null, assoc);
         }
 
         var id = type.ItemId;
-        return new RelativePosition(new ItemId(id.Client, id.Clock), null, item, assoc);
+        return new RelativePosition(new ItemId(id.Client, id.Clock), null, null, assoc);
     }
 
     private static void WriteJsonId(Utf8JsonWriter writer, string name, ItemId id)
@@ -251,7 +288,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
             throw new InvalidOperationException("A default RelativePosition locates nothing: it has no item, type or root type to encode.");
         }
 
-        writer.WriteVarInt(Assoc);
+        writer.WriteVarInt((int)Assoc);
     }
 
     internal static RelativePosition Read(Lib0Reader reader)
@@ -278,7 +315,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
                 throw new YUpdateException("Unknown kind of relative position.");
         }
 
-        var assoc = reader.HasContent ? (int)Math.Clamp(reader.ReadVarInt().Value, int.MinValue, int.MaxValue) : 0;
+        var assoc = reader.HasContent && reader.ReadVarInt().Value < 0 ? Assoc.Before : Assoc.After;
         return new RelativePosition(typeId, rootName, itemId, assoc);
     }
 }

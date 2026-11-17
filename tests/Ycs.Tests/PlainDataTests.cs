@@ -39,7 +39,7 @@ public class PlainDataTests
             RelativePosition.FromIndex(text, 1),
             RelativePosition.FromIndex(text, 1),
             RelativePosition.FromIndex(text, 2),
-            RelativePosition.FromIndex(text, 1, -1),
+            RelativePosition.FromIndex(text, 1, Assoc.Before),
         };
 
         Assert.AreEqual(3, set.Count);
@@ -95,5 +95,22 @@ public class PlainDataTests
         var b = doc.CreateSnapshot();
 
         Assert.AreEqual((true, true, false), (a.Equals((object)b), a.GetHashCode() == b.GetHashCode(), a.Equals((object)"x")));
+    }
+
+    [TestMethod]
+    public void Snapshot_DecodeOfEncode_EqualsByOperator()
+    {
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
+        doc.GetText("t").Insert(0, "abc");
+        var snapshot = doc.CreateSnapshot();
+        doc.GetText("t").Insert(0, "d");
+
+        Assert.AreEqual((true, false, false, true), (Snapshot.Decode(snapshot.Encode()) == snapshot, snapshot != Snapshot.Decode(snapshot.Encode()), snapshot == doc.CreateSnapshot(), (Snapshot?)null == null));
+    }
+
+    [TestMethod]
+    public void Snapshot_ComparedWithNull_IsNotEqual()
+    {
+        Assert.AreEqual((false, true, false), (Snapshot.Empty == null, Snapshot.Empty != null, null == Snapshot.Empty));
     }
 }
