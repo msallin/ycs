@@ -10,7 +10,7 @@ namespace Ycs;
 /// <summary>
 /// Outside the item layout and the decoded form, no method reads <see cref="ItemRef.Content"/> or type-tests a content
 /// class: the callers go through the accessors of <see cref="ItemRef"/> (<c>Kind</c>, <c>Chars</c>, <c>Cold</c>, ...), so
-/// that the storage under them can move. Each package that moves its callers deletes its own group below.
+/// that the storage under them can move.
 /// </summary>
 [TestClass]
 public class ContentAccessArchitectureTests
@@ -22,22 +22,16 @@ public class ContentAccessArchitectureTests
         "UpdateOperations", "LazyStructWriter",
     ];
 
-    // Package 8.2b: array, map and xml callers.
-    private static readonly string[] ArrayAndMapCallers = ["YArrayBase", "YArray", "YMap", "YType", "YXmlFragment", "YXmlElement", "YXmlNodeHelpers"];
-
-    // Package 8.2c: the other callers. StructStore is one type over its partial files (IntegrationPlan, Checks, TestDump
-    // are the ones that read content); the IL does not tell the files apart.
-    private static readonly string[] OtherCallers =
-    [
-        "YEvent", "UndoManager", "PermanentUserData", "AbsolutePosition", "YDoc", "ItemView", "StructStore",
-    ];
+    // ItemView reads the decoded form, StructStore its decoded structs in the integration plan and the content object
+    // against its kind in the store checks; the IL does not tell StructStore's partial files apart.
+    private static readonly string[] DecodedReaders = ["ItemView", "StructStore"];
 
     [TestMethod]
     public void Library_EveryMethodBody_ReadsContentOnlyInTheAllowedTypes()
     {
         using var scan = IlScan.Read();
         var (methods, ops, md) = scan;
-        var allowed = Layout.Concat(ArrayAndMapCallers).Concat(OtherCallers).ToArray();
+        var allowed = Layout.Concat(DecodedReaders).ToArray();
         var found = new SortedSet<string>(StringComparer.Ordinal);
 
         foreach (var (type, method, outer, _, op) in ops)
