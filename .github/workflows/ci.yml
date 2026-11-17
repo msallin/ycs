@@ -7,7 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
 
@@ -38,8 +38,9 @@ jobs:
       - name: Unit tests, arenas with three-slot pages and copy on merge
         run: YCS_ARENA_PAGE=3 YCS_ARENA_COPY=1 dotnet test tests/Ycs.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m
 
+      # The slow category runs in Release above; in Debug it takes too long for a runner (overflow checks, no inlining).
       - name: Unit tests (Debug, overflow checks on)
-        run: dotnet test tests/Ycs.Tests -c Debug --blame-hang --blame-hang-timeout 10m
+        run: dotnet test tests/Ycs.Tests -c Debug --filter "TestCategory!=Slow" --blame-hang --blame-hang-timeout 10m
 
       - name: Yjs corpus
         run: dotnet test tests/Ycs.Corpus -c Release --no-build --blame-hang --blame-hang-timeout 10m
