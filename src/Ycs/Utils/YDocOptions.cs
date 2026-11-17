@@ -56,6 +56,9 @@ public sealed record YDocOptions
     private readonly UpdateLimits _limits = UpdateLimits.Default;
     private readonly long? _clientId;
 
+    // What a document made without options holds: the record is immutable, so documents share it.
+    internal static readonly YDocOptions Default = new();
+
     // Collects everything; another filter is called once per item (see Transaction.CleanupTransaction).
     internal static readonly Func<ItemView, bool> DefaultGcFilter = static _ => true;
 }

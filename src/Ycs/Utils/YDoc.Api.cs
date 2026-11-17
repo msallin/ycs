@@ -22,7 +22,7 @@ public partial class YDoc
 
     public YDoc(YDocOptions? options = null)
     {
-        _opts = options ?? new YDocOptions();
+        _opts = options ?? YDocOptions.Default;
         _transactionCleanups = new List<Transaction>();
 
         ClientId = _opts.ClientId ?? GenerateNewClientId();
