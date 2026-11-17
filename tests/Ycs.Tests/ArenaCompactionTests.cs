@@ -73,6 +73,29 @@ public class ArenaCompactionTests
     }
 
     [TestMethod]
+    public void EndOfBatch_DeadOutweighsLiveButFewerThanTheSlots_DoesNotCompact()
+    {
+        // A compaction walks every slot: the garbage must amount to as many elements as there are slots.
+        using var max = StaticScope.Set(ref Arena<char>.MaxPageForTests, 16);
+        var doc = NewDoc();
+        var array = doc.GetArray("a");
+        doc.Transact(_ =>
+        {
+            for (var i = 0; i < 300; i++)
+            {
+                array.Add(new YMap());
+            }
+        });
+        var text = doc.GetText("t");
+
+        text.Insert(0, new string('x', 200));
+        text.Remove(0, 190);
+
+        var chars = Chars(doc);
+        Assert.AreEqual((true, true, 0), (chars.Live < chars.Dead, chars.Dead < doc.Store.Slab.LiveCount, chars.CompactionCount));
+    }
+
+    [TestMethod]
     public void Compaction_LiveRuns_KeepTheirTextAndTheStateOfBothFormats()
     {
         var doc = NewDoc();
