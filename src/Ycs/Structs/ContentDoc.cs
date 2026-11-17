@@ -55,10 +55,7 @@ internal class ContentDoc : IContentEx
 
     public IContent Copy() => new ContentDoc(Options.Parse(Guid, Opts, shouldLoad: null));
 
-    public IContent Splice(int offset)
-    {
-        throw new NotImplementedException();
-    }
+    public IContent Splice(int offset) => throw TypeContent.Unsplittable();
 
     public bool MergeWith(IContent right)
     {

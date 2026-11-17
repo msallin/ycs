@@ -31,10 +31,7 @@ internal class ContentEmbed : IContentEx
 
     public IContent Copy() => new ContentEmbed(_embed);
 
-    public IContent Splice(int offset)
-    {
-        throw new NotImplementedException();
-    }
+    public IContent Splice(int offset) => throw TypeContent.Unsplittable();
 
     public bool MergeWith(IContent right)
     {

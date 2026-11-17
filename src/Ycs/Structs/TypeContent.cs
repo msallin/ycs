@@ -9,8 +9,9 @@ namespace Ycs;
 /// </summary>
 internal static class TypeContent
 {
+    /// <summary>For every content of length 1 (a type, a document, binary, an embed, a format): a split offset is within 1..Length-1, so none exists.</summary>
     internal static InvalidOperationException Unsplittable() =>
-        new("The content of a type has length 1 and cannot be split.");
+        new("The content has length 1 and cannot be split.");
 
     /// <summary>Integrates the type of <paramref name="item"/>, which names it by its table index.</summary>
     internal static void Integrate(Transaction transaction, ItemRef item) => item.TypeOf.Integrate(transaction.Doc, item);

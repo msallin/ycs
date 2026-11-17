@@ -28,10 +28,7 @@ internal class ContentBinary : IContentEx
 
     public IContent Copy() => new ContentBinary(_content);
 
-    public IContent Splice(int offset)
-    {
-        throw new NotImplementedException();
-    }
+    public IContent Splice(int offset) => throw TypeContent.Unsplittable();
 
     public bool MergeWith(IContent right)
     {

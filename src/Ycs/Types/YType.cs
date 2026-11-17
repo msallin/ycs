@@ -235,10 +235,10 @@ public abstract partial class YType
         CheckCanNest();
     }
 
-    internal virtual YType InternalCopy() { throw new NotImplementedException(); }
-    internal virtual YType InternalClone() { throw new NotImplementedException(); }
+    internal abstract YType InternalCopy();
+    internal abstract YType InternalClone();
 
-    internal virtual void Write(IUpdateEncoder encoder) { throw new NotImplementedException(); }
+    internal abstract void Write(IUpdateEncoder encoder);
 
     /// <summary>
     /// For a type whose JSON holds the JSON of the types nested in it (a map, an array): its JSON without them,
