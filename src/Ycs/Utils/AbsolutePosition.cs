@@ -85,9 +85,9 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, int
 
                 var res = followUndoneDeletions ? store.FollowRedone(typeId.Value) : GetItemWithOffset(store, typeId.Value);
                 var item = res.item.AsItem;
-                if (!item.IsNull && item.Content is ContentType content)
+                if (!item.IsNull && item.Kind == SlotKind.Type)
                 {
-                    type = content.Type;
+                    type = item.TypeOf;
                 }
                 else
                 {

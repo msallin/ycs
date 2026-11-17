@@ -365,7 +365,7 @@ public sealed partial class UndoManager
             }
         }
 
-        var parentType = parentItem.IsNull ? (AbstractType)item.Parent : ((ContentType)parentItem.Content).Type;
+        var parentType = parentItem.IsNull ? (AbstractType)item.Parent : parentItem.TypeOf;
 
         if (item.ParentSub == null)
         {
@@ -442,7 +442,7 @@ public sealed partial class UndoManager
         }
 
         var nextId = new ID(ownClientId, store.GetState(ownClientId));
-        var redoneItem = ItemRef.New(store.Slab, nextId, left, right, parentType, item.ParentSub, item.Content.Copy());
+        var redoneItem = ItemRef.New(store.Slab, nextId, left, right, parentType, item.ParentSub, item.CopyContent());
         item.Redone = nextId;
         redoneItem.KeepItemAndParents(true);
         redoneItem.Integrate(transaction, 0);

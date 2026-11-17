@@ -75,7 +75,7 @@ public readonly partial struct ItemView
         Same("Length", str.Length, view.Length);
         Same("LastId", new ID(str.Id.Client, str.Id.Clock + str.Length - 1), view.LastId);
         Same("Deleted", str.Deleted, view.Deleted);
-        Same("Kind", !item.IsNull ? (ItemKind)item.Content.Ref : str.IsGC ? ItemKind.GC : ItemKind.Skip, view.Kind);
+        Same("Kind", !item.IsNull ? item.Kind.ToItemKind() : str.IsGC ? ItemKind.GC : ItemKind.Skip, view.Kind);
         Same("Countable", !item.IsNull && item.Countable, view.Countable);
         Same("Keep", !item.IsNull && item.Keep, view.Keep);
         Same("LeftOrigin", item.IsNull ? null : item.LeftOrigin, view.LeftOrigin);
@@ -87,7 +87,7 @@ public readonly partial struct ItemView
         Same("Right", item.IsNull || item.Right.IsNull ? null : item.Right.Id, view.Right?.Id);
         Same("Left length", item.IsNull || item.Left.IsNull ? null : item.Left.Length, view.Left?.Length);
         Same("Right length", item.IsNull || item.Right.IsNull ? null : item.Right.Length, view.Right?.Length);
-        var expected = item.IsNull ? Array.Empty<object>() : item.Content.GetContent();
+        var expected = item.IsNull ? Array.Empty<object>() : item.Elements;
         var content = view.Content;
         Same("Content count", expected.Count, content.Count);
         for (var i = 0; i < expected.Count; i++)

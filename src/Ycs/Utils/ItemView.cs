@@ -71,7 +71,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
             }
 
             var s = Resolve(out _);
-            return s.IsItem ? (ItemKind)s.ContentRef : ItemKind.GC;
+            return s.IsItem ? s.Kind.ToItemKind() : ItemKind.GC;
         }
     }
 
@@ -125,7 +125,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
                 return Array.Empty<object?>();
             }
 
-            IReadOnlyList<object?> content = item.Content.GetContent();
+            IReadOnlyList<object?> content = item.Elements;
             return o == 0 ? content : new Slice(content, o);
         }
     }

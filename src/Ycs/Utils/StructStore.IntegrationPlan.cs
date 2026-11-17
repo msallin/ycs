@@ -413,7 +413,7 @@ internal sealed partial class StructStore
             if (id.Clock < _store.GetState(id.Client))
             {
                 var found = _store.Find(id);
-                return found.IsItem && found.Content is ContentType ct ? ct.Type.Depth : -1;
+                return found.Kind == SlotKind.Type ? found.TypeOf.Depth : -1;
             }
 
             return _typeDepths != null && _typeDepths.TryGetValue(id, out var depth) ? depth : -1;
@@ -827,9 +827,9 @@ internal sealed partial class StructStore
 
                 void Push(ItemRef item)
                 {
-                    if (item.Content is ContentType child)
+                    if (item.Kind == SlotKind.Type)
                     {
-                        stack.Add((child.Type, c || (!item.Keep && doc.GcFilter(PlanItem.Store(item).GcView(doc)))));
+                        stack.Add((item.TypeOf, c || (!item.Keep && doc.GcFilter(PlanItem.Store(item).GcView(doc)))));
                     }
                 }
             }

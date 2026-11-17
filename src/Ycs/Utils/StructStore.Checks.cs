@@ -29,18 +29,18 @@ internal sealed partial class StructStore
                 return link;
             }
 
-            if (s.Content is ContentType content && content.Type._item != s)
+            if (s.Kind == SlotKind.Type && s.TypeOf._item != s)
             {
                 return $"the type of {s.Id.Client}:{s.Id.Clock} names another item";
             }
 
-            if (s.Content is ContentDoc doc && doc.Doc._item != s && !IsAttachedInOwner(doc.Doc._item))
+            if (s.Kind == SlotKind.Doc && s.Subdoc._item != s && !IsAttachedInOwner(s.Subdoc._item))
             {
                 return $"the subdocument of {s.Id.Client}:{s.Id.Clock} names a freed item";
             }
 
             visited ??= [];
-            var type = s.Content is ContentType held ? held.Type : s.Parent as AbstractType;
+            var type = s.Kind == SlotKind.Type ? s.TypeOf : s.Parent as AbstractType;
             if (type != null && visited.Add(type))
             {
                 _typesSeen ??= [];

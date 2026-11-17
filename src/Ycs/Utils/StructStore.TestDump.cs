@@ -69,7 +69,7 @@ internal sealed partial class StructStore
         {
             foreach (var s in structs)
             {
-                if (s.IsItem && s.Content is ContentType { Type: YArrayBase list })
+                if (s.Kind == SlotKind.Type && s.TypeOf is YArrayBase list)
                 {
                     yield return (s.Id, list);
                 }

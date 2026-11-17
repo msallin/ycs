@@ -80,11 +80,9 @@ public partial class YDoc
         {
             _item = default;
             // A collected item holds ContentDeleted already (Yjs sets a property nothing reads).
-            var content = item.Content as ContentDoc;
-            if (content != null)
+            if (item.Kind == SlotKind.Doc)
             {
-                content.Doc = ContentDoc.CreateDocFromOpts(Guid, content.Opts, shouldLoad: false, _opts.Limits);
-                content.Doc._item = item;
+                item.RecreateSubdoc(Guid, _opts.Limits);
             }
 
             var parentDoc = ((AbstractType)item.Parent).Doc;
@@ -93,7 +91,7 @@ public partial class YDoc
             {
                 if (!s.item.Deleted)
                 {
-                    tr.AddedSubdocs.Add(((ContentDoc)s.item.Content).Doc);
+                    tr.AddedSubdocs.Add(s.item.Subdoc);
                 }
 
                 tr.RemovedSubdocs.Add(s.doc);
