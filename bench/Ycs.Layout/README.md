@@ -1,14 +1,18 @@
-# A measured model of the compact item layout
+# Layout measurements
 
-A standalone model of the layout that [`docs/design-item-layout.md`](../../docs/design-item-layout.md) designs: items as
-52-byte structs in a slab, linked by 32-bit handles, a client table, per client the structs in clock order (start
-clocks and handles), the types in a table, the characters and values in append-only arenas. It does not replace the
-library: it walks the struct store of a document ycs built (through `InternalsVisibleTo`) and builds its own store from
-it, checks that it holds the same content, and measures what it holds, what three operations cost and what editing
-(integration and deletion) costs against today's `YDoc`. Run on 2026-11-15; results in
-[`results/2026-11-15.md`](results/2026-11-15.md) and, for small documents,
-[`results/2026-11-15-small.md`](results/2026-11-15-small.md); editing on 2026-11-16,
-[`results/2026-11-16-edit.md`](results/2026-11-16-edit.md).
+What a document holds and what editing costs, measured on the library the project is built against, and against a
+standalone model of the layout. The library side is the built layout (slab, arenas, staging tables:
+[`docs/design-item-layout.md`](../../docs/design-item-layout.md)); built at 044bb73 the same bench measures the object
+layout, which is how the two are compared. The model (52-byte slots, 32-bit handles, a client table, the types in a
+table, the characters and values in append-only arenas) walks the struct store of a document ycs built (through
+`InternalsVisibleTo`), builds its own store from it, checks that it holds the same content, and measures what it holds,
+what three operations cost and what editing (integration and deletion) costs against the library. `small` is the
+measurement of the built layout's small documents and many clients; the model's results of 2026-11-15 and 2026-11-16
+are the measurements the layout was decided on. Results in [`results/`](results/): the model in
+[`2026-11-15.md`](results/2026-11-15.md), [`2026-11-15-small.md`](results/2026-11-15-small.md) and
+[`2026-11-16-edit.md`](results/2026-11-16-edit.md); the built layout in
+[`2026-11-17-8-14-small.md`](results/2026-11-17-8-14-small.md) and
+[`2026-11-17-8-14-footprint.md`](results/2026-11-17-8-14-footprint.md).
 
 ```bash
 bench/Ycs.Layout/run.sh                  # about 6 minutes; fetches the automerge-paper trace (see below)
@@ -261,7 +265,7 @@ Two more runs in the same minutes moved the ratios by up to 0.4 (one, under a lo
 trace's integration).
 
 * **Integration is 1.4-1.7× faster on slots**, with and without conflicts. Today pays the run-head index on every
-  `Add` and relink, which the prototype does not model, so the gap is an upper bound; open question 6 puts the leaf
+  `Add` and relink, which the prototype does not model, so the gap is an upper bound; the design's open item on the leaf order puts the leaf
   order's own overhead at 8-15 ns per `FindIndex` or `Add`.
 * **Deletion is 1.6-4.1× faster** with the leaf order; most where it splits: today a split of an array item copies the
   right part into a new list (`ContentAny.Splice`, 759 bytes a range on `array-delete-random`) and allocates an item,
@@ -280,7 +284,7 @@ trace's integration).
 
 * Editing beyond integration and deletion: merging and the rest of the transaction cleanup, slot reuse, garbage
   collection, undo, events and encoding run only in today's code; their costs in the design are estimates
-  (`docs/design-item-layout.md`, sections 3 and 5). Of integration: a struct at an offset (an update overlapping the
+  (the estimates of `docs/design-item-layout.md`). Of integration: a struct at an offset (an update overlapping the
   store), pending structs, a nested type's content (integrated as a type entry; deleting one is not supported), a split
   surrogate pair. The delete set as ycs reads it (pending ranges).
 * Decoding straight into the slab and the arenas (the allocation of a load), and the arenas' garbage: a deleted

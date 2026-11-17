@@ -525,10 +525,10 @@ ycs child of c9f673a (`modernize`) and of the branch (42f0687), interleaved with
     operation goes through the leaf object), the rest is the two-level lookup (+8.5 to +11 % with leaves of 128).
     No cheap fix found in six variants (the cursor not rewritten when unchanged, a plain binary search in the leaf,
     no pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined):
-    none beyond 2 %. Recorded as open question 6 of the design. It is the price of the leaf object and the two-level
+    none beyond 2 %. Recorded among the open items of the design. It is the price of the leaf object and the two-level
     lookup, against -26 % and -29 % on the workloads that split.
 * **A flat form below one leaf: no gain, not kept** (2026-11-16, `results/2026-11-16-leaf-flat/`, `ab.py 4 6`, load 1.1
-  to 8.4 on a shared machine). The candidate of open question 6: while a client has no directory (at most 128 structs),
+  to 8.4 on a shared machine). The candidate recorded in the design's open items: while a client has no directory (at most 128 structs),
   the structs, starts and flags without the leaf object. Prototyped for the operations that matter (the indexer, both
   `FindIndex`, `Add`, `Refresh` read the one leaf's arrays cached in the list; `prototype.patch`) and measured against
   9e182ef:

@@ -1,9 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    A model of the item layout of docs/design-item-layout.md: items as structs in a slab with 32-bit handles. It
-    loads documents ycs built (through ycs' internals) and measures what they hold and what three operations cost.
-    Not a part of the library; results in README.md.
+    Measures what the documents ycs builds hold and what editing costs, and compares them with a model of the layout of
+    docs/design-item-layout.md (through ycs' internals). Not a part of the library; results in README.md.
   -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>

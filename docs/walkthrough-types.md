@@ -43,7 +43,7 @@ Verdicts: **identical** (the same control flow), **equivalent** (different code,
 | `typeListInsertGenerics` | `YArrayBase.InsertGenerics` | equivalent (an index beyond the length throws, as in Yjs) |
 | `typeListPushGenerics` | `YArrayBase.PushGenerics` | identical (appends after the last item, deleted ones included; the walk starts from the item the last push made, not from the highest marker) |
 | `typeListDelete` | `YArrayBase.Delete` | identical |
-| `typeMapDelete`, `typeMapSet` | `TypeMapDelete`, `TypeMapSet` | identical (the value is validated by `AnyEncoding.Validate`) |
+| `typeMapDelete`, `typeMapSet` | `TypeMapDelete`, `TypeMapSet` | identical (the value is a `YValue`, which holds the closed value set only; `YValue.Stored` gives the document its stored form) |
 | `typeMapGet`, `typeMapHas` | `TryTypeMapGet`, `YMap.TryGetValue`, `ContainsKey` | identical |
 | `typeMapGetAll` | `TypeMapEnumerateValues` | identical |
 | `typeMapGetSnapshot`, `typeMapGetAllSnapshot` | `YMap.TryGetValue(key, snapshot, ...)`, `ToDictionary(snapshot)` | equivalent (a collected value reads as absent) |
