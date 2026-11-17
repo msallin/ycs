@@ -1,12 +1,16 @@
 name: Publish to GitHub Packages
 
-# Run by hand only: packs a prerelease of Ycs and pushes it to this repository owner's GitHub Packages NuGet feed.
+# Packs a prerelease of Ycs and pushes it to this repository owner's GitHub Packages NuGet feed. Started by hand, or by
+# pushing a tag publish-<version> (a workflow started by hand must be on the default branch; a tag runs its own commit's).
 on:
+  push:
+    tags:
+      - 'publish-*'
   workflow_dispatch:
     inputs:
       version:
         description: Package version (a prerelease, e.g. 0.0.1-preview.1)
-        required: true
+        required: false
 
 permissions:
   contents: read
@@ -23,13 +27,21 @@ jobs:
         with:
           global-json-file: global.json
 
+      - name: Version
+        id: version
+        run: |
+          v="${{ inputs.version }}"
+          if [ -z "$v" ]; then v="${GITHUB_REF_NAME#publish-}"; fi
+          case "$v" in *-*) ;; *) echo "Only prereleases are published here: $v" >&2; exit 1 ;; esac
+          echo "value=$v" >> "$GITHUB_OUTPUT"
+
       - name: Test
         run: dotnet test tests/Ycs.Tests -c Release --filter "TestCategory!=Slow"
 
       - name: Pack
         run: >
           dotnet pack src/Ycs -c Release -o out/pack
-          -p:Version=${{ inputs.version }}
+          -p:Version=${{ steps.version.outputs.value }}
           -p:RepositoryUrl=${{ github.server_url }}/${{ github.repository }}
           -p:PackageProjectUrl=${{ github.server_url }}/${{ github.repository }}
 
