@@ -29,8 +29,8 @@ internal interface IUpdateDecoder : IDSDecoder
     bool ReadParentInfo();
     uint ReadTypeRef();
     int ReadLength();
-    object ReadAny();
+    object? ReadAny();
     byte[] ReadBuffer();
     string ReadKey();
-    object ReadJson();
+    object? ReadJson();
 }

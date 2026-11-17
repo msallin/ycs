@@ -4,9 +4,9 @@ internal class ContentEmbed : IContentEx
 {
     internal const int _ref = 5;
 
-    private readonly object _embed;
+    private readonly object? _embed;
 
-    internal ContentEmbed(object embed)
+    internal ContentEmbed(object? embed)
     {
         _embed = embed;
     }

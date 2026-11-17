@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Globalization;
 using System.Diagnostics;
@@ -15,13 +14,13 @@ namespace Ycs;
 /// </summary>
 internal static class UpdateOperations
 {
-    private static long MaxStructs(UpdateLimits limits) => (limits ?? UpdateLimits.Default).MaxStructsPerUpdate;
+    private static long MaxStructs(UpdateLimits? limits) => (limits ?? UpdateLimits.Default).MaxStructsPerUpdate;
 
     /// <summary>A reader of <paramref name="update"/> whose values may be nested as deeply as <paramref name="limits"/> allow.</summary>
-    private static Lib0Reader Reader(ArraySegment<byte> update, UpdateLimits limits) =>
-        new(update.Array, update.Offset, update.Count) { MaxDepth = (limits ?? UpdateLimits.Default).MaxDepth };
+    private static Lib0Reader Reader(ArraySegment<byte> update, UpdateLimits? limits) =>
+        new(update.Array!, update.Offset, update.Count) { MaxDepth = (limits ?? UpdateLimits.Default).MaxDepth };
 
-    private static IUpdateDecoder Decoder(ArraySegment<byte> update, bool v2, UpdateLimits limits) =>
+    private static IUpdateDecoder Decoder(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
         v2 ? new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits)) : new UpdateDecoderV1(Reader(update, limits), MaxStructs(limits));
 
     private static IUpdateEncoder Encoder(bool v2) => v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
@@ -33,7 +32,7 @@ internal static class UpdateOperations
     /// produced (which may hold 'Skip' gaps). As in Yjs, not where one update holds a GC struct and another an item
     /// for the same clock: the struct kept then depends on the order and the grouping (Yjs under V8's sort).
     /// </summary>
-    public static byte[] MergeUpdates(IList<ArraySegment<byte>> updates, bool v2, UpdateLimits limits) =>
+    public static byte[] MergeUpdates(IList<ArraySegment<byte>> updates, bool v2, UpdateLimits? limits) =>
         YUpdateException.Decode(() => MergeUpdatesCore(updates, v2, MaxStructs(limits), (limits ?? UpdateLimits.Default).MaxDepth, out _));
 
     /// <summary>
@@ -73,7 +72,7 @@ internal static class UpdateOperations
         written = -1;
         if (updates.Count == 1)
         {
-            return updates[0].Array;
+            return updates[0].Array!;
         }
 
         var updateDecoders = new List<IUpdateDecoder>(updates.Count);
@@ -84,7 +83,7 @@ internal static class UpdateOperations
         {
             foreach (var update in updates)
             {
-                var reader = new Lib0Reader(update.Array, update.Offset, update.Count) { MaxDepth = maxDepth };
+                var reader = new Lib0Reader(update.Array!, update.Offset, update.Count) { MaxDepth = maxDepth };
                 var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(reader, maxStructs) : new UpdateDecoderV1(reader, maxStructs);
                 updateDecoders.Add(decoder);
                 var table = StagingTable.Rent();
@@ -347,7 +346,7 @@ internal static class UpdateOperations
     #region DiffUpdate
 
     /// <summary>Extracts the part of <paramref name="update"/> that is missing relative to the encoded <paramref name="stateVector"/>.</summary>
-    public static byte[] DiffUpdate(ArraySegment<byte> update, ArraySegment<byte> stateVector, bool v2, UpdateLimits limits) =>
+    public static byte[] DiffUpdate(ArraySegment<byte> update, ArraySegment<byte> stateVector, bool v2, UpdateLimits? limits) =>
         YUpdateException.Decode(() =>
         {
             var encoder = Encoder(v2);
@@ -363,7 +362,7 @@ internal static class UpdateOperations
         });
 
     private static void DiffUpdateCore(IUpdateDecoder decoder, ArraySegment<byte> stateVector, IUpdateEncoder encoder) =>
-        DiffUpdateCore(decoder, EncodingUtils.DecodeStateVector(new Lib0Reader(stateVector.Array, stateVector.Offset, stateVector.Count)), encoder);
+        DiffUpdateCore(decoder, EncodingUtils.DecodeStateVector(new Lib0Reader(stateVector.Array!, stateVector.Offset, stateVector.Count)), encoder);
 
     /// <summary>
     /// What <see cref="EncodingUtils.EncodeStateAsUpdate(StructStore, ReadOnlySpan{byte}, bool)"/>
@@ -468,7 +467,7 @@ internal static class UpdateOperations
     /// Computes the state vector implied by an update, without applying it to a document: far cheaper than applying the
     /// update to an empty document and encoding its state vector.
     /// </summary>
-    public static byte[] EncodeStateVectorFromUpdate(ArraySegment<byte> update, bool v2, UpdateLimits limits) =>
+    public static byte[] EncodeStateVectorFromUpdate(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
         YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(Decoder(update, v2, limits)));
 
     private static byte[] EncodeStateVectorFromUpdateCore(IUpdateDecoder decoder)
@@ -540,7 +539,7 @@ internal static class UpdateOperations
     #region ParseUpdateMeta
 
     /// <summary>For every client that contributed at least one struct to an update, the clock range it covers.</summary>
-    public static UpdateMeta ParseUpdateMeta(ArraySegment<byte> update, bool v2, UpdateLimits limits) =>
+    public static UpdateMeta ParseUpdateMeta(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
         YUpdateException.Decode(() => ParseUpdateMetaCore(Decoder(update, v2, limits)));
 
     private static UpdateMeta ParseUpdateMetaCore(IUpdateDecoder decoder)
@@ -596,7 +595,7 @@ internal static class UpdateOperations
     /// and the overlapping ones merged, which deletes the same. (Yjs writes negative clock differences,
     /// which its own decoder reads as other ranges.)
     /// </summary>
-    public static byte[] ConvertUpdateFormat(ArraySegment<byte> update, bool fromV2, bool toV2, UpdateLimits limits) =>
+    public static byte[] ConvertUpdateFormat(ArraySegment<byte> update, bool fromV2, bool toV2, UpdateLimits? limits) =>
         YUpdateException.Decode(() =>
         {
             var encoder = Encoder(toV2);
@@ -681,7 +680,7 @@ internal static class UpdateOperations
     #region DecodeUpdate
 
     /// <summary>Decodes an update into its structs (in order) and its delete set, without applying it to a document.</summary>
-    public static DecodedUpdate DecodeUpdate(ArraySegment<byte> update, bool v2, UpdateLimits limits) =>
+    public static DecodedUpdate DecodeUpdate(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
         YUpdateException.Decode(() => DecodeUpdateCore(Decoder(update, v2, limits)));
 
     private static DecodedUpdate DecodeUpdateCore(IUpdateDecoder decoder)
@@ -709,7 +708,7 @@ internal static class UpdateOperations
     #region Describe
 
     /// <summary>Describes an update (its structs and its delete set) as a plain string, for debugging.</summary>
-    public static string DescribeUpdate(ArraySegment<byte> update, bool v2, UpdateLimits limits) =>
+    public static string DescribeUpdate(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
         DescribeDecodedUpdate(DecodeUpdate(update, v2, limits));
 
     private static string DescribeDecodedUpdate(DecodedUpdate decoded)

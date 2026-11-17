@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -46,7 +45,8 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     private readonly IntDiffOptRleDecoder _leftClockDecoder;
     private readonly IntDiffOptRleDecoder _rightClockDecoder;
     private readonly RleDecoder _infoDecoder;
-    private StringDecoder _stringDecoder;
+    // Made by the constructor's ReadColumns; Reset only refills it.
+    private StringDecoder _stringDecoder = null!;
     private readonly RleDecoder _parentInfoDecoder;
     private readonly UintOptRleDecoder _typeRefDecoder;
     private readonly UintOptRleDecoder _lengthDecoder;
@@ -165,7 +165,7 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         return (int)value;
     }
 
-    public object ReadAny() => Reader.ReadAny();
+    public object? ReadAny() => Reader.ReadAny();
 
     public byte[] ReadBuffer() => Reader.ReadVarUint8Array();
 
@@ -188,5 +188,5 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         return key;
     }
 
-    public object ReadJson() => Reader.ReadAny();
+    public object? ReadJson() => Reader.ReadAny();
 }

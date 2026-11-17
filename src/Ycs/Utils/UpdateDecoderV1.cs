@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -65,7 +64,7 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
         return (int)value;
     }
 
-    public object ReadAny() => Reader.ReadAny();
+    public object? ReadAny() => Reader.ReadAny();
 
     public byte[] ReadBuffer() => Reader.ReadVarUint8Array();
 
@@ -73,5 +72,5 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
 
     // Plain CLR values: the same content may be re-encoded with the v2 encoder,
     // which writes it through WriteAny.
-    public object ReadJson() => YJson.Parse(Reader.ReadVarUint8ArraySpan(), Reader.MaxDepth);
+    public object? ReadJson() => YJson.Parse(Reader.ReadVarUint8ArraySpan(), Reader.MaxDepth);
 }

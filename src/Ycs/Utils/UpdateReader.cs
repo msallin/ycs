@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -24,10 +23,10 @@ internal sealed class UpdateReader
 
     // Two free readers: the reader of a nested read is released before the one it nests in.
     [ThreadStatic]
-    private static UpdateReader t_free;
+    private static UpdateReader? t_free;
 
     [ThreadStatic]
-    private static UpdateReader t_spare;
+    private static UpdateReader? t_spare;
 
     [ThreadStatic]
     private static int t_constructed;
@@ -37,8 +36,8 @@ internal sealed class UpdateReader
     private readonly DeleteSet _deleteSet = new();
     private readonly StagingTable _staging = new();
     private readonly Stack<List<DeleteSet.DeleteItem>> _spareDeleteLists = new();
-    private UpdateDecoderV1 _v1;
-    private UpdateDecoderV2 _v2;
+    private UpdateDecoderV1? _v1;
+    private UpdateDecoderV2? _v2;
     private int _version;
 
     /// <summary>
@@ -158,7 +157,7 @@ internal sealed class UpdateReader
     /// <summary>The decoded update, valid until <see cref="Dispose"/>; disposing twice is harmless.</summary>
     public readonly struct Lease : IDisposable
     {
-        private readonly UpdateReader _reader;
+        private readonly UpdateReader? _reader;
         private readonly int _version;
 
         internal Lease(UpdateReader reader, int version)
