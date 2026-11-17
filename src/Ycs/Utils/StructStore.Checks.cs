@@ -208,12 +208,12 @@ internal sealed partial class StructStore
 
         if (slot.Kind == 0)
         {
-            return slot.Info == Slot.DeletedFlag && slot.Left == -1 && slot.Right == -1 && slot.Parent == -1 && slot.OriginClient == -1 && slot.ROriginClient == -1 && content == null && Slab.GetKey(s.Handle) == null
+            return slot.Info == Slot.DeletedFlag && slot.Payload == 0 && slot.Left == -1 && slot.Right == -1 && slot.Parent == -1 && slot.OriginClient == -1 && slot.ROriginClient == -1 && content == null && Slab.GetKey(s.Handle) == null
                 ? null
                 : $"the slot of the GC struct {id} holds more than a range";
         }
 
-        if (slot.Kind != (int)SlotKind.Type && slot.Payload != 0)
+        if (slot.Kind is not ((int)SlotKind.Type or (int)SlotKind.String) && slot.Payload != 0)
         {
             return $"the slot of {id} of kind {(SlotKind)slot.Kind} holds the payload {slot.Payload}";
         }
@@ -301,6 +301,56 @@ internal sealed partial class StructStore
                 if ((SlotViolation(structs[i]) ?? LinkViolation(structs[i])) is { } violation)
                 {
                     return violation;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// What is wrong with the character arena, or null: every String slot's range lies in the used part of a held page
+    /// and equals its object's text, the ranges are disjoint (from each other and from the reservations), the dead count
+    /// equals a recount and the tail table names only the ends of live ranges (<see cref="Arena{T}.Violations"/>). A
+    /// store of more than 4,096 slots is checked every count/32nd time.
+    /// </summary>
+    private string CharsViolation()
+    {
+        if (Slab.LiveCount > 4096 && _checks % (Slab.LiveCount / 32) != 0)
+        {
+            return null;
+        }
+
+        var ranges = new List<(long Offset, int Length)>();
+        foreach (var list in Clients.Values)
+        {
+            foreach (var s in list)
+            {
+                if (s.IsItem && s.Kind == SlotKind.String)
+                {
+                    ranges.Add((Slab.Read(s.Handle).Payload, s.Length));
+                }
+            }
+        }
+
+        var chars = Slab.CharsOrNull;
+        if (chars == null)
+        {
+            return ranges.Count == 0 ? null : "String items hold ranges of an arena that was never made";
+        }
+
+        if (chars.Violations(ranges).FirstOrDefault() is { } violation)
+        {
+            return violation;
+        }
+
+        foreach (var list in Clients.Values)
+        {
+            foreach (var s in list)
+            {
+                if (s.IsItem && s.Kind == SlotKind.String && !chars.Slice(Slab.Read(s.Handle).Payload, s.Length).SequenceEqual(((ContentString)s.Content).GetString()))
+                {
+                    return $"the range of {s.Id.Client}:{s.Id.Clock} differs from its text";
                 }
             }
         }

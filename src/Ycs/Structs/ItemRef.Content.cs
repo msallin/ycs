@@ -107,7 +107,12 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
-    internal void AppendChars(string text) => Typed<ContentString>(SlotKind.String).Append(text);
+    internal void AppendChars(string text)
+    {
+        Typed<ContentString>(SlotKind.String).Append(text);
+        ref var slot = ref Write();
+        slot.Payload = _slab.Chars.Extend(slot.Payload, slot.Length, text);
+    }
 
     /// <summary>Appends <paramref name="values"/> to a <see cref="SlotKind.Any"/> item; the caller adjusts <see cref="Length"/>.</summary>
     internal void AppendValues(List<object> values) => Typed<ContentAny>(SlotKind.Any).Append(values);

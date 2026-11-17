@@ -116,6 +116,10 @@ internal readonly partial struct ItemRef
         else if (content is not ContentDeleted)
         {
             slab.SetRef(item._handle, content);
+            if (content is ContentString text)
+            {
+                slot.Payload = CopyChars(slab, text);
+            }
         }
 
         return item;
@@ -306,6 +310,11 @@ internal readonly partial struct ItemRef
                 "Ycs). Nothing was changed.");
         }
 
+        if (Kind == SlotKind.String)
+        {
+            MergeChars(right);
+        }
+
         var parent = Parent;
         parent?.Doc?.Store.NoteDeparture();
         (parent as YArrayBase)?.OnMerge(this, right);
@@ -323,7 +332,7 @@ internal readonly partial struct ItemRef
         }
 
         Length += right.Length;
-        right.FreeSlot();
+        right.FreeSlotKeepingChars();
         return true;
     }
 
@@ -332,6 +341,13 @@ internal readonly partial struct ItemRef
     /// it are stale from here on, and the slot is reused after the outermost batch (<see cref="Slab.AllowReuse"/>).
     /// </summary>
     public void FreeSlot()
+    {
+        ReleaseChars();
+        FreeSlotKeepingChars();
+    }
+
+    // The range of a String is somebody else's already (the left neighbour took it over, or ended it).
+    private void FreeSlotKeepingChars()
     {
         Check();
         if (Kind == SlotKind.Type)
@@ -349,6 +365,7 @@ internal readonly partial struct ItemRef
     /// </summary>
     internal void BecomeGC()
     {
+        ReleaseChars();
         ref var slot = ref Write();
         if (slot.Kind == (int)SlotKind.Type)
         {
@@ -497,6 +514,11 @@ internal readonly partial struct ItemRef
                     throw TypeContent.Unsplittable();
                 default:
                     Content = (IContentEx)Content.Splice(offset);
+                    if (Kind == SlotKind.String)
+                    {
+                        CutCharsHead(offset);
+                    }
+
                     break;
             }
 
@@ -703,6 +725,7 @@ internal readonly partial struct ItemRef
     // Countable stays what the content was (Yjs' item.countable is not touched by gc); no object is held.
     private void BecomeDeletedContent()
     {
+        ReleaseChars();
         ref var slot = ref Write();
         slot.Info = (slot.Info & ~(0xFF << 8)) | (ContentDeleted._ref << 8);
         slot.Payload = 0;
@@ -776,6 +799,7 @@ internal readonly partial struct ItemRef
         }
 
         var content = kind == SlotKind.Deleted ? null : (IContentEx)Content.Splice(diff);
+        var rightChars = kind == SlotKind.String ? SplitChars(diff) : 0;
         var rightLength = kind == SlotKind.Deleted ? Length - diff : content.Length;
         var parent = Parent;
         var parentSub = ParentSub;
@@ -804,6 +828,7 @@ internal readonly partial struct ItemRef
         right.Left = _handle;
         right.Right = left.Right;
         right.Parent = parentIndex;
+        right.Payload = rightChars;
 
         if ((left.Info & Slot.HasRedoneFlag) != 0)
         {

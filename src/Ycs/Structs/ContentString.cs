@@ -69,6 +69,13 @@ internal class ContentString : IContentEx
         return _string;
     }
 
+    /// <summary>The text as a span when it is held as a string (not in a builder), without materializing it.</summary>
+    internal bool TryGetSpan(out ReadOnlySpan<char> text)
+    {
+        text = _builder == null ? Slice : default;
+        return _builder == null;
+    }
+
     /// <summary>Copies the text into <paramref name="destination"/>, which is at least <see cref="Length"/> long.</summary>
     internal void CopyTo(Span<char> destination)
     {

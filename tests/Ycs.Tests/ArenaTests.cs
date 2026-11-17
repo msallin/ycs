@@ -8,6 +8,22 @@ namespace Ycs;
 [TestClass]
 public class ArenaTests
 {
+    // These tests state page sizes of their own: the run mode's (YCS_ARENA_PAGE) is off while one runs.
+    private static (int First, int Max) _mode;
+
+    [ClassInitialize]
+    public static void SaveMode(TestContext context) => _mode = (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests);
+
+    [TestInitialize]
+    public void NoMode()
+    {
+        Arena<char>.FirstPageForTests = 0;
+        Arena<char>.MaxPageForTests = 0;
+    }
+
+    [TestCleanup]
+    public void RestoreMode() => (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests) = _mode;
+
     private static char[] Text(int length, char from = 'a') => Enumerable.Range(0, length).Select(i => (char)(from + i % 26)).ToArray();
 
     private static char[] Fill(int length, char c) => new string(c, length).ToCharArray();
@@ -523,5 +539,25 @@ public class ArenaTests
                 current.Offset = n;
             });
         }
+    }
+
+    [TestMethod]
+    public void Overwrite_WithinTheUsedPart_ReplacesTheElementsAndChangesNoCount()
+    {
+        var arena = new Arena<char>(8, 8);
+        var offset = arena.Append(Text(4));
+
+        arena.Overwrite(offset + 1, ['X', 'Y']);
+
+        Assert.AreEqual(("aXYd", 4L, 0L), (arena.Slice(offset, 4).ToString(), arena.Live, arena.Dead));
+    }
+
+    [TestMethod]
+    public void Overwrite_PastTheUsedPart_Throws()
+    {
+        var arena = new Arena<char>(8, 8);
+        var offset = arena.Append(Text(4));
+
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => arena.Overwrite(offset + 3, ['X', 'Y']));
     }
 }
