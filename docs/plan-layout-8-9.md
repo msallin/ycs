@@ -15,7 +15,7 @@ coordinator merges the rows).
 ## Decisions
 
 * **Garbage in the arenas** is collected content and copied-away runs only: a deleted but uncollected item keeps and
-  encodes its content (gc off, kept items, snapshots). Design 2.3 is to be corrected accordingly (8.12).
+  encodes its content (gc off, kept items, snapshots). Design 2.3 says so.
 * **D1, slack**: a tail table in the arena, keyed by a run's end offset, giving its reservation end; a split and an
   adjacent merge keep the end; compaction clears the table. No slot field.
 * **D2, runs longer than a page** get a page of their own with as much room again (the large object heap is accepted
@@ -40,7 +40,7 @@ coordinator merges the rows).
   pending struct, which takes the reader's table when the struct moves whole and is `Truncate`d and copied into when it is
   cut). A streaming table forgets the clients it streamed past beyond 64. `DecodeUpdate` owns a table of its own. Moving
   staging pages into an empty document's arena is deferred until measured.
-* **Staging is not the slab** (design 2.5 says "the same slots"): a staged struct has no type-table index and no
+* **Staging is not the slab** (design 2.5): a staged struct has no type-table index and no
   `YType` yet, so its client, parent and payload mean other things (9.0).
 * **The model's split is not ported**: `Countable` comes from the right part's kind, as Yjs takes it from the spliced
   content (`ContentDeleted` is not countable), not copied from `Info`.
@@ -67,7 +67,23 @@ as spans), 9.2 (`StructCursor.NextStaged`; `UpdateReader` always stages), 9.3 (`
 (the integration plan on staging), 9.4b (detached views on staging), 9.4c (the garbage-collection pre-check on staged
 items), 9.5 (adoption from staging; the `YType` is created at adoption), 9.6 (decoded objects removed: a load allocates no
 `Item`, `GC`, `Skip` or hot content object; `ContentJson.Tail` builds the right part of an offset adoption without
-changing the table). Open: 8.13, 8.12.
+changing the table). 8.13 (the performance pass, measured against 044bb73): four changes kept, each measured alone: `WriteItem` reads
+the slot once (`encode-v1` -6.7 %), `read-array` copies an Any run into a rented array (0 B allocated instead of 7.63 MiB; -10 %), the
+leaf scan of the marker walks (`ClientStructs.SeekRight`/`SeekLeft` through the flags and starts arrays, about -8 %) and the walk to
+the left jumping to the run head after 8 steps instead of 32 (about -15 % more): observed typing -21 to -23 %, `array-delete-random`
+-15 %. The gaps that remain against the object layout, under load 0.75 to 4: `trace-replay` +19 % (the deletes' dependent loads
+through two arrays per step), `text-append` +26 %, mid-document typing +30 %, `text-append-1txn-observed-25k` +22 %,
+`map-set-same` +15 %, `array-push` +8 % and `array-push-1txn` +10 %: spread over the transaction, with no phase above 10 %; several
+hypotheses (one-read `MarkDeleted`, `ExtendRun`, `NewItem` without the key and parent round trip, the inlinable `Transaction`
+getters) measured nothing and were dropped (bench/Ycs.Compare/README.md, "Step 8 and 9 against the object layout"). 8.12
+(the docs describe the code as it is: design 1.8, 1.9, 2.1 to 2.5 and 4; the walkthroughs, `compatibility.md`, `api.md` and
+`untrusted-input.md` figures; the held-memory and allocation table against 044bb73 and `bench/Ycs.Layout small` rerun, README
+"Step 8 and 9: allocation and held memory"; no budget row had slack beyond the 15 % of its convention). The aliases `ID` and
+`AbstractType` are removed from the code (12e5ea7) and the `#nullable disable` cleanup of the public files (plan-api.md, A13) runs
+elsewhere.
+
+Open: a clean timing round of the whole table (the machine was never quiet while steps 8 and 9 were measured); the remaining gaps
+of 8.13 above; the open risks without a package (below).
 
 ## Step 8: inline content and the arenas
 
@@ -80,8 +96,8 @@ changing the table). Open: 8.13, 8.12.
 | 8.6 | String objects removed from the store | `ItemRef.Chars.cs` (`New(..., ReadOnlySpan<char>)`, `StoreChars`), `ItemRef.Content.cs` (`StoreContent` without a `ContentString` case; `NewCopyOf` for the undo manager's redo), `Utils/SlotKind.cs` (`HasObject`: String false), `Structs/ContentString.cs` (the decoded form only: the string and `Read`/`Write`), `Utils/StructStore.Checks.cs` (the mirror comparison goes; a String slot holds no object), `Types/YText.cs` (the two `new ContentString` call sites), `Utils/UndoManager.cs` (`NewCopyOf`); `CharArenaShadowTests` → `CharArenaTests`; `ContentStringTests`; budget rows | no `ContentString` is allocated for a store item: a local insert copies the caller's string into the arena, a redo copies the item's range, `Adopt` copies the decoded string (until 9.5); the arena is the one source of a String's text | budgets lowered: `text.type-100k-in-one-transaction` (about 530 KB, D2), `text.insert-char-at-caret-100k`, `undo.*`, `text.to-string-after-edit-100k`; the IL test's allow-list shrinks; corpus, soak, `COMPARE_ALLOC_TYPES=1` shows no `ContentString` on the editing workloads | medium |
 | 8.7 | value arena for Any: shadow and reads | `ItemRef.Values.cs`, `ItemRef.Content.Collections.cs`, `ItemRef.Write.cs` (the Any branch), `Utils/Slab.cs` (`Values`), `Utils/StructStore.Compaction.cs` (the second arena; a moved range's old values cleared), new `Utils/StructStore.Checks.Values.cs`, `Utils/StructStore.ForTests.cs` (one hook line), `Structs/ContentAny.cs` (a span of its list); new `ValueArenaShadowTests.cs`; budget rows | every live Any slot's range equals its object's values; the 8.3 invariants for values (disjoint, inside a used part, dead recount, no range on a collected slot, a split gives payload + diff, a merge extends or copies with slack); a range's values are nulled (`Arena.Clear`) at gc, at `ReplaceWithGC`, at `BecomeGC`, when a run is copied away (D4) and when a never-integrated item's slot is freed (`Adopt`'s failure path); `ValueAt` applies `ValueFreezer.OnRead` as today | check after every transaction with tiny pages and copy-on-merge; weak references: a value is collectible after delete+gc, after a copying merge then delete+gc, after a nested type's collection, after a failed adoption, all before any compaction; forced compaction modes. Sabotage: no nulling of a copied-away range; a compaction that moves a range without clearing the old one | high, *full review* |
 | 8.8 | Any objects removed | `ItemRef.Values.cs` (`New(..., ReadOnlySpan<object>)`, `StoreValues`), `ItemRef.Content.cs` (`StoreContent`, `NewCopyOf`), `ItemRef.Content.Collections.cs`, `ItemRef.Content.Other.cs` (`Elements`), `Utils/SlotKind.cs`, `Structs/ContentAny.cs` (decoded only), `Utils/StructStore.Checks.Values.cs`, `Types/YArrayBase.cs` (`ContentAny.Own` → the span overload; `_spareValues` stays the insert's buffer), `Types/YType.Api.cs` (`ContentAny.Single`), `Types/YType.cs` (the poison hook's item); budget rows | no `ContentAny` for a store item; `Values`/`Elements` of an Any item is a read-only view over the arena range (one small object, as `ContentView` was), valid until the item changes | `array.push-100k-in-one-transaction`, `map.set-existing-key`, `array.delete-random-100k` lowered; `COMPARE_ALLOC_TYPES=1`; the IL allow-list shrinks to the cold kinds | medium |
-| 8.13 | performance pass (below) | `ItemRef.Write.cs`, `ItemRef.Runs.cs`, `ItemRef.Operations.cs`, `Utils/Arena.cs`, `Utils/Slab.cs`, `Utils/DeleteSet.cs`, `Utils/EncodingUtils.cs`, `Utils/ClientStructs*.cs`, `Utils/Transaction.cs`, `Types/YText.cs`, `Types/YArrayBase.cs`; `bench/Ycs.Compare/README.md`, `results/`; budget rows | no semantic change: corpus byte for byte, every suite; each commit one hypothesis, kept when `ab.py` shows ≥ 3 % on its workload (or the code is simpler) | `ab.py 4 6` on a quiet machine (load under 1.5), 044bb73 against the branch; the budgets re-baselined | low |
-| 8.12 | measurements and docs for steps 8 and 9 (9.7 merged into it) | `docs/*`, `bench/Ycs.Compare/README.md`, `Budgets.cs` | design 1.8/1.9 describe the code as it is; the corrections owed below are made; the held-memory table against 044bb73 | `ab.py`; `bench/Ycs.Layout small` rerun on the built layout | low |
+| 8.13 | performance pass (below; done) | `ItemRef.Write.cs`, `ItemRef.Runs.cs`, `ItemRef.Operations.cs`, `Utils/Arena.cs`, `Utils/Slab.cs`, `Utils/DeleteSet.cs`, `Utils/EncodingUtils.cs`, `Utils/ClientStructs*.cs`, `Utils/Transaction.cs`, `Types/YText.cs`, `Types/YArrayBase.cs`; `bench/Ycs.Compare/README.md`, `results/`; budget rows | no semantic change: corpus byte for byte, every suite; each commit one hypothesis, kept when `ab.py` shows ≥ 3 % on its workload (or the code is simpler) | `ab.py 4 6` on a quiet machine (load under 1.5), 044bb73 against the branch; the budgets re-baselined | low |
+| 8.12 | measurements and docs for steps 8 and 9 (9.7 merged into it; done) | `docs/*`, `bench/Ycs.Compare/README.md`, `Budgets.cs` | design 1.8/1.9 describe the code as it is; the corrections owed below are made; the held-memory table against 044bb73 | `ab.py`; `bench/Ycs.Layout small` rerun on the built layout | low |
 
 8.11 is not built (D5). 8.9 and 8.10 are done.
 
@@ -138,7 +154,7 @@ Hypotheses, from reading the hot paths (the numbers in parentheses are the extra
 implies, to be rechecked):
 
 1. **`encode-v1`** (+1.3 ms over 10 encodings of the trace document). `ItemRef.WriteItem` reads the slot through about
-   ten accessors, each an indexed read with two bounds checks; `LeftOrigin` and `RightOrigin` are built as `ID?` twice
+   ten accessors, each an indexed read with two bounds checks; `LeftOrigin` and `RightOrigin` are built as `ItemId?` twice
    (the parent test, then the header), `Kind` twice, `Id`, `Length`, `ParentSub` and `Content` once each;
    `EncodingUtils.WriteStructs` reads `structs[i]` through the leaf directory for every i. Change: `WriteItem` takes one
    `ref readonly Slot` and writes the clients from the client table straight off it; `WriteStructs` walks the leaves
@@ -206,13 +222,13 @@ and after compaction, which stays the check after 8.6 and 8.8 when no object rem
   ranges and the object lists (both in decode order; `AddStackToRestSS` cuts a range where it cut a list), a view that
   outlives its table (D7).
 
-Design corrections owed (8.12): design 2.3's garbage rule; design 2.5 ("the same slots"); the file lists of steps 8
+Design corrections made in 8.12: design 2.3's garbage rule; design 2.5 ("the same slots"); the file lists of steps 8
 and 9 in design section 4 (step 8 also `ItemRef.Adopt`, `UndoManager.cs`, `YEvent.cs`, `PermanentUserData.cs`,
 `YXmlFragment.cs`, `YMap.cs`, `YArray.cs`, `YType*.cs`, `AbsolutePosition.cs`, `YDoc.cs`, `StructStore.IntegrationPlan.cs`,
 `ContentType.cs`, `TypeContent.cs`, `ItemView.cs`, `Transaction.cs`, `TypeTable.cs`, `Slab.cs`, `SlotKind.cs`; step 9 also
 `EncodingUtils.cs`, `LazyStructWriter.cs`, `StructStore.Pending.cs`, `Lib0Reader.cs`, `StringDecoder.cs`, `ItemView.cs`,
 `DecodedStruct.cs`, `PlanItem.cs`, `StructStaging.cs`, and `Item.cs`/`GC.cs`/`Skip.cs`/`AbstractStruct.cs` for the
-removal); the design's `AbstractType` is `YType` in the code; a new 1.8 and 1.9 as the code is.
+removal); the design's `AbstractType` is `YType` and its `ID` is `ItemId`; a new 1.8 and 1.9 as the code is.
 
 ## Risks, and what each full review looks for
 
