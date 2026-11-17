@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
 
@@ -47,7 +46,7 @@ internal class DeleteSet
     public Dictionary<long, List<DeleteItem>> Clients { get; }
 
     // Lists of a transaction's set, kept by ClearForReuse for the next transaction (nobody else holds them then).
-    private Stack<List<DeleteItem>> _spare;
+    private Stack<List<DeleteItem>>? _spare;
 
     public void Add(long client, long clock, long length)
     {
@@ -439,7 +438,7 @@ internal class DeleteSet
     {
         foreach (var (client, structs) in ss.Clients)
         {
-            List<DeleteItem> dsItems = null;
+            List<DeleteItem>? dsItems = null;
             for (var i = 0; NextDeletedRange(structs, ref i, out var clock, out var length);)
             {
                 dsItems ??= new List<DeleteItem>();
@@ -494,7 +493,7 @@ internal class DeleteSet
     public void Write(IDSEncoder encoder)
     {
         var count = Clients.Count;
-        long[] rented = null;
+        long[]? rented = null;
         Span<long> clients = count <= EncodingUtils.StackClients ? stackalloc long[EncodingUtils.StackClients] : (rented = BufferPool<long>.Rent(count));
         try
         {
@@ -546,8 +545,8 @@ internal class DeleteSet
     {
         var clientStructs = store.Clients;
         var capacity = clientStructs.Count;
-        long[] rentedClients = null;
-        long[] rentedCounts = null;
+        long[]? rentedClients = null;
+        long[]? rentedCounts = null;
         Span<long> clients = capacity <= EncodingUtils.StackClients ? stackalloc long[EncodingUtils.StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
         Span<long> rangeCounts = capacity <= EncodingUtils.StackClients ? stackalloc long[EncodingUtils.StackClients] : (rentedCounts = BufferPool<long>.Rent(capacity));
         try
@@ -594,7 +593,7 @@ internal class DeleteSet
             if (rentedClients != null)
             {
                 BufferPool<long>.Return(rentedClients);
-                BufferPool<long>.Return(rentedCounts);
+                BufferPool<long>.Return(rentedCounts!); // Rented with rentedClients.
             }
         }
     }
@@ -614,7 +613,7 @@ internal class DeleteSet
     /// <see cref="Read"/> into the empty <paramref name="ds"/>, taking the per-client lists from
     /// <paramref name="spareLists"/> while it has any (on an exception, the lists taken are in <paramref name="ds"/>).
     /// </summary>
-    public static void ReadInto(IDSDecoder decoder, DeleteSet ds, Stack<List<DeleteItem>> spareLists)
+    public static void ReadInto(IDSDecoder decoder, DeleteSet ds, Stack<List<DeleteItem>>? spareLists)
     {
         Debug.Assert(ds.Clients.Count == 0);
         var numClients = decoder.Reader.ReadVarUint();

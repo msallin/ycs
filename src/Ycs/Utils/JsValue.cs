@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Collections;
 using System.Globalization;
@@ -27,7 +26,7 @@ internal static class JsValue
     /// <see cref="int"/>, a <see cref="long"/>, or a <see cref="double"/> without a fraction within
     /// the safe integers (JavaScript has one number type).
     /// </summary>
-    public static bool IsInteger(object value, out long integer)
+    public static bool IsInteger(object? value, out long integer)
     {
         switch (value)
         {
@@ -47,7 +46,7 @@ internal static class JsValue
     }
 
     /// <summary>JavaScript's truthiness, for the values of the 'any' encoding.</summary>
-    public static bool Truthy(object value) => value switch
+    public static bool Truthy(object? value) => value switch
     {
         null => false,
         bool b => b,
@@ -66,7 +65,7 @@ internal static class JsValue
     /// <c>[object Object]</c>, a list joined with commas (null as nothing), a text or an XML type
     /// as its string, any other shared type as an object.
     /// </summary>
-    public static string ToJsString(object value) => value switch
+    public static string ToJsString(object? value) => value switch
     {
         null => "null",
         string s => s,
@@ -76,7 +75,7 @@ internal static class JsValue
         decimal m => JsNumber((double)m),
         System.Numerics.BigInteger i => i.ToString(CultureInfo.InvariantCulture),
         IFormattable n when n is int or long or short or sbyte or byte or ushort or uint or ulong => JsNumber(Convert.ToDouble(n, CultureInfo.InvariantCulture)),
-        YText or YXmlFragment => value.ToString(),
+        YText or YXmlFragment => value.ToString()!,
         IList list => JsJoin(list),
         _ => "[object Object]",
     };
@@ -159,7 +158,7 @@ internal static class JsValue
     /// JavaScript's <c>===</c> on the values an attribute can hold: numbers by value (whatever their
     /// CLR type), strings, booleans and big integers by value, maps, lists and byte arrays by reference.
     /// </summary>
-    public static bool StrictEquals(object a, object b)
+    public static bool StrictEquals(object? a, object? b)
     {
         if (ReferenceEquals(a, b))
         {
@@ -180,7 +179,7 @@ internal static class JsValue
 
         return TryGetNumber(a, out var na) && TryGetNumber(b, out var nb) && na == nb;
 
-        static bool TryGetNumber(object value, out double number)
+        static bool TryGetNumber(object? value, out double number)
         {
             switch (value)
             {

@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Buffers;
 using System.Diagnostics;
@@ -73,8 +72,8 @@ internal static class EncodingUtils
     {
         var clientStructs = store.Clients;
         var capacity = clientStructs.Count;
-        long[] rentedClients = null;
-        long[] rentedClocks = null;
+        long[]? rentedClients = null;
+        long[]? rentedClocks = null;
         Span<long> clients = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
         Span<long> clocks = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClocks = BufferPool<long>.Rent(capacity));
         try
@@ -110,7 +109,7 @@ internal static class EncodingUtils
             if (rentedClients != null)
             {
                 BufferPool<long>.Return(rentedClients);
-                BufferPool<long>.Return(rentedClocks);
+                BufferPool<long>.Return(rentedClocks!); // Rented with rentedClients.
             }
         }
     }
@@ -132,7 +131,7 @@ internal static class EncodingUtils
     public static byte[] EncodeStateAsUpdate(StructStore store, ReadOnlySpan<byte> encodedTargetStateVector, bool v2)
     {
         var targetStateVector = TargetStateVector.Rent();
-        IUpdateEncoder encoder = null;
+        IUpdateEncoder? encoder = null;
         try
         {
             var target = targetStateVector.Decode(encodedTargetStateVector);
@@ -158,7 +157,7 @@ internal static class EncodingUtils
     {
         ArgumentNullException.ThrowIfNull(destination);
         var targetStateVector = TargetStateVector.Rent();
-        IUpdateEncoder encoder = null;
+        IUpdateEncoder? encoder = null;
         try
         {
             var target = targetStateVector.Decode(encodedTargetStateVector);
@@ -223,7 +222,7 @@ internal static class EncodingUtils
         }
     }
 
-    internal static void ReturnEncoder(IUpdateEncoder encoder)
+    internal static void ReturnEncoder(IUpdateEncoder? encoder)
     {
         switch (encoder)
         {
@@ -248,21 +247,21 @@ internal static class EncodingUtils
     {
         private readonly IUpdateDecoder _decoder;
         private readonly long _sections;
-        private readonly HashSet<long> _clients;
+        private readonly HashSet<long>? _clients;
         private StagingTable _staging;
         private long _section;
         private long _structsLeft;
         private long _structCount;
         private long _client;
         private long _clock;
-        private object[] _values;
+        private object?[]? _values;
 
         /// <param name="seenClients">An empty set to find a client listed twice; one is created when needed if null.</param>
         /// <param name="staging">
         /// An empty table that takes the structs read: one client range per section, one staged struct per struct.
         /// The cursor only appends; the table's owner resets it.
         /// </param>
-        public StructCursor(IUpdateDecoder decoder, StagingTable staging, HashSet<long> seenClients = null)
+        public StructCursor(IUpdateDecoder decoder, StagingTable staging, HashSet<long>? seenClients = null)
         {
             _decoder = decoder;
             _staging = staging;
@@ -326,7 +325,7 @@ internal static class EncodingUtils
     }
 
     // The struct is added once it is read whole, when its length is known.
-    private static int StageStruct(IUpdateDecoder decoder, StagingTable table, long client, long clock, ref object[] values)
+    private static int StageStruct(IUpdateDecoder decoder, StagingTable table, long client, long clock, ref object?[]? values)
     {
         var id = new ItemId(client, clock);
         var info = decoder.ReadInfo();
@@ -346,9 +345,9 @@ internal static class EncodingUtils
         var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ItemId?)CheckEarlier(decoder.ReadLeftId(), id) : null;
         var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ItemId?)CheckEarlier(decoder.ReadRightId(), id) : null;
 
-        string parentName = null;
+        string? parentName = null;
         ItemId? parentId = null;
-        string parentSub = null;
+        string? parentSub = null;
         if ((info & (Bit.Bit7 | Bit.Bit8)) == 0)
         {
             if (decoder.ReadParentInfo())
@@ -379,7 +378,7 @@ internal static class EncodingUtils
                 break;
             case 8:
                 var count = decoder.ReadLength();
-                values ??= new object[16];
+                values ??= new object?[16];
                 for (var v = 0; v < count; v++)
                 {
                     if (v == values.Length)
@@ -442,8 +441,8 @@ internal static class EncodingUtils
     public static void WriteStateVector(IDSEncoder encoder, IDictionary<long, long> sv)
     {
         var capacity = sv.Count;
-        long[] rentedClients = null;
-        long[] rentedClocks = null;
+        long[]? rentedClients = null;
+        long[]? rentedClocks = null;
         Span<long> clients = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
         Span<long> clocks = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClocks = BufferPool<long>.Rent(capacity));
         try
@@ -473,7 +472,7 @@ internal static class EncodingUtils
             if (rentedClients != null)
             {
                 BufferPool<long>.Return(rentedClients);
-                BufferPool<long>.Return(rentedClocks);
+                BufferPool<long>.Return(rentedClocks!); // Rented with rentedClients.
             }
         }
     }
@@ -483,8 +482,8 @@ internal static class EncodingUtils
     {
         var clientStructs = store.Clients;
         var capacity = clientStructs.Count;
-        long[] rentedClients = null;
-        long[] rentedClocks = null;
+        long[]? rentedClients = null;
+        long[]? rentedClocks = null;
         Span<long> clients = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
         Span<long> clocks = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClocks = BufferPool<long>.Rent(capacity));
         try
@@ -504,7 +503,7 @@ internal static class EncodingUtils
             if (rentedClients != null)
             {
                 BufferPool<long>.Return(rentedClients);
-                BufferPool<long>.Return(rentedClocks);
+                BufferPool<long>.Return(rentedClocks!); // Rented with rentedClients.
             }
         }
     }
@@ -554,7 +553,7 @@ internal static class EncodingUtils
     private sealed class TargetStateVector
     {
         [ThreadStatic]
-        private static TargetStateVector t_free;
+        private static TargetStateVector? t_free;
 
         private readonly Dictionary<long, long> _stateVector = new();
         private readonly Lib0Reader _reader = new();
