@@ -3,7 +3,7 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-public partial class YDoc
+public sealed partial class YDoc
 {
     /// <summary>The one the options named, or a random one made when it is first read (a document that never reads it costs none).</summary>
     public string Guid => _guid ??= _opts.Guid ?? System.Guid.NewGuid().ToString("D");
@@ -53,6 +53,14 @@ public partial class YDoc
         return _subdocs == null ? new HashSet<string>() : new HashSet<string>(_subdocs.Select(sd => sd.Guid));
     }
 
+    /// <summary>Whether <see cref="Destroy"/> has been called, directly or because the document, as a subdocument, was removed.</summary>
+    public bool IsDestroyed { get; private set; }
+
+    /// <summary>
+    /// Destroys the subdocuments, then this document, and raises <see cref="Destroyed"/> once: a second call raises nothing.
+    /// A removed subdocument raises <see cref="SubdocsChanged"/> twice, as Yjs does (the removal destroys it in a nested
+    /// transaction).
+    /// </summary>
     public void Destroy()
     {
         // A subdocument's Destroy runs a transaction here whose cleanup changes Subdocs.
@@ -90,7 +98,11 @@ public partial class YDoc
             });
         }
 
-        InvokeDestroyed();
+        if (!IsDestroyed)
+        {
+            IsDestroyed = true;
+            InvokeDestroyed();
+        }
     }
 
     public event EventHandler<Transaction>? BeforeObserverCalls

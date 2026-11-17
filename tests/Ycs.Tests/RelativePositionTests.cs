@@ -1,3 +1,4 @@
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -152,5 +153,13 @@ public class RelativePositionTests : YTestBase
     public void FromJson_NotAPosition_ThrowsYUpdateException(string json)
     {
         Assert.ThrowsExactly<YUpdateException>(() => RelativePosition.FromJson(json));
+    }
+
+    [TestMethod]
+    public void FromIndex_TypeOutsideADocument_ThrowsArgumentException()
+    {
+        var e = Assert.ThrowsExactly<ArgumentException>(() => RelativePosition.FromIndex(new YText("a"), 0));
+
+        Assert.AreEqual("The type is not part of a document. (Parameter 'type')", e.Message);
     }
 }

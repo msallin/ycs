@@ -163,4 +163,64 @@ public class YDocTests : YTestBase
 
         Assert.AreEqual("The root 'content' is a YText; it cannot be read as a YMap. Use GetText(\"content\").", ex.Message);
     }
+
+    // A format named second must reach the decoder, not become the origin.
+    [TestMethod]
+    public void ApplyUpdate_FormatAsSecondArgument_AppliesTheV2Update()
+    {
+        var source = new YDoc();
+        source.GetText("t").Insert(0, "abc");
+        var v2 = source.EncodeStateAsUpdate(format: UpdateFormat.V2);
+        var target = new YDoc();
+        var tried = new YDoc();
+
+        target.ApplyUpdate(v2, UpdateFormat.V2);
+        var applied = tried.TryApplyUpdate(v2, UpdateFormat.V2);
+
+        Assert.AreEqual(("abc", true, "abc"), (target.GetText("t").ToString(), applied, tried.GetText("t").ToString()));
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_FormatAndOrigin_OriginReachesTheTransaction()
+    {
+        var source = new YDoc();
+        source.GetText("t").Insert(0, "abc");
+        var target = new YDoc();
+        object? seen = null;
+        target.UpdatedV2 += (_, e) => seen = e.Origin;
+
+        target.ApplyUpdate(source.EncodeStateAsUpdate(format: UpdateFormat.V2), UpdateFormat.V2, "peer");
+
+        Assert.AreEqual("peer", seen);
+    }
+
+    [TestMethod]
+    public void Destroy_CalledTwice_RaisesDestroyedOnce()
+    {
+        var doc = new YDoc();
+        var count = 0;
+        doc.Destroyed += (_, _) => count++;
+
+        doc.Destroy();
+        doc.Destroy();
+
+        Assert.AreEqual((1, true), (count, doc.IsDestroyed));
+    }
+
+    [TestMethod]
+    public void Destroy_RemovedSubdocument_RaisesDestroyedOnceAndSubdocsChangedTwice()
+    {
+        var parent = new YDoc();
+        var sub = new YDoc(new YDocOptions { Guid = "s" });
+        var map = parent.GetMap();
+        map["s"] = sub;
+        var destroyed = 0;
+        var changes = 0;
+        sub.Destroyed += (_, _) => destroyed++;
+        parent.SubdocsChanged += (_, _) => changes++;
+
+        map.Remove("s");
+
+        Assert.AreEqual((1, 2, true), (destroyed, changes, sub.IsDestroyed));
+    }
 }

@@ -45,8 +45,7 @@ var doc = new YDoc(new YDocOptions { GarbageCollection = false });
 
 Other members of `YDoc`: `HasPending` (structs wait for others the document lacks), `CreateSnapshot()`,
 `CreateDocFromSnapshot(snapshot, newDoc?)`, the update and encoding methods ([Encoding and updates](#encoding-and-updates)),
-the events ([Events](#events)), and for subdocuments `GetSubdocGuids()`, `Load()` and `Destroy()` with the `Destroyed`
-event. A document is a value too: `YValue` converts from a `YDoc`, and inserting it makes a subdocument, once: a document that is a subdocument already (until `Destroy()`), the document
+the events ([Events](#events)), and for subdocuments `GetSubdocGuids()`, `Load()` and `Destroy()` (a second call does nothing) with the `Destroyed` event (raised once) and `IsDestroyed`. `YDoc` is sealed. A document is a value too: `YValue` converts from a `YDoc`, and inserting it makes a subdocument, once: a document that is a subdocument already (until `Destroy()`), the document
 it is inserted into and that document's ancestors are refused with an `ArgumentException` before anything is inserted
 (Yjs logs an error and moves the document to the new item; create a second `YDoc` with the same guid instead); `SubdocsChanged`
 raises a `SubdocsEventArgs(Loaded, Added, Removed)` of read-only sets.
@@ -281,10 +280,10 @@ converts to a span implicitly.
 
 | On | Members |
 | --- | --- |
-| `YDoc` | `ApplyUpdate(update, origin = null, format = V1, limits = null)` and `TryApplyUpdate` (the same, returning false for a malformed update); `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
-| `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client; clocks count the positions of the id space, not structs, so a struct of a run covers several), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
+| `YDoc` | `ApplyUpdate(update, origin = null, limits = null)` and `ApplyUpdate(update, format, origin = null, limits = null)`, and `TryApplyUpdate` (the same two, returning false for a malformed update); the format has its own overload, so `ApplyUpdate(bytes, UpdateFormat.V2)` cannot be taken for an origin; `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
+| `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, an `IEnumerable<ReadOnlyMemory<byte>>` or an `IEnumerable<byte[]>` (a `List<byte[]>` log), `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client; clocks count the positions of the id space, not structs, so a struct of a run covers several), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
 | `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`, `Snapshot.Empty`; equality is `Equals`, `==` and `!=` (a decoded snapshot equals the one it was encoded from) |
-| `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree); `ReadSyncMessage` takes `origin = null` as `ApplyUpdate` does |
+| `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree); `ReadSyncMessage(message, reply, doc, origin = null)` and `ReadSyncMessage(message, reply, doc, format, origin = null)` as `ApplyUpdate`; `CreateUpdateMessage(update)` returns the whole sync update message in one array |
 
 `Merge` of a single update returns a copy of it, unchecked, as Yjs returns it.
 
@@ -306,7 +305,7 @@ sticks to the character after it) or `Before` (-1, to the one before); a peer's 
 else as `After`.
 
 ```csharp
-var position = RelativePosition.FromIndex(text, 3);          // Assoc.After by default, or Assoc.Before
+var position = RelativePosition.FromIndex(text, 3);          // Assoc.After by default, or Assoc.Before; ArgumentException for a type outside a document
 text.Insert(0, "abc");
 if (position.TryResolve(doc, out var absolute))              // false: names a struct the document lacks or collected
 {
@@ -335,7 +334,8 @@ scope; adding the document makes the manager track the whole document (`TracksWh
 only). `Undo()` and `Redo()` return the `StackItem`, or null when there was nothing to do; `CanUndo`, `CanRedo`, `UndoStack`,
 `RedoStack`, `CurrentStackItem`, `StopCapturing()`, `Clear(undoStack, redoStack)`, `AddTrackedOrigin`,
 `RemoveTrackedOrigin`. A `StackItem` has a `Meta` dictionary of your own. The manager is `IDisposable`: dispose it to
-unhook it from the document.
+unhook it from the document; afterwards the members that change it throw `ObjectDisposedException`, while the stacks and
+`CanUndo`/`CanRedo` stay readable.
 
 `UndoManagerOptions` is a sealed record with `init` properties:
 
@@ -360,9 +360,9 @@ ChangedParentTypes, Origin)` (`Operation` is an `UndoOperation`, `Undo` or `Redo
 
 - `WriteSyncStep1(destination, doc)`: the document's state vector, which asks the peer for what the document lacks.
 - `WriteSyncStep2(destination, doc, encodedStateVector, format)`: what a peer with that state vector lacks.
-- `WriteUpdate(destination, update)`: one update.
+- `WriteUpdate(destination, update)`: one update; `CreateUpdateMessage(update)`: the message type, the sync type and the update in one new array, for a fan-out that sends the same bytes to many peers.
 
-`ReadSyncMessage(message, reply, doc, origin = null, format = V1)` handles one whole message (a `ReadOnlySpan<byte>` or a
+`ReadSyncMessage(message, reply, doc, origin = null)` (or `ReadSyncMessage(message, reply, doc, format, origin = null)`) handles one whole message (a `ReadOnlySpan<byte>` or a
 `ReadOnlySequence<byte>`; bytes after it are ignored) and returns a `SyncReadResult(Type, Replied)`. A step 1 appends the answer, a step 2, to
 `reply`; a step 2 or an update is applied to `doc` with `origin` and writes nothing. A truncated message, an unknown
 type, or an update that is malformed or beyond a limit throws `YUpdateException`, with the document as it was. Both ends

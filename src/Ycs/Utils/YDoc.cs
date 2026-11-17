@@ -7,7 +7,7 @@ namespace Ycs;
 /// <summary>
 /// Yjs instance handles the state of shared data.
 /// </summary>
-public partial class YDoc
+public sealed partial class YDoc
 {
     private readonly YDocOptions _opts;
 

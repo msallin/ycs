@@ -1,6 +1,6 @@
 namespace Ycs;
 
-public partial class YDoc
+public sealed partial class YDoc
 {
     /// <summary>The JSON of this document as Yjs' <c>Doc.toJSON()</c>: each root type by name; a root nobody defined yet is left out.</summary>
     internal List<KeyValuePair<string, object?>> JsonRoots()

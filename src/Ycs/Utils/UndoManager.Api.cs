@@ -94,6 +94,7 @@ public sealed partial class UndoManager : IDisposable
     /// <summary>Extends the scope by a type (and the types inside it); one already in the scope is skipped.</summary>
     public void AddToScope(YType type)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(type);
         if (!_scope.Contains(type))
         {
@@ -103,6 +104,7 @@ public sealed partial class UndoManager : IDisposable
 
     public void AddToScope(IEnumerable<YType> types)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(types);
         foreach (var type in types)
         {
@@ -114,6 +116,7 @@ public sealed partial class UndoManager : IDisposable
     /// <exception cref="ArgumentException">It is not the document of this manager.</exception>
     public void AddToScope(YDoc doc)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         ArgumentNullException.ThrowIfNull(doc);
         if (doc != _doc)
         {
@@ -127,15 +130,24 @@ public sealed partial class UndoManager : IDisposable
     /// Captures the transactions of an origin as well (by equality, or by type: a transaction whose origin is of
     /// the given <see cref="Type"/>). Null is the origin of a transaction made without one.
     /// </summary>
-    public void AddTrackedOrigin(object? origin) => _trackedOrigins.Add(origin);
+    public void AddTrackedOrigin(object? origin)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _trackedOrigins.Add(origin);
+    }
 
-    public void RemoveTrackedOrigin(object? origin) => _trackedOrigins.Remove(origin);
+    public void RemoveTrackedOrigin(object? origin)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _trackedOrigins.Remove(origin);
+    }
 
     /// <summary>
     /// Empties the undo and/or the redo stack and lets the deleted items they kept be garbage collected.
     /// </summary>
     public void Clear(bool undoStack = true, bool redoStack = true)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (!((undoStack && CanUndo) || (redoStack && CanRedo)))
         {
             return;
@@ -171,12 +183,17 @@ public sealed partial class UndoManager : IDisposable
     /// Changes are merged into one stack item while they come within the capture timeout of each other;
     /// after this call the next change starts a new one.
     /// </summary>
-    public void StopCapturing() => _lastChange = null;
+    public void StopCapturing()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _lastChange = null;
+    }
 
     /// <summary>Undoes the last stack item that changes the document.</summary>
     /// <returns>The stack item, or null when none changed anything.</returns>
     public StackItem? Undo()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _undoing = true;
         try
         {
@@ -192,6 +209,7 @@ public sealed partial class UndoManager : IDisposable
     /// <returns>The stack item, or null when none changed anything.</returns>
     public StackItem? Redo()
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         _redoing = true;
         try
         {
@@ -203,7 +221,7 @@ public sealed partial class UndoManager : IDisposable
         }
     }
 
-    /// <summary>Unhooks this manager from its document; the stacks stay readable. Safe to call more than once.</summary>
+    /// <summary>Unhooks this manager from its document; the stacks and <see cref="CanUndo"/> stay readable, every member that changes it throws <see cref="ObjectDisposedException"/>. Safe to call more than once.</summary>
     public void Dispose()
     {
         if (_disposed)

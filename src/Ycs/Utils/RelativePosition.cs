@@ -28,9 +28,14 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
     /// <see cref="Decode"/> reads back from <see cref="Encode()"/>: the item when there is one, else the root type's
     /// name, else the id of the type.
     /// </summary>
+    /// <exception cref="ArgumentException">The type is not part of a document.</exception>
     public static RelativePosition FromIndex(YType type, int index, Assoc assoc = Assoc.After)
     {
         ArgumentNullException.ThrowIfNull(type);
+        if (type.Doc == null)
+        {
+            throw new ArgumentException("The type is not part of a document.", nameof(type));
+        }
 
         if ((int)assoc < 0)
         {

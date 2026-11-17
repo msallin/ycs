@@ -1,6 +1,6 @@
 namespace Ycs;
 
-public partial class YDoc
+public sealed partial class YDoc
 {
     /// <summary>Yjs: <c>doc.getXmlFragment(name)</c>.</summary>
     public YXmlFragment GetXmlFragment(string name = "") => Get<YXmlFragment>(name);

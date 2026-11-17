@@ -264,8 +264,11 @@ enum Ycs.SyncMessageType : uint
 static class Ycs.SyncProtocol
     const uint MessageAwareness = 1
     const uint MessageSync = 0
-    static SyncReadResult ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin = null, UpdateFormat format = 0)
-    static SyncReadResult ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin = null, UpdateFormat format = 0)
+    static SyncReadResult ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, UpdateFormat format, object? origin = null)
+    static SyncReadResult ReadSyncMessage(System.Buffers.ReadOnlySequence<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin = null)
+    static SyncReadResult ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, UpdateFormat format, object? origin = null)
+    static SyncReadResult ReadSyncMessage(System.ReadOnlySpan<byte> message, System.Buffers.IBufferWriter<byte> reply, YDoc doc, object? origin = null)
+    static byte[] CreateUpdateMessage(System.ReadOnlySpan<byte> update)
     static uint ReadMessageType(System.ReadOnlySpan<byte> message, out System.ReadOnlySpan<byte> body)
     static void WriteMessageType(System.Buffers.IBufferWriter<byte> destination, uint messageType)
     static void WriteSyncStep1(System.Buffers.IBufferWriter<byte> destination, YDoc doc)
@@ -460,7 +463,7 @@ sealed class Ycs.YChanges
     System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
     System.Collections.Generic.IReadOnlySet<ItemView> Added { get; }
     System.Collections.Generic.IReadOnlySet<ItemView> Deleted { get; }
-class Ycs.YDoc
+sealed class Ycs.YDoc
     Snapshot CreateSnapshot()
     System.Collections.Generic.IEnumerable<string> GetSubdocGuids()
     System.Threading.Tasks.Task<TResult?> Transact<TResult>(System.Func<Transaction, System.Threading.Tasks.Task<TResult?>> func, object? origin = null, bool local = true)
@@ -477,8 +480,10 @@ class Ycs.YDoc
     bool AutoLoad { get; }
     bool GarbageCollection { get; }
     bool HasPending { get; }
+    bool IsDestroyed { get; }
     bool ShouldLoad { get; }
-    bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = 0, UpdateLimits? limits = null)
+    bool TryApplyUpdate(System.ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null)
     byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     byte[] EncodeStateVector()
     event System.EventHandler<PendingDrop>? PendingDropped
@@ -495,7 +500,8 @@ class Ycs.YDoc
     long ClientId { get; }
     string Guid { get; }
     string? CollectionId { get; }
-    void ApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = 0, UpdateLimits? limits = null)
+    void ApplyUpdate(System.ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    void ApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null)
     void Destroy()
     void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     void EncodeStateVector(System.Buffers.IBufferWriter<byte> destination)
@@ -595,6 +601,8 @@ static class Ycs.YUpdate
     static byte[] Convert(System.ReadOnlySpan<byte> update, UpdateFormat from, UpdateFormat to, UpdateLimits? limits = null)
     static byte[] Diff(System.ReadOnlySpan<byte> update, System.ReadOnlySpan<byte> stateVector, UpdateFormat format = 0, UpdateLimits? limits = null)
     static byte[] EncodeStateVector(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static byte[] Merge(System.Collections.Generic.IEnumerable<System.ReadOnlyMemory<byte>> updates, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static byte[] Merge(System.Collections.Generic.IEnumerable<byte[]> updates, UpdateFormat format = 0, UpdateLimits? limits = null)
     static byte[] Merge(System.ReadOnlySpan<System.ReadOnlyMemory<byte>> updates, UpdateFormat format = 0, UpdateLimits? limits = null)
     static string Describe(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
 sealed class Ycs.YUpdateException : System.FormatException

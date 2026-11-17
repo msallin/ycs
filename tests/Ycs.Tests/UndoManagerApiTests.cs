@@ -139,4 +139,42 @@ public class UndoManagerApiTests
         Assert.AreEqual((TimeSpan.FromMilliseconds(500), false, null, null), (options.CaptureTimeout, options.IgnoreRemoteMapChanges, options.TrackedOrigins, options.TimeProvider));
         Assert.AreEqual(TimeSpan.Zero, (options with { CaptureTimeout = TimeSpan.Zero }).CaptureTimeout);
     }
+
+    [TestMethod]
+    public void Mutators_AfterDispose_ThrowObjectDisposed()
+    {
+        var doc = new YDoc();
+        var text = doc.GetText();
+        text.Insert(0, "a");
+        var undo = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero });
+        text.Insert(1, "b");
+        undo.Dispose();
+
+        Assert.AreEqual(
+            (true, true, true, true, true, true, true, true, true),
+            (
+                Throws(() => undo.Undo()),
+                Throws(() => undo.Redo()),
+                Throws(() => undo.StopCapturing()),
+                Throws(() => undo.Clear()),
+                Throws(() => undo.AddToScope(text)),
+                Throws(() => undo.AddToScope([text])),
+                Throws(() => undo.AddToScope(doc)),
+                Throws(() => undo.AddTrackedOrigin("x")),
+                Throws(() => undo.RemoveTrackedOrigin("x"))));
+        Assert.AreEqual(("ab", true, false), (text.ToString(), undo.CanUndo, undo.CanRedo));
+
+        static bool Throws(Action action)
+        {
+            try
+            {
+                action();
+                return false;
+            }
+            catch (ObjectDisposedException)
+            {
+                return true;
+            }
+        }
+    }
 }

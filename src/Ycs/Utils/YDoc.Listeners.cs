@@ -1,6 +1,6 @@
 namespace Ycs;
 
-public partial class YDoc
+public sealed partial class YDoc
 {
     /// <summary>
     /// Whether a document-level handler sees transactions after their observers ran, and with them
