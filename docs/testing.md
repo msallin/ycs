@@ -432,6 +432,10 @@ default when unset.
 | Variable | Read by | What it does |
 | --- | --- | --- |
 | `YCS_ACCEPT_API=1` | `PublicApiTests` | writes the current public surface into `tests/Ycs.Tests/PublicApi.txt` instead of comparing |
+| `YCS_ARENA_COPY=1` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | a merge of two String or Any runs always copies the left run to a new place (`ItemRef.CopyOnMergeForTests`), so that the in-place and the copy paths both run |
+| `YCS_ARENA_PAGE=<n>` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | arena pages of at most n characters and n values, the first n/4 (at least 1), so that runs outgrow pages and cross them |
+| `YCS_COMPACT=always\|midbatch` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | `always` compacts the arenas after every transaction's cleanup; `midbatch` also in the middle of a batch (each struct added, each item made, each append to a run, between gc and merge) |
+| `YCS_COMPACT_EVERY=1` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | compacts at every one of those points; without it a store of more than 2,048 slots compacts every count/64th time, so that a test stays linear in its edits |
 | `YCS_CONVERGENCE_SEEDS=<n>` | `Ycs.Corpus` `ConvergenceTests` | runs seeds 1 to n instead of 1 to 40 |
 | `YCS_CORPUS_EXPORT=<dir>` | `Ycs.Corpus` `RoundTripExport` | writes Ycs' answers for the corpus into the directory (set by `interop/corpus/roundtrip.sh`) |
 | `YCS_EXTENSION_FUZZ=<first>:<count>` | `RunExtensionFuzzTests` | runs these seeds of the run-extension fuzz instead of the 300 default (40,000 take about ten minutes) |
