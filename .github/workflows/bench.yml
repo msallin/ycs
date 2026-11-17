@@ -1,0 +1,41 @@
+name: Benchmarks
+
+# One benchmarking round (bench/run-round.sh) on a runner chosen by its labels: a quiet machine of our own, since the
+# numbers are only as good as the load. Run by hand; the results come back as an artifact to commit to the bench READMEs.
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Runner labels, as JSON (e.g. ["self-hosted", "linux"])'
+        default: '["self-hosted"]'
+      baseline:
+        description: 'The commit the ab.py step compares against'
+        default: '044bb73'
+
+jobs:
+  round:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          global-json-file: global.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Round
+        run: bench/run-round.sh "$RUNNER_TEMP/round" "${{ inputs.baseline }}"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: bench-round-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/round
+            !${{ runner.temp }}/round/work
