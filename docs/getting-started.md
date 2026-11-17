@@ -31,7 +31,7 @@ text.Insert(0, "Hello world");
 text.Format(0, 5, [new("bold", true)]);
 foreach (var d in text.ToDelta())
 {
-    Console.WriteLine($"{((Delta.Insert)d).Value} {(d.Attributes is null ? "" : string.Join(",", d.Attributes.Keys))}");
+    Console.WriteLine($"{((Delta.Insert)d).Value.GetString()} {(d.Attributes is null ? "" : string.Join(",", d.Attributes.Keys))}");
 }
 // Hello bold
 //  world
@@ -44,17 +44,20 @@ var tags = new YArray();
 settings["tags"] = tags;
 tags.Add("draft", "review");
 
-Console.WriteLine(settings["theme"]);               // dark
+Console.WriteLine(settings["theme"].GetString());   // dark
 Console.WriteLine(tags.Count);                      // 2
-Console.WriteLine(string.Join(", ", tags[0..2]));   // draft, review
+Console.WriteLine(string.Join(", ", tags[0..2].Select(t => t.GetString())));   // draft, review
 ```
 
+- To store a null, assign `YValue.Null` (`settings["theme"] = null` does not compile: the conversions from `string`,
+  `byte[]`, `YType` and `YDoc` all fit a bare `null`); to remove a key, call `Remove`. A key holding `YValue.Null` is
+  still present.
 - `doc.GetText(name)`, `GetMap`, `GetArray` and the XML getters return the root type of that name, created on first
   use. Peers that use the same name and type share it.
-- Values are `YValue`s: `null`, `bool`, a number, `BigInteger`, `string`, `byte[]`, arrays and objects of those, and
+- Values are `YValue`s: `null`, `bool`, a number, a 64-bit BigInt (`YValue.BigInt(long)`), `string`, `byte[]`, arrays and objects of those, and
   shared types. The implicit conversions cover the scalars, `YValue.FromObject` the CLR lists and dictionaries.
   Anything else is rejected when it is converted. Read one back with `GetString()`, `TryGetInt32(out var n)`, `Kind` and
-  the like.
+  the like. `ToString()` is the JSON text, so a string prints with its quotes.
 - Indexes into a text count UTF-16 code units, as in Yjs and in .NET strings.
 - `YMap` and `YArray` read as a dictionary and a list of `YValue`s: the indexer of a map throws for a missing key and
   `TryGetValue` tells a missing key from a null value; the indexer of an array throws for an index out of range.
@@ -71,7 +74,7 @@ using var subscription = text.Observe(e =>
     {
         Console.WriteLine(d switch
         {
-            Delta.Insert i => $"insert {i.Value}",
+            Delta.Insert i => $"insert {i.Value.GetString()}",
             Delta.Retain r => $"retain {r.Length}",
             Delta.Delete x => $"delete {x.Length}",
             _ => d.ToString(),

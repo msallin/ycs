@@ -130,7 +130,7 @@ public class YArrayShapeTests
         array.RemoveAt(0);
         array.Insert(0, YValue.Null);
 
-        Assert.AreEqual("null,two,3", string.Join(",", array.Select(v => v.ToString())));
+        Assert.AreEqual("null,\"two\",3", string.Join(",", array.Select(v => v.ToString())));
         Assert.AreEqual((3, "two"), (array.Count, array[1].GetString()));
     }
 

@@ -13,7 +13,7 @@ public enum YValueKind
     Number,
 
     /// <summary>A JavaScript BigInt, 64 bits signed.</summary>
-    BigInteger,
+    BigInt,
 
     String,
 

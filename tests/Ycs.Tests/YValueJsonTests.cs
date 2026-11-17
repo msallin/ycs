@@ -46,7 +46,7 @@ public class YValueJsonTests
         sub.GetText("t").Insert(0, "x");
         doc.GetMap("m")["sub"] = sub;
         doc.GetMap("m")["bytes"] = new byte[] { 1, 2, 3, 250 };
-        doc.GetMap("m")["big"] = new BigInteger(long.MinValue);
+        doc.GetMap("m")["big"] = YValue.BigInt(long.MinValue);
 
         Assert.AreEqual(@"{""sub"":{""inner"":{""k"":1},""t"":""x""},""bytes"":""AQID+g=="",""big"":-9223372036854775808}", doc.GetMap("m").ToJsonString());
     }

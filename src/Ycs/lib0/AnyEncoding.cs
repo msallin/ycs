@@ -28,7 +28,7 @@ namespace Ycs;
 /// <see cref="IList"/> (arrays, <c>List&lt;T&gt;</c>); what a document stores has been copied by <see cref="ValueFreezer.Freeze"/>. Numbers follow JavaScript's rules, so the
 /// bytes match what Yjs writes for the same value: an integer within ±(2^31 - 1) is a var-int,
 /// any other number is a float32 if that is exact and a float64 otherwise. An integer beyond
-/// ±(2^53 - 1) has no exact JavaScript number and is rejected; use <see cref="BigInteger"/>.
+/// ±(2^53 - 1) has no exact JavaScript number and is rejected; use <see cref="YValue.BigInt(long)"/>.
 /// </para>
 /// </summary>
 internal static class AnyEncoding

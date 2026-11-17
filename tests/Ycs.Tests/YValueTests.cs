@@ -38,12 +38,12 @@ public class YValueTests
     [TestMethod]
     public void ImplicitConversions_EachType_GivesItsKind()
     {
-        YValue[] values = [true, 1, 2L, 3.5, new BigInteger(4), "s", new byte[] { 1 }, (string?)null, (byte[]?)null, new YMap(), new YDoc()];
+        YValue[] values = [true, 1, 2L, 3.5, YValue.BigInt(4), "s", new byte[] { 1 }, (string?)null, (byte[]?)null, new YMap(), new YDoc()];
 
         CollectionAssert.AreEqual(
             new[]
             {
-                YValueKind.Boolean, YValueKind.Number, YValueKind.Number, YValueKind.Number, YValueKind.BigInteger, YValueKind.String,
+                YValueKind.Boolean, YValueKind.Number, YValueKind.Number, YValueKind.Number, YValueKind.BigInt, YValueKind.String,
                 YValueKind.Bytes, YValueKind.Null, YValueKind.Null, YValueKind.SharedType, YValueKind.Document,
             },
             values.Select(v => v.Kind).ToArray());
@@ -80,11 +80,9 @@ public class YValueTests
     }
 
     [TestMethod]
-    public void ImplicitFromBigInteger_Beyond64Bits_Throws()
+    public void BigInt_Extremes_RoundTrip()
     {
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => { YValue v = BigInteger.Pow(2, 63); });
-        Assert.AreEqual(long.MinValue, (long)(BigInteger)(YValue)new BigInteger(long.MinValue));
-        Assert.AreEqual(new BigInteger(long.MaxValue), ((YValue)new BigInteger(long.MaxValue)).GetBigInteger());
+        Assert.AreEqual((long.MinValue, long.MaxValue), (YValue.BigInt(long.MinValue).GetBigInt(), YValue.BigInt(long.MaxValue).GetBigInt()));
     }
 
     [TestMethod]
@@ -143,7 +141,7 @@ public class YValueTests
         YValue negative = double.NegativeInfinity;
 
         Assert.AreEqual(
-            ("NaN", "Infinity", "-Infinity", false, false, false, true),
+            ("null", "null", "null", false, false, false, true),
             (nan.ToString(), positive.ToString(), negative.ToString(), nan.TryGetInt64(out _), positive.TryGetInt64(out _), negative.TryGetInt64(out _), nan == double.NaN));
     }
 
@@ -164,7 +162,7 @@ public class YValueTests
     {
         var value = Decoded(new BigInteger(-123456789012345L), v2);
 
-        Assert.AreEqual((YValueKind.BigInteger, new BigInteger(-123456789012345L), false), (value.Kind, value.GetBigInteger(), value.TryGetInt64(out _)));
+        Assert.AreEqual((YValueKind.BigInt, -123456789012345L, false), (value.Kind, value.GetBigInt(), value.TryGetInt64(out _)));
     }
 
     [TestMethod]
@@ -189,7 +187,7 @@ public class YValueTests
 
         Assert.AreEqual(
             (null, true, 7, 1L << 40, 0.5, -0.0, "s", new BigInteger(9)),
-            (default(YValue).ToObject(), ((YValue)true).ToObject(), ((YValue)7).ToObject(), ((YValue)(1L << 40)).ToObject(), ((YValue)0.5).ToObject(), ((YValue)(-0.0)).ToObject(), ((YValue)"s").ToObject(), ((YValue)new BigInteger(9)).ToObject()));
+            (default(YValue).ToObject(), ((YValue)true).ToObject(), ((YValue)7).ToObject(), ((YValue)(1L << 40)).ToObject(), ((YValue)0.5).ToObject(), ((YValue)(-0.0)).ToObject(), ((YValue)"s").ToObject(), YValue.BigInt(9).ToObject()));
         Assert.AreEqual((4, 1), (((IList<object?>)array.ToObject()!).Count, ((IDictionary<string, object?>)obj.ToObject()!).Count));
     }
 
@@ -201,17 +199,17 @@ public class YValueTests
     [DataRow(1e-7, "1e-7")]
     [DataRow(123456789012345680000.0, "123456789012345680000")]
     [DataRow(-0.0, "0")]
-    [DataRow("text", "text")]
-    public void ToString_Scalars_IsJavaScriptString(object? scalar, string expected) =>
+    [DataRow("text", "\"text\"")]
+    public void ToString_Scalars_IsJson(object? scalar, string expected) =>
         Assert.AreEqual(expected, YValue.FromObject(scalar).ToString());
 
     [TestMethod]
-    public void ToString_Containers_IsJavaScriptString()
+    public void ToString_Containers_IsJson()
     {
         var array = YValue.Array(1, YValue.Array(2, 3), YValue.Null, "a", true);
         var obj = YValue.Object([new("k", 1)]);
 
-        Assert.AreEqual(("1,2,3,,a,true", "[object Object]", "1,2,3", "9007199254740993"), (array.ToString(), obj.ToString(), ((YValue)new byte[] { 1, 2, 3 }).ToString(), ((YValue)new BigInteger(9007199254740993)).ToString()));
+        Assert.AreEqual(("[1,[2,3],null,\"a\",true]", "{\"k\":1}", "\"AQID\"", "9007199254740993"), (array.ToString(), obj.ToString(), ((YValue)new byte[] { 1, 2, 3 }).ToString(), YValue.BigInt(9007199254740993).ToString()));
     }
 
     [TestMethod]
@@ -222,7 +220,7 @@ public class YValueTests
         var different = YValue.Object([new("b", new byte[] { 1 }), new("a", YValue.Array(1, "y"))]);
 
         Assert.AreEqual((true, true, false, false), (first == reordered, first.GetHashCode() == reordered.GetHashCode(), first == different, ((YValue)1).Equals((YValue)"1")));
-        Assert.AreEqual((false, false), ((YValue)1 == new BigInteger(1), YValue.Array() == YValue.Object([])));
+        Assert.AreEqual((false, false), ((YValue)1 == YValue.BigInt(1), YValue.Array() == YValue.Object([])));
     }
 
     [TestMethod]
@@ -342,8 +340,8 @@ public class YValueTests
     public void ExplicitCasts_MatchingKind_Convert()
     {
         Assert.AreEqual(
-            (true, 3, 4L, 2.5, "s", new BigInteger(5), 1),
-            ((bool)(YValue)true, (int)(YValue)3, (long)(YValue)4, (double)(YValue)2.5, (string)(YValue)"s", (BigInteger)(YValue)new BigInteger(5), ((byte[])(YValue)new byte[] { 1 })[0]));
+            (true, 3, 4L, 2.5, "s", 5L, 1),
+            ((bool)(YValue)true, (int)(YValue)3, (long)(YValue)4, (double)(YValue)2.5, (string)(YValue)"s", YValue.BigInt(5).GetBigInt(), ((byte[])(YValue)new byte[] { 1 })[0]));
     }
 
     [TestMethod]

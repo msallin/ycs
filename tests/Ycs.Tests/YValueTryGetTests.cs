@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
 
-/// <summary>The kind-checked reads <c>TryGetDouble</c>, <c>TryGetBoolean</c> and <c>TryGetBigInteger</c> of <see cref="YValue"/>.</summary>
+/// <summary>The kind-checked reads <c>TryGetDouble</c>, <c>TryGetBoolean</c> and <c>TryGetBigInt</c> of <see cref="YValue"/>.</summary>
 [TestClass]
 public class YValueTryGetTests
 {
@@ -16,7 +16,7 @@ public class YValueTryGetTests
         "double" => 1.5,
         "int" => 7,
         "long" => 9_000_000_000L,
-        "big" => new BigInteger(-123456789012345L),
+        "big" => YValue.BigInt(-123456789012345L),
         "string" => "text",
         "bytes" => new byte[] { 1, 2 },
         "array" => YValue.Array([1, 2]),
@@ -30,7 +30,7 @@ public class YValueTryGetTests
 
     public static IEnumerable<object[]> NotBooleans => Of("null", "string", "bytes", "array", "object", "type", "doc");
 
-    public static IEnumerable<object[]> NotBigIntegers => Of("null", "true", "false", "double", "int", "long", "string", "bytes", "array", "object", "type", "doc");
+    public static IEnumerable<object[]> NotBigInts => Of("null", "true", "false", "double", "int", "long", "string", "bytes", "array", "object", "type", "doc");
 
     private static IEnumerable<object[]> Of(params string[] kinds)
     {
@@ -102,37 +102,37 @@ public class YValueTryGetTests
     }
 
     [TestMethod]
-    public void TryGetBigInteger_BigInteger_ReturnsTrueAndTheValue()
+    public void TryGetBigInt_BigInt_ReturnsTrueAndTheValue()
     {
-        var ok = Sample("big").TryGetBigInteger(out var value);
+        var ok = Sample("big").TryGetBigInt(out var value);
 
-        Assert.AreEqual((true, new BigInteger(-123456789012345L)), (ok, value));
+        Assert.AreEqual((true, -123456789012345L), (ok, value));
     }
 
     [TestMethod]
-    public void TryGetBigInteger_LongConvertedToBigInteger_ReturnsTrueAndTheValue()
+    public void TryGetBigInt_BigIntOfALong_ReturnsTrueAndTheValue()
     {
-        YValue value = new BigInteger(9_000_000_000L);
+        var value = YValue.BigInt(9_000_000_000L);
 
-        var ok = value.TryGetBigInteger(out var read);
+        var ok = value.TryGetBigInt(out var read);
 
-        Assert.AreEqual((true, new BigInteger(9_000_000_000L)), (ok, read));
+        Assert.AreEqual((true, 9_000_000_000L), (ok, read));
     }
 
     [TestMethod]
-    public void TryGetBigInteger_LongValue_IsANumberNotABigInteger()
+    public void TryGetBigInt_LongValue_IsANumberNotABigInt()
     {
-        var ok = Sample("long").TryGetBigInteger(out var value);
+        var ok = Sample("long").TryGetBigInt(out var value);
 
-        Assert.AreEqual((false, BigInteger.Zero), (ok, value));
+        Assert.AreEqual((false, 0L), (ok, value));
     }
 
     [TestMethod]
-    [DynamicData(nameof(NotBigIntegers))]
-    public void TryGetBigInteger_OtherKind_ReturnsFalseAndDefault(string kind)
+    [DynamicData(nameof(NotBigInts))]
+    public void TryGetBigInt_OtherKind_ReturnsFalseAndDefault(string kind)
     {
-        var ok = Sample(kind).TryGetBigInteger(out var value);
+        var ok = Sample(kind).TryGetBigInt(out var value);
 
-        Assert.AreEqual((false, BigInteger.Zero), (ok, value));
+        Assert.AreEqual((false, 0L), (ok, value));
     }
 }

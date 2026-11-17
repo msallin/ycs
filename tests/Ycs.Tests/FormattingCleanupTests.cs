@@ -86,7 +86,7 @@ public class FormattingCleanupTests
         var parts = new System.Text.StringBuilder();
         foreach (var op in text.ToDelta())
         {
-            parts.Append('[').Append(op.Inserted());
+            parts.Append('[').Append(op.Inserted().GetString());
             foreach (var attribute in op.Attributes ?? new Dictionary<string, YValue>())
             {
                 parts.Append(' ').Append(attribute.Key);

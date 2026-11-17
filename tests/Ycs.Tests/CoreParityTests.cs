@@ -286,7 +286,7 @@ public class CoreParityTests
 
         var delta = doc.GetText("t").ToDelta(snapshot);
 
-        Assert.AreEqual(" world", string.Concat(System.Linq.Enumerable.Select(delta, d => d.Inserted())));
+        Assert.AreEqual(" world", string.Concat(System.Linq.Enumerable.Select(delta, d => d.Inserted().GetString())));
     }
 
     private static (byte[] First, byte[] Second) LargeUpdateAfterItsBase()

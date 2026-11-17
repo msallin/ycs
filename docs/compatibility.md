@@ -46,8 +46,8 @@ as in Yjs.
 - The DOM bindings of the XML types (`toDOM`): there is no DOM. The traversal API above is there.
 - JavaScript's `undefined` is read as `null`, and written back as `null`.
 - JavaScript objects with integer-like keys are written in insertion order, not in JavaScript's key order.
-- Integers beyond ±(2^53 - 1) have no exact JavaScript number and are rejected; use `BigInteger` (a JavaScript
-  `bigint`).
+- Integers beyond ±(2^53 - 1) have no exact JavaScript number and are rejected; use `YValue.BigInt(long)` (a JavaScript
+  `bigint`, which Yjs writes as 64 bits signed).
 - Clocks beyond 2^31 - 1 per client (about two billion operations by one client id) are rejected; Yjs reads up to
   2^53 - 1.
 

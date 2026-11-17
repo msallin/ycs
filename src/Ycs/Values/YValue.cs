@@ -23,7 +23,7 @@ public readonly partial struct YValue : IEquatable<YValue>
 
     private const double MaxExactInteger = 9007199254740992.0; // 2^53
 
-    // Null: nothing. Boolean: _bits 0 or 1. Number: the bits of the double. BigInteger: the value. Other kinds: _object only.
+    // Null: nothing. Boolean: _bits 0 or 1. Number: the bits of the double. BigInt: the value. Other kinds: _object only.
     private readonly object? _object;
     private readonly long _bits;
     private readonly YValueKind _kind;
@@ -44,6 +44,9 @@ public readonly partial struct YValue : IEquatable<YValue>
     public static YValue True { get; } = new(YValueKind.Boolean, null, 1);
 
     public static YValue False { get; } = new(YValueKind.Boolean, null, 0);
+
+    /// <summary>A JavaScript BigInt, which Yjs writes as 64 bits signed; a number of the same value is a different value.</summary>
+    public static YValue BigInt(long value) => new(YValueKind.BigInt, null, value);
 
     public static YValue Bytes(ReadOnlySpan<byte> bytes) => new(YValueKind.Bytes, bytes.ToArray(), 0);
 
@@ -137,7 +140,7 @@ public readonly partial struct YValue : IEquatable<YValue>
         YValueKind.Null => null,
         YValueKind.Boolean => _bits != 0,
         YValueKind.Number => NumberObject(BitConverter.Int64BitsToDouble(_bits)),
-        YValueKind.BigInteger => new BigInteger(_bits),
+        YValueKind.BigInt => new BigInteger(_bits),
         YValueKind.Bytes => ((byte[])_object!).Clone(),
         _ => _object,
     };
@@ -174,7 +177,7 @@ public readonly partial struct YValue : IEquatable<YValue>
             case ulong ul:
                 return Number(ul);
             case BigInteger bi:
-                return new YValue(YValueKind.BigInteger, null, (long)bi);
+                return new YValue(YValueKind.BigInt, null, (long)bi);
             case byte[] bytes:
                 return new YValue(YValueKind.Bytes, bytes, 0);
             case FrozenList list:
@@ -234,7 +237,7 @@ public readonly partial struct YValue : IEquatable<YValue>
         YValueKind.Null => null,
         YValueKind.Boolean => _bits != 0 ? BoxedTrue : BoxedFalse,
         YValueKind.Number => NumberObject(BitConverter.Int64BitsToDouble(_bits)),
-        YValueKind.BigInteger => new BigInteger(_bits),
+        YValueKind.BigInt => new BigInteger(_bits),
         _ => _object,
     };
 
@@ -261,17 +264,11 @@ public readonly partial struct YValue : IEquatable<YValue>
 
     public static implicit operator YValue(int value) => Number(value);
 
-    /// <exception cref="ArgumentOutOfRangeException">The integer lies beyond ±(2^53 - 1): a JavaScript number cannot hold it exactly; use a <see cref="BigInteger"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The integer lies beyond ±(2^53 - 1): a JavaScript number cannot hold it exactly; use <see cref="BigInt(long)"/>.</exception>
     public static implicit operator YValue(long value) =>
         value >= -JsValue.MaxSafeInteger && value <= JsValue.MaxSafeInteger ? Number(value) : throw AnyEncoding.OutOfRange(value);
 
     public static implicit operator YValue(double value) => Number(value);
-
-    /// <exception cref="ArgumentOutOfRangeException">The value does not fit 64 bits.</exception>
-    public static implicit operator YValue(BigInteger value) =>
-        value >= long.MinValue && value <= long.MaxValue
-            ? new YValue(YValueKind.BigInteger, null, (long)value)
-            : throw new ArgumentOutOfRangeException(nameof(value), value, "A BigInt value must fit into 64 bits.");
 
     public static implicit operator YValue(string? value) => value == null ? default : new YValue(YValueKind.String, value, 0);
 
@@ -289,8 +286,6 @@ public readonly partial struct YValue : IEquatable<YValue>
     public static explicit operator long(YValue value) => value.GetInt64();
 
     public static explicit operator double(YValue value) => value.GetDouble();
-
-    public static explicit operator BigInteger(YValue value) => value.GetBigInteger();
 
     public static explicit operator string(YValue value) => value.GetString();
 
@@ -340,10 +335,11 @@ public readonly partial struct YValue : IEquatable<YValue>
         return true;
     }
 
-    public bool TryGetBigInteger(out BigInteger value)
+    /// <summary>A BigInt, which the wire holds as 64 bits signed; a number is not one, whatever its value.</summary>
+    public bool TryGetBigInt(out long value)
     {
-        value = _kind == YValueKind.BigInteger ? new BigInteger(_bits) : default;
-        return _kind == YValueKind.BigInteger;
+        value = _kind == YValueKind.BigInt ? _bits : 0;
+        return _kind == YValueKind.BigInt;
     }
 
     public bool TryGetString([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out string? value)
@@ -385,8 +381,8 @@ public readonly partial struct YValue : IEquatable<YValue>
     /// <exception cref="InvalidOperationException">The value is not an integral number within the range of an <see cref="int"/>.</exception>
     public int GetInt32() => TryGetInt32(out var v) ? v : throw NotA("an integer within the range of an int");
 
-    /// <exception cref="InvalidOperationException">The value is not a big integer.</exception>
-    public BigInteger GetBigInteger() => TryGetBigInteger(out var v) ? v : throw NotA("a big integer");
+    /// <exception cref="InvalidOperationException">The value is not a BigInt.</exception>
+    public long GetBigInt() => TryGetBigInt(out var v) ? v : throw NotA("a BigInt");
 
     /// <exception cref="InvalidOperationException">The value is not a string.</exception>
     public string GetString() => TryGetString(out var v) ? v : throw NotA("a string");
@@ -445,15 +441,8 @@ public readonly partial struct YValue : IEquatable<YValue>
         }
     }
 
-    /// <summary>JavaScript's <c>String(value)</c>: <c>"null"</c>, <c>"true"</c>, a number as JavaScript prints it, an array joined with commas, <c>"[object Object]"</c> for an object.</summary>
-    public override string ToString() => _kind switch
-    {
-        YValueKind.Null => "null",
-        YValueKind.Boolean => _bits != 0 ? "true" : "false",
-        YValueKind.BigInteger => _bits.ToString(CultureInfo.InvariantCulture),
-        YValueKind.Number => JsValue.ToJsString(BitConverter.Int64BitsToDouble(_bits)),
-        _ => JsValue.ToJsString(_object!),
-    };
+    /// <summary>The JSON text of the value, as <see cref="ToJsonString"/>.</summary>
+    public override string ToString() => ToJsonString();
 
     public bool Equals(YValue other)
     {
@@ -465,7 +454,7 @@ public readonly partial struct YValue : IEquatable<YValue>
         return _kind switch
         {
             YValueKind.Null => true,
-            YValueKind.Boolean or YValueKind.BigInteger => _bits == other._bits,
+            YValueKind.Boolean or YValueKind.BigInt => _bits == other._bits,
             YValueKind.Number => BitConverter.Int64BitsToDouble(_bits).Equals(BitConverter.Int64BitsToDouble(other._bits)),
             YValueKind.String => string.Equals((string)_object!, (string)other._object!, StringComparison.Ordinal),
             YValueKind.Bytes => ((byte[])_object!).AsSpan().SequenceEqual((byte[])other._object!),
@@ -479,7 +468,7 @@ public readonly partial struct YValue : IEquatable<YValue>
     public override int GetHashCode() => _kind switch
     {
         YValueKind.Null => 0,
-        YValueKind.Boolean or YValueKind.BigInteger => HashCode.Combine(_kind, _bits),
+        YValueKind.Boolean or YValueKind.BigInt => HashCode.Combine(_kind, _bits),
         YValueKind.Number => HashCode.Combine(_kind, BitConverter.Int64BitsToDouble(_bits).GetHashCode()),
         YValueKind.String => HashCode.Combine(_kind, string.GetHashCode((string)_object!, StringComparison.Ordinal)),
         YValueKind.Bytes => HashCode.Combine(_kind, ((byte[])_object!).Length),

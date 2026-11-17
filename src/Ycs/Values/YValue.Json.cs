@@ -10,7 +10,7 @@ public readonly partial struct YValue
     /// number (<c>1.0</c> is <c>1</c>, <c>1e21</c> is <c>1e+21</c>; NaN and the infinities are <c>null</c>), a string, an array, an
     /// object in key order, a shared type as its <see cref="YType.WriteTo"/> (a text as a string, a map as an object ...) and a
     /// subdocument as an object of its root types, as <c>Doc.toJSON()</c>. The two values <c>JSON.stringify</c> cannot write have a
-    /// form of their own: a <see cref="YValueKind.BigInteger"/> is a JSON number of its digits (a JavaScript reader loses what
+    /// form of their own: a <see cref="YValueKind.BigInt"/> is a JSON number of its digits (a JavaScript reader loses what
     /// a double cannot hold) and <see cref="YValueKind.Bytes"/> are a base64 string, as <see cref="Utf8JsonWriter.WriteBase64StringValue"/> writes them
     /// (<c>JSON.stringify</c> writes a <c>Uint8Array</c> as an object of its indices). A string with a lone surrogate is written
     /// with the <c>\udXXX</c> escape, a property name with one with U+FFFD.

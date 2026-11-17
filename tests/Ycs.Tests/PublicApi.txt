@@ -431,14 +431,18 @@ sealed class Ycs.YArray : YArrayBase, System.Collections.Generic.IEnumerable<YVa
 abstract class Ycs.YArrayBase : YType
 sealed class Ycs.YArrayEvent : YEvent
     YArray Target { get; }
-sealed class Ycs.YAttributes : System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>>, System.Collections.Generic.IReadOnlyCollection<System.Collections.Generic.KeyValuePair<string, YValue>>, System.Collections.Generic.IReadOnlyDictionary<string, YValue>, System.Collections.IEnumerable
+sealed class Ycs.YAttributes : System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>>, System.Collections.Generic.IReadOnlyCollection<System.Collections.Generic.KeyValuePair<string, YValue>>, System.Collections.Generic.IReadOnlyDictionary<string, YValue>, System.Collections.IEnumerable, System.IEquatable<YAttributes>
     System.Collections.Generic.IEnumerable<YValue> Values { get; }
     System.Collections.Generic.IEnumerable<string> Keys { get; }
     System.Collections.Generic.IEnumerator<System.Collections.Generic.KeyValuePair<string, YValue>> GetEnumerator()
     YValue this[string key] { get; }
     bool ContainsKey(string key)
+    bool Equals(YAttributes? other)
     bool TryGetValue(string key, out YValue value)
     int Count { get; }
+    override bool Equals(object? obj)
+    override int GetHashCode()
+    override string ToString()
     static YAttributes Create(System.ReadOnlySpan<System.Collections.Generic.KeyValuePair<string, YValue>> entries)
     static YAttributes Empty { get; }
     static YAttributes From(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>> entries)
@@ -614,14 +618,13 @@ sealed class Ycs.YUpdateException : System.FormatException
 readonly struct Ycs.YValue : System.IEquatable<YValue>
     System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>> EnumerateObject()
     System.Collections.Generic.IEnumerable<YValue> EnumerateArray()
-    System.Numerics.BigInteger GetBigInteger()
     YValue this[int index] { get; }
     YValue this[string name] { get; }
     YValueKind Kind { get; }
     bool Equals(YValue other)
     bool GetBoolean()
     bool IsNull { get; }
-    bool TryGetBigInteger(out System.Numerics.BigInteger value)
+    bool TryGetBigInt(out long value)
     bool TryGetBoolean(out bool value)
     bool TryGetBytes(out System.ReadOnlyMemory<byte> value)
     bool TryGetDocument(out YDoc? value)
@@ -636,13 +639,14 @@ readonly struct Ycs.YValue : System.IEquatable<YValue>
     int GetInt32()
     int Length { get; }
     int MemberCount { get; }
+    long GetBigInt()
     long GetInt64()
     object? ToObject()
     override bool Equals(object? obj)
     override int GetHashCode()
     override string ToString()
-    static System.Numerics.BigInteger op_Explicit(YValue value)
     static YValue Array(System.ReadOnlySpan<YValue> items)
+    static YValue BigInt(long value)
     static YValue Bytes(System.ReadOnlySpan<byte> bytes)
     static YValue False { get; }
     static YValue FromJson(System.Text.Json.JsonElement element)
@@ -653,7 +657,6 @@ readonly struct Ycs.YValue : System.IEquatable<YValue>
     static YValue Object(System.ReadOnlySpan<System.ValueTuple<string, YValue>> members)
     static YValue Parse(string json)
     static YValue True { get; }
-    static YValue op_Implicit(System.Numerics.BigInteger value)
     static YValue op_Implicit(YDoc? value)
     static YValue op_Implicit(YType? value)
     static YValue op_Implicit(bool value)
@@ -675,7 +678,7 @@ readonly struct Ycs.YValue : System.IEquatable<YValue>
     void WriteTo(System.Text.Json.Utf8JsonWriter writer)
 enum Ycs.YValueKind : int
     Array = 6
-    BigInteger = 3
+    BigInt = 3
     Boolean = 1
     Bytes = 5
     Document = 9

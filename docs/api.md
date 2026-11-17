@@ -56,25 +56,26 @@ raises a `SubdocsEventArgs(Loaded, Added, Removed)` of read-only sets.
 ## YValue
 
 `YValue` is the value of every shared type: a `readonly struct`, a closed set of kinds (`YValueKind`): `Null`, `Boolean`,
-`Number`, `BigInteger`, `String`, `Bytes`, `Array`, `Object`, `SharedType` and `Document`. Plain scalars convert
+`Number`, `BigInt`, `String`, `Bytes`, `Array`, `Object`, `SharedType` and `Document`. Plain scalars convert
 implicitly, so `map["theme"] = "dark"` and `array.Add(1, "two")` read as they should.
 
 | To make one | |
 | --- | --- |
-| implicit conversion | from `bool`, `int`, `long`, `double`, `BigInteger`, `string`, `byte[]`, a `YType` (a shared type) or a `YDoc` |
+| implicit conversion | from `bool`, `int`, `long`, `double`, `string`, `byte[]`, a `YType` (a shared type) or a `YDoc` |
 | `YValue.Null`, `YValue.True`, `YValue.False` | the constants |
+| `YValue.BigInt(long)` | a JavaScript BigInt, 64 bits signed as Yjs writes it |
 | `YValue.Array(items)`, `YValue.Object(members)`, `YValue.Bytes(bytes)` | containers and binary data from spans; the members of an object are `("key", value)` tuples (`YValue.Object(("k", 1), ("s", "v"))`) or `KeyValuePair<string, YValue>` |
 | `YValue.Parse(json)`, `YValue.FromJson(JsonElement)`, `YValue.FromJson(JsonNode?)` | from JSON, see [JSON](#json) |
 | `YValue.FromObject(object?)` | from the CLR values `null`, `bool`, `int`, `long`, `double`, `BigInteger`, `string`, `byte[]`, lists, string-keyed dictionaries, and shared types; anything else is rejected |
 
-To read one: `Kind`, `IsNull`, `GetBoolean`, `GetInt32`, `GetInt64`, `GetDouble`, `GetBigInteger`, `GetString`,
+To read one: `Kind`, `IsNull`, `GetBoolean`, `GetInt32`, `GetInt64`, `GetDouble`, `GetBigInt`, `GetString`,
 `GetBytes` (these throw when the kind does not fit) and the `TryGet...` form of each (`TryGetBoolean`, `TryGetInt32`,
-`TryGetInt64`, `TryGetDouble`, `TryGetBigInteger`, `TryGetString`, `TryGetBytes`); explicit conversions to the same
+`TryGetInt64`, `TryGetDouble`, `TryGetBigInt`, `TryGetString`, `TryGetBytes`); explicit conversions to the same
 scalar types; `TryGetSharedType<T>(out T? value)` (`YType` for any shared type) and `TryGetDocument`; for arrays `Length`, the
 `int` indexer and `EnumerateArray()`; for objects `MemberCount`, the `string` indexer, `TryGetMember(name, out value)`
 and `EnumerateObject()`; `ToObject()`, the CLR value back (a number as `int`, `long` or `double`, an array as a
 read-only `IList<object?>`, an object as a read-only `IDictionary<string, object?>`, the rest as they are, so a `YType`
-is a shared type to cast); and `WriteTo` and `ToJsonString`, see [JSON](#json).
+is a shared type to cast); and `WriteTo` and `ToJsonString`, see [JSON](#json). `ToString()` is the JSON text of `ToJsonString()` (a string prints with its quotes). `YAttributes` compares by value (keys ordinal, in any order) and prints as a JSON object, so `Delta` records compare and print.
 
 A number inserted encodes as Yjs encodes a JavaScript number (an integer within 31 bits as a varint, otherwise a float32
 or a float64); one read back is a `YValue` number whatever its wire form. A shared type is a value too:
@@ -101,7 +102,7 @@ The JSON of a shared type is what Yjs' `toJSON()` returns, as `JSON.stringify` w
 | number | JavaScript's text: `1.0` is `1`, `1e21` is `1e+21`, `1.5e-7`, `-0` is `0`; NaN and the infinities are `null` | the same |
 | string | escaped by the encoder of the options, by default `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`; a lone surrogate is `\udXXX` in a value and U+FFFD in a name | `JSON.stringify` escapes less |
 | bytes | a base64 string (`Utf8JsonWriter.WriteBase64StringValue`) | `toJSON()` keeps the `Uint8Array`, which `JSON.stringify` writes as `{"0":1,"1":2}`; Ycs picks the encoding `System.Text.Json` uses for `byte[]` |
-| BigInteger | a number of its digits | `JSON.stringify` throws a `TypeError`; a JavaScript reader loses what a double cannot hold |
+| BigInt | a number of its digits | `JSON.stringify` throws a `TypeError`; a JavaScript reader loses what a double cannot hold |
 | subdocument | an object of its root types by name (a root nobody defined by its kind yet is left out) | the same: `Doc.toJSON()` |
 | `null` | `null` | the same |
 

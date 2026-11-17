@@ -51,7 +51,7 @@ public class EnumeratorLifetimeTests
 
         foreach (var value in array)
         {
-            seen.Add(value);
+            seen.Add(value.GetString());
             if (value.Equals("c"))
             {
                 array.RemoveRange(1, 2);
@@ -71,7 +71,7 @@ public class EnumeratorLifetimeTests
 
         foreach (var value in array)
         {
-            seen.Add(value);
+            seen.Add(value.GetString());
             if (value.Equals("c"))
             {
                 array.RemoveRange(1, 2);
@@ -126,7 +126,7 @@ public class EnumeratorLifetimeTests
 
         foreach (var value in array)
         {
-            seen.Add(value);
+            seen.Add(value.GetString());
             map.Remove("k");
         }
 

@@ -453,7 +453,7 @@ public class RunHeadIndexTests
         }
     }
 
-    private static string Content(YType type) => type is YText text ? text.ToString() : string.Join(",", ((YArray)type).ToArray());
+    private static string Content(YType type) => type is YText text ? text.ToString() : string.Join(",", ((YArray)type).ToArray().Select(v => v.GetString()));
 
     private static void Sync(YDoc from, YDoc to) => to.ApplyUpdate(from.EncodeStateAsUpdate(to.EncodeStateVector()));
 

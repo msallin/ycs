@@ -415,5 +415,5 @@ public class RunExtensionYjsTests
 
     // Each op as its insert, and its ychange type after a colon.
     private static string Describe(IEnumerable<Delta> delta) =>
-        string.Join("|", delta.Select(d => d.Inserted() + (d.Attributes != null && d.Attributes.TryGetValue("ychange", out var c) ? ":" + (c["type"] == "added" ? "Added" : "Removed") : "")));
+        string.Join("|", delta.Select(d => d.Inserted().GetString() + (d.Attributes != null && d.Attributes.TryGetValue("ychange", out var c) ? ":" + (c["type"] == "added" ? "Added" : "Removed") : "")));
 }
