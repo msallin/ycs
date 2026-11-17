@@ -45,14 +45,14 @@ public partial class YDoc
     {
         if (!_item.IsNull || _itemCollected)
         {
-            throw new ArgumentException("The document is already a subdocument and cannot be inserted again: create a second YDoc with the same guid instead. Nothing was inserted.", "doc");
+            throw new ArgumentException("The document is already a subdocument and cannot be inserted again: create a second YDoc with the same guid instead. Nothing was inserted.");
         }
 
         for (var d = parent; d != null; d = d._item.IsNull || d._itemCollected ? null : ((AbstractType)d._item.Parent).Doc)
         {
             if (d == this)
             {
-                throw new ArgumentException("A document cannot be inserted into itself or into a subdocument of its own. Nothing was inserted.", "doc");
+                throw new ArgumentException("A document cannot be inserted into itself or into a subdocument of its own. Nothing was inserted.");
             }
         }
     }
