@@ -183,31 +183,25 @@ public class YArrayTests : YTestBase
         CompareUsers();
     }
 
+    private static string Show(List<Dictionary<string, object>> delta) => "[" + string.Join(",", delta.Select(op => "{" + string.Join(",", op.Select(kv =>
+        kv.Key + "=" + (kv.Value is IEnumerable<object> items ? "[" + string.Join(",", items) + "]" : kv.Value))) + "}")) + "]";
+
     [TestMethod]
     public void TestInsertAndDeleteEvents()
     {
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        YArrayEvent evt = null;
+        var deltas = new List<string>();
 
-        array0.Observe(e =>
-        {
-            evt = e;
-        });
+        array0.Observe(e => deltas.Add(Show(e.Changes.Delta.Select(d => d.ToPlain()).ToList())));
 
         array0.Insert(0, 0, 1, 2);
-        Assert.IsNotNull(evt);
-        evt = null;
-
         array0.RemoveAt(0);
-        Assert.IsNotNull(evt);
-        evt = null;
-
         array0.RemoveRange(0, 2);
-        Assert.IsNotNull(evt);
-        evt = null;
 
+        // The deltas of Yjs' y-array testInsertAndDeleteEvents.
+        CollectionAssert.AreEqual(new[] { "[{insert=[0,1,2]}]", "[{delete=1}]", "[{delete=2}]" }, deltas);
         CompareUsers();
     }
 
@@ -249,21 +243,28 @@ public class YArrayTests : YTestBase
         Init(users: 2);
 
         var array0 = Arrays[Users[0]];
-        YArrayEvent evt = null;
+        var inserted = new List<object>();
+        var deltas = new List<string>();
 
         array0.Observe(e =>
         {
-            evt = e;
+            foreach (var delta in e.Changes.Delta)
+            {
+                if (delta is Delta.InsertItems items)
+                {
+                    inserted.AddRange(items.Items.Select(v => v.ToObject()));
+                }
+            }
+
+            deltas.Add(Show(e.Changes.Delta.Select(d => d.ToPlain()).ToList()));
         });
 
-        array0.Insert(0, new YArray());
-        Assert.IsNotNull(evt);
-        evt = null;
-
+        var inner = new YArray();
+        array0.Insert(0, inner);
         array0.RemoveAt(0);
-        Assert.IsNotNull(evt);
-        evt = null;
 
+        CollectionAssert.AreEqual(new object[] { inner }, inserted);
+        Assert.AreEqual("[{delete=1}]", deltas[1]);
         CompareUsers();
     }
 
