@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -104,6 +105,16 @@ public class SlabGenerationTests
     }
 #endif
 
+#if !DEBUG
+    [TestMethod]
+    public void Release_ItemRef_HoldsTheSlabAndTheHandleOnly()
+    {
+        var fields = typeof(ItemRef).GetFields(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Public);
+
+        Assert.AreEqual("_handle,_slab", string.Join(",", fields.Select(f => f.Name).OrderBy(n => n, StringComparer.Ordinal)));
+    }
+#endif
+
     [TestMethod]
     public void Replace_ItemByGc_KeepsTheReferenceValid()
     {
@@ -123,9 +134,10 @@ public class SlabGenerationTests
     public void Compare_ReferenceToAFreedSlot_NeverThrows()
     {
         var (doc, first, second) = TwoItems();
+        var again = new ItemRef(doc.Store.Slab, first.Handle);
 
         doc.Store.Slab.Free(first.Handle);
 
-        Assert.AreEqual((false, true, true), (first == second, first == first, first.IsFreed));
+        Assert.AreEqual((false, true, true), (first == second, first == again, first.IsFreed));
     }
 }
