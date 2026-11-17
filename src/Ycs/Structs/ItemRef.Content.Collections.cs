@@ -1,5 +1,7 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Buffers;
+
 namespace Ycs;
 
 internal readonly partial struct ItemRef
@@ -26,15 +28,29 @@ internal readonly partial struct ItemRef
 
     /// <summary>
     /// The content as it is now, readable after the struct merged into another or left the store: a String's text and an
-    /// Any's values are copies, not views of the arena, which a compaction moves.
+    /// Any's values are copies, not views of the arena, which a compaction moves. The copy of an Any's values is a rented
+    /// array: <see cref="StoredContent.Release"/> returns it.
     /// </summary>
-    internal StoredContent Stored => Kind switch
+    internal StoredContent Stored
     {
-        SlotKind.Type => new(TypeOf),
-        SlotKind.String => new(Chars.ToString()),
-        SlotKind.Any => new(ValueSpan.ToArray()),
-        _ => new(Content),
-    };
+        get
+        {
+            switch (Kind)
+            {
+                case SlotKind.Type:
+                    return new(TypeOf);
+                case SlotKind.String:
+                    return new(Chars.ToString());
+                case SlotKind.Any:
+                    var span = ValueSpan;
+                    var values = ArrayPool<object>.Shared.Rent(span.Length);
+                    span.CopyTo(values);
+                    return new(values);
+                default:
+                    return new(Content);
+            }
+        }
+    }
 }
 
 /// <summary>The content object of an item at one moment; it stays readable when the item's slot is reused.</summary>
@@ -52,8 +68,17 @@ internal readonly struct StoredContent
     // The text of a String item, one string per UTF-16 code unit.
     internal StoredContent(string text) => _text = text;
 
-    // The values of an Any item, as stored.
+    // The values of an Any item, as stored, in an array rented from the shared pool (longer than the item).
     internal StoredContent(object[] values) => _values = values;
+
+    /// <summary>Returns the rented array of an Any's values; the content is not readable afterwards.</summary>
+    internal void Release()
+    {
+        if (_values != null)
+        {
+            ArrayPool<object>.Shared.Return(_values, clearArray: true);
+        }
+    }
 
     // A type has length 1: the index is ignored.
     internal object ValueAt(int index) => _type ?? (_text != null ? _text[index].ToString() : _values != null ? ValueFreezer.OnRead(_values[index]) : ItemRef.StoredValueAt(_content, index));

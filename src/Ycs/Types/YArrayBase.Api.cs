@@ -267,9 +267,16 @@ public abstract partial class YArrayBase
             {
                 var length = n.Length;
                 var content = n.Stored;
-                for (var i = 0; i < length; i++)
+                try
                 {
-                    yield return content.ValueAt(i);
+                    for (var i = 0; i < length; i++)
+                    {
+                        yield return content.ValueAt(i);
+                    }
+                }
+                finally
+                {
+                    content.Release();
                 }
             }
 
