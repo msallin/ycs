@@ -624,8 +624,7 @@ shared with other work (load averages from 2 to 90); each row is from the quiete
 Base `modernize` efa8a8e (ItemRef = slab + handle, holders keep handles) against `layout-7-7`, built into separate
 folders and run interleaved by `ab.py` (4 rounds of 6 runs, `ab.py 4 6 <cases>`; `results/2026-11-17-slab-perf/ab-4x6.txt`).
 The machine was quiet: load average 1.1 to 1.4 during the run (AMD EPYC-Genoa, 8 logical cores, .NET 11.0.0). Allocation
-and held memory are identical in every case. `map-set-distinct` fails in both builds (its fixture check at
-`YcsCases.cs:335`), so it has no row.
+and held memory are identical in every case. `map-set-distinct` failed in both builds (a fixture bug, fixed: "`map-set-distinct` (fixture check)" below), so it has no row.
 
 | workload | base ms | 7.7 ms | change |
 | --- | ---: | ---: | ---: |
@@ -672,6 +671,49 @@ Tried and not kept:
   index against the page. The second cannot be proved away without `Unsafe`/`MemoryMarshal` (a page's length is data), so the
   hot loops keep them; the gain of this pass is in reading each slot once, which removes most of them per step.
 * A profile with `perf` was not possible (`perf_event_paranoid` is 4 here), and no sampling profiler could be run; the changes were found by reading the hot methods and measured by A/B.
+
+### Step 7 against the object layout (2026-11-17, ycs only)
+
+`modernize` 044bb73 (the last commit before the slab: items are objects, the leaf order holds them) against 5464252 (the
+slab, content still objects, after the 7.7 pass), each built from its own tree, run interleaved by `ab.py 4 6`
+(`results/2026-11-17-step7/ab-4x6.txt`). Machine: AMD EPYC-Genoa, 8 logical cores, .NET 11.0.0. **Not quiet**: another agent
+built and tested at the same time, load average 2.2 to 3.0 on the lines (3.0 at the start, 1.7 to 2.4 at the end), so
+differences under about 10 % are inside the noise. Held memory and allocation are deterministic and do not depend on it.
+
+| workload | base ms | step 7 ms | change | alloc MiB | held MiB (base / step 7) |
+| --- | ---: | ---: | ---: | --- | --- |
+| `trace-replay` | 200.1 | 233.5 | +17 % | 43.0 / 34.8 | 3.0 / 2.3 (-23 %) |
+| `text-random` | 24.4 | 26.8 | +10 % | 3.7 / 2.5 | 5.3 / 4.0 (-25 %) |
+| `text-random-100k` | 842.9 | 865.0 | +3 % | 18.6 / 12.2 | 27.1 / 20.7 (-24 %) |
+| `text-append` | 16.5 | 19.5 | +18 % | 0.20 / 0.21 | 1.3 / 1.3 |
+| `array-insert-random` | 141.8 | 129.4 | -9 % | 16.9 / 10.7 | 18.9 / 15.7 (-17 %) |
+| `array-delete-random` | 183.3 | 180.5 | -2 % | 32.8 / 26.3 | 20.1 / 16.7 (-17 %) |
+| `array-push-1txn` | 6.6 | 7.2 | +9 % | 10.4 / 4.3 | 9.4 / 9.4 |
+| `concurrent-20` | 69.6 | 68.6 | -1 % | 28.6 / 32.5 | 29.1 / 21.7 (-25 %) |
+| `apply-state-v1/ycs` | 51.8 | 53.9 | +4 % | 33.1 / 37.8 | 4.5 / 3.3 (-27 %) |
+| `apply-state-v2/ycs` | 56.4 | 57.5 | +2 % | 35.1 / 39.8 | 4.4 / 3.4 (-23 %) |
+| `apply-updates/ycs` | 221.5 | 240.2 | +8 % | 59.3 / 51.5 | 18.6 / 17.8 (-4 %) |
+| `encode-v1` | 4.8 | 6.1 | +27 % | 2.8 / 2.8 | 3.2 / 2.5 |
+| `text-append-1txn-observed-25k` | 31.7 | 45.4 | +43 % | 4.7 / 3.2 | 0.6 / 0.7 |
+| `map-set-distinct` | 41.1 | 39.4 | -4 % | 36.6 / 30.9 | 38.9 / 33.2 (-15 %) |
+| `map-set-distinct-1txn` | 31.0 | 31.8 | +3 % | 39.3 / 33.6 | 38.9 / 33.2 (-15 %) |
+| `map-set-same` | 46.4 | 58.7 | +27 % | 29.0 / 16.0 | 0.0 / 0.0 |
+
+Reading: step 7 holds 15 to 27 % less on the workloads that keep many structs (the content object is still there, so
+this is the item object's 128 bytes becoming a 64-byte slot, not the model's 35-45 %: that needs step 8), allocates 15-60 %
+less on the editing workloads, and costs time: typing workloads and the observed one-transaction append are slower than the
+object layout (+10 to +43 %), the random-position array and map workloads equal or faster. The 7.7 pass (above) took back
+6 to 20 % of what the slab first cost; what remains is the slot read by index against a field read of an object the JIT
+keeps in a register. `apply-state-x100/ycs` and `many-clients-200` are not in 044bb73's bench: step 7 alone, 702.7 ms, 324.9
+MiB held (load 2.4).
+
+### `map-set-distinct` (fixture check)
+
+It failed its check at `YcsCases.cs:335` on the base and the branch alike: `Convert.ToInt64(kv.Value)` threw
+`InvalidCastException` since the map's values are `YValue` (the API break of 8b64428), so no ycs map case produced content.
+It was a fixture bug, not the library: the check now reads `kv.Value.GetInt64()` (also in the hostile reader). With it,
+`map-set-distinct` 38.1 / 36.1 / 38.2 ms (three passes, yrs 97 to 101), `-1txn` 25 to 29 ms (yrs 63 to 76), `map-set-same`
+56 to 58 ms (yrs 95 to 98); content equal to the model and to yrs in every check.
 
 ## Not measured yet
 
