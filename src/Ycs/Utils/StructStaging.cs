@@ -3,63 +3,10 @@ using System.Diagnostics;
 namespace Ycs;
 
 /// <summary>
-/// Stages decoded structs into a <see cref="StagingTable"/> and reads them back as <see cref="DecodedStruct"/>. The
-/// decoder is a stream, so the staged struct is taken from the object just built from it, which stays authoritative:
-/// the table is its shadow and must read back equal.
+/// Copies a struct from one <see cref="StagingTable"/> to another and reads staged structs as <see cref="DecodedStruct"/>.
 /// </summary>
 internal static class StructStaging
 {
-    /// <summary>
-    /// Appends <paramref name="str"/> to the open client's range. A Type stages its type reference and node name. Cold content (Json, Binary, Embed, Format, Doc) is held by reference.
-    /// </summary>
-    public static void Stage(StagingTable table, AbstractStruct str)
-    {
-        if (str is not Item item)
-        {
-            table.Add(str is Skip ? StagedKind.Skip : StagedKind.GC, str.Length);
-            return;
-        }
-
-        var content = item.Content;
-        var kind = KindOf(content);
-        var i = table.Add(kind, item.Length, item.LeftOrigin, item.RightOrigin);
-        switch (item.Parent)
-        {
-            case string name:
-                table.SetParentRoot(i, name);
-                break;
-            case ID parentId:
-                table.SetParentId(i, parentId);
-                break;
-        }
-
-        if (item.ParentSub != null)
-        {
-            table.SetParentSub(i, item.ParentSub);
-        }
-
-        switch (content)
-        {
-            case ContentString text:
-                text.CopyTo(table.Chars(i));
-                break;
-            case ContentAny any:
-                var values = table.Values(i);
-                for (var v = 0; v < values.Length; v++)
-                {
-                    values[v] = any.ValueAt(v);
-                }
-
-                break;
-            case ContentType type:
-                table.SetType(i, type.TypeRef, type.TypeName);
-                break;
-            case ContentJson or ContentBinary or ContentEmbed or ContentFormat or ContentDoc:
-                table.SetCold(i, content);
-                break;
-        }
-    }
-
     /// <summary>
     /// Appends struct <paramref name="i"/> of <paramref name="from"/>, <paramref name="cut"/> clocks in, to the empty
     /// <paramref name="to"/>, as the right part of Yjs' <c>splice</c> would be: an item starts after its own clock
@@ -164,7 +111,7 @@ internal static class StructStaging
                 typeName = table.TypeName(i);
                 break;
             case ItemKind.Doc:
-                docGuid = ((ContentDoc)table.Cold(i)).Doc.Guid;
+                docGuid = ((ContentDoc)table.Cold(i)).Guid;
                 break;
         }
 
@@ -187,17 +134,4 @@ internal static class StructStaging
             DocGuid = docGuid,
         };
     }
-
-    private static StagedKind KindOf(IContent content) => content switch
-    {
-        ContentDeleted => StagedKind.Deleted,
-        ContentJson => StagedKind.Json,
-        ContentBinary => StagedKind.Binary,
-        ContentString => StagedKind.String,
-        ContentEmbed => StagedKind.Embed,
-        ContentFormat => StagedKind.Format,
-        ContentType => StagedKind.Type,
-        ContentAny => StagedKind.Any,
-        _ => StagedKind.Doc,
-    };
 }

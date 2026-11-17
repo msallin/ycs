@@ -75,11 +75,11 @@ internal sealed class LazyStructWriter
         switch (table.At(i).Kind)
         {
             case StagedKind.GC:
-                encoder.WriteInfo(GC.StructGCRefNumber);
+                encoder.WriteInfo((byte)StagedKind.GC);
                 encoder.WriteLength(table.At(i).Length - offset);
                 break;
             case StagedKind.Skip:
-                encoder.WriteInfo(Skip.StructSkipRefNumber);
+                encoder.WriteInfo((byte)StagedKind.Skip);
 
                 // Write as VarUint because Skips can't make use of predictable length-encoding.
                 encoder.RestWriter.WriteVarUint((uint)(table.At(i).Length - offset));
@@ -93,11 +93,11 @@ internal sealed class LazyStructWriter
         lazyWriter.TotalWritten++;
     }
 
-    // Yjs' Item#write: the header is Item.WriteItemHeader's, the content is written from the staged fields.
+    // Yjs' Item#write: the header is ItemRef.WriteItemHeader's, the content is written from the staged fields.
     private static void WriteItem(IUpdateEncoder encoder, StagingTable table, int i, ItemId id, int offset)
     {
         ref readonly var s = ref table.At(i);
-        Item.WriteItemHeader(
+        ItemRef.WriteItemHeader(
             encoder,
             (int)s.Kind,
             offset,

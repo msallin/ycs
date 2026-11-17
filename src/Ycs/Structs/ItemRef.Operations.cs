@@ -85,18 +85,12 @@ internal readonly partial struct ItemRef
     /// <paramref name="source"/>, a store item that is not collected (what a redone item holds).
     /// </summary>
     public static ItemRef NewCopyOf(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ItemRef source) =>
-        source.Kind is SlotKind.String or SlotKind.Any
+        source.Kind is SlotKind.String or SlotKind.Any or SlotKind.Deleted
             ? NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, source.Kind, source.Length, null, default, default, source)
             : New(slab, id, left, right, parent, parentSub, source.CopyContent());
 
-    // A decoded String or Any enters as a copy of its text or values, any other content as the object.
     private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, IContentEx content) =>
-        content switch
-        {
-            ContentString text => NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, SlotKind.String, text.Length, null, text.AsSpan(), default, default),
-            ContentAny any => NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, SlotKind.Any, any.Length, null, default, any.AsSpan(), default),
-            _ => NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, (SlotKind)content.Ref, content.Length, content, default, default, default),
-        };
+        NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, (SlotKind)content.Ref, content.Length, content, default, default, default);
 
     // A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet): the object
     // of a kind that has one, the given type of a Type (else the one of its content object), else the chars of a String or
@@ -162,7 +156,7 @@ internal readonly partial struct ItemRef
     }
 
     // The run-head index holds whether an item is deleted: for an item the store holds, the caller then calls
-    // StructStore.Refresh (MarkDeleted(Transaction), ContentDeleted.Integrate); a split's right part is not in it yet.
+    // StructStore.Refresh (MarkDeleted(Transaction), the integration of Deleted content); a split's right part is not in it yet.
     public void MarkDeleted() => Write().Info |= Slot.DeletedFlag;
 
     /// <summary>

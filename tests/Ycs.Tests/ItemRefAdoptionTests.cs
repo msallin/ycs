@@ -8,20 +8,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// A staged struct enters the store only through <see cref="ItemRef.Adopt"/>, and the library allocates an
-/// <see cref="Item"/> or <see cref="GC"/> object only for the decoded form: a struct of the store is a slot, never an object.
+/// A staged struct enters the store only through <see cref="ItemRef.Adopt"/>, which reads the staging table and leaves it
+/// as it was; a struct of the store is a slot, never an object.
 /// </summary>
 [TestClass]
 public class ItemRefAdoptionTests
 {
-    [TestMethod]
-    public void Library_EveryMethodBody_AllocatesItemAndGcObjectsOnlyWhereAnUpdateIsDecoded()
-    {
-        var found = Callers(["Item", "GC"], [".ctor"], OpCodes.Newobj).Select(c => $"{c.Outer}.{c.Method}").Distinct().OrderBy(s => s, StringComparer.Ordinal);
-
-        Assert.AreEqual("EncodingUtils.ReadStruct", string.Join("\n", found));
-    }
-
     [TestMethod]
     public void Library_EveryMethodBody_AdoptsStagedStructsOnlyInTheIntegrationPlansExecute()
     {
@@ -91,6 +83,25 @@ public class ItemRefAdoptionTests
         doc.Transact(tr => ItemRef.Adopt(table, i, tr, 0, true), origin: null, local: false);
 
         Assert.AreSame(binary, doc.Store.Find(new ItemId(1, 0)).Cold);
+    }
+
+    [TestMethod]
+    public void Adopt_StagedJsonAtAnOffset_LeavesTheTablesObjectAsItWas()
+    {
+        // A legacy ContentJSON item of two values in the root array 'a'.
+        var update = Convert.FromBase64String("AQECAAIBAWECCXVuZGVmaW5lZAd7ImsiOjF9AA==");
+        var table = new StagingTable();
+        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV1(new Lib0Reader(update), long.MaxValue), table);
+        cursor.NextStaged();
+        var doc = new YDoc(new YDocOptions { ClientId = 2 });
+
+        // The store holds the first clock of the struct's client, as when the first part came earlier.
+        doc.GetArray("a").Add(1);
+        var before = ((IContent)table.Cold(0)).Length;
+
+        doc.Transact(tr => ItemRef.Adopt(table, 0, tr, 1, true), origin: null, local: false);
+
+        Assert.AreEqual((2, 2, 1), (before, ((IContent)table.Cold(0)).Length, doc.Store.Find(new ItemId(2, 1)).Length));
     }
 
     private static List<(string Outer, string Type, string Method, string Target)> Callers(string[] types, string[] names, OpCode? only = null)

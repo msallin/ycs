@@ -506,9 +506,29 @@ internal sealed partial class StructStore
 
                 // The update stood whole; what somebody else sent earlier is gone, which the document reports:
                 // clients that were sent it as waiting structs may integrate it, under other limits.
-                transaction.Doc.InvokeOnPendingDropped(new PendingDrop(count, lease.Structs.Keys.ToArray()));
+                transaction.Doc.InvokeOnPendingDropped(new PendingDrop(count, ClientsOf(lease.Staging)));
             }
         }
+    }
+
+    // The clients that have structs in the table (not those only an origin names), in the order of their sections.
+    private static long[] ClientsOf(StagingTable table)
+    {
+        var clients = new List<long>(table.ClientCount);
+        var starts = new List<int>(table.ClientCount);
+        for (var i = 0; i < table.ClientCount; i++)
+        {
+            var (start, count) = table.RangeOf(i);
+            if (count > 0)
+            {
+                clients.Add(table.ClientAt(i));
+                starts.Add(start);
+            }
+        }
+
+        var result = clients.ToArray();
+        Array.Sort(starts.ToArray(), result);
+        return result;
     }
 
     /// <summary>

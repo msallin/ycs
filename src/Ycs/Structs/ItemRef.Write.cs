@@ -12,7 +12,7 @@ internal readonly partial struct ItemRef
         }
         else
         {
-            encoder.WriteInfo(GC.StructGCRefNumber);
+            encoder.WriteInfo((byte)SlotKind.GC);
             encoder.WriteLength(Length - offset);
         }
     }
@@ -36,32 +36,78 @@ internal readonly partial struct ItemRef
 
         if (Kind == SlotKind.Deleted)
         {
-            Item.WriteItemHeader(encoder, ContentDeleted._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
+            WriteItemHeader(encoder, (int)SlotKind.Deleted, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
             encoder.WriteLength(Length - offset);
             return;
         }
 
         if (Kind == SlotKind.Type)
         {
-            Item.WriteItemHeader(encoder, ContentType._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
+            WriteItemHeader(encoder, (int)SlotKind.Type, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
             TypeOf.Write(encoder);
             return;
         }
 
         if (Kind == SlotKind.String)
         {
-            Item.WriteItemHeader(encoder, ContentString._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
+            WriteItemHeader(encoder, (int)SlotKind.String, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
             encoder.WriteString(Chars[offset..]);
             return;
         }
 
         if (Kind == SlotKind.Any)
         {
-            Item.WriteItemHeader(encoder, ContentAny._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
+            WriteItemHeader(encoder, (int)SlotKind.Any, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
             WriteValues(encoder, offset);
             return;
         }
 
-        Item.WriteItem(encoder, offset, Id, LeftOrigin, RightOrigin, ParentSub, Content, root, parentId);
+        WriteItemHeader(encoder, (int)Kind, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
+        Cold.Write(encoder, offset);
+    }
+
+    /// <summary>
+    /// What the encoding of an item has before its content: the info byte (<paramref name="contentRef"/>, the origins
+    /// and the parentSub flag), the origins, and the parent when neither origin is written (<paramref name="offset"/> 0
+    /// and no origins): <paramref name="parentRoot"/> names a root type, or, when it is null, <paramref name="parentId"/>
+    /// is the id of the type's item.
+    /// </summary>
+    internal static void WriteItemHeader(IUpdateEncoder encoder, int contentRef, int offset, ID id, ID? leftOrigin, ID? rightOrigin, string parentSub, string parentRoot, ID parentId)
+    {
+        var origin = offset > 0 ? new ID(id.Client, id.Clock + offset - 1) : leftOrigin;
+        var info = (contentRef & Bits.Bits5) |
+            (origin == null ? 0 : Bit.Bit8) |
+            (rightOrigin == null ? 0 : Bit.Bit7) |
+            (parentSub == null ? 0 : Bit.Bit6);
+        encoder.WriteInfo((byte)info);
+
+        if (origin != null)
+        {
+            encoder.WriteLeftId(origin.Value);
+        }
+
+        if (rightOrigin != null)
+        {
+            encoder.WriteRightId(rightOrigin.Value);
+        }
+
+        if (origin == null && rightOrigin == null)
+        {
+            if (parentRoot != null)
+            {
+                encoder.WriteParentInfo(true);
+                encoder.WriteString(parentRoot);
+            }
+            else
+            {
+                encoder.WriteParentInfo(false);
+                encoder.WriteLeftId(parentId);
+            }
+
+            if (parentSub != null)
+            {
+                encoder.WriteString(parentSub);
+            }
+        }
     }
 }

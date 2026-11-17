@@ -39,7 +39,8 @@ internal class ContentDoc : IContentEx
     // Fixed at construction; Copy and the replacement of a destroyed subdocument start from them.
     internal Dictionary<string, object> Opts { get; }
 
-    private string Guid => _doc?.Guid ?? _read.Guid;
+    // Read without creating the document.
+    internal string Guid => _doc?.Guid ?? _read.Guid;
 
     public IReadOnlyList<object> GetContent() => new[] { Doc };
 

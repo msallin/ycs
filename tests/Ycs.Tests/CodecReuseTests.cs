@@ -264,11 +264,11 @@ public class CodecReuseTests
         var fresh = Allocated(() =>
         {
             var decoder = new UpdateDecoderV2(new Lib0Reader(update), long.MaxValue);
-            EncodingUtils.ReadClientStructRefs(decoder);
+            ReadStructs(decoder);
             DeleteSet.Read(decoder);
         });
 
-        // The decoded structs are new either way; the decoders, their readers and the collections are not.
+        // The decoders, their readers, the staging table and the collections are not new when reused.
         Assert.IsLessThan(fresh - 800, reused, $"reused {reused} B, fresh {fresh} B");
     }
 
@@ -280,7 +280,7 @@ public class CodecReuseTests
         Assert.ThrowsExactly<YUpdateException>(() => UpdateReader.Read(update, 0, update.Length - 3, v2: false, long.MaxValue));
         using var lease = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
 
-        Assert.AreEqual(Describe(EncodingUtils.ReadClientStructRefs(new UpdateDecoderV1(new Lib0Reader(update), long.MaxValue))), Describe(lease.Structs));
+        Assert.AreEqual(Describe(ReadStructs(new UpdateDecoderV1(new Lib0Reader(update), long.MaxValue))), Describe(lease.Staging));
     }
 
     [TestMethod]
@@ -290,13 +290,13 @@ public class CodecReuseTests
         var second = SampleDoc(2).EncodeStateAsUpdate();
 
         using var outer = UpdateReader.Read(first, 0, first.Length, v2: false, long.MaxValue);
-        var expected = Describe(outer.Structs);
+        var expected = Describe(outer.Staging);
         using (var inner = UpdateReader.Read(second, 0, second.Length, v2: false, long.MaxValue))
         {
-            Assert.AreNotEqual(expected, Describe(inner.Structs));
+            Assert.AreNotEqual(expected, Describe(inner.Staging));
         }
 
-        Assert.AreEqual(expected, Describe(outer.Structs));
+        Assert.AreEqual(expected, Describe(outer.Staging));
     }
 
     [TestMethod]
@@ -331,8 +331,8 @@ public class CodecReuseTests
 
         lease.Dispose();
 
-        Assert.IsNotEmpty(next.Structs, "the second dispose must not release the reader the next lease holds");
-        Assert.ThrowsExactly<ObjectDisposedException>(() => lease.Structs);
+        Assert.AreNotEqual(0, next.Staging.Count, "the second dispose must not release the reader the next lease holds");
+        Assert.ThrowsExactly<ObjectDisposedException>(() => lease.Staging);
     }
 
     [TestMethod]
@@ -482,12 +482,12 @@ public class CodecReuseTests
             var fresh = Outcome(() =>
             {
                 IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue);
-                return Describe(EncodingUtils.ReadClientStructRefs(decoder)) + " | " + Describe(DeleteSet.Read(decoder));
+                return Describe(ReadStructs(decoder)) + " | " + Describe(DeleteSet.Read(decoder));
             });
             var reused = Outcome(() =>
             {
                 using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2, long.MaxValue);
-                return Describe(lease.Structs) + " | " + Describe(lease.DeleteSet);
+                return Describe(lease.Staging) + " | " + Describe(lease.DeleteSet);
             });
 
             Assert.AreEqual(fresh, reused, $"input {i}: {Convert.ToHexString(bytes)}");
@@ -620,7 +620,21 @@ public class CodecReuseTests
         return (System.GC.GetAllocatedBytesForCurrentThread() - before) / 100;
     }
 
-    private static string Describe(Dictionary<long, List<AbstractStruct>> structs) =>
-        string.Join(";", structs.OrderBy(kvp => kvp.Key).Select(kvp =>
-            $"{kvp.Key}:" + string.Join(",", kvp.Value.Select(s => $"{s.GetType().Name}@{s.Id.Clock}+{s.Length}"))));
+    private static StagingTable ReadStructs(IUpdateDecoder decoder)
+    {
+        var table = new StagingTable();
+        var cursor = new EncodingUtils.StructCursor(decoder, table);
+        while (cursor.NextStaged() >= 0)
+        {
+        }
+
+        return table;
+    }
+
+    private static string Describe(StagingTable table) =>
+        string.Join(";", Enumerable.Range(0, table.ClientCount).Select(client => table.ClientAt(client)).Order().Select(client =>
+        {
+            var (start, count) = table.RangeOf(table.FindClient(client));
+            return $"{client}:" + string.Join(",", Enumerable.Range(start, count).Select(i => $"{table.At(i).Kind}@{table.At(i).Clock}+{table.At(i).Length}"));
+        }));
 }

@@ -6,19 +6,9 @@ internal class ContentType : IContentEx
 {
     internal const int _ref = 7;
 
-    private readonly AbstractType _type;
-
     internal ContentType(AbstractType type)
     {
-        _type = type;
-        (TypeRef, TypeName) = Describe(type);
-    }
-
-    // The decoded form: the type's reference and node name, no type. The store makes the type when the item enters it.
-    private ContentType(int typeRef, string typeName)
-    {
-        TypeRef = typeRef;
-        TypeName = typeName;
+        Type = type;
     }
 
     int IContentEx.Ref => _ref;
@@ -26,15 +16,7 @@ internal class ContentType : IContentEx
     public bool Countable => true;
     public int Length => 1;
 
-    /// <summary>The type reference of the wire (<c>YArray.YArrayRefId</c> and the like).</summary>
-    internal int TypeRef { get; }
-
-    /// <summary>The node name of an XML element, the name of an XML hook, else null.</summary>
-    internal string TypeName { get; }
-
-    /// <summary>The type of a content made from one; a decoded content has none.</summary>
-    public AbstractType Type => _type
-        ?? throw new InvalidOperationException("A decoded type content holds the type's reference and name only; the type is made by Create when the item enters a store.");
+    public AbstractType Type { get; }
 
     public IReadOnlyList<object> GetContent() => new object[] { Type };
 
@@ -53,16 +35,9 @@ internal class ContentType : IContentEx
     void IContentEx.Gc(StructStore store) => throw StoreSide();
 
     private static InvalidOperationException StoreSide() =>
-        new("The content of a type is integrated, deleted and collected through its store slot (TypeContent), not as an object.");
+        new("The content of a type is integrated, deleted, collected and written through its store slot (TypeContent), not as an object.");
 
-    void IContentEx.Write(IUpdateEncoder encoder, int offset)
-    {
-        encoder.WriteTypeRef((uint)TypeRef);
-        if (TypeName != null)
-        {
-            encoder.WriteKey(TypeName);
-        }
-    }
+    void IContentEx.Write(IUpdateEncoder encoder, int offset) => throw StoreSide();
 
     /// <summary>Reads a type's reference and, for an XML element or hook, its node name; throws for a reference no type has.</summary>
     internal static int ReadHeader(IUpdateDecoder decoder, out string typeName)
@@ -83,12 +58,6 @@ internal class ContentType : IContentEx
         return (int)typeRef;
     }
 
-    internal static ContentType Read(IUpdateDecoder decoder)
-    {
-        var typeRef = ReadHeader(decoder, out var typeName);
-        return new ContentType(typeRef, typeName);
-    }
-
     /// <summary>A new, empty type of the reference and name <see cref="ReadHeader"/> read: what an item of the update holds once it is adopted.</summary>
     internal static AbstractType Create(int typeRef, string typeName) => typeRef switch
     {
@@ -100,16 +69,5 @@ internal class ContentType : IContentEx
         YXmlHook.YXmlHookRefId => new YXmlHook(typeName),
         YXmlText.YXmlTextRefId => new YXmlText(),
         _ => throw new YUpdateException($"Unknown shared type: {typeRef}."),
-    };
-
-    private static (int Ref, string Name) Describe(AbstractType type) => type switch
-    {
-        YXmlElement element => (YXmlElement.YXmlElementRefId, element.NodeName),
-        YXmlHook hook => (YXmlHook.YXmlHookRefId, hook.HookName),
-        YXmlText => (YXmlText.YXmlTextRefId, null),
-        YXmlFragment => (YXmlFragment.YXmlFragmentRefId, null),
-        YText => (YText.YTextRefId, null),
-        YMap => (YMap.YMapRefId, null),
-        _ => (YArray.YArrayRefId, null),
     };
 }

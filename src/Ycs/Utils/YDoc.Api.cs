@@ -73,7 +73,7 @@ public partial class YDoc
         else if (!item.IsNull)
         {
             _item = default;
-            // A collected item holds ContentDeleted already (Yjs sets a property nothing reads).
+            // A collected item is Deleted content already (Yjs sets a property nothing reads).
             if (item.Kind == SlotKind.Doc)
             {
                 item.RecreateSubdoc(Guid, _opts.Limits);

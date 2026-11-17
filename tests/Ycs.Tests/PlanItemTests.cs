@@ -23,7 +23,9 @@ public class PlanItemTests
     private static void StageText(StagingTable table, long client, long clock, string text)
     {
         table.BeginClient(client, clock);
-        StructStaging.Stage(table, new Item(new ItemId(client, clock), null, null, "t", null, new ContentString(text)));
+        var i = table.Add(StagedKind.String, text.Length);
+        text.CopyTo(table.Chars(i));
+        table.SetParentRoot(i, "t");
     }
 
     [TestMethod]
@@ -84,9 +86,11 @@ public class PlanItemTests
     {
         var table = new StagingTable();
         table.BeginClient(7, 4);
-        StructStaging.Stage(table, new Item(new ItemId(7, 4), new ItemId(3, 9), null, null, null, new ContentString("xyz")));
+        "xyz".CopyTo(table.Chars(table.Add(StagedKind.String, 3, new ItemId(3, 9))));
         table.BeginClient(8, 0);
-        StructStaging.Stage(table, new Item(new ItemId(8, 0), null, null, new ItemId(7, 2), "k", new ContentDeleted(2)));
+        var deletedIndex = table.Add(StagedKind.Deleted, 2);
+        table.SetParentId(deletedIndex, new ItemId(7, 2));
+        table.SetParentSub(deletedIndex, "k");
         var (text, deleted) = (PlanItem.Staged(table, 0), PlanItem.Staged(table, 1));
 
         Assert.AreEqual(

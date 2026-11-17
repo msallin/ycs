@@ -15,7 +15,7 @@ namespace Ycs;
 /// of the last one. Every change of the list goes through this class, which keeps the starts, the leaves and the
 /// run-head index (ClientStructs.RunHeads.cs) in step. Three changes of items made elsewhere change what the index
 /// holds and call <see cref="StructStore.Refresh"/>: an item deleted (<see cref="ItemRef.MarkDeleted()"/>), a deleted
-/// content integrated (<see cref="ContentDeleted"/>), an item integrated between a struct and its predecessor
+/// content integrated (<see cref="SlotKind.Deleted"/>), an item integrated between a struct and its predecessor
 /// (<see cref="ItemRef.Left"/>).
 /// </remarks>
 internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
@@ -520,16 +520,6 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         public long End => end;
 
         public long StartAt(int index) => starts[index];
-    }
-
-    /// <summary>The structs an update was decoded into (one client's, contiguous by clock).</summary>
-    internal readonly struct Decoded(List<AbstractStruct> structs) : IClockOrder
-    {
-        public int Count => structs.Count;
-
-        public long End => structs[^1].Id.Clock + structs[^1].Length;
-
-        public long StartAt(int index) => structs[index].Id.Clock;
     }
 
     /// <summary>The structs in order, without a copy (a <c>foreach</c> over the list).</summary>

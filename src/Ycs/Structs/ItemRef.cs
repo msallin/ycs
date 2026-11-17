@@ -328,13 +328,6 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
             Check();
             return (IContentEx)_slab.ReadRef(_handle);
         }
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        set
-        {
-            ref var slot = ref Write();
-            slot.Info = (slot.Info & ~(0xFF << 8)) | (value.Ref << 8);
-            _slab.SetRef(_handle, value is ContentDeleted ? null : value);
-        }
     }
 
     public bool Marker

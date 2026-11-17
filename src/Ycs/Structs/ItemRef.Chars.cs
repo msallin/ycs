@@ -42,7 +42,7 @@ internal readonly partial struct ItemRef
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.String, text.Length, null, text, default, default);
 
     // The range of the right part after a split of this String at diff; a pair cut in two becomes two replacement
-    // characters in place, as ContentString.Splice does. The tail reservation of the range stays with its end, which
+    // characters in place. The tail reservation of the range stays with its end, which
     // the right part holds.
     private long SplitChars(int diff)
     {

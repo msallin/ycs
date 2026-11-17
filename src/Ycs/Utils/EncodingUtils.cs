@@ -20,30 +20,21 @@ namespace Ycs;
 /// </summary>
 internal static class EncodingUtils
 {
-    public static IContent ReadItemContent(IUpdateDecoder decoder, byte info)
+    /// <summary>Reads the content of a format, embed, binary, JSON or document item, the kinds the table holds as objects.</summary>
+    private static IContent ReadColdContent(IUpdateDecoder decoder, byte info)
     {
         switch (info & Bits.Bits5)
         {
-            case 1: // Deleted
-                return ContentDeleted.Read(decoder);
-            case 2: // JSON
+            case (int)StagedKind.Json:
                 return ContentJson.Read(decoder);
-            case 3: // Binary
+            case (int)StagedKind.Binary:
                 return ContentBinary.Read(decoder);
-            case 4: // String
-                return ContentString.Read(decoder);
-            case 5: // Embed
+            case (int)StagedKind.Embed:
                 return ContentEmbed.Read(decoder);
-            case 6: // Format
+            case (int)StagedKind.Format:
                 return ContentFormat.Read(decoder);
-            case 7: // Type
-                return ContentType.Read(decoder);
-            case 8: // Any
-                return ContentAny.Read(decoder);
-            case 9: // Doc
-                return ContentDoc.Read(decoder);
             default:
-                throw new YUpdateException($"Unknown content type: {info & Bits.Bits5}.");
+                return ContentDoc.Read(decoder);
         }
     }
 
@@ -246,57 +237,12 @@ internal static class EncodingUtils
     }
 
     /// <summary>
-    /// The structs of an update grouped by client, each list in clock order (Yjs' <c>readClientsStructRefs</c>).
-    /// Parents stay unresolved (a root type's name or the id of the parent's item) until the struct is
-    /// integrated, so reading changes no document. See <see cref="StructCursor"/> for what is checked.
-    /// </summary>
-    public static Dictionary<long, List<AbstractStruct>> ReadClientStructRefs(IUpdateDecoder decoder)
-    {
-        var clientRefs = new Dictionary<long, List<AbstractStruct>>();
-        ReadClientStructRefs(decoder, clientRefs, seenClients: null, spareLists: null);
-        return clientRefs;
-    }
-
-    /// <summary>
-    /// <see cref="ReadClientStructRefs(IUpdateDecoder)"/> into the empty <paramref name="clientRefs"/>,
-    /// with an empty <paramref name="seenClients"/> to find a client listed twice, and the lists taken
-    /// from <paramref name="spareLists"/> while it has any. On an exception, the lists taken are in
-    /// <paramref name="clientRefs"/>. An empty <paramref name="staging"/> is filled with the same structs.
-    /// </summary>
-    public static void ReadClientStructRefs(
-        IUpdateDecoder decoder,
-        Dictionary<long, List<AbstractStruct>> clientRefs,
-        HashSet<long> seenClients,
-        Stack<List<AbstractStruct>> spareLists,
-        StagingTable staging = null)
-    {
-        Debug.Assert(clientRefs.Count == 0);
-        var cursor = new StructCursor(decoder, seenClients, staging);
-        List<AbstractStruct> refs = null;
-
-        while (cursor.Next() is { } str)
-        {
-            if (refs == null || refs[0].Id.Client != str.Id.Client)
-            {
-                if (spareLists == null || !spareLists.TryPop(out refs))
-                {
-                    refs = new List<AbstractStruct>();
-                }
-
-                clientRefs[str.Id.Client] = refs;
-            }
-
-            refs.Add(str);
-        }
-    }
-
-    /// <summary>
     /// Reads the struct section of an update one struct at a time, checking everything that can be
     /// checked without a document: every value within its range, no empty struct, no struct ending
     /// beyond <see cref="Limits.MaxClock"/>, no client listed twice, an origin or parent of the same
     /// client only at an earlier clock (it must have existed when the struct was created), and no more
     /// structs than <see cref="IUpdateDecoder.MaxStructs"/>. Throws <see cref="YUpdateException"/>.
-    /// A mutable struct: keep it in a local or a non-readonly field.
+    /// Each struct is staged into the table. A mutable struct: keep it in a local or a non-readonly field.
     /// </summary>
     internal struct StructCursor
     {
@@ -313,10 +259,10 @@ internal static class EncodingUtils
 
         /// <param name="seenClients">An empty set to find a client listed twice; one is created when needed if null.</param>
         /// <param name="staging">
-        /// An empty table that shadows the structs read: one client range per section, one staged struct per object.
+        /// An empty table that takes the structs read: one client range per section, one staged struct per struct.
         /// The cursor only appends; the table's owner resets it.
         /// </param>
-        public StructCursor(IUpdateDecoder decoder, HashSet<long> seenClients = null, StagingTable staging = null)
+        public StructCursor(IUpdateDecoder decoder, StagingTable staging, HashSet<long> seenClients = null)
         {
             _decoder = decoder;
             _staging = staging;
@@ -327,36 +273,10 @@ internal static class EncodingUtils
         /// <summary>Stages the structs from here on into <paramref name="staging"/>, which has begun the open client's range.</summary>
         public void UseStaging(StagingTable staging) => _staging = staging;
 
-        /// <summary>The next struct, or null after the last.</summary>
-        public AbstractStruct Next()
-        {
-            while (_structsLeft == 0)
-            {
-                if (_section == _sections)
-                {
-                    return null;
-                }
-
-                _section++;
-                ReadSectionHeader();
-            }
-
-            _structsLeft--;
-            var str = ReadStruct(_decoder, _client, _clock);
-            if (_staging != null)
-            {
-                StructStaging.Stage(_staging, str);
-            }
-
-            _clock += str.Length;
-            return str;
-        }
-
         /// <summary>
-        /// The next struct staged straight from the decoder, as <see cref="Next"/> checks and reads it but without the
-        /// struct object: a String's characters come from <see cref="IUpdateDecoder.ReadStringSpan"/>, a Type's reference
-        /// and name are read as <see cref="ContentType.Read"/> does. Returns its index in the table, or -1 after the last.
-        /// The table is the one given to the constructor; the cursor appends only.
+        /// The next struct, read from the decoder into the table and checked as the cursor's summary says: a String's
+        /// characters come from <see cref="IUpdateDecoder.ReadStringSpan"/>, a Type's reference and name from
+        /// <see cref="ContentType.ReadHeader"/>. Returns its index in the table, or -1 after the last.
         /// </summary>
         public int NextStaged()
         {
@@ -396,7 +316,7 @@ internal static class EncodingUtils
             _structCount += numberOfStructs;
             if (numberOfStructs > 0)
             {
-                _staging?.BeginClient(client, clock);
+                _staging.BeginClient(client, clock);
             }
 
             _structsLeft = numberOfStructs;
@@ -405,58 +325,18 @@ internal static class EncodingUtils
         }
     }
 
-    private static AbstractStruct ReadStruct(IUpdateDecoder decoder, long client, long clock)
-    {
-        var id = new ID(client, clock);
-        var info = decoder.ReadInfo();
-        AbstractStruct str;
-
-        switch (info & Bits.Bits5)
-        {
-            case GC.StructGCRefNumber:
-                str = new GC(id, decoder.ReadLength());
-                break;
-            case Skip.StructSkipRefNumber:
-                // A range of clocks this update has no data for (written by mergeUpdates).
-                var skipLength = decoder.Reader.ReadVarUint();
-                Limits.CheckRange(clock, skipLength);
-                str = new Skip(id, (int)skipLength);
-                break;
-            default:
-                // The items that were originally to the left and to the right of this item.
-                var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ID?)CheckEarlier(decoder.ReadLeftId(), id) : null;
-                var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ID?)CheckEarlier(decoder.ReadRightId(), id) : null;
-
-                // Without origins the parent is given: a root type by name, or the item of a nested type.
-                object parent = null;
-                string parentSub = null;
-                if ((info & (Bit.Bit7 | Bit.Bit8)) == 0)
-                {
-                    parent = decoder.ReadParentInfo() ? decoder.ReadString() : CheckEarlier(decoder.ReadLeftId(), id);
-                    parentSub = (info & Bit.Bit6) == Bit.Bit6 ? decoder.ReadString() : null;
-                }
-
-                str = new Item(id, leftOrigin, rightOrigin, parent, parentSub, ReadItemContent(decoder, info));
-                break;
-        }
-
-        Limits.CheckRange(clock, str.Length);
-        return str;
-    }
-
-    // ReadStruct, into the staging table. The reads and the checks are in ReadStruct's order, so a damaged update fails
-    // with the same exception at the same point; the struct is added once it is read whole, when its length is known.
+    // The struct is added once it is read whole, when its length is known.
     private static int StageStruct(IUpdateDecoder decoder, StagingTable table, long client, long clock, ref object[] values)
     {
         var id = new ID(client, clock);
         var info = decoder.ReadInfo();
         switch (info & Bits.Bits5)
         {
-            case GC.StructGCRefNumber:
+            case (int)StagedKind.GC:
                 var gcLength = decoder.ReadLength();
                 Limits.CheckRange(clock, gcLength);
                 return table.Add(StagedKind.GC, gcLength);
-            case Skip.StructSkipRefNumber:
+            case (int)StagedKind.Skip:
                 // A range of clocks this update has no data for (written by mergeUpdates).
                 var skipLength = decoder.Reader.ReadVarUint();
                 Limits.CheckRange(clock, skipLength);
@@ -522,7 +402,7 @@ internal static class EncodingUtils
                 table.SetType(i, typeRef, typeName);
                 break;
             case 2 or 3 or 5 or 6 or 9:
-                var cold = ReadItemContent(decoder, info);
+                var cold = ReadColdContent(decoder, info);
                 Limits.CheckRange(clock, cold.Length);
                 i = table.Add((StagedKind)(info & Bits.Bits5), cold.Length, leftOrigin, rightOrigin);
                 table.SetCold(i, cold);

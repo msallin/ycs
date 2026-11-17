@@ -110,7 +110,7 @@ internal readonly partial struct ItemRef
         slot.Payload = moved;
     }
 
-    // The values from offset on, as ContentAny.Write encodes them.
+    // The values from offset on, as an Any item is encoded.
     private void WriteValues(IUpdateEncoder encoder, int offset)
     {
         var values = ValueSpan;

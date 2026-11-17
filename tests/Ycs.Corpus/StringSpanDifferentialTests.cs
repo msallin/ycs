@@ -133,7 +133,10 @@ public class StringSpanDifferentialTests
         try
         {
             IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader, 1 << 20) : new UpdateDecoderV1(reader, 1 << 20);
-            EncodingUtils.ReadClientStructRefs(new Logging(decoder, span, log));
+            var cursor = new EncodingUtils.StructCursor(new Logging(decoder, span, log), new StagingTable());
+            while (cursor.NextStaged() >= 0)
+            {
+            }
         }
         catch (YUpdateException e)
         {

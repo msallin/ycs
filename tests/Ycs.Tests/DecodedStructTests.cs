@@ -8,8 +8,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// <see cref="DecodedStruct"/> against the struct objects it detaches from: every field of every record, over the
-/// corpus updates, documents that hold every content kind, gapped merges (Skip) and damaged updates.
+/// <see cref="DecodedStruct"/>: the v1 and the v2 encoding of an update give the same records (two decoders, one result),
+/// the records hold what was inserted, and the records of damaged updates that still decode are well formed.
 /// </summary>
 [TestClass]
 public class DecodedStructTests
@@ -17,22 +17,21 @@ public class DecodedStructTests
     private const int Damaged = 20000;
 
     [TestMethod]
-    public void Detach_CorpusUpdates_EveryFieldEqualsTheObject()
+    public void Decode_CorpusUpdates_V1AndV2GiveTheSameRecords()
     {
         var inputs = CorpusUpdates();
 
-        var (updates, structs) = Compare(inputs);
+        var structs = CompareFormats(inputs, i => i % 2 == 0 ? UpdateFormat.V1 : UpdateFormat.V2);
 
-        Assert.IsGreaterThan(100, updates);
         Assert.IsGreaterThan(500, structs);
     }
 
     [TestMethod]
-    public void Detach_EveryContentKind_EveryFieldEqualsTheObjectAndTheKindsAreAllSeen()
+    public void Decode_EveryContentKind_V1AndV2GiveTheSameRecordsAndTheKindsAreAllSeen()
     {
         var inputs = RichUpdates();
 
-        var (_, _) = Compare(inputs);
+        CompareFormats(inputs, i => i < 4 && i % 2 == 0 ? UpdateFormat.V1 : UpdateFormat.V2);
 
         var kinds = inputs
             .SelectMany(Decodable)
@@ -44,7 +43,24 @@ public class DecodedStructTests
     }
 
     [TestMethod]
-    public void Detach_DamagedUpdates_EveryDecodedFieldEqualsTheObject()
+    public void Decode_RichUpdate_RecordsHoldWhatWasInserted()
+    {
+        var structs = YUpdate.Decode(RichUpdates()[0]).Structs;
+
+        var found = (
+            structs.Any(s => s.Kind == ItemKind.String && s.Text!.EndsWith(" world", StringComparison.Ordinal)),
+            structs.Any(s => s.Kind == ItemKind.String && s.Text == "h" && s.ParentName == "t"),
+            structs.Any(s => s.Kind == ItemKind.Format && s.FormatKey == "bold" && Equals(YValue.FromStored(s.FormatValue), YValue.FromStored(true))),
+            structs.Any(s => s.Kind == ItemKind.Doc && s.DocGuid == "sub-1"),
+            structs.Any(s => s.Kind == ItemKind.Type && s.TypeName == "div"),
+            structs.Any(s => s.Kind == ItemKind.Type && s.TypeName == "hk"),
+            structs.Any(s => s.Kind == ItemKind.Any && s.Content.Count == 3 && Equals(s.Content[0], 3.5) && s.Content[1] == null && Equals(s.Content[2], true)),
+            structs.Any(s => s.Kind == ItemKind.Binary && s.Content.Count == 1 && ((byte[])s.Content[0]!).SequenceEqual(new byte[] { 1, 2, 3 })));
+        Assert.AreEqual((true, true, true, true, true, true, true, true), found);
+    }
+
+    [TestMethod]
+    public void Decode_DamagedUpdates_EveryDecodedRecordIsWellFormed()
     {
         var seeds = CorpusUpdates().Concat(RichUpdates()).ToList();
         var random = new Random(20261116);
@@ -54,9 +70,19 @@ public class DecodedStructTests
             inputs.Add(Damage(seeds[random.Next(seeds.Count)], random));
         }
 
-        var (updates, structs) = Compare(inputs);
+        var (updates, structs) = (0, 0);
+        foreach (var input in inputs)
+        {
+            foreach (var s in Decodable(input))
+            {
+                AssertWellFormed(s);
+                structs++;
+            }
 
-        Assert.IsGreaterThan(1000, updates, "enough damaged updates still decode");
+            updates++;
+        }
+
+        Assert.AreEqual(Damaged, updates);
         Assert.IsGreaterThan(1500, structs);
     }
 
@@ -98,112 +124,46 @@ public class DecodedStructTests
         }
     }
 
-    private static (int Updates, int Structs) Compare(IEnumerable<byte[]> inputs)
+    // Each update in its own format and converted to the other: the two decoders must read the same records.
+    private static int CompareFormats(List<byte[]> inputs, Func<int, UpdateFormat> formatOf)
     {
-        var updates = 0;
         var structs = 0;
-        foreach (var input in inputs)
+        for (var n = 0; n < inputs.Count; n++)
         {
-            foreach (var v2 in new[] { false, true })
+            var from = formatOf(n);
+            var to = from == UpdateFormat.V1 ? UpdateFormat.V2 : UpdateFormat.V1;
+            var original = YUpdate.Decode(inputs[n], format: from);
+            var converted = YUpdate.Decode(YUpdate.Convert(inputs[n], from, to), format: to);
+            Assert.AreEqual(original.Structs.Count, converted.Structs.Count);
+            for (var i = 0; i < original.Structs.Count; i++)
             {
-                var raw = ReadObjects(input, v2, out var rawError);
-                DecodedUpdate decoded;
-                try
-                {
-                    decoded = v2 ? YUpdate.Decode(input, format: UpdateFormat.V2) : YUpdate.Decode(input, format: UpdateFormat.V1);
-                }
-                catch (YUpdateException e)
-                {
-                    if (rawError != null)
-                    {
-                        Assert.AreEqual(rawError, e.Message, "the same exception as the struct objects' read");
-                    }
-
-                    continue;
-                }
-
-                Assert.IsNull(rawError, "decoding succeeds where the struct objects' read fails");
-                var detached = decoded.Structs;
-                Assert.HasCount(raw.Count, detached);
-                for (var i = 0; i < detached.Count; i++)
-                {
-                    AssertEqual(raw[i], detached[i]);
-                }
-
-                updates++;
-                structs += detached.Count;
+                StagingDifferential.AssertEqual(original.Structs[i], converted.Structs[i]);
+                AssertWellFormed(original.Structs[i]);
             }
+
+            structs += original.Structs.Count;
         }
 
-        return (updates, structs);
+        return structs;
     }
 
-    // The structs as objects, in the order of the update, up to the one that fails.
-    private static List<AbstractStruct> ReadObjects(byte[] input, bool v2, out string rawError)
+    // What DecodedStruct says each kind carries, and that the rest is empty.
+    private static void AssertWellFormed(DecodedStruct d)
     {
-        var limits = UpdateLimits.Default;
-        var reader = new Lib0Reader(input) { MaxDepth = limits.MaxDepth };
-        var result = new List<AbstractStruct>();
-        rawError = null;
-        try
-        {
-            IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader, limits.MaxStructsPerUpdate) : new UpdateDecoderV1(reader, limits.MaxStructsPerUpdate);
-            var cursor = new EncodingUtils.StructCursor(decoder);
-            while (cursor.Next() is { } str)
-            {
-                result.Add(str);
-            }
-        }
-        catch (Exception e) when (e is YUpdateException || YUpdateException.IsDecodingFailure(e))
-        {
-            rawError = YUpdateException.Wrap(e).Message;
-        }
-
-        return result;
-    }
-
-    // The oracle reads the objects with the wire's own numbers (IContentEx.Ref) and their public members.
-    private static void AssertEqual(AbstractStruct s, DecodedStruct d)
-    {
-        Assert.AreEqual(s.Id, d.Id);
-        Assert.AreEqual(s.Length, d.Length);
-        if (s is not Item item)
-        {
-            Assert.AreEqual(s is Skip ? ItemKind.Skip : ItemKind.GC, d.Kind);
-            Assert.IsTrue(d.LeftOrigin == null && d.RightOrigin == null && d.ParentName == null && d.ParentId == null && d.ParentSub == null);
-            Assert.IsEmpty(d.Content);
-            Assert.IsTrue(d.Text == null && d.FormatKey == null && d.FormatValue == null && d.TypeRef == -1 && d.TypeName == null && d.DocGuid == null);
-            return;
-        }
-
-        var content = item.Content;
-        Assert.AreEqual((ItemKind)content.Ref, d.Kind);
-        Assert.AreEqual(item.LeftOrigin, d.LeftOrigin);
-        Assert.AreEqual(item.RightOrigin, d.RightOrigin);
-        Assert.AreEqual(item.Parent as string, d.ParentName);
-        Assert.AreEqual(item.Parent is ItemId id ? id : (ItemId?)null, d.ParentId);
-        Assert.AreEqual(item.ParentSub, d.ParentSub);
-
         var holdsValues = d.Kind is ItemKind.Any or ItemKind.Json or ItemKind.Binary or ItemKind.Embed;
-        if (holdsValues)
-        {
-            Assert.AreEqual(item.Length, d.Content.Count);
-        }
-
-        var expectedValues = holdsValues ? content.GetContent().ToList() : new List<object>();
-        Assert.HasCount(expectedValues.Count, d.Content);
-        for (var i = 0; i < expectedValues.Count; i++)
-        {
-            Assert.IsTrue(StagingDifferential.DeepEqual(expectedValues[i], d.Content[i]), $"value {i} of {s.Id}");
-        }
-
-        Assert.AreEqual(d.Kind == ItemKind.String ? ((ContentString)content).GetString() : null, d.Text);
-        Assert.AreEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Key : null, d.FormatKey);
-        Assert.IsTrue(StagingDifferential.DeepEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Value : null, d.FormatValue), $"format value of {s.Id}");
-        var type = d.Kind == ItemKind.Type ? (ContentType)content : null;
-        Assert.AreEqual(type?.TypeRef ?? -1, d.TypeRef);
-        Assert.AreEqual(type?.TypeName, d.TypeName);
-        Assert.AreEqual(d.Kind == ItemKind.Doc ? ((ContentDoc)content).Doc.Guid : null, d.DocGuid);
+        var actual = (
+            d.Length > 0,
+            holdsValues ? d.Content.Count == d.Length : d.Content.Count == 0,
+            d.Kind == ItemKind.String ? d.Text != null && d.Text.Length == d.Length : d.Text == null,
+            d.Kind == ItemKind.Format ? d.FormatKey != null : d.FormatKey == null && d.FormatValue == null,
+            d.Kind == ItemKind.Type ? d.TypeRef >= 0 : d.TypeRef == -1 && d.TypeName == null,
+            d.Kind == ItemKind.Doc ? d.DocGuid != null : d.DocGuid == null,
+            d.Kind is ItemKind.GC or ItemKind.Skip
+                ? d.LeftOrigin == null && d.RightOrigin == null && d.ParentName == null && d.ParentId == null && d.ParentSub == null
+                : d.LeftOrigin != null || d.RightOrigin != null
+                    ? d.ParentName == null && d.ParentId == null
+                    : (d.ParentName == null) != (d.ParentId == null));
+        Assert.AreEqual((true, true, true, true, true, true, true), actual, $"the record of {d.Id} ({d.Kind})");
     }
 
     internal static List<byte[]> CorpusUpdates()

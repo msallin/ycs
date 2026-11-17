@@ -11,6 +11,12 @@ public class ItemRefContentTests
     private static ItemRef NewItem(Slab slab, IContent content, long clock = 0) =>
         ItemRef.New(slab, new ItemId(1, clock), default, default, new YMap(), null, content);
 
+    private static ItemRef Text(Slab slab, string text, long clock = 0) =>
+        ItemRef.New(slab, new ItemId(1, clock), default, default, new YMap(), null, text.AsSpan());
+
+    private static ItemRef Values(Slab slab, object[] values, long clock = 0) =>
+        ItemRef.New(slab, new ItemId(1, clock), default, default, new YMap(), null, values.AsSpan());
+
     private static YDoc NewDoc() => new(new YDocOptions { ClientId = 1 });
 
     [TestMethod]
@@ -82,9 +88,8 @@ public class ItemRefContentTests
         var slab = new Slab();
         var kinds = new[]
         {
-            NewItem(slab, new ContentString("a"), 0).Kind,
-            NewItem(slab, new ContentAny(new object[] { 1 }), 1).Kind,
-            NewItem(slab, new ContentDeleted(1), 2).Kind,
+            Text(slab, "a", 0).Kind,
+            Values(slab, new object[] { 1 }, 1).Kind,
             NewItem(slab, new ContentType(new YMap()), 3).Kind,
             NewItem(slab, new ContentFormat("b", true), 4).Kind,
             NewItem(slab, new ContentEmbed("e"), 5).Kind,
@@ -94,7 +99,7 @@ public class ItemRefContentTests
         };
 
         CollectionAssert.AreEqual(
-            new[] { SlotKind.String, SlotKind.Any, SlotKind.Deleted, SlotKind.Type, SlotKind.Format, SlotKind.Embed, SlotKind.Binary, SlotKind.Doc, SlotKind.GC },
+            new[] { SlotKind.String, SlotKind.Any, SlotKind.Type, SlotKind.Format, SlotKind.Embed, SlotKind.Binary, SlotKind.Doc, SlotKind.GC },
             kinds);
     }
 
@@ -104,19 +109,18 @@ public class ItemRefContentTests
         var slab = new Slab();
         var items = new[]
         {
-            NewItem(slab, new ContentString("a"), 0),
-            NewItem(slab, new ContentDeleted(1), 1),
-            NewItem(slab, new ContentFormat("b", true), 2),
-            NewItem(slab, new ContentType(new YMap()), 3),
+            Text(slab, "a", 0),
+            NewItem(slab, new ContentFormat("b", true), 1),
+            NewItem(slab, new ContentType(new YMap()), 2),
         };
 
-        CollectionAssert.AreEqual(new[] { true, false, false, true }, new[] { items[0].Countable, items[1].Countable, items[2].Countable, items[3].Countable });
+        CollectionAssert.AreEqual(new[] { true, false, true }, new[] { items[0].Countable, items[1].Countable, items[2].Countable });
     }
 
     [TestMethod]
     public void Chars_StringItem_IsTheText()
     {
-        var item = NewItem(new Slab(), new ContentString("héllo"));
+        var item = Text(new Slab(), "héllo");
 
         Assert.AreEqual("héllo", item.Chars.ToString());
     }
@@ -124,7 +128,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void Chars_NotAString_Throws()
     {
-        var item = NewItem(new Slab(), new ContentAny(new object[] { 1 }));
+        var item = Values(new Slab(), new object[] { 1 });
 
         Assert.ThrowsExactly<InvalidOperationException>(() => item.Chars.ToString());
     }
@@ -132,7 +136,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void ValueAtAndValues_AnyItem_AreTheValues()
     {
-        var item = NewItem(new Slab(), new ContentAny(new object[] { "x", 2L }));
+        var item = Values(new Slab(), new object[] { "x", 2L });
 
         Assert.AreEqual(("x", 2L, 2), (item.ValueAt(0), item.ValueAt(1), item.Values.Count));
     }
@@ -140,7 +144,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void ValueAt_NotAny_Throws()
     {
-        var item = NewItem(new Slab(), new ContentString("a"));
+        var item = Text(new Slab(), "a");
 
         Assert.ThrowsExactly<InvalidOperationException>(() => item.ValueAt(0));
     }
@@ -157,7 +161,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void TypeOf_NotAType_Throws()
     {
-        var item = NewItem(new Slab(), new ContentString("a"));
+        var item = Text(new Slab(), "a");
 
         Assert.ThrowsExactly<InvalidOperationException>(() => item.TypeOf.ToString());
     }
@@ -174,8 +178,8 @@ public class ItemRefContentTests
             ReferenceEquals(NewItem(slab, format, 0).Cold, format)
             && ReferenceEquals(NewItem(slab, embed, 1).Cold, embed)
             && ReferenceEquals(NewItem(slab, binary, 2).Cold, binary)
-            && NewItem(slab, new ContentString("a"), 3).Cold is null
-            && NewItem(slab, new ContentDeleted(1), 4).Cold is null);
+            && Text(slab, "a", 3).Cold is null
+            && Text(slab, "b", 4).Cold is null);
     }
 
     [TestMethod]
@@ -184,8 +188,8 @@ public class ItemRefContentTests
         var slab = new Slab();
         var destination = new List<object> { "first" };
 
-        NewItem(slab, new ContentAny(new object[] { 1L, 2L }), 0).AppendContentTo(destination);
-        NewItem(slab, new ContentString("ab"), 2).AppendContentTo(destination);
+        Values(slab, new object[] { 1L, 2L }, 0).AppendContentTo(destination);
+        Text(slab, "ab", 2).AppendContentTo(destination);
 
         CollectionAssert.AreEqual(new object[] { "first", 1L, 2L, "a", "b" }, destination);
     }
@@ -194,7 +198,7 @@ public class ItemRefContentTests
     public void NewCopyOf_StringItem_CopiesTheRangeToAnotherOne()
     {
         var slab = new Slab();
-        var item = NewItem(slab, new ContentString("abc"));
+        var item = Text(slab, "abc");
 
         var copy = ItemRef.NewCopyOf(slab, new ItemId(1, 10), default, default, item.Parent, null, item);
 
@@ -204,7 +208,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void CopyContent_StringItem_Throws()
     {
-        var item = NewItem(new Slab(), new ContentString("abc"));
+        var item = Text(new Slab(), "abc");
 
         Assert.ThrowsExactly<InvalidOperationException>(() => item.CopyContent());
     }
@@ -213,7 +217,7 @@ public class ItemRefContentTests
     public void NewCopyOf_AnyItem_CopiesTheValuesToARangeOfItsOwn()
     {
         var slab = new Slab();
-        var item = NewItem(slab, new ContentAny(new object[] { 1L, 2L }));
+        var item = Values(slab, new object[] { 1L, 2L });
 
         var copy = ItemRef.NewCopyOf(slab, new ItemId(1, 10), default, default, item.Parent, null, item);
 
@@ -223,7 +227,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void CopyContent_AnyItem_Throws()
     {
-        var item = NewItem(new Slab(), new ContentAny(new object[] { 1L }));
+        var item = Values(new Slab(), new object[] { 1L });
 
         Assert.ThrowsExactly<InvalidOperationException>(() => item.CopyContent());
     }
@@ -231,7 +235,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void AppendChars_StringItem_ExtendsTheText()
     {
-        var item = NewItem(new Slab(), new ContentString("ab"));
+        var item = Text(new Slab(), "ab");
 
         item.AppendChars("cd");
         item.Length += 2;
@@ -242,7 +246,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void AppendChars_NotAString_Throws()
     {
-        var item = NewItem(new Slab(), new ContentAny(new object[] { 1 }));
+        var item = Values(new Slab(), new object[] { 1 });
 
         Assert.ThrowsExactly<InvalidOperationException>(() => item.AppendChars("x"));
     }
@@ -250,7 +254,7 @@ public class ItemRefContentTests
     [TestMethod]
     public void AppendValues_AnyItem_ExtendsTheValues()
     {
-        var item = NewItem(new Slab(), new ContentAny(new object[] { 1L }));
+        var item = Values(new Slab(), new object[] { 1L });
 
         item.AppendValues([2L, 3L]);
         item.Length += 2;
@@ -259,40 +263,45 @@ public class ItemRefContentTests
     }
 
     [TestMethod]
-    public void Content_Set_KeepsTheKindOfTheObjectAndTheCountableFlag()
+    public void Deleted_CollectedItem_HoldsNoObjectAndKeepsItsLength()
     {
-        var item = NewItem(new Slab(), new ContentString("abc"));
+        var doc = NewDoc();
+        doc.GetText("t").Insert(0, "abc");
+        doc.GetText("t").Remove(0, 3);
 
-        item.Content = new ContentDeleted(3);
+        var item = doc.Store.Find(new ItemId(1, 0));
 
-        Assert.AreEqual((SlotKind.Deleted, true), (item.Kind, item.Countable));
+        Assert.AreEqual((SlotKind.Deleted, null, 3, 0), (item.Kind, doc.Store.Slab.GetRef(item.Handle), item.Length, item.Elements.Count));
     }
 
     [TestMethod]
-    public void New_DeletedContent_HoldsNoObjectAndTheLengthOfTheSlot()
+    public void NewCopyOf_DeletedItem_IsDeletedOfTheSameLengthWithoutAnObject()
     {
-        var slab = new Slab();
+        var doc = NewDoc();
+        doc.GetText("t").Insert(0, "abc");
+        doc.GetText("t").Remove(0, 3);
+        var item = doc.Store.Find(new ItemId(1, 0));
 
-        var item = NewItem(slab, new ContentDeleted(3));
+        var copy = ItemRef.NewCopyOf(doc.Store.Slab, new ItemId(1, 10), default, default, item.Parent, null, item);
 
-        Assert.AreEqual((null, 3, 0, 0), (slab.GetRef(item.Handle), item.Length, item.Elements.Count, item.CopyContent().Length - 3));
+        Assert.AreEqual((SlotKind.Deleted, 3, null), (copy.Kind, copy.Length, doc.Store.Slab.GetRef(copy.Handle)));
     }
 
     [TestMethod]
-    public void Content_SetDeleted_DropsTheObject()
+    public void CopyContent_DeletedItem_Throws()
     {
-        var slab = new Slab();
-        var item = NewItem(slab, new ContentString("abc"));
+        var doc = NewDoc();
+        doc.GetText("t").Insert(0, "abc");
+        doc.GetText("t").Remove(0, 3);
+        var item = doc.Store.Find(new ItemId(1, 0));
 
-        item.Content = new ContentDeleted(3);
-
-        Assert.AreEqual((null, 3), (slab.GetRef(item.Handle), item.Length));
+        Assert.ThrowsExactly<InvalidOperationException>(() => item.CopyContent());
     }
 
     [TestMethod]
     public void BecomeGC_Item_IsKindGcAndNotCountable()
     {
-        var item = NewItem(new Slab(), new ContentString("abc"));
+        var item = Text(new Slab(), "abc");
 
         item.BecomeGC();
 

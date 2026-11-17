@@ -3,13 +3,13 @@
 namespace Ycs;
 
 /// <summary>
-/// Decodes an update (its structs by client, and its delete set) into objects that are reused from
-/// one update to the next on the same thread: the reader, the v1 and v2 decoders with their column
-/// readers, the dictionary, the per-client lists and the delete set. The checks are those of
-/// <see cref="EncodingUtils.ReadClientStructRefs(IUpdateDecoder)"/> and <see cref="DeleteSet.Read"/>.
+/// Decodes an update (its structs by client into a <see cref="StagingTable"/>, and its delete set) into objects that are
+/// reused from one update to the next on the same thread: the reader, the v1 and v2 decoders with their column
+/// readers, the staging table and the delete set. The checks are those of <see cref="EncodingUtils.StructCursor"/> and
+/// <see cref="DeleteSet.Read"/>.
 /// <br/>
-/// <see cref="Read"/> hands out a <see cref="Lease"/>; disposing it clears the lists and the staging table (dropping the
-/// references to the structs and the input) and makes the reader available again. Thread-local
+/// <see cref="Read"/> hands out a <see cref="Lease"/>; disposing it clears the delete set's lists and the staging table
+/// (dropping the references to the input) and makes the reader available again. Thread-local
 /// rather than per document: a server holding many documents keeps one per thread. A read while
 /// another lease is open on the thread (re-entrancy) gets the second free reader, or a new one: two readers are kept,
 /// for the pending update's retry that reads inside the lease of the update that set it aside.
@@ -33,8 +33,6 @@ internal sealed class UpdateReader
     private static int t_constructed;
 
     private readonly Lib0Reader _input = new();
-    private readonly Dictionary<long, List<AbstractStruct>> _structs = new();
-    private readonly Stack<List<AbstractStruct>> _spareStructLists = new();
     private readonly HashSet<long> _clients = new();
     private readonly DeleteSet _deleteSet = new();
     private readonly StagingTable _staging = new();
@@ -107,7 +105,11 @@ internal sealed class UpdateReader
         }
 
         _input.MaxDepth = maxDepth;
-        EncodingUtils.ReadClientStructRefs(decoder, _structs, _clients, _spareStructLists, _staging);
+        var cursor = new EncodingUtils.StructCursor(decoder, _staging, _clients);
+        while (cursor.NextStaged() >= 0)
+        {
+        }
+
         DeleteSet.ReadInto(decoder, _deleteSet, _spareDeleteLists);
     }
 
@@ -121,17 +123,11 @@ internal sealed class UpdateReader
 
         _version++;
 
-        foreach (var list in _structs.Values)
-        {
-            Recycle(list, _spareStructLists);
-        }
-
         foreach (var list in _deleteSet.Clients.Values)
         {
             Recycle(list, _spareDeleteLists);
         }
 
-        _structs.Clear();
         _deleteSet.Clients.Clear();
         _clients.Clear();
         _staging.Reset();
@@ -149,8 +145,8 @@ internal sealed class UpdateReader
         static void Recycle<T>(List<T> list, Stack<List<T>> spare)
         {
             // Also a list that is not kept: an array of 85,000 bytes or more is on the large object heap, where a dead
-            // one counts as live until a gen2 collection, so the references of an uncleared one keep the structs and
-            // their document alive through every gen0 and gen1 collection.
+            // one counts as live until a gen2 collection, so the references of an uncleared one keep its contents
+            // alive through every gen0 and gen1 collection.
             list.Clear();
             if (list.Capacity <= MaxRetainedListCapacity && spare.Count < MaxSpareLists)
             {
@@ -171,15 +167,11 @@ internal sealed class UpdateReader
             _version = version;
         }
 
-        /// <summary>The structs by client, each list in clock order.</summary>
-        public Dictionary<long, List<AbstractStruct>> Structs => Valid()._structs;
-
         public DeleteSet DeleteSet => Valid()._deleteSet;
 
         /// <summary>
         /// The structs of the update as staged fields, one table per reader and so per lease: a read while another lease is
-        /// open gets another reader and another table. Reset when the lease is released. Holds the same structs as
-        /// <see cref="Structs"/>, in the same order, each client's as one range.
+        /// open gets another reader and another table. Reset when the lease is released. Each client's structs are one range.
         /// </summary>
         public StagingTable Staging => Valid()._staging;
 

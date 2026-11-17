@@ -9,7 +9,7 @@ namespace Ycs;
 public class ItemRefTests
 {
     private static ItemRef NewItem(Slab slab, long client, long clock, string text, YType? parent = null) =>
-        ItemRef.New(slab, new ItemId(client, clock), default, default, parent ?? new YMap(), null, new ContentString(text));
+        ItemRef.New(slab, new ItemId(client, clock), default, default, parent ?? new YMap(), null, text.AsSpan());
 
     [TestMethod]
     public void Default_IsNull_ReadsAsNoStruct()

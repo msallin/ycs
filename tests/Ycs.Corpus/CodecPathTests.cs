@@ -59,7 +59,7 @@ public class CodecPathTests
 
     [TestMethod]
     [DynamicData(nameof(Cases))]
-    public void UpdateReader_RecordedUpdates_ReadsWhatTheAllocatingPathReads(string name) => Run(name, c =>
+    public void UpdateReader_RecordedUpdates_ReadsWhatFreshDecodersRead(string name) => Run(name, c =>
     {
         foreach (var v2 in new[] { false, true })
         {
@@ -67,11 +67,17 @@ public class CodecPathTests
             {
                 var bytes = update.Get(v2);
                 IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue);
-                var expectedStructs = Describe(EncodingUtils.ReadClientStructRefs(decoder));
+                var fresh = new StagingTable();
+                var cursor = new EncodingUtils.StructCursor(decoder, fresh);
+                while (cursor.NextStaged() >= 0)
+                {
+                }
+
+                var expectedStructs = Describe(fresh);
                 var expectedDs = Describe(DeleteSet.Read(decoder));
 
                 using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2, long.MaxValue);
-                Assert.AreEqual(expectedStructs, Describe(lease.Structs));
+                Assert.AreEqual(expectedStructs, Describe(lease.Staging));
                 Assert.AreEqual(expectedDs, Describe(lease.DeleteSet));
             }
         }
@@ -95,9 +101,12 @@ public class CodecPathTests
         return doc;
     }
 
-    private static string Describe(Dictionary<long, List<AbstractStruct>> structs) =>
-        string.Join(";", structs.OrderBy(kvp => kvp.Key).Select(kvp =>
-            $"{kvp.Key}:" + string.Join(",", kvp.Value.Select(s => $"{s.GetType().Name}@{s.Id.Clock}+{s.Length}"))));
+    private static string Describe(StagingTable table) =>
+        string.Join(";", Enumerable.Range(0, table.ClientCount).Select(client => table.ClientAt(client)).Order().Select(client =>
+        {
+            var (start, count) = table.RangeOf(table.FindClient(client));
+            return $"{client}:" + string.Join(",", Enumerable.Range(start, count).Select(i => $"{table.At(i).Kind}@{table.At(i).Clock}+{table.At(i).Length}"));
+        }));
 
     private static string Describe(DeleteSet ds) =>
         string.Join(";", ds.Clients.OrderBy(kvp => kvp.Key).Select(kvp =>

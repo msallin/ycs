@@ -8,18 +8,18 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// Outside the item layout and the decoded form, no method reads <see cref="ItemRef.Content"/> or type-tests a content
+/// Outside the item layout and the readers of staged structs, no method reads <see cref="ItemRef.Content"/> or type-tests a content
 /// class: the callers go through the accessors of <see cref="ItemRef"/> (<c>Kind</c>, <c>Chars</c>, <c>Cold</c>, ...), so
 /// that the storage under them can move.
 /// </summary>
 [TestClass]
 public class ContentAccessArchitectureTests
 {
-    // Types by name prefix: the item layout (the content objects of the cold kinds, the decoded form it copies from) and the
-    // staging of a decoded struct, which type-tests the decoded form.
+    // Types by name prefix: the item layout (the content objects of the cold kinds) and the staging of a struct, which
+    // reads the cold content object a staged struct holds.
     private static readonly string[] Layout = ["ItemRef", "Content", "StructStaging"];
 
-    // ItemView reads the decoded form of an item that is not in a store.
+    // ItemView reads a staged item that is not in a store.
     private static readonly string[] DecodedReaders = ["ItemView"];
 
     [TestMethod]
@@ -45,60 +45,6 @@ public class ContentAccessArchitectureTests
         }
 
         Assert.IsTrue(methods > 1000);
-        Assert.AreEqual(string.Empty, string.Join("\n", found));
-    }
-
-    // A store slot holds no ContentDeleted: the kind and the length say it. Only the decoded form, the reading of an
-    // update (ContentDeleted.Read) and ItemRef (the copy a decoded or encoded form needs) make one.
-    [TestMethod]
-    public void Library_EveryMethodBody_MakesContentDeletedOnlyInTheDecodedFormAndItemRef()
-    {
-        using var scan = IlScan.Read();
-        var (_, ops, md) = scan;
-        var found = new SortedSet<string>(StringComparer.Ordinal);
-
-        foreach (var (type, method, outer, _, op) in ops)
-        {
-            var outerName = md.GetString(md.GetTypeDefinition(outer).Name);
-            if (outerName.StartsWith("ItemRef", StringComparison.Ordinal) || outerName.StartsWith("ContentDeleted", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (op.Op == OpCodes.Newobj && op.Token.Kind == HandleKind.MethodDefinition
-                && md.GetString(md.GetTypeDefinition(md.GetMethodDefinition((MethodDefinitionHandle)op.Token).GetDeclaringType()).Name) == "ContentDeleted")
-            {
-                found.Add($"{outerName} ({type}.{method})");
-            }
-        }
-
-        Assert.AreEqual(string.Empty, string.Join("\n", found));
-    }
-
-    // A store slot holds no ContentString either: the text of a String item is in the character arena. Only the decoded
-    // form makes one (ContentString itself: Read, Copy).
-    [TestMethod]
-    public void Library_EveryMethodBody_MakesContentStringOnlyInTheDecodedForm()
-    {
-        using var scan = IlScan.Read();
-        var (_, ops, md) = scan;
-        var found = new SortedSet<string>(StringComparer.Ordinal);
-
-        foreach (var (type, method, outer, _, op) in ops)
-        {
-            var outerName = md.GetString(md.GetTypeDefinition(outer).Name);
-            if (outerName.StartsWith("ContentString", StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            if (op.Op == OpCodes.Newobj && op.Token.Kind == HandleKind.MethodDefinition
-                && md.GetString(md.GetTypeDefinition(md.GetMethodDefinition((MethodDefinitionHandle)op.Token).GetDeclaringType()).Name) == "ContentString")
-            {
-                found.Add($"{outerName} ({type}.{method})");
-            }
-        }
-
         Assert.AreEqual(string.Empty, string.Join("\n", found));
     }
 

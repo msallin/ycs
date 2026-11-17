@@ -11,7 +11,7 @@ public class StructStagingTests
     private const long Unlimited = long.MaxValue;
 
     [TestMethod]
-    public void Read_CorpusUpdates_StagingEqualsTheObjects()
+    public void Read_CorpusUpdates_WrittenAndReadAgainGiveTheSameStructs()
     {
         var structs = Sum(DecodedStructTests.CorpusUpdates());
 
@@ -19,7 +19,7 @@ public class StructStagingTests
     }
 
     [TestMethod]
-    public void Read_EveryContentKind_StagingEqualsTheObjects()
+    public void Read_EveryContentKind_WrittenAndReadAgainGiveTheSameStructs()
     {
         var inputs = DecodedStructTests.RichUpdates();
         var structs = Sum(inputs);
@@ -28,7 +28,7 @@ public class StructStagingTests
     }
 
     [TestMethod]
-    public void Read_DamagedUpdates_SameExceptionAtTheSameStructAndSoundStaging()
+    public void Read_DamagedUpdates_LeaveSoundStagingAndWhatReadsRoundTrips()
     {
         var seeds = DecodedStructTests.CorpusUpdates().Concat(DecodedStructTests.RichUpdates()).ToList();
         var random = new Random(20261117);
@@ -40,7 +40,7 @@ public class StructStagingTests
     }
 
     [TestMethod]
-    public void Read_TooManyStructs_FailsAsWithoutStaging()
+    public void Read_TooManyStructs_LeavesSoundStaging()
     {
         var update = DecodedStructTests.RichUpdates()[0];
 
@@ -64,7 +64,7 @@ public class StructStagingTests
 
         Assert.AreEqual(outerCount, outer.Staging.Count);
         Assert.IsEmpty(outer.Staging.Violations());
-        AssertShadows(outer);
+        StagingDifferential.AssertSame(ReadTable(first), outer.Staging);
     }
 
     [TestMethod]
@@ -77,8 +77,8 @@ public class StructStagingTests
 
         using var next = UpdateReader.Read(second, 0, second.Length, v2: false, Unlimited);
 
-        Assert.AreEqual((true, next.Structs.Values.Sum(l => l.Count)), (Throws(() => _ = lease.Staging), next.Staging.Count));
-        AssertShadows(next);
+        Assert.AreEqual((true, ReadTable(second).Count), (Throws(() => _ = lease.Staging), next.Staging.Count));
+        StagingDifferential.AssertSame(ReadTable(second), next.Staging);
     }
 
     [TestMethod]
@@ -90,7 +90,7 @@ public class StructStagingTests
 
         using var lease = UpdateReader.Read(good, 0, good.Length, v2: false, Unlimited);
 
-        Assert.AreEqual(lease.Structs.Values.Sum(l => l.Count), lease.Staging.Count);
+        StagingDifferential.AssertSame(ReadTable(good), lease.Staging);
     }
 
     [TestMethod]
@@ -106,7 +106,7 @@ public class StructStagingTests
 
         var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);
         var table = new StagingTable();
-        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited), staging: table);
+        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited), table);
         while (cursor.NextStaged() >= 0)
         {
         }
@@ -127,9 +127,16 @@ public class StructStagingTests
         }
     }
 
-    private static void AssertShadows(UpdateReader.Lease lease)
+    // v1 updates, read by a cursor of its own: what a lease must hold too.
+    private static StagingTable ReadTable(byte[] update)
     {
-        StagingDifferential.AssertShadows(new Dictionary<long, List<AbstractStruct>>(lease.Structs), lease.Staging);
+        var table = new StagingTable();
+        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV1(new Lib0Reader(update), Unlimited), table);
+        while (cursor.NextStaged() >= 0)
+        {
+        }
+
+        return table;
     }
 
     private static int Sum(IEnumerable<byte[]> inputs)

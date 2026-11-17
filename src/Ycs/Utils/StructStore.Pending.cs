@@ -75,30 +75,6 @@ internal sealed partial class StructStore
 
     internal PendingStructs Pending { get; set; }
 
-    /// <summary>
-    /// Writes decoded structs as the structs section of a v2 update that starts at clock 0 for every client: highest
-    /// client id first, each list from its first struct (Yjs' <c>writeClientsStructs</c> with an empty state vector). The
-    /// plan writes the same from its table (<see cref="IntegrationPlan.EncodeRest"/>); this is what it must equal.
-    /// </summary>
-    internal static void WriteRest(IUpdateEncoder encoder, Dictionary<long, List<AbstractStruct>> rest)
-    {
-        var clients = new long[rest.Count];
-        rest.Keys.CopyTo(clients, 0);
-        Array.Sort(clients);
-        encoder.RestWriter.WriteVarUint((uint)clients.Length);
-        for (var i = clients.Length - 1; i >= 0; i--)
-        {
-            var structs = rest[clients[i]];
-            encoder.RestWriter.WriteVarUint((uint)structs.Count);
-            encoder.WriteClient(clients[i]);
-            encoder.RestWriter.WriteVarUint((uint)structs[0].Id.Clock);
-            foreach (var str in structs)
-            {
-                str.Write(encoder, 0);
-            }
-        }
-    }
-
     /// <summary>Deletions of structs this store does not have yet (Yjs' <c>store.pendingDs</c>).</summary>
     internal PendingDeletes PendingDs { get; } = new();
 

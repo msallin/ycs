@@ -23,7 +23,7 @@ internal static class Editing
     /// <summary>Updates recorded on one document, applied to a receiver that starts from <see cref="Start"/>.</summary>
     private sealed record Recording(string Name, string Root, char RootKind, byte[] Start, byte[][] Updates, string Content);
 
-    private sealed record Decoded(List<AbstractStruct> Structs, List<(StagingTable Table, int Index)> Staged, List<(long Client, (long Clock, long Length)[] Ranges)> Deletes);
+    private sealed record Decoded(List<(StagingTable Table, int Index)> Staged, List<(long Client, (long Clock, long Length)[] Ranges)> Deletes);
 
     public static void Run(Fixtures f, Action<bool, string> check)
     {
@@ -156,92 +156,91 @@ internal static class Editing
 
     private static Decoded Decode(Recording r, YDoc receiver, Action<bool, string> check)
     {
-        var structs = new List<AbstractStruct>();
         var staged = new List<(StagingTable, int)>();
         var deletes = new List<(long, (long, long)[])>();
         var state = new Dictionary<long, long>();
         foreach (var u in r.Updates)
         {
-            using var lease = UpdateReader.Read(u, 0, u.Length, v2: false, long.MaxValue, int.MaxValue);
+            // A table of its own per update: a lease's table is reset when it is disposed.
             var table = new StagingTable();
-            foreach (var (client, list) in lease.Structs)
+            var decoder = new UpdateDecoderV1(new Lib0Reader(u) { MaxDepth = int.MaxValue }, long.MaxValue);
+            var cursor = new EncodingUtils.StructCursor(decoder, table);
+            while (cursor.NextStaged() is >= 0 and var i)
             {
-                table.BeginClient(client, list[0].Id.Clock);
-                foreach (var s in list)
+                // Every struct starts at its client's state: integrated in this order, each at offset 0.
+                var (id, s) = (table.IdOf(i), table.At(i));
+                var expected = state.TryGetValue(id.Client, out var c) ? c : receiver.Store.GetState(id.Client);
+                if (s.Kind == StagedKind.Skip || id.Clock != expected)
                 {
-                    // Every struct starts at its client's state: integrated in this order, each at offset 0.
-                    var expected = state.TryGetValue(client, out var c) ? c : receiver.Store.GetState(client);
-                    if (s is not (Item or GC) || s.Id.Clock != expected)
-                    {
-                        check(false, $"{r.Name}: a struct out of order, or a skip");
-                    }
-
-                    state[client] = s.Id.Clock + s.Length;
-                    structs.Add(s);
-                    StructStaging.Stage(table, s);
-                    staged.Add((table, table.Count - 1));
+                    check(false, $"{r.Name}: a struct out of order, or a skip");
                 }
+
+                state[id.Client] = id.Clock + s.Length;
+                staged.Add((table, i));
             }
 
-            foreach (var (client, items) in lease.DeleteSet.Clients)
+            foreach (var (client, items) in DeleteSet.Read(decoder).Clients)
             {
                 deletes.Add((client, [.. items.Select(i => (i.Clock, i.Length))]));
             }
         }
 
-        return new(structs, staged, deletes);
+        return new(staged, deletes);
     }
 
-    private static Staged[] Stage(List<AbstractStruct> structs) => [.. structs.Select(str =>
+    private static Staged[] Stage(List<(StagingTable Table, int Index)> structs) => [.. structs.Select(p =>
     {
-        var s = new Staged { Client = str.Id.Client, Clock = str.Id.Clock, Length = str.Length, Kind = ContentKind.Gc };
-        if (str is not Item item)
+        var (table, i) = p;
+        var id = table.IdOf(i);
+        var staged = table.At(i);
+        var s = new Staged { Client = id.Client, Clock = id.Clock, Length = staged.Length, Kind = ContentKind.Gc };
+        if (staged.Kind is StagedKind.GC or StagedKind.Skip)
         {
             return s;
         }
 
-        if (item.LeftOrigin is ItemId lo)
+        if (table.LeftOrigin(i) is ItemId lo)
         {
             (s.HasOrigin, s.OriginClient, s.OriginClock) = (true, lo.Client, lo.Clock);
         }
 
-        if (item.RightOrigin is ItemId ro)
+        if (table.RightOrigin(i) is ItemId ro)
         {
             (s.HasROrigin, s.ROriginClient, s.ROriginClock) = (true, ro.Client, ro.Clock);
         }
 
-        switch (item.Parent)
+        switch (staged.ParentKind)
         {
-            case string root:
-                s.ParentRoot = root;
+            case StagedParent.Root:
+                s.ParentRoot = table.ParentName(i);
                 break;
-            case ItemId pid:
+            case StagedParent.Id:
+                var pid = table.ParentId(i);
                 (s.HasParentId, s.ParentClient, s.ParentClock) = (true, pid.Client, pid.Clock);
                 break;
         }
 
-        s.Key = item.ParentSub;
-        s.Countable = item.Countable;
-        switch (item.Content)
+        s.Key = table.ParentSub(i);
+        s.Countable = staged.Countable;
+        switch (staged.Kind)
         {
-            case ContentString str2:
+            case StagedKind.String:
                 s.Kind = ContentKind.String;
-                s.Chars = new char[str2.Length];
-                str2.CopyTo(s.Chars);
+                s.Chars = table.Chars(i).ToArray();
                 break;
-            case ContentAny any:
+            case StagedKind.Any:
                 s.Kind = ContentKind.Any;
-                s.Values = [.. Enumerable.Range(0, any.Length).Select(any.ValueAt)];
+                s.Values = table.Values(i).ToArray();
                 break;
-            case ContentDeleted:
+            case StagedKind.Deleted:
                 s.Kind = ContentKind.Deleted;
                 break;
-            case ContentType:
+            case StagedKind.Type:
                 s.Kind = ContentKind.Type;
                 break;
             default:
                 s.Kind = ContentKind.Cold;
-                s.Cold = item.Content;
+                s.Cold = table.Cold(i);
                 break;
         }
 
@@ -251,7 +250,7 @@ internal static class Editing
     private static void Integrate(Recording r, Action<bool, string> check)
     {
         var probe = Receiver(r);
-        var staged = Stage(Decode(r, probe, check).Structs);
+        var staged = Stage(Decode(r, probe, check).Staged);
         probe = null;
         var n = staged.Length;
         var today = new Best();
@@ -313,7 +312,7 @@ internal static class Editing
         {
             // The start: the receiver with every struct integrated, in a transaction of its own (its cleanup merges).
             var doc = Receiver(r);
-            var (_, structs, deletes) = Decode(r, doc, check);
+            var (structs, deletes) = Decode(r, doc, check);
             doc.Transact(tr =>
             {
                 foreach (var (table, index) in structs)

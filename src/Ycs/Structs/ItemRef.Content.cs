@@ -53,9 +53,8 @@ internal readonly partial struct ItemRef
     /// <summary>A copy of the content that belongs to no item (what a redone item holds).</summary>
     internal IContentEx CopyContent() => Kind switch
     {
-        SlotKind.Deleted => new ContentDeleted(Length),
         SlotKind.Type => TypeContent.Copy(this),
-        SlotKind.String or SlotKind.Any => throw new InvalidOperationException($"The {Kind} content of an item is copied by NewCopyOf, not as an object."),
+        SlotKind.Deleted or SlotKind.String or SlotKind.Any => throw new InvalidOperationException($"The {Kind} content of an item is copied by NewCopyOf, not as an object."),
         _ => (IContentEx)Content.Copy(),
     };
 

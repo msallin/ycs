@@ -261,23 +261,34 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
             ? (IUpdateDecoder)new UpdateDecoderV1(stream, maxStructs)
             : new UpdateDecoderV2(stream, maxStructs);
 
-        var clientStructRefs = EncodingUtils.ReadClientStructRefs(decoder);
-
-        foreach (var kvp in clientStructRefs)
+        var table = StagingTable.Rent();
+        try
         {
-            var structs = kvp.Value;
-            if (structs.Count == 0)
+            var cursor = new EncodingUtils.StructCursor(decoder, table);
+            while (cursor.NextStaged() >= 0)
             {
-                continue;
             }
 
-            var last = structs[structs.Count - 1];
-            var endClock = last.Id.Clock + last.Length;
-
-            if (!StateVector.TryGetValue(kvp.Key, out var svClock) || svClock < endClock)
+            for (var client = 0; client < table.ClientCount; client++)
             {
-                return false;
+                var (start, count) = table.RangeOf(client);
+                if (count == 0)
+                {
+                    continue;
+                }
+
+                var last = table.At(start + count - 1);
+                var endClock = last.Clock + last.Length;
+
+                if (!StateVector.TryGetValue(table.ClientAt(client), out var svClock) || svClock < endClock)
+                {
+                    return false;
+                }
             }
+        }
+        finally
+        {
+            StagingTable.Return(table);
         }
 
         var updateDs = DeleteSet.Read(decoder);

@@ -91,36 +91,28 @@ internal static class Builder
 
             ContentKind kind;
             object cold = null;
-            switch (item.Content)
+            switch (item.Kind)
             {
-                case ContentDeleted:
+                case SlotKind.Deleted:
                     kind = ContentKind.Deleted;
                     break;
-                case ContentString str:
+                case SlotKind.String:
                     kind = ContentKind.String;
-                    var chars = new char[str.Length];
-                    str.CopyTo(chars);
-                    slot.Payload = store.Chars.Append(chars);
+                    slot.Payload = store.Chars.Append(item.Chars.ToArray());
                     break;
-                case ContentAny any:
+                case SlotKind.Any:
                     kind = ContentKind.Any;
-                    var values = new object[any.Length];
-                    for (var i = 0; i < values.Length; i++)
-                    {
-                        values[i] = any.ValueAt(i);
-                    }
-
-                    slot.Payload = store.Values.Append(values);
+                    slot.Payload = store.Values.Append(item.ValueSpan.ToArray());
                     break;
-                case ContentType type:
+                case SlotKind.Type:
                     kind = ContentKind.Type;
-                    var ti = TypeIndex(type.Type);
+                    var ti = TypeIndex(item.TypeOf);
                     slot.Payload = ti;
                     store.Types[ti].Item = h;
                     break;
                 default:
                     kind = ContentKind.Cold;
-                    cold = item.Content;
+                    cold = item.Cold;
                     break;
             }
 

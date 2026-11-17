@@ -255,7 +255,7 @@ public class ValueArenaTests
     public void Read_ByteArrayValue_IsACopyOfTheStoredOne()
     {
         var slab = new Slab();
-        var item = ItemRef.New(slab, new ItemId(1, 0), default, default, null, null, new ContentAny(new object[] { new byte[] { 1, 2 } }));
+        var item = ItemRef.New(slab, new ItemId(1, 0), default, default, null, null, new object[] { new byte[] { 1, 2 } }.AsSpan());
         var stored = slab.Values.Slice(slab.Read(item.Handle).Payload, 1)[0];
 
         var read = item.ValueAt(0);

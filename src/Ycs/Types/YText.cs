@@ -1046,7 +1046,7 @@ public partial class YText : YArrayBase
         {
             var right = curPos.Right;
             ref readonly var slot = ref right.Peek();
-            if ((slot.Info & Slot.DeletedFlag) == 0 && slot.Kind is ContentString._ref or ContentEmbed._ref or ContentType._ref)
+            if ((slot.Info & Slot.DeletedFlag) == 0 && slot.Kind is (int)SlotKind.String or (int)SlotKind.Embed or (int)SlotKind.Type)
             {
                 if (length < slot.Length)
                 {

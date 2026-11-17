@@ -64,7 +64,7 @@ public class UpdateOperationsStagedTests
     public void LazyStructReader_ManyOriginClients_ForgetsTheClientsItStreamedPast(bool v2)
     {
         var structs = Enumerable.Range(0, 1000).Select(k => (Action<IUpdateEncoder, ItemId>)((e, id) =>
-            Item.WriteItem(e, 0, id, new ItemId(100 + k, 0), null, null, new ContentDeleted(1), null, default))).ToArray();
+            WriteDeleted(e, id, new ItemId(100 + k, 0), 1))).ToArray();
         var bytes = Update(v2, (1, 0, structs));
         var reader = new LazyStructReader(
             v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue),
@@ -147,14 +147,24 @@ public class UpdateOperationsStagedTests
 
     // The items have an origin and so no parent: a parent's name would be a string between the texts in the v2 string column.
     private static Action<IUpdateEncoder, ItemId> Text(string text) =>
-        (encoder, id) => Item.WriteItem(encoder, 0, id, new ItemId(9, 0), null, null, new ContentString(text), null, default);
+        (encoder, id) =>
+        {
+            ItemRef.WriteItemHeader(encoder, (int)SlotKind.String, 0, id, new ItemId(9, 0), null, null, null, default);
+            encoder.WriteString(text);
+        };
 
     private static Action<IUpdateEncoder, ItemId> Deleted(int length) =>
-        (encoder, id) => Item.WriteItem(encoder, 0, id, new ItemId(9, 0), null, null, new ContentDeleted(length), null, default);
+        (encoder, id) => WriteDeleted(encoder, id, new ItemId(9, 0), length);
+
+    private static void WriteDeleted(IUpdateEncoder encoder, ItemId id, ItemId origin, int length)
+    {
+        ItemRef.WriteItemHeader(encoder, (int)SlotKind.Deleted, 0, id, origin, null, null, null, default);
+        encoder.WriteLength(length);
+    }
 
     private static Action<IUpdateEncoder, ItemId> Gc(int length) => (encoder, _) =>
     {
-        encoder.WriteInfo(GC.StructGCRefNumber);
+        encoder.WriteInfo((byte)SlotKind.GC);
         encoder.WriteLength(length);
     };
 
