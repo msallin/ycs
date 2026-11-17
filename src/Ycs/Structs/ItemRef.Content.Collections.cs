@@ -21,10 +21,6 @@ internal readonly partial struct ItemRef
 
     /// <summary>The content as it is now, readable after the struct merged into another or left the store.</summary>
     internal StoredContent Stored => Kind == SlotKind.Type ? new(TypeOf) : new(Content);
-
-    /// <summary><see cref="CanExtendRun"/> for <see cref="SlotKind.Any"/> values.</summary>
-    internal bool CanExtendAnyRun(Transaction transaction, AbstractType parent, ItemRef right, long client) =>
-        CanExtendRun(transaction, parent, right, typeof(ContentAny), client);
 }
 
 /// <summary>The content object of an item at one moment; it stays readable when the item's slot is reused.</summary>

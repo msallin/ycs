@@ -1,5 +1,7 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Buffers;
+
 namespace Ycs;
 
 // The shadow of a String item's text in the slab's character arena: the slot's Payload is the offset of a range, its
@@ -77,5 +79,32 @@ internal readonly partial struct ItemRef
         {
             _slab.Chars.MarkDead(slot.Payload, slot.Length);
         }
+    }
+
+    /// <summary>The text of a <see cref="SlotKind.String"/> item; valid until the item's content changes.</summary>
+    internal ReadOnlySpan<char> Chars => Typed<ContentString>(SlotKind.String).GetString().AsSpan();
+
+    /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
+    internal void AppendChars(string text)
+    {
+        StructStore.CompactForTests(_slab, true);
+        Typed<ContentString>(SlotKind.String).Append(text);
+        ref var slot = ref Write();
+        slot.Payload = _slab.Chars.Extend(slot.Payload, slot.Length, text);
+    }
+
+    /// <summary>Copies the text of a <see cref="SlotKind.String"/> item to <paramref name="destination"/>, which holds at least <see cref="Length"/> characters, without materializing a run kept in a builder.</summary>
+    internal void CopyCharsTo(Span<char> destination) => Typed<ContentString>(SlotKind.String).CopyTo(destination);
+
+    /// <summary>
+    /// Writes the text of a <see cref="SlotKind.String"/> item to <paramref name="writer"/>. The content is read before the writer
+    /// is asked for its span: a writer that runs user code there may change the item.
+    /// </summary>
+    internal void WriteCharsTo(IBufferWriter<char> writer)
+    {
+        var content = Typed<ContentString>(SlotKind.String);
+        var length = content.Length;
+        content.CopyTo(writer.GetSpan(length));
+        writer.Advance(length);
     }
 }

@@ -16,15 +16,6 @@ internal readonly partial struct ItemRef
         get => (SlotKind)Read().Kind;
     }
 
-    /// <summary>The text of a <see cref="SlotKind.String"/> item; valid until the item's content changes.</summary>
-    internal ReadOnlySpan<char> Chars => Typed<ContentString>(SlotKind.String).GetString().AsSpan();
-
-    /// <summary>The <paramref name="index"/>th value of a <see cref="SlotKind.Any"/> item.</summary>
-    internal object ValueAt(int index) => Typed<ContentAny>(SlotKind.Any).ValueAt(index);
-
-    /// <summary>The values of a <see cref="SlotKind.Any"/> item.</summary>
-    internal IReadOnlyList<object> Values => Typed<ContentAny>(SlotKind.Any).GetContent();
-
     /// <summary>The type of a <see cref="SlotKind.Type"/> item, by the table index its slot holds.</summary>
     internal AbstractType TypeOf
     {
@@ -105,18 +96,6 @@ internal readonly partial struct ItemRef
                 break;
         }
     }
-
-    /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
-    internal void AppendChars(string text)
-    {
-        StructStore.CompactForTests(_slab, true);
-        Typed<ContentString>(SlotKind.String).Append(text);
-        ref var slot = ref Write();
-        slot.Payload = _slab.Chars.Extend(slot.Payload, slot.Length, text);
-    }
-
-    /// <summary>Appends <paramref name="values"/> to a <see cref="SlotKind.Any"/> item; the caller adjusts <see cref="Length"/>.</summary>
-    internal void AppendValues(List<object> values) => Typed<ContentAny>(SlotKind.Any).Append(values);
 
     private int HandleChecked()
     {
