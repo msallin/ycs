@@ -254,6 +254,6 @@ public class ThrowingObserverTests
 
         var broken = doc._transaction != null || doc._transactionCleanups.Count > 0;
         return $"log: {first}\nescaped: {escaped ?? "-"}\nlater: {string.Join(" ", log)}\nlater escaped: {laterEscaped ?? "-"}\n" +
-            $"content: {YJson.Stringify(a.ToJson())}\nbroken: {broken}";
+            $"content: {a.ToJsonString()}\nbroken: {broken}";
     }
 }

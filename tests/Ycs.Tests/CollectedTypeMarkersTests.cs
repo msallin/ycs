@@ -51,12 +51,12 @@ public class CollectedTypeMarkersTests
         var other = Filled(doc, "o");
         map.Remove("k");
         var markers = other.DescribeSearchMarkers();
-        var content = other.ToJson().ToString();
+        var content = other.ToJsonString();
         var violations = other.SearchMarkerViolations();
 
         held.Insert(0, "q");
         held.Insert(0, "r");
 
-        Assert.AreEqual((markers, content, violations), (other.DescribeSearchMarkers(), other.ToJson().ToString(), other.SearchMarkerViolations()));
+        Assert.AreEqual((markers, content, violations), (other.DescribeSearchMarkers(), other.ToJsonString(), other.SearchMarkerViolations()));
     }
 }

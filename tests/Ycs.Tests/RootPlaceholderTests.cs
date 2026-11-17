@@ -15,7 +15,7 @@ public class RootPlaceholderTests
         var array = doc.GetArray("a");
 
         Assert.IsTrue(placeholder is not YArray && array.Doc == doc && !ReferenceEquals(placeholder, array));
-        Assert.Throws<InvalidOperationException>(() => placeholder.ToJson());
+        Assert.Throws<InvalidOperationException>(() => placeholder.ToJsonString());
     }
 
     [TestMethod]

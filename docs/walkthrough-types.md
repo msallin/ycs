@@ -32,7 +32,7 @@ Verdicts: **identical** (the same control flow), **equivalent** (different code,
 | `_first` | `_First` | identical |
 | `_callObserver` (marker reset on a remote change) | `YArrayBase.CallObserver` | identical |
 | `observe`, `unobserve`, `observeDeep`, `unobserveDeep` | `Observe` on each type, `ObserveDeep`; each returns an `IDisposable` (`YType.Subscription`) | differs: subscriptions |
-| `toJSON` | `ToJson` | identical |
+| `toJSON` | `ToJsonString` and `WriteTo` (JSON text) | identical |
 | `typeListSlice` | `YArrayBase.InternalSlice` | differs: ranges |
 | `typeListToArray` | `YArray.ToArray`, `YXmlFragment.ToArray` | equivalent (the fragment's skips only deleted items, not uncountable ones; none occur) |
 | `typeListToArraySnapshot` | `ToArray(snapshot)` (`YArrayBase.ContentAtSnapshot`) | identical |
@@ -62,7 +62,7 @@ Verdicts: **identical** (the same control flow), **equivalent** (different code,
 | `insert`, `push` | `Insert`, `Add` | differs: ranges (`Add` is `PushGenerics`) |
 | `unshift` | `Insert(0, ...)` | identical |
 | `delete` | `RemoveAt`, `RemoveRange` | identical |
-| `get`, `toArray`, `map`, `forEach`, the iterator, `toJSON` | the indexer, `ToArray`, `IEnumerable<YValue>`, `ToJson` | identical |
+| `get`, `toArray`, `map`, `forEach`, the iterator, `toJSON` | the indexer, `ToArray`, `IEnumerable<YValue>`, `ToJsonString` and `WriteTo` (JSON text) | identical |
 | `slice` | `Slice` | differs: ranges |
 | `_write`, `readYArray` | `Write`, `Read` | identical |
 | `YArrayEvent` | `YArrayEvent` | identical |
@@ -74,7 +74,7 @@ Verdicts: **identical** (the same control flow), **equivalent** (different code,
 | constructor with entries | `YMap()`, `YMap(entries)` | identical |
 | `_integrate`, `_copy`, `clone` | `Integrate`, `InternalCopy`, `InternalClone`, `Clone` | identical |
 | `_callObserver` | `CallObserver` | identical |
-| `toJSON` | `ToJson` | identical |
+| `toJSON` | `ToJsonString` and `WriteTo` (JSON text) | identical |
 | `size` | `Count` (O(1), from `_mapCount`) | equivalent (the count equals `size` after every step of the traces: a concurrent set of one key, a delete of a deleted key, the collection of nested types, splits) |
 | `keys`, `values`, `entries`, `forEach`, the iterator | `Keys`, `Values`, `IEnumerable<KeyValuePair<string, YValue>>` | identical |
 | `delete`, `clear`, `has` | `Remove`, `Clear`, `ContainsKey` | identical |
@@ -104,7 +104,7 @@ Verdicts: **identical** (the same control flow), **equivalent** (different code,
 | `_integrate` | `Integrate` | equivalent |
 | `_copy`, `clone` | `InternalCopy`, `InternalClone`, `Clone` | identical |
 | `_callObserver`, `_hasFormatting`, `_needFormattingCleanup` | `CallObserver`, `HasFormatting` | identical |
-| `toString`, `toJSON` | `ToString` (cached), `ToJson` | equivalent (the cache was checked against a fresh `CopyTo` after random edits, undo, remote updates, snapshot reads and garbage collection) |
+| `toString`, `toJSON` | `ToString` (cached), `ToJsonString` and `WriteTo` (JSON text) | equivalent (the cache was checked against a fresh `CopyTo` after random edits, undo, remote updates, snapshot reads and garbage collection) |
 | `applyDelta` with `sanitize` and the trailing newline rule | `ApplyDelta` | identical (Yjs' inverted `sanitize` included) |
 | `toDelta` | `ToDelta`, `ComputeDelta` | identical (it opens no transaction without a snapshot; a text outside a document answers) |
 | `insert`, `insertEmbed`, `delete`, `format` | `Insert`, `InsertEmbed`, `Remove`, `Format` (`InsertInTransaction`, `DeleteInTransaction`) | identical |
@@ -120,7 +120,7 @@ Verdicts: **identical** (the same control flow), **equivalent** (different code,
 | `YXmlFragment` constructor, `firstChild`, `_integrate`, `_copy`, `clone`, `length` | `YXmlFragment()`, `FirstChild`, `Integrate`, `InternalCopy`, `InternalClone`, `Count` | identical |
 | `createTreeWalker`, `querySelector`, `querySelectorAll` | `CreateTreeWalker`, `QuerySelector`, `QuerySelectorAll` | identical |
 | `_callObserver` | `CallObserver` | identical |
-| `toString`, `toJSON` | `ToString`, `ToJson` | identical (a format with a string value renders as indexed attributes, as in Yjs) |
+| `toString`, `toJSON` | `ToString`, `ToJsonString` and `WriteTo` (JSON text) | identical (a format with a string value renders as indexed attributes, as in Yjs) |
 | `insert`, `insertAfter`, `push`, `unshift`, `delete`, `get`, `toArray`, `forEach` | `Insert`, `InsertAfter`, `Add`, `Insert(0, ...)`, `RemoveAt`, `RemoveRange`, the indexer, `ToArray`, the enumerator | identical |
 | `slice` | `Slice` | differs: ranges |
 | `toDOM` (fragment, element, text, hook) | none | not ported |

@@ -636,7 +636,7 @@ internal sealed class HostileRoom
         }
 
         var snapshot = doc.CreateSnapshot();
-        return $"sv {Vector(doc.EncodeStateVector())} ds {Convert.ToHexString(snapshot.Encode())} text {Safe(() => doc.GetText("text").ToString())} map {Safe(() => doc.GetMap("map").ToJson())} array {Safe(() => doc.GetArray("array").ToJson())}";
+        return $"sv {Vector(doc.EncodeStateVector())} ds {Convert.ToHexString(snapshot.Encode())} text {Safe(() => doc.GetText("text").ToString())} map {Safe(() => YValue.Parse(doc.GetMap("map").ToJsonString()).ToObject()!)} array {Safe(() => YValue.Parse(doc.GetArray("array").ToJsonString()).ToObject()!)}";
     }
 
     private static string Vector(byte[] encoded)

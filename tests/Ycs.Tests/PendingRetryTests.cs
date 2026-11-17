@@ -81,7 +81,7 @@ public class PendingRetryTests
 
     private static (bool Pending, string StateVector, string StateV2, string Text, string Array, string Map) Observe(YDoc doc) =>
         (doc.HasPending, Convert.ToBase64String(doc.EncodeStateVector()), Convert.ToBase64String(doc.EncodeStateAsUpdate(format: UpdateFormat.V2)), doc.GetText("text").ToString(),
-            Canonical(YJson.Stringify(doc.GetArray("array").ToJson())), Canonical(YJson.Stringify(doc.GetMap("map").ToJson())));
+            Canonical(doc.GetArray("array").ToJsonString()), Canonical(doc.GetMap("map").ToJsonString()));
 
     // Object keys sorted: Yjs and Ycs list a map's keys in different orders.
     private static string Canonical(string json) => Write(JsonElement.Parse(json));

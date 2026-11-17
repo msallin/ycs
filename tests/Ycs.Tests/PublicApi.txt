@@ -396,7 +396,6 @@ sealed class Ycs.YArray : YArrayBase, System.Collections.Generic.IEnumerable<YVa
     YValue[] ToArray(Snapshot snapshot)
     bool TryGetValue(int index, out YValue value)
     int Count { get; }
-    override object ToJson()
     void Add(System.ReadOnlySpan<YValue> values)
     void Insert(int index, System.ReadOnlySpan<YValue> values)
     void RemoveAt(int index)
@@ -510,7 +509,6 @@ class Ycs.YMap : YType, System.Collections.Generic.IEnumerable<System.Collection
     bool TryGetValue(string key, Snapshot snapshot, out YValue value)
     bool TryGetValue(string key, out YValue value)
     int Count { get; }
-    override object ToJson()
     void Add(string key, YValue value)
     void Clear()
 sealed class Ycs.YMapEvent : YEvent
@@ -527,7 +525,6 @@ class Ycs.YText : YArrayBase
     int CleanupFormatting()
     int CopyTo(System.Span<char> destination)
     int Length { get; }
-    override object ToJson()
     override string ToString()
     void ApplyDelta(System.Collections.Generic.IEnumerable<Delta> delta, bool sanitize = true)
     void Format(int index, int length, System.Collections.Generic.IReadOnlyDictionary<string, YValue> attributes)
@@ -546,7 +543,8 @@ abstract class Ycs.YType
     System.IDisposable ObserveDeep(System.Action<System.Collections.Generic.IReadOnlyList<YEvent>, Transaction> handler)
     YDoc? Doc { get; }
     YType? Parent { get; }
-    abstract object ToJson()
+    string ToJsonString(System.Text.Json.JsonWriterOptions options = null)
+    void WriteTo(System.Text.Json.Utf8JsonWriter writer)
 static class Ycs.YUpdate
     static DecodedUpdate Decode(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
     static UpdateMeta ParseMeta(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
@@ -594,9 +592,13 @@ readonly struct Ycs.YValue : System.IEquatable<YValue>
     static YValue Array(System.ReadOnlySpan<YValue> items)
     static YValue Bytes(System.ReadOnlySpan<byte> bytes)
     static YValue False { get; }
+    static YValue FromJson(System.Text.Json.JsonElement element)
+    static YValue FromJson(System.Text.Json.Nodes.JsonNode? node)
     static YValue FromObject(object? value)
     static YValue Null { get; }
     static YValue Object(System.ReadOnlySpan<System.Collections.Generic.KeyValuePair<string, YValue>> members)
+    static YValue Object(System.ReadOnlySpan<System.ValueTuple<string, YValue>> members)
+    static YValue Parse(string json)
     static YValue True { get; }
     static YValue op_Implicit(System.Numerics.BigInteger value)
     static YValue op_Implicit(YDoc? value)
@@ -616,6 +618,8 @@ readonly struct Ycs.YValue : System.IEquatable<YValue>
     static long op_Explicit(YValue value)
     static string op_Explicit(YValue value)
     string GetString()
+    string ToJsonString(System.Text.Json.JsonWriterOptions options = null)
+    void WriteTo(System.Text.Json.Utf8JsonWriter writer)
 enum Ycs.YValueKind : int
     Array = 6
     BigInteger = 3
@@ -658,7 +662,6 @@ class Ycs.YXmlFragment : YArrayBase, System.Collections.Generic.IEnumerable<YTyp
     YXmlFragment()
     bool TryGetValue(int index, out YType? value)
     int Count { get; }
-    override object ToJson()
     override string ToString()
     void Add(System.ReadOnlySpan<YType> children)
     void Insert(int index, System.ReadOnlySpan<YType> children)
@@ -674,5 +677,4 @@ sealed class Ycs.YXmlText : YText
     YType? PrevSibling { get; }
     YXmlText Clone()
     YXmlText(string? text = null)
-    override object ToJson()
     override string ToString()

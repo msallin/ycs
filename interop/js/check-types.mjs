@@ -12,7 +12,7 @@ const Y = await import('yjs13')
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // --- Build the reference document with real Yjs, capturing the same shape of event summaries
-// that the C# side captures via YEvent.Path / YEvent.Keys / YEvent.Delta / AbstractType.ToJson(). ---
+// that the C# side captures via YEvent.Path / YEvent.Keys / YEvent.Delta / YType.ToJsonString(). ---
 
 const doc = new Y.Doc()
 const map = doc.getMap('map')

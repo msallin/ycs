@@ -73,8 +73,8 @@ text.Remove(0, 1);
 
 var finalState = new
 {
-    map = map.ToJson(),
-    array = arr.ToJson(),
+    map = JsonNode.Parse(map.ToJsonString()),
+    array = JsonNode.Parse(arr.ToJsonString()),
     text = text.ToString(),
     textDelta = text.ToDelta().Select(DeltaToJson).ToList()
 };

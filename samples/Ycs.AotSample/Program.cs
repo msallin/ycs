@@ -88,6 +88,14 @@ foreach (var v2 in new[] { false, true })
     Check(decoded.TryResolve(copy, out var absolute) && absolute.Index == 4, $"v{(v2 ? 2 : 1)}: position resolves elsewhere");
 }
 
+// JSON: the document's shared types as Yjs' toJSON(), written without reflection, and parsed back.
+var mapJson = doc.GetMap("map").ToJsonString();
+var parsedMap = YValue.Parse(mapJson);
+Check(parsedMap["added"]["n"].GetInt32() == 42 && parsedMap["added"]["list"].Length == 3 && parsedMap["observed"] == 1, $"json map: {mapJson}");
+Check(doc.GetArray("list").ToJsonString().StartsWith("[[10,20],\"two\",null,2.5,3000000000,{\"k\":true}]", StringComparison.Ordinal), "json array");
+Check(doc.GetText("text").ToJsonString() == "\"AOT plain bold tail\"" && YValue.FromJson(System.Text.Json.JsonElement.Parse(mapJson)) == parsedMap, "json text and element");
+Console.WriteLine(mapJson);
+
 // The text API: embeds, deltas of both kinds, a snapshot with ychange, the span and writer reads.
 var edited = new YDoc();
 var note = edited.GetText("note");

@@ -394,8 +394,8 @@ public class TraceReplayTests
         {
             var got = new Dictionary<string, object>
             {
-                ["m"] = Doc.GetMap("m").ToJson(),
-                ["a"] = Doc.GetArray("a").ToJson(),
+                ["m"] = Doc.GetMap("m").ToJsonObject(),
+                ["a"] = Doc.GetArray("a").ToJsonObject(),
                 ["sizes"] = Walk().Select(w => (object)(w.Type is YMap m ? m.Count : w.Type.Length)).ToList(),
                 ["state"] = StateHash(Doc),
                 ["log"] = Log.ToList(),
@@ -508,12 +508,12 @@ public class TraceReplayTests
             var got = new Dictionary<string, object>
             {
                 ["str"] = _root.ToString(),
-                ["json"] = _root.ToJson(),
+                ["json"] = _root.ToJsonObject(),
                 ["nodes"] = Walk().Select(t => (object)(t switch
                 {
                     YXmlElement el => new Dictionary<string, object> { ["name"] = el.NodeName, ["attrs"] = el.GetAttributes().ToDictionary(kv => kv.Key, kv => kv.Value.ToObject()), ["len"] = el.Length },
                     YXmlText xt => new Dictionary<string, object> { ["delta"] = xt.ToDelta(), ["len"] = xt.Length },
-                    YXmlHook h => new Dictionary<string, object> { ["hook"] = h.ToJson() },
+                    YXmlHook h => new Dictionary<string, object> { ["hook"] = h.ToJsonObject() },
                     _ => new Dictionary<string, object> { ["len"] = t.Length },
                 })).ToList(),
                 ["state"] = StateHash(Doc),

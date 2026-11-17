@@ -247,7 +247,7 @@ public abstract partial class YType
     internal virtual object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested) => null;
 
     /// <summary>
-    /// <see cref="ToJson"/> of <paramref name="root"/> and the maps and arrays nested in it, without recursion: they
+    /// <see cref="ToJsonTree"/> of <paramref name="root"/> and the maps and arrays nested in it, without recursion: they
     /// may be nested as deep as an update allows (<see cref="UpdateLimits.MaxDepth"/>).
     /// </summary>
     internal static object JsonTree(YType root)
@@ -258,7 +258,7 @@ public abstract partial class YType
         {
             var (type, container, key, index) = nested[^1];
             nested.RemoveAt(nested.Count - 1);
-            var json = type.ShallowJson(nested) ?? type.ToJson();
+            var json = type.ShallowJson(nested) ?? type.ToJsonTree();
             if (container is List<object> list)
             {
                 list[index] = json;

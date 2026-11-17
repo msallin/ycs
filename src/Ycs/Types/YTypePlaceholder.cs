@@ -4,5 +4,5 @@ namespace Ycs;
 // definition moves its content into the type asked for.
 internal sealed class YTypePlaceholder : YType
 {
-    public override object ToJson() => throw new InvalidOperationException("The type is not defined yet: ask the document for it by its kind (GetArray, GetMap, GetText ...).");
+    internal override object ToJsonTree() => throw new InvalidOperationException("The type is not defined yet: ask the document for it by its kind (GetArray, GetMap, GetText ...).");
 }

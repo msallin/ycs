@@ -1323,13 +1323,24 @@ namespace Ycs.Properties
         {
             try
             {
-                return View(t.ToJson());
+                _ = t.ToJsonString(); // the refusal of a root nobody defined by its kind
+                return View(JsonTree(t));
             }
             catch (Exception)
             {
                 return Obj(("$err", "toJSON"));
             }
         }
+
+        // What Yjs' toJSON() returns, in objects that keep what a JSON text cannot (bytes, NaN, the infinities).
+        private static object JsonTree(YType t) => t switch
+        {
+            YMap m => m.ToDictionary(kv => kv.Key, kv => JsonTreeOf(kv.Value)),
+            YArray a => a.Select(JsonTreeOf).ToList(),
+            _ => t.ToString(),
+        };
+
+        private static object JsonTreeOf(YValue v) => v.TryGetSharedType<YType>(out var type) ? JsonTree(type) : v.ToObject();
 
         /// <summary>The delete set of an update, merged and sorted, as plain values.</summary>
         public static Dictionary<string, object> DeleteSetOf(byte[] update, bool v2) =>

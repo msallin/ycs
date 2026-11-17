@@ -62,7 +62,8 @@ implicitly, so `map["theme"] = "dark"` and `array.Add(1, "two")` read as they sh
 | --- | --- |
 | implicit conversion | from `bool`, `int`, `long`, `double`, `BigInteger`, `string`, `byte[]`, a `YType` (a shared type) or a `YDoc` |
 | `YValue.Null`, `YValue.True`, `YValue.False` | the constants |
-| `YValue.Array(items)`, `YValue.Object(members)`, `YValue.Bytes(bytes)` | containers and binary data from spans |
+| `YValue.Array(items)`, `YValue.Object(members)`, `YValue.Bytes(bytes)` | containers and binary data from spans; the members of an object are `("key", value)` tuples (`YValue.Object(("k", 1), ("s", "v"))`) or `KeyValuePair<string, YValue>` |
+| `YValue.Parse(json)`, `YValue.FromJson(JsonElement)`, `YValue.FromJson(JsonNode?)` | from JSON, see [JSON](#json) |
 | `YValue.FromObject(object?)` | from the CLR values `null`, `bool`, `int`, `long`, `double`, `BigInteger`, `string`, `byte[]`, lists, string-keyed dictionaries, and shared types; anything else is rejected |
 
 To read one: `Kind`, `IsNull`, `GetBoolean`, `GetInt32`, `GetInt64`, `GetDouble`, `GetBigInteger`, `GetString`,
@@ -70,15 +71,46 @@ To read one: `Kind`, `IsNull`, `GetBoolean`, `GetInt32`, `GetInt64`, `GetDouble`
 `TryGetInt64`, `TryGetDouble`, `TryGetBigInteger`, `TryGetString`, `TryGetBytes`); explicit conversions to the same
 scalar types; `TryGetSharedType<T>(out T? value)` (`YType` for any shared type) and `TryGetDocument`; for arrays `Length`, the
 `int` indexer and `EnumerateArray()`; for objects `MemberCount`, the `string` indexer, `TryGetMember(name, out value)`
-and `EnumerateObject()`; and `ToObject()`, the CLR value back.
+and `EnumerateObject()`; `ToObject()`, the CLR value back (a number as `int`, `long` or `double`, an array as a
+read-only `IList<object?>`, an object as a read-only `IDictionary<string, object?>`, the rest as they are, so a `YType`
+is a shared type to cast); and `WriteTo` and `ToJsonString`, see [JSON](#json).
 
 A number inserted encodes as Yjs encodes a JavaScript number (an integer within 31 bits as a varint, otherwise a float32
 or a float64); one read back is a `YValue` number whatever its wire form. A shared type is a value too:
 `array[0].TryGetSharedType<YMap>(out var map)`.
 
+### JSON
+
+Values and shared types are written as JSON without reflection (Native AOT and a source-generated
+`JsonSerializerContext` need no help), the way `JsonNode` does:
+
+| | |
+| --- | --- |
+| `YType.WriteTo(Utf8JsonWriter)`, `YValue.WriteTo(Utf8JsonWriter)` | write into a writer, as a value or after `WritePropertyName` |
+| `YType.ToJsonString(JsonWriterOptions)`, `YValue.ToJsonString(JsonWriterOptions)` | the text; the options are optional (`Indented`, `Encoder`, `MaxDepth`) |
+| `YValue.Parse(string)`, `YValue.FromJson(JsonElement)`, `YValue.FromJson(JsonNode?)` | the value of a JSON text, element or node; a number is always a double, a malformed or too deep text (`UpdateLimits.DefaultMaxDepth`) a `JsonException` |
+
+The JSON of a shared type is what Yjs' `toJSON()` returns, as `JSON.stringify` writes it:
+
+| Value | JSON | Yjs |
+| --- | --- | --- |
+| `YText`, `YXmlText`, `YXmlFragment`, `YXmlElement` | a string: `ToString()` (text without formatting, XML as markup) | the same: `toJSON()` is `toString()` |
+| `YArray` | an array, nested types in place | the same |
+| `YMap`, `YXmlHook` | an object in key order, nested types in place | the same |
+| number | JavaScript's text: `1.0` is `1`, `1e21` is `1e+21`, `1.5e-7`, `-0` is `0`; NaN and the infinities are `null` | the same |
+| string | escaped by the encoder of the options, by default `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`; a lone surrogate is `\udXXX` in a value and U+FFFD in a name | `JSON.stringify` escapes less |
+| bytes | a base64 string (`Utf8JsonWriter.WriteBase64StringValue`) | `toJSON()` keeps the `Uint8Array`, which `JSON.stringify` writes as `{"0":1,"1":2}`; Ycs picks the encoding `System.Text.Json` uses for `byte[]` |
+| BigInteger | a number of its digits | `JSON.stringify` throws a `TypeError`; a JavaScript reader loses what a double cannot hold |
+| subdocument | an object of its root types by name (a root nobody defined by its kind yet is left out) | the same: `Doc.toJSON()` |
+| `null` | `null` | the same |
+
+A type that is a root the document has not been asked for by its kind yet (`GetArray`, `GetMap`, `GetText` ...) throws
+`InvalidOperationException`. There is no `ToJson()` returning an object tree: it needed reflection to serialize, and
+`YValue.Parse(type.ToJsonString())` gives the tree as `YValue`s where one is wanted.
+
 ## Shared types
 
-`YType` is the base of every shared type: `Doc`, `Parent`, `ToJson()` and `ObserveDeep(handler)`. A type made with `new`
+`YType` is the base of every shared type: `Doc`, `Parent`, `WriteTo(writer)` and `ToJsonString()` (see [JSON](#json)) and `ObserveDeep(handler)`. A type made with `new`
 is not in a document yet: its content can be read, changed and then inserted into an array or map (or set as a value).
 
 ### YArray
@@ -86,7 +118,7 @@ is not in a document yet: its content can be read, changed and then inserted int
 `YArray` is an `IReadOnlyList<YValue>`: `Count`, the indexer (an `ArgumentOutOfRangeException` for an index out of range),
 `TryGetValue(index, out value)`, `Add(params ReadOnlySpan<YValue>)` (Yjs' `push`), `Insert(index, params
 ReadOnlySpan<YValue>)`, `RemoveAt(index)`, `RemoveRange(index, count)`, `Slice(start, length)` (so `array[1..3]` works),
-`ToArray()`, `ToArray(snapshot)`, `Clone()` and `ToJson()`. `new YArray(1, "two")` builds one that is not in a document yet.
+`ToArray()`, `ToArray(snapshot)` and `Clone()`. `new YArray(1, "two")` builds one that is not in a document yet.
 A range that is not within the array throws before anything changes.
 
 ### YMap
@@ -424,7 +456,7 @@ before anything changes:
   recursive walks go before the JavaScript stack runs out, so no Yjs peer writes a deeper document; a
   local insert beyond the document's limit throws `ArgumentException` / `InvalidOperationException`).
   What an update can make Ycs walk, it walks without recursion: decoding and encoding values (binary
-  and JSON), deleting and garbage-collecting nested types, `ToJson`; so a hostile update of any depth
+  and JSON), deleting and garbage-collecting nested types, `WriteTo` and `ToJsonString`; so a hostile update of any depth
   is rejected, and with `UpdateLimits.Unlimited` a document of 100,000 levels is applied, read,
   deleted and encoded, on a thread with a 256 KiB stack. `ToString` of nested XML, `Clone` and the
   UndoManager's redo of nested deleted types recurse once per level of types and throw

@@ -96,7 +96,7 @@ public sealed record UpdateLimits
     /// its own (a value in a type counts from its own top). Yjs handles about 3,000 levels of values and of types
     /// before its recursive walks exhaust the JavaScript stack, so no Yjs peer writes a deeper document. Ycs walks
     /// both without recursion where an update can lead it (decoding, encoding, deleting, garbage collection,
-    /// <see cref="AbstractType.ToJson"/>); the other walks (<c>ToString</c> of XML, <c>Clone</c>, the UndoManager's
+    /// <see cref="YType.WriteTo"/>); the other walks (<c>ToString</c> of XML, <c>Clone</c>, the UndoManager's
     /// redo) recurse once per level of types and throw <see cref="InsufficientExecutionStackException"/> where the
     /// stack runs out. Values inserted locally are held to the default. Default 3,000. Positive.
     /// </summary>
