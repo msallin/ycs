@@ -806,6 +806,89 @@ objects) against `layout-9-6` (the table only). One child process per workload a
 | `apply-state-v1/ycs` (10 loads of the final state) | 67.2 | 57.3 | 57.6 / 38.2 | 2.7 / 2.7 |
 | `apply-updates/ycs` (259,778 updates, one transaction each) | 243.4 | 228.3 | 38.6 / 12.0 | 17.4 / 17.4 |
 
+### Step 8 and 9 against the object layout (layout 8.13, 2026-11-17, ycs only)
+
+`modernize` 044bb73 (items as objects) against the branch, after the slab (7), the arenas (8.x) and the removal of the decoded
+objects (9.x), built from separate trees and run interleaved by `ab.py 4 6` (`results/2026-11-17-8-13/`). The machine was
+shared: load average 0.75 at the start of the final run and 1.7 to 4.0 on its lines (1.2 to 4.8 in the run without any
+change), so a difference under about 5 % is inside the noise; the in-process comparisons below ran at load 0.7 to 1.5 where
+noted. Allocation and held memory are deterministic.
+
+| workload | 044bb73 ms | branch ms | change | alloc MiB 044bb73 / branch | held MiB 044bb73 / branch |
+| --- | ---: | ---: | ---: | --- | --- |
+| `trace-replay` | 202.0 | 240.5 | +19 % | 43.04 / 24.86 | 3.0 / 1.9 |
+| `text-random` | 24.6 | 25.4 | +3 % | 3.74 / 1.68 | 5.3 / 3.2 |
+| `text-random-100k` | 905.0 | 758.3 | -16 % | 18.59 / 7.87 | 27.1 / 16.3 |
+| `text-append` | 16.6 | 20.9 | +26 % | 0.20 / 0.51 | 1.3 / 1.5 |
+| `array-insert-random` | 134.8 | 122.0 | -9 % | 16.93 / 5.41 | 18.9 / 10.4 |
+| `array-delete-random` | 176.7 | 123.8 | -30 % | 32.78 / 4.20 | 20.1 / 11.6 |
+| `array-push-1txn` | 6.8 | 7.5 | +10 % | 10.39 / 4.27 | 9.4 / 10.4 |
+| `concurrent-20` | 68.2 | 68.2 | +0 % | 28.55 / 14.32 | 29.1 / 14.3 |
+| `apply-state-v1/ycs` | 53.1 | 56.3 | +6 % | 33.14 / 38.07 | 4.5 / 2.7 |
+| `apply-state-v2/ycs` | 54.8 | 55.7 | +2 % | 35.14 / 40.08 | 4.4 / 2.8 |
+| `apply-updates/ycs` | 223.3 | 228.6 | +2 % | 59.31 / 11.94 | 18.6 / 17.4 |
+| `encode-v1` | 5.0 | 5.5 | +10 % | 2.76 / 2.76 | 3.2 / 1.9 |
+| `text-append-1txn-observed-25k` | 30.7 | 37.4 | +22 % | 4.71 / 2.11 | 0.6 / 0.7 |
+| `text-append-1txn-observed` | 138.4 | 142.3 | +3 % | 18.77 / 8.30 | 2.3 / 2.4 |
+| `map-set-distinct` | 40.8 | 31.4 | -23 % | 36.55 / 22.57 | 38.9 / 24.9 |
+| `map-set-distinct-1txn` | 31.9 | 18.5 | -42 % | 39.25 / 25.28 | 38.9 / 24.9 |
+| `map-set-same` | 48.4 | 55.5 | +15 % | 28.99 / 6.84 | 0.0 / 0.0 |
+| `array-push` | 18.2 | 19.7 | +8 % | 10.39 / 4.33 | 9.4 / 10.9 |
+| `read-array` | 5.0 | 19.0 | +280 % | 0.00 / 0.00 | 4.3 / 4.8 |
+| `read-map` | 25.8 | 27.2 | +5 % | 0.00 / 0.00 | 34.1 / 20.1 |
+
+Before any change (359f0a3 against 044bb73, `ab-4x6-before.txt`): `text-append-1txn-observed-25k` +52 %, `-observed` +40 %,
+`encode-v1` +24 %, `trace-replay` +21 %, `text-append` +20 %, `map-set-same` +18 %, `read-array` x4, the rest as in the step 7
+table. Allocation is lower on every editing workload and `apply-updates`, higher on `apply-state-*` (the staging table);
+held memory is 25 to 40 % lower on the text and map workloads, 10 to 15 % higher on the array pushes (8 bytes per value in the
+arena, with the run's doubling).
+
+What was kept, each measured alone against the commit before it (`ab.py 4 6` where a file is named, else the in-process
+harness: the typing loops timed with `Stopwatch` in one process, 30 to 45 repetitions, the build before against the build
+after, alternated):
+
+* **`WriteItem` reads the slot once** (`encode-v1`): the clients, origins, parent and key come off one `ref readonly Slot`, and the
+  kind is switched on once (it was read through about ten accessors and tested four times). 6.0 to 5.6 ms (-6.7 %,
+  `ab-4x6-write-and-read-array.txt`).
+* **`read-array`** (the +7.6 MiB of 8.8): `EnumerateRaw` copies an Any run so that the values stay readable when the struct merges
+  away or a compaction moves the range; the copy is a rented array now (`ArrayPool<object>`, returned by the enumerator's `finally`)
+  instead of a fresh 800 kB array on the large object heap per 100,000-value run. 0 B allocated (was 7.63 MiB), 20.6 to 18.5 ms
+  (-10 %). The 044bb73 time (5.0 ms) is not reached: since the `YValue` API an element is also converted (`YValue.FromStored`) through
+  two nested iterators, which is the API's cost, not the layout's.
+* **The marker walk of observed typing** (`text-append-1txn-observed-25k`, `-observed`, `array-delete-random`): the cost was found
+  by timing the phases of `YText.InsertInTransaction` (an instrumented build, not kept): 42 of 52 ms of 25,000 inserts were
+  `FindPosition`. In one observed transaction every insert is an item of its own, all in one run; the marker sits on the run's head,
+  so each lookup walks right over the whole run (a jump through the run-head index after 32 steps), then walks left back to the
+  head (another jump after 32 steps), and each jump scans positions of up to two 128-position leaves one `ValueAt` at a time.
+  Two changes: `ClientStructs.SeekRight`/`SeekLeft` scan a leaf through its flags and starts arrays, taken once (about -8 %), and
+  the walk to the left jumps to the run head after 8 steps instead of 32 (every step of that walk stays in a run, so the jump always
+  gains; about -15 % more; random typing unchanged). Together, against 359f0a3: `text-append-1txn-observed-25k` 46.9 to 36.9 ms
+  (-21 %), `-observed` 187.4 to 144.5 (-23 %), `array-delete-random` 156.7 to 133.2 (-15 %), the rest equal
+  (`ab-4x6-marker-walk.txt`, load 1.3 to 1.6).
+
+Tried and not kept (each in the in-process harness, load 0.7 to 4, kept when it gained at least 3 % on its workload):
+
+* `MarkDeleted(Transaction)` from one slot read (`map-set-same` 53.4 against 54.2 ms); `ExtendRun`/`CanExtendRun` from one slot read
+  (`text-append`, mid-document typing 11.1 to 11.5 against 11.4 to 12.0 ms: noise).
+* `Transaction.Doc`, `Local` and `DeleteSet` made inlinable (a `throw` in the getter kept the JIT from inlining them into
+  `CanExtendRun`, found with `DOTNET_JitDisasm`; with a throw helper they inline and `GetState` with them): no change in any workload.
+* A memo of the last list change in `AddChangedTypeToTransaction` (typing records the same type per insert): -3 % on the observed
+  typing, nothing on `text-append`.
+* `NewItem` and `SplitItem` without the `SetKey(handle, null)` and the `Parent` to table-index round trip: `text-random` 26.8
+  against 25.9 ms. The simplified `TryToMergeWithLefts` (the redundant `Deleted` and `IsSameKind` tests before `CanMergeWith`):
+  nothing, the merge pass of 25,000 observed items is 1.2 of 46 ms.
+* The same run probe in the walk to the right: 36.8 to 39.7 against 37.1 to 39.0 ms without it. A lower `LiteralWalkSteps` for all
+  walks: observed 47 to 32 ms but `text-random` 27 to 34 ms (a lookup that finds no run to jump costs about 25 steps).
+* `Right.AsItem`/`Left.AsItem` as one accessor (one slot read for the neighbour test): `trace-replay`'s delete calls 86.8 against 88.3 ms.
+
+What remains of the step 7 table, and why: `trace-replay` is +19 %. Its 77,463 delete calls take 66 ms on 044bb73 and 87 ms on the
+branch in the harness (the inserts 83 and 94 ms, the rest 73 and 78); counters show each delete passes 12.9 items in
+`DeleteText`'s loop and 36 in `CleanupFormattingGap`'s walk over the deleted items around it (Yjs' algorithm). Each step is a
+dependent load through two arrays (`_slotPages`, then the page) where the object layout had one, and a read-once accessor does
+not change that; only a run index of deleted items would. `text-append` (+26 %) and mid-document typing (+30 %) are per-transaction
+costs spread over the transaction, the item and the run extension, with no single phase above 10 %. `map-set-same` +15 %,
+`array-push` +8 %, `array-push-1txn` +10 %: the same.
+
 ## Pinned versions
 
 `YDotNet` 0.7.0 and `YDotNet.Native` 0.7.0 (which pulls `YDotNet.Native.Linux`, `.MacOS`, `.Win32` 0.7.0), source

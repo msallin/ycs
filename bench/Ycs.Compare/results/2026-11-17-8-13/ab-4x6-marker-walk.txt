@@ -1,0 +1,18 @@
+start load 1.45 2.17 3.84 1/1008 119118
+text-append-1txn-observed-25k base median      46.9 ms (min 45.4 max 63.6; pass medians 47.2, 46.0, 46.0, 46.9)  alloc     2.11 MiB  held 0.7 MiB  peak RSS 55 MiB  load 1.57
+text-append-1txn-observed-25k new  median      36.9 ms (min 36.2 max 42.3; pass medians 36.4, 37.0, 36.8, 38.0)  alloc     2.11 MiB  held 0.7 MiB  peak RSS 49 MiB  load 1.57
+text-append-1txn-observed base median     187.4 ms (min 184.5 max 206.4; pass medians 185.3, 188.0, 205.4, 186.6)  alloc     8.30 MiB  held 2.4 MiB  peak RSS 59 MiB  load 1.37
+text-append-1txn-observed new  median     144.5 ms (min 138.7 max 196.1; pass medians 139.3, 169.2, 143.8, 144.7)  alloc     8.30 MiB  held 2.4 MiB  peak RSS 70 MiB  load 1.37
+trace-replay             base median     241.8 ms (min 238.5 max 253.0; pass medians 242.5, 240.8, 240.4, 250.6)  alloc    24.86 MiB  held 1.9 MiB  peak RSS 211 MiB  load 1.35
+trace-replay             new  median     241.7 ms (min 235.6 max 252.5; pass medians 236.8, 244.0, 236.6, 251.0)  alloc    24.86 MiB  held 1.9 MiB  peak RSS 207 MiB  load 1.35
+text-random              base median      25.5 ms (min 24.9 max 30.2; pass medians 25.2, 25.8, 25.8, 25.3)  alloc     1.68 MiB  held 3.2 MiB  peak RSS 68 MiB  load 1.33
+text-random              new  median      25.9 ms (min 25.3 max 38.8; pass medians 25.4, 27.2, 30.7, 25.6)  alloc     1.68 MiB  held 3.2 MiB  peak RSS 52 MiB  load 1.33
+text-random-100k         base median     834.6 ms (min 763.5 max 868.6; pass medians 763.5, 868.6, 857.3, 812.0)  alloc     7.87 MiB  held 16.3 MiB  peak RSS 60 MiB  load 1.52
+text-random-100k         new  median     776.0 ms (min 741.2 max 887.7; pass medians 804.4, 887.7, 741.2, 747.5)  alloc     7.87 MiB  held 16.3 MiB  peak RSS 75 MiB  load 1.52
+array-insert-random      base median     128.0 ms (min 121.1 max 174.5; pass medians 130.4, 129.2, 128.2, 125.1)  alloc     5.41 MiB  held 10.4 MiB  peak RSS 78 MiB  load 1.61
+array-insert-random      new  median     129.1 ms (min 119.8 max 167.8; pass medians 149.8, 120.7, 122.1, 130.1)  alloc     5.41 MiB  held 10.4 MiB  peak RSS 80 MiB  load 1.57
+array-delete-random      base median     156.7 ms (min 148.4 max 174.0; pass medians 149.6, 162.6, 159.0, 153.0)  alloc     4.20 MiB  held 11.6 MiB  peak RSS 69 MiB  load 1.47
+array-delete-random      new  median     133.2 ms (min 125.2 max 140.4; pass medians 133.5, 130.4, 133.5, 132.7)  alloc     4.20 MiB  held 11.6 MiB  peak RSS 80 MiB  load 1.51
+text-append              base median      21.6 ms (min 20.5 max 25.9; pass medians 21.8, 21.7, 21.7, 20.6)  alloc     0.51 MiB  held 1.5 MiB  peak RSS 50 MiB  load 1.33
+text-append              new  median      21.0 ms (min 20.6 max 24.1; pass medians 21.0, 22.4, 20.9, 21.0)  alloc     0.51 MiB  held 1.5 MiB  peak RSS 51 MiB  load 1.36
+end load 1.33 1.83 3.42 3/917 131540
