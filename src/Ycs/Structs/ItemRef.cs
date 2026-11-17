@@ -204,13 +204,6 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     // JIT's inlining budget, and a call per read cost the walks up to 15 % (bench/Ycs.Compare/README.md, "ItemRef").
     // A GC struct's slot holds no links, origins, parent, content or key: they read as none.
 
-    // The kind of the content (its reference number); 0 for a GC struct.
-    internal int ContentRef
-    {
-        [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get => Read().Kind;
-    }
-
     public ItemRef Left
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]

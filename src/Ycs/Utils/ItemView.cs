@@ -15,7 +15,7 @@ namespace Ycs;
 /// the id (a split narrows the range; a merge frees the slot, and the slot may be reused by another struct, which
 /// then is the one that holds the id or does not cover it); else one lookup by id finds S. Valid as long as the
 /// document: after a merge the view reads the struct that holds its id now, so the second of three merged items reads
-/// "bc" where Yjs' orphan reads "b" (H7). A replacement by a GC struct keeps the slot: the view then reads the GC struct.
+/// "bc" where Yjs' orphan reads "b". A replacement by a GC struct keeps the slot: the view then reads the GC struct.
 /// A handle rather than a copy of <c>StructStore.Departures</c>: a departure elsewhere does not make every view look up
 /// again.
 /// </para>

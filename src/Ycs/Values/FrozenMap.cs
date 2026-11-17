@@ -70,8 +70,6 @@ internal sealed class FrozenMap : IDictionary<string, object?>, IReadOnlyDiction
         _count = count;
     }
 
-    internal string[] RawKeys => _keys;
-
     internal object?[] RawValues => _values;
 
     internal void SetRawAt(int index, object? value) => _values[index] = value;

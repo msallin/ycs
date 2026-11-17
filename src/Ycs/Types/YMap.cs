@@ -63,10 +63,7 @@ public partial class YMap : YType
 
         foreach (var kvp in EnumerateEntries())
         {
-            // Bug fix vs. the original port: `TypeMapEnumerate()` yields raw `Item`s, not their
-            // content values, so cloning used to store the `Item` itself as the value. Use
-            // `TypeMapEnumerateValues()` (actual values) and recursively clone nested shared types,
-            // matching Yjs' `clone()`: `map.set(key, value instanceof YType ? value.clone() : value)`.
+            // Matches Yjs' `clone()`: `map.set(key, value instanceof YType ? value.clone() : value)`.
             map.SetRaw(kvp.Key, kvp.Value is YType at ? at.InternalClone() : kvp.Value);
         }
 

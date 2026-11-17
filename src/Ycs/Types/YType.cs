@@ -418,17 +418,6 @@ public abstract partial class YType
         // Do nothing.
     }
 
-    internal ItemRef _First()
-    {
-        var n = _start;
-        while (!n.IsNull && n.Deleted)
-        {
-            n = n.Right.AsItem;
-        }
-
-        return n;
-    }
-
     internal bool HasDeepObservers => _deepObservers != null;
 
     internal void InvokeEventHandlers(YEvent evt, Transaction transaction)

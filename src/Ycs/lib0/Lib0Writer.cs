@@ -147,18 +147,6 @@ internal sealed class Lib0Writer
         _length += bytes.Length;
     }
 
-    public void WriteUint16(ushort num)
-    {
-        BinaryPrimitives.WriteUInt16LittleEndian(GetSpan(2), num);
-        _length += 2;
-    }
-
-    public void WriteUint32(uint num)
-    {
-        BinaryPrimitives.WriteUInt32LittleEndian(GetSpan(4), num);
-        _length += 4;
-    }
-
     public void WriteFloat32(float num)
     {
         BinaryPrimitives.WriteSingleBigEndian(GetSpan(4), num);

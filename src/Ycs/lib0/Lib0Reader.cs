@@ -75,10 +75,6 @@ internal sealed class Lib0Reader
         return span;
     }
 
-    public ushort ReadUint16() => BinaryPrimitives.ReadUInt16LittleEndian(ReadBytes(2));
-
-    public uint ReadUint32() => BinaryPrimitives.ReadUInt32LittleEndian(ReadBytes(4));
-
     public float ReadFloat32() => BinaryPrimitives.ReadSingleBigEndian(ReadBytes(4));
 
     public double ReadFloat64() => BinaryPrimitives.ReadDoubleBigEndian(ReadBytes(8));

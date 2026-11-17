@@ -39,7 +39,6 @@ public abstract partial class YArrayBase
             // We need to iterate one to the left so that the algorithm works.
             if (index == 0)
             {
-                // @todo: refactor this as it actually doesn't consider formats.
                 n = n.Prev.AsItem;
                 index += !n.IsNull && n.Countable && !n.Deleted ? n.Length : 0;
             }

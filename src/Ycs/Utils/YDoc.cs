@@ -326,11 +326,6 @@ public sealed partial class YDoc
         }
     }
 
-    internal YDocOptions CloneOptionsWithNewGuid()
-    {
-        return _opts with { Guid = System.Guid.NewGuid().ToString("D") };
-    }
-
     internal string FindRootTypeKey(YType type)
     {
         foreach (var kvp in _share ?? [])
