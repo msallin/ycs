@@ -602,6 +602,6 @@ internal sealed partial class StructStore
         }
 
         /// <summary>The view the garbage collection filter is asked about for <paramref name="item"/>, a planned item or a stored one.</summary>
-        private ItemView GcViewOf(YDoc doc, PlanItem item) => item.IsStaged ? ItemView.Detached(doc, StructAt(item.Index)) : item.GcView(doc);
+        private static ItemView GcViewOf(YDoc doc, PlanItem item) => item.GcView(doc);
     }
 }

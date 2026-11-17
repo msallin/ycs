@@ -77,8 +77,8 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
 
     public ID? RightOrigin => _table is null ? _stored.RightOrigin : _table.RightOrigin(_index);
 
-    /// <summary>The view the document's garbage collection filter is asked about; the plan makes one of a staged item.</summary>
-    public ItemView GcView(YDoc doc) => ItemView.At(doc, _stored.Id);
+    /// <summary>The view the document's garbage collection filter is asked about: of the store's item, or the detached view of the staged one.</summary>
+    public ItemView GcView(YDoc doc) => _table is null ? ItemView.At(doc, _stored.Id) : ItemView.Detached(doc, _table, _index);
 
     public static bool operator ==(PlanItem left, PlanItem right) => left.Equals(right);
 

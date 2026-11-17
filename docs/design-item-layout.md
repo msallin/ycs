@@ -515,7 +515,8 @@ ported code keeps reading like Yjs. It is (slab, handle) (1.7), and the long-liv
 
 `public readonly struct ItemView : IEquatable<ItemView>`: the document, the id, and an internal hint: the
 slab handle of the struct it was made from, valid when its slot is live and holds the id (a detached view holds the
-decoded struct instead).
+staging table, the struct's index and the table's version instead: it reads the staged fields while the version
+matches, then the store's struct that holds its id, and throws `InvalidOperationException` when the store has none).
 
 * **What it reads**: the struct that holds its id *now*, as if split at the id without splitting it. With S the struct
   that holds the id and o = id.clock - S.clock: `Length` = S.Length - o; `Content` = S's content from o; `LeftOrigin` =

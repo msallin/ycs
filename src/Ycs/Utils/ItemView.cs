@@ -20,9 +20,13 @@ namespace Ycs;
 /// again.
 /// </para>
 /// <para>
-/// A detached view (<see cref="Detached"/>) holds a decoded struct that is in no store (the integration plan calls
-/// <c>GcFilter</c> on planned items): it reads that object and never looks up. Layout: <c>_doc</c>, <c>_id</c>,
-/// <c>_hint</c> (a slab handle, -1 for none), <c>_decoded</c> (null for a store view).
+/// A detached view (<see cref="Detached"/>) names a staged struct that is in no store (the integration plan calls
+/// <c>GcFilter</c> on planned items): <c>_hint</c> is its index in <c>_table</c> and <c>_version</c> the table's version
+/// when the view was made. While the table still has that version it reads the staged fields, as the struct is staged
+/// (no neighbours, no resolved parent, no type yet for a Type); after a reset or truncate it reads the store's struct
+/// that holds its id, and throws <see cref="InvalidOperationException"/> when the store has none (the struct was set
+/// aside, or its clock is beyond the client's state). Layout: <c>_doc</c>, <c>_id</c>, <c>_hint</c> (a slab handle, -1
+/// for none), <c>_table</c> (null for a store view), <c>_version</c>.
 /// </para>
 /// <para><c>default</c> is no view: every member throws <see cref="InvalidOperationException"/>.</para>
 /// </remarks>
@@ -31,31 +35,37 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     private readonly YDoc? _doc;
     private readonly ID _id;
     private readonly int _hint;
-    private readonly AbstractStruct? _decoded;
+    private readonly StagingTable? _table;
+    private readonly int _version;
 
-    private ItemView(YDoc? doc, ID id, int hint, AbstractStruct? decoded)
+    private ItemView(YDoc? doc, ID id, int hint, StagingTable? table = null, int version = 0)
     {
         _doc = doc;
         _id = id;
         _hint = hint;
-        _decoded = decoded;
+        _table = table;
+        _version = version;
     }
 
     /// <summary>The view of the struct <paramref name="str"/> of <paramref name="doc"/>'s store, which it names by its id.</summary>
-    internal static ItemView Of(YDoc doc, ItemRef str) => new(doc ?? throw new ArgumentNullException(nameof(doc)), str.Id, str.Handle, null);
+    internal static ItemView Of(YDoc doc, ItemRef str) => new(doc ?? throw new ArgumentNullException(nameof(doc)), str.Id, str.Handle);
 
     /// <summary>The view of the id <paramref name="id"/> of <paramref name="doc"/>, with no hint: the first read looks it up.</summary>
-    internal static ItemView At(YDoc doc, ID id) => new(doc ?? throw new ArgumentNullException(nameof(doc)), id, -1, null);
+    internal static ItemView At(YDoc doc, ID id) => new(doc ?? throw new ArgumentNullException(nameof(doc)), id, -1);
 
     /// <summary>
-    /// The view of a decoded struct that is in no store, which it reads as it is: it has no neighbours, and its parent is
-    /// not resolved (<see cref="Parent"/> is null unless the decoded struct names a type).
+    /// The view of struct <paramref name="index"/> of <paramref name="table"/>, which is in no store: it reads the staged
+    /// struct while the table keeps its version, the store's struct after.
     /// </summary>
-    internal static ItemView Detached(YDoc? doc, AbstractStruct decoded) => new(doc, decoded.Id, -1, decoded);
+    internal static ItemView Detached(YDoc? doc, StagingTable table, int index) => new(doc, table.IdOf(index), index, table, table.Version);
 
-    public bool IsDefault => _doc == null && _decoded == null;
+    public bool IsDefault => _doc == null && _table == null;
 
-    internal bool IsDetached => _decoded != null;
+    internal bool IsDetached => _table != null;
+
+    private bool IsStaged => _table != null && _table.Version == _version;
+
+    private ref readonly StagedStruct Staged => ref _table!.At(_hint);
 
     public YDoc? Doc => _doc;
 
@@ -65,9 +75,9 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     {
         get
         {
-            if (_decoded != null)
+            if (IsStaged)
             {
-                return _decoded is Item decodedItem ? (ItemKind)decodedItem.Content.Ref : _decoded is GC ? ItemKind.GC : ItemKind.Skip;
+                return (ItemKind)(int)Staged.Kind;
             }
 
             var s = Resolve(out _);
@@ -79,9 +89,9 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     {
         get
         {
-            if (_decoded != null)
+            if (IsStaged)
             {
-                return _decoded.Length;
+                return Staged.Length;
             }
 
             var s = Resolve(out var o);
@@ -93,9 +103,9 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     {
         get
         {
-            if (_decoded != null)
+            if (IsStaged)
             {
-                return new ID(_decoded.Id.Client, _decoded.Id.Clock + _decoded.Length - 1);
+                return new ID(_id.Client, _id.Clock + Staged.Length - 1);
             }
 
             var s = Resolve(out _);
@@ -103,20 +113,20 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         }
     }
 
-    public bool Deleted => _decoded != null ? _decoded.Deleted : Resolve(out _).Deleted;
+    public bool Deleted => IsStaged ? Staged.Kind is StagedKind.GC or StagedKind.Skip : Resolve(out _).Deleted;
 
-    public bool Countable => _decoded != null ? _decoded is Item { Countable: true } : Resolve(out _).AsItem is { IsNull: false } item && item.Countable;
+    public bool Countable => IsStaged ? Staged.Countable : Resolve(out _).AsItem is { IsNull: false } item && item.Countable;
 
-    public bool Keep => _decoded == null && Resolve(out _).AsItem is { IsNull: false } item && item.Keep;
+    public bool Keep => !IsStaged && Resolve(out _).AsItem is { IsNull: false } item && item.Keep;
 
     /// <summary>What <c>GetContent()</c> gives from the view's offset on: a read-only slice, never a <c>Splice</c>.</summary>
     public IReadOnlyList<object?> Content
     {
         get
         {
-            if (_decoded != null)
+            if (IsStaged)
             {
-                return _decoded is Item decodedItem ? (IReadOnlyList<object?>)decodedItem.Content.GetContent() : Array.Empty<object?>();
+                return StagedContent();
             }
 
             var item = Resolve(out var o);
@@ -134,9 +144,9 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     {
         get
         {
-            if (_decoded != null)
+            if (IsStaged)
             {
-                return (_decoded as Item)?.LeftOrigin;
+                return _table!.LeftOrigin(_hint);
             }
 
             var s = Resolve(out var o);
@@ -144,35 +154,35 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         }
     }
 
-    public ID? RightOrigin => _decoded != null ? (_decoded as Item)?.RightOrigin : Resolve(out _).AsItem is { IsNull: false } item ? item.RightOrigin : null;
+    public ID? RightOrigin => IsStaged ? _table!.RightOrigin(_hint) : Resolve(out _).AsItem is { IsNull: false } item ? item.RightOrigin : null;
 
     /// <summary>The view of (client, clock - 1) at an offset, else of S's left struct; null when there is none (a decoded struct has no neighbours).</summary>
     public ItemView? Left
     {
         get
         {
-            if (_decoded != null)
+            if (IsStaged)
             {
                 return null;
             }
 
             var s = Resolve(out var o);
-            return o > 0 ? new ItemView(_doc, new ID(_id.Client, _id.Clock - 1), s.Handle, null) : Neighbour(s.AsItem is { IsNull: false } item ? item.Left : default);
+            return o > 0 ? new ItemView(_doc, new ID(_id.Client, _id.Clock - 1), s.Handle) : Neighbour(s.AsItem is { IsNull: false } item ? item.Left : default);
         }
     }
 
-    public ItemView? Right => _decoded != null ? null : Neighbour(Resolve(out _).AsItem is { IsNull: false } item ? item.Right : default);
+    public ItemView? Right => IsStaged ? null : Neighbour(Resolve(out _).AsItem is { IsNull: false } item ? item.Right : default);
 
-    public AbstractType? Parent => _decoded != null ? (_decoded as Item)?.Parent as AbstractType : Resolve(out _).AsItem is { IsNull: false } item ? item.Parent : null;
+    public AbstractType? Parent => IsStaged ? null : Resolve(out _).AsItem is { IsNull: false } item ? item.Parent : null;
 
-    public string? ParentSub => _decoded != null ? (_decoded as Item)?.ParentSub : Resolve(out _).AsItem is { IsNull: false } item ? item.ParentSub : null;
+    public string? ParentSub => IsStaged ? _table!.ParentSub(_hint) : Resolve(out _).AsItem is { IsNull: false } item ? item.ParentSub : null;
 
     /// <summary>S's, moved by the offset as Yjs' <c>splitItem</c> moves it.</summary>
     public ID? Redone
     {
         get
         {
-            if (_decoded != null)
+            if (IsStaged)
             {
                 return null;
             }
@@ -183,7 +193,7 @@ public readonly partial struct ItemView : IEquatable<ItemView>
     }
 
     public bool Equals(ItemView other) =>
-        ReferenceEquals(_doc, other._doc) && _id.Equals(other._id) && ReferenceEquals(_decoded, other._decoded);
+        ReferenceEquals(_doc, other._doc) && _id.Equals(other._id) && ReferenceEquals(_table, other._table) && (_table == null || (_hint == other._hint && _version == other._version));
 
     public override bool Equals(object? obj) => obj is ItemView other && Equals(other);
 
@@ -197,14 +207,19 @@ public readonly partial struct ItemView : IEquatable<ItemView>
 
     private bool Checked() => !IsDefault ? true : throw new InvalidOperationException("The view is default(ItemView): it names no struct. Make one from a struct or an id.");
 
-    private ItemView? Neighbour(ItemRef s) => s.IsNull ? null : new ItemView(_doc, s.Id, s.Handle, null);
+    private ItemView? Neighbour(ItemRef s) => s.IsNull ? null : new ItemView(_doc, s.Id, s.Handle);
 
     /// <summary>The struct of the store that holds the id now, and the offset of the id in it.</summary>
     private ItemRef Resolve(out int offset)
     {
         Checked();
-        var store = _doc!.Store;
-        if (_hint >= 0 && store.Slab.TryRead(_hint, out var slot) && !slot.IsFree)
+        var store = _doc?.Store ?? throw new InvalidOperationException($"The staged struct {_id.Client}:{_id.Clock} was released and its view has no document to look it up in.");
+        if (_table != null && store.GetState(_id.Client) <= _id.Clock)
+        {
+            throw new InvalidOperationException($"The staged struct {_id.Client}:{_id.Clock} was released and is not in the store (it was set aside or not integrated).");
+        }
+
+        if (_table == null && _hint >= 0 && store.Slab.TryRead(_hint, out var slot) && !slot.IsFree)
         {
             var o = _id.Clock - slot.Clock;
             if (store.ClientTable[slot.Client] == _id.Client && (ulong)o < (ulong)slot.Length)
@@ -217,6 +232,28 @@ public readonly partial struct ItemView : IEquatable<ItemView>
         var found = store.Find(_id);
         offset = (int)(_id.Clock - found.Id.Clock);
         return found;
+    }
+
+    private IReadOnlyList<object?> StagedContent()
+    {
+        switch (Staged.Kind)
+        {
+            case StagedKind.String:
+                var chars = _table!.Chars(_hint);
+                var units = new object?[chars.Length];
+                for (var i = 0; i < units.Length; i++)
+                {
+                    units[i] = chars[i].ToString();
+                }
+
+                return units;
+            case StagedKind.Any:
+                return new ContentView([.. _table!.Values(_hint)]);
+            case StagedKind.Json or StagedKind.Binary or StagedKind.Embed or StagedKind.Doc:
+                return ((IContent)_table!.Cold(_hint)).GetContent();
+            default:
+                return Array.Empty<object?>();
+        }
     }
 
     private sealed class Slice : IReadOnlyList<object?>
