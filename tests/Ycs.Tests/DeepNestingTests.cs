@@ -56,8 +56,8 @@ public class DeepNestingTests
         {
             var doc = new YDoc(new YDocOptions { ClientId = 9 });
             doc.ApplyUpdate(v1);
-            _ = doc.GetMap("m").ToJson();
-            _ = doc.GetArray("a").ToJson();
+            _ = doc.GetMap("m").ToJsonString();
+            _ = doc.GetArray("a").ToJsonString();
             _ = doc.GetText("t").ToDelta();
             doc.GetMap("m").Clear();
             doc.GetArray("a").RemoveRange(0, doc.GetArray("a").Length);
@@ -150,7 +150,7 @@ public class DeepNestingTests
         {
             var doc = new YDoc(new YDocOptions { ClientId = 9, Limits = UpdateLimits.Unlimited });
             Apply(doc, update, v2, UpdateLimits.Unlimited);
-            _ = doc.GetMap("m").ToJson();
+            _ = doc.GetMap("m").ToJsonString();
             _ = doc.GetText("t").ToDelta();
             encoded = v2 ? doc.EncodeStateAsUpdate(format: UpdateFormat.V2) : doc.EncodeStateAsUpdate();
             doc.GetMap("m").Clear();

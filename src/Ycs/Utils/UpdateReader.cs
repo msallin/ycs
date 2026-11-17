@@ -17,7 +17,8 @@ namespace Ycs;
 /// <see cref="Read"/> hands out a <see cref="Lease"/>; disposing it clears the lists and the staging table (dropping the
 /// references to the structs and the input) and makes the reader available again. Thread-local
 /// rather than per document: a server holding many documents keeps one per thread. A read while
-/// another lease is open on the thread (re-entrancy) simply gets a new reader.
+/// another lease is open on the thread (re-entrancy) gets the second free reader, or a new one: two readers are kept,
+/// for the pending update's retry that reads inside the lease of the update that set it aside.
 /// </summary>
 internal sealed class UpdateReader
 {
@@ -27,21 +28,22 @@ internal sealed class UpdateReader
     /// <summary>At most this many spare lists of each kind are kept.</summary>
     private const int MaxSpareLists = 64;
 
-    /// <summary>
-    /// Whether reads fill a <see cref="StagingTable"/> (<see cref="Lease.Staging"/>); the tests switch it on. Off, no table
-    /// is allocated and the cursor stages nothing. Set before the first read.
-    /// </summary>
-    internal static bool StageForTests;
-
+    // Two free readers: the reader of a nested read is released before the one it nests in.
     [ThreadStatic]
     private static UpdateReader t_free;
+
+    [ThreadStatic]
+    private static UpdateReader t_spare;
+
+    [ThreadStatic]
+    private static int t_constructed;
 
     private readonly Lib0Reader _input = new();
     private readonly Dictionary<long, List<AbstractStruct>> _structs = new();
     private readonly Stack<List<AbstractStruct>> _spareStructLists = new();
     private readonly HashSet<long> _clients = new();
     private readonly DeleteSet _deleteSet = new();
-    private StagingTable _staging;
+    private readonly StagingTable _staging = new();
     private readonly Stack<List<DeleteSet.DeleteItem>> _spareDeleteLists = new();
     private UpdateDecoderV1 _v1;
     private UpdateDecoderV2 _v2;
@@ -56,8 +58,15 @@ internal sealed class UpdateReader
     /// <param name="maxDepth">How deeply values may be nested (<see cref="UpdateLimits.MaxDepth"/>).</param>
     public static Lease Read(byte[] buffer, int offset, int count, bool v2, long maxStructs, int maxDepth = UpdateLimits.DefaultMaxDepth)
     {
-        var reader = t_free ?? new UpdateReader();
-        t_free = null;
+        var reader = t_free;
+        t_free = t_spare;
+        t_spare = null;
+        if (reader == null)
+        {
+            reader = new UpdateReader();
+            t_constructed++;
+        }
+
         var version = reader._version;
         try
         {
@@ -74,6 +83,9 @@ internal sealed class UpdateReader
 
     /// <summary>Whether this thread's reader is free, that is no lease of it is open (for tests).</summary>
     internal static bool IsFreeOnCurrentThread => t_free != null;
+
+    /// <summary>How many readers this thread constructed (for tests).</summary>
+    internal static int ConstructedOnCurrentThread => t_constructed;
 
     private void ReadCore(byte[] buffer, int offset, int count, bool v2, long maxStructs, int maxDepth)
     {
@@ -101,11 +113,6 @@ internal sealed class UpdateReader
         }
 
         _input.MaxDepth = maxDepth;
-        if (StageForTests)
-        {
-            _staging ??= new StagingTable();
-        }
-
         EncodingUtils.ReadClientStructRefs(decoder, _structs, _clients, _spareStructLists, _staging);
         DeleteSet.ReadInto(decoder, _deleteSet, _spareDeleteLists);
     }
@@ -133,10 +140,17 @@ internal sealed class UpdateReader
         _structs.Clear();
         _deleteSet.Clients.Clear();
         _clients.Clear();
-        _staging?.Reset();
+        _staging.Reset();
         _input.Clear();
         _v2?.Clear();
-        t_free = this;
+        if (t_free == null)
+        {
+            t_free = this;
+        }
+        else
+        {
+            t_spare = this;
+        }
 
         static void Recycle<T>(List<T> list, Stack<List<T>> spare)
         {
@@ -169,9 +183,9 @@ internal sealed class UpdateReader
         public DeleteSet DeleteSet => Valid()._deleteSet;
 
         /// <summary>
-        /// The shadow of <see cref="Structs"/>, one table per reader and so per lease: a read while another lease is
-        /// open gets another reader and another table. Reset when the lease is released. Null unless
-        /// <see cref="StageForTests"/> is on.
+        /// The structs of the update as staged fields, one table per reader and so per lease: a read while another lease is
+        /// open gets another reader and another table. Reset when the lease is released. Holds the same structs as
+        /// <see cref="Structs"/>, in the same order, each client's as one range.
         /// </summary>
         public StagingTable Staging => Valid()._staging;
 

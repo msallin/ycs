@@ -11,12 +11,6 @@ namespace Ycs;
 
 public sealed partial class YXmlElement
 {
-    public YXmlElement()
-        : this("UNDEFINED")
-    {
-        // Do nothing.
-    }
-
     public YXmlElement(string nodeName)
     {
         ArgumentNullException.ThrowIfNull(nodeName);
@@ -75,18 +69,24 @@ public sealed partial class YXmlElement
     public void SetAttribute(string attributeName, YValue attributeValue) => SetAttributeRaw(attributeName, attributeValue.Stored());
 
     /// <summary>
-    /// Returns the value of the given attribute, or null (<see cref="HasAttribute"/> tells it from an attribute set to null)
-    /// if it isn't set.
+    /// Returns the value of the given attribute, or <see cref="YValue.Null"/> if it isn't set (<see cref="TryGetAttribute"/>
+    /// tells it from an attribute set to null).
     /// </summary>
-    public YValue GetAttribute(string attributeName)
+    public YValue GetAttribute(string attributeName) => TryGetAttribute(attributeName, out var value) ? value : YValue.Null;
+
+    /// <summary>Reads the attribute <paramref name="attributeName"/>; false when it isn't set.</summary>
+    public bool TryGetAttribute(string attributeName, out YValue value)
     {
         ArgumentNullException.ThrowIfNull(attributeName);
-        if (_prelimAttrs != null)
+        object? stored;
+        if (_prelimAttrs != null ? _prelimAttrs.TryGetValue(attributeName, out stored) : TryTypeMapGet(attributeName, out stored))
         {
-            return _prelimAttrs.TryGetValue(attributeName, out var stored) ? YValue.FromStored(stored) : default;
+            value = YValue.FromStored(stored);
+            return true;
         }
 
-        return TryTypeMapGet(attributeName, out var value) ? YValue.FromStored(value) : default;
+        value = default;
+        return false;
     }
 
     /// <summary>

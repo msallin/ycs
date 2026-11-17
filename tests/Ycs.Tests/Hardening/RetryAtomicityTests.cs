@@ -148,7 +148,7 @@ public class RetryAtomicityTests
         }
     }
 
-    private static string Json(YArray array) => YJson.Stringify(array.ToJson());
+    private static string Json(YArray array) => array.ToJsonString();
 
     /// <summary>
     /// The trigger (client 1's "x" in root array 'a') and an update of client 2 that waits for it: arrays nested four

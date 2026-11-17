@@ -44,19 +44,11 @@ public class SlabTests
     [TestMethod]
     public void Constructor_HookSet_StartsPageZeroThere()
     {
-        var before = Slab.FirstPageSlotsForTests;
-        Slab.FirstPageSlotsForTests = 1;
-        try
-        {
-            var slab = new Slab();
-            slab.Allocate();
+        using var _ = StaticScope.Set(ref Slab.FirstPageSlotsForTests, 1);
+        var slab = new Slab();
+        slab.Allocate();
 
-            Assert.AreEqual(1, slab.FirstPageCapacity);
-        }
-        finally
-        {
-            Slab.FirstPageSlotsForTests = before;
-        }
+        Assert.AreEqual(1, slab.FirstPageCapacity);
     }
 
     [TestMethod]

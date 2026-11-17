@@ -430,7 +430,7 @@ public class UpdateOperationsTests
     #region Describe / log
 
     [TestMethod]
-    public void DescribeUpdate_ReturnsNonEmptyString_AndDoesNotThrow()
+    public void DescribeUpdate_ItemsAndDeletes_NamesTheStructsAndTheDeletedRange()
     {
         var doc = new YDoc(new YDocOptions { GarbageCollection = false });
         var array = doc.GetArray("array");
@@ -443,10 +443,15 @@ public class UpdateOperationsTests
         var describedV1 = YUpdate.Describe(v1, format: UpdateFormat.V1);
         var describedV2 = YUpdate.Describe(v2, format: UpdateFormat.V2);
 
-        Assert.IsFalse(string.IsNullOrWhiteSpace(describedV1));
-        Assert.IsFalse(string.IsNullOrWhiteSpace(describedV2));
-        StringAssert.Contains(describedV1, "Structs");
-        StringAssert.Contains(describedV1, "DeleteSet");
+        // One item per value (clocks 0 to 2); the removed value is clock 1, length 1.
+        var clientId = doc.ClientId;
+        foreach (var described in new[] { describedV1, describedV2 })
+        {
+            StringAssert.Contains(described, "Structs (3):");
+            StringAssert.Contains(described, $"Item(client={clientId}, clock=0, length=1, deleted=False, content=ContentAny)");
+            StringAssert.Contains(described, $"Item(client={clientId}, clock=2, length=1, deleted=False, content=ContentAny)");
+            StringAssert.Contains(described, $"client={clientId} clock=1 length=1");
+        }
     }
 
     #endregion

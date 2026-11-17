@@ -122,7 +122,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
 
     public bool Equals(Snapshot? other)
     {
-        if (other == null)
+        if (other is null)
         {
             return false;
         }
@@ -175,6 +175,10 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     }
 
     public override bool Equals(object? obj) => obj is Snapshot other && Equals(other);
+
+    public static bool operator ==(Snapshot? left, Snapshot? right) => left is null ? right is null : left.Equals(right);
+
+    public static bool operator !=(Snapshot? left, Snapshot? right) => !(left == right);
 
     // Order-independent over the clients, as Equals; order-dependent within a client's ranges.
     // The per-client hashes are summed modulo 2^32 on purpose.

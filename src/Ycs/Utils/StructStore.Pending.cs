@@ -32,10 +32,13 @@ internal sealed partial class StructStore
         /// <summary>How many structs <see cref="Updates"/> hold (Skip structs included), as they were written.</summary>
         public long Structs { get; private set; }
 
-        /// <summary>Adds the remainder <paramref name="update"/>, which holds the structs of <paramref name="rest"/>.</summary>
-        public void Add(byte[] update, long structs, Dictionary<long, List<AbstractStruct>> rest)
+        /// <summary>
+        /// Adds the remainder <paramref name="update"/>, which holds the structs <paramref name="plan"/> set aside. The
+        /// plan's table must still be valid: the clocks are read from it.
+        /// </summary>
+        public void Add(byte[] update, long structs, IntegrationPlan plan)
         {
-            if (SharesAClock(rest))
+            if (plan.RestOverlaps(_clocks))
             {
                 // Yjs' pending.update = mergeUpdatesV2([pending.update, rest.update]).
                 var merged = new List<byte[]> { Merge(), update };
@@ -49,34 +52,7 @@ internal sealed partial class StructStore
                 Structs += structs;
             }
 
-            foreach (var (client, list) in rest)
-            {
-                for (var i = 0; i < list.Count; i++)
-                {
-                    var str = list[i];
-                    if (str is not Skip)
-                    {
-                        _clocks.Add(client, str.Id.Clock, str.Id.Clock + str.Length);
-                    }
-                }
-            }
-        }
-
-        private bool SharesAClock(Dictionary<long, List<AbstractStruct>> rest)
-        {
-            foreach (var (client, list) in rest)
-            {
-                for (var i = 0; i < list.Count; i++)
-                {
-                    var str = list[i];
-                    if (str is not Skip && _clocks.Overlaps(client, str.Id.Clock, str.Id.Clock + str.Length))
-                    {
-                        return true;
-                    }
-                }
-            }
-
-            return false;
+            plan.RecordRest(_clocks);
         }
 
         public byte[] Merge()
@@ -101,7 +77,8 @@ internal sealed partial class StructStore
 
     /// <summary>
     /// Writes decoded structs as the structs section of a v2 update that starts at clock 0 for every client: highest
-    /// client id first, each list from its first struct (Yjs' <c>writeClientsStructs</c> with an empty state vector).
+    /// client id first, each list from its first struct (Yjs' <c>writeClientsStructs</c> with an empty state vector). The
+    /// plan writes the same from its table (<see cref="IntegrationPlan.EncodeRest"/>); this is what it must equal.
     /// </summary>
     private static void WriteRest(IUpdateEncoder encoder, Dictionary<long, List<AbstractStruct>> rest)
     {
@@ -141,7 +118,7 @@ internal sealed partial class StructStore
     /// duplicates) is accepted whatever that is. Returns true when
     /// <paramref name="rest"/> had to be merged into <see cref="Pending"/> to fit (a duplicate).
     /// </summary>
-    private bool CheckPendingLimits(UpdateLimits limits, bool retry, byte[] rest, long restStructs, Dictionary<long, List<AbstractStruct>> restStore, long deleteGrowth)
+    private bool CheckPendingLimits(UpdateLimits limits, bool retry, byte[] rest, long restStructs, IntegrationPlan plan, long deleteGrowth)
     {
         var restBytes = rest?.Length ?? 0;
         if (restStructs == 0 && restBytes + deleteGrowth <= 0)
@@ -173,7 +150,7 @@ internal sealed partial class StructStore
             var (pending, pendingStructs, pendingBytes) = (Pending.Updates[0], Pending.Structs, PendingBytes);
             allowStructs = Math.Max(maxStructs, pendingStructs);
             allowBytes = Math.Max(maxBytes, pendingBytes);
-            Pending.Add(rest, restStructs, restStore);
+            Pending.Add(rest, restStructs, plan);
             Pending.Merge();
             if (Fits(0, 0))
             {

@@ -24,11 +24,11 @@ public class RelativePositionYjsTests
     [TestMethod]
     [DataRow(3, 0, "02010200", 3, DisplayName = "end")]
     [DataRow(0, -1, "02010241", 0, DisplayName = "start, left-associated")]
-    public void FromTypeIndex_EdgeOfNestedText_NamesTheTextAndResolvesIntoIt(int index, int assoc, string yjsHex, int resolvedIndex)
+    public void FromTypeIndex_EdgeOfNestedText_NamesTheTextAndResolvesIntoIt(int index, int assocValue, string yjsHex, int resolvedIndex)
     {
         var (doc, _, nested) = NestedText();
 
-        var rpos = RelativePosition.FromIndex(nested, index, assoc);
+        var rpos = RelativePosition.FromIndex(nested, index, (Assoc)assocValue);
         Assert.IsTrue(rpos.TryResolve(doc, out var abs));
 
         Assert.AreEqual((yjsHex, true, resolvedIndex), (Convert.ToHexStringLower(rpos.Encode()), abs.Type == nested, abs.Index));
@@ -67,11 +67,11 @@ public class RelativePositionYjsTests
     }
 
     [TestMethod]
-    public void FromJson_AssocBeyondInt_IsClamped()
+    public void FromJson_AssocBeyondInt_ReadsBySign()
     {
         using var document = JsonDocument.Parse("""{"tname":"t","assoc":-1e15}""");
 
-        Assert.AreEqual(int.MinValue, RelativePosition.FromJson(document.RootElement).Assoc);
+        Assert.AreEqual(Assoc.Before, RelativePosition.FromJson(document.RootElement).Assoc);
     }
 
     [TestMethod]

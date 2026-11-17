@@ -116,6 +116,10 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
         this[key] = value;
     }
 
+    /// <summary>Adds <paramref name="entry"/>; what a collection expression (<c>YMap m = [new("k", 1)]</c>) calls.</summary>
+    /// <exception cref="ArgumentException">The map has the key already.</exception>
+    public void Add(KeyValuePair<string, YValue> entry) => Add(entry.Key, entry.Value);
+
     /// <summary>Removes <paramref name="key"/>; false when the map had none. In a document it is a transaction either way, as Yjs' <c>delete</c>.</summary>
     public bool Remove(string key)
     {
@@ -159,10 +163,7 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
 
     public IEnumerable<YValue> Values => EnumerateEntries().Select(static kvp => YValue.FromStored(kvp.Value));
 
-    /// <summary>
-    /// Transforms this Shared Type to a JSON-compatible <see cref="IDictionary{TKey,TValue}"/>. Mirrors Yjs' <c>toJSON()</c>.
-    /// </summary>
-    public override object ToJson() => JsonTree(this);
+    internal override object ToJsonTree() => JsonTree(this);
 
     public YMap Clone() => (YMap)InternalClone();
 

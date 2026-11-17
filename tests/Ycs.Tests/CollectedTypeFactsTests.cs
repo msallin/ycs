@@ -14,8 +14,18 @@ public class CollectedTypeFactsTests
     // Whether the scenarios run with a collected type's handle replaced by an unrelated live item (a reused slot).
     protected virtual bool PoisonHandles => false;
 
+    private bool _poisonBefore;
+
+    // The switch is a static the whole run may set (YCS_POISON); a test class cannot hold a scope across initialize and cleanup.
     [TestInitialize]
-    public void SetPoison() => YType.PoisonCollectedHandleForTests = PoisonHandles || YType.PoisonCollectedHandleForTests;
+    public void SetPoison()
+    {
+        _poisonBefore = YType.PoisonCollectedHandleForTests;
+        YType.PoisonCollectedHandleForTests = PoisonHandles || _poisonBefore;
+    }
+
+    [TestCleanup]
+    public void RestorePoison() => YType.PoisonCollectedHandleForTests = _poisonBefore;
 
     // inner's item is a GC struct that merges with its neighbours' (all one client, consecutive clocks); outer's item
     // is a deleted item that merges into the deleted item left of it.
@@ -219,7 +229,4 @@ public class CollectedTypeFactsTests
 public class CollectedTypeFactsPoisonedTests : CollectedTypeFactsTests
 {
     protected override bool PoisonHandles => true;
-
-    [TestCleanup]
-    public void ClearPoison() => YType.PoisonCollectedHandleForTests = false;
 }

@@ -10,7 +10,7 @@ public static class StoreChecks
     public static void RecountAfterEveryTransaction(TestContext context)
     {
         StructStore.CheckAfterTransactionsForTests = true;
-        UpdateReader.StageForTests = true;
+        StructStore.IntegrationPlan.CompareRestForTests = true;
         YEvent.CheckViewsForTests = true;
 
         // Leaves of 2 positions, so that short lists split and merge leaves.

@@ -20,7 +20,7 @@ Contents: [Documents](#documents-and-options), [YValue](#yvalue), [Shared types]
 ## Documents and options
 
 `YDoc` holds the shared types of one document. `doc.GetText(name)`, `GetMap`, `GetArray`, `GetXmlFragment`,
-`GetXmlElement` and `GetXmlText` return the root type of that name, created on first use; peers that use the same name
+`GetXmlText` return the root type of that name, created on first use; peers that use the same name
 and type share it. The default name is the empty string.
 
 `YDocOptions` is a sealed record with `init` properties (`with` copies one):
@@ -62,7 +62,8 @@ implicitly, so `map["theme"] = "dark"` and `array.Add(1, "two")` read as they sh
 | --- | --- |
 | implicit conversion | from `bool`, `int`, `long`, `double`, `BigInteger`, `string`, `byte[]`, a `YType` (a shared type) or a `YDoc` |
 | `YValue.Null`, `YValue.True`, `YValue.False` | the constants |
-| `YValue.Array(items)`, `YValue.Object(members)`, `YValue.Bytes(bytes)` | containers and binary data from spans |
+| `YValue.Array(items)`, `YValue.Object(members)`, `YValue.Bytes(bytes)` | containers and binary data from spans; the members of an object are `("key", value)` tuples (`YValue.Object(("k", 1), ("s", "v"))`) or `KeyValuePair<string, YValue>` |
+| `YValue.Parse(json)`, `YValue.FromJson(JsonElement)`, `YValue.FromJson(JsonNode?)` | from JSON, see [JSON](#json) |
 | `YValue.FromObject(object?)` | from the CLR values `null`, `bool`, `int`, `long`, `double`, `BigInteger`, `string`, `byte[]`, lists, string-keyed dictionaries, and shared types; anything else is rejected |
 
 To read one: `Kind`, `IsNull`, `GetBoolean`, `GetInt32`, `GetInt64`, `GetDouble`, `GetBigInteger`, `GetString`,
@@ -70,15 +71,46 @@ To read one: `Kind`, `IsNull`, `GetBoolean`, `GetInt32`, `GetInt64`, `GetDouble`
 `TryGetInt64`, `TryGetDouble`, `TryGetBigInteger`, `TryGetString`, `TryGetBytes`); explicit conversions to the same
 scalar types; `TryGetSharedType<T>(out T? value)` (`YType` for any shared type) and `TryGetDocument`; for arrays `Length`, the
 `int` indexer and `EnumerateArray()`; for objects `MemberCount`, the `string` indexer, `TryGetMember(name, out value)`
-and `EnumerateObject()`; and `ToObject()`, the CLR value back.
+and `EnumerateObject()`; `ToObject()`, the CLR value back (a number as `int`, `long` or `double`, an array as a
+read-only `IList<object?>`, an object as a read-only `IDictionary<string, object?>`, the rest as they are, so a `YType`
+is a shared type to cast); and `WriteTo` and `ToJsonString`, see [JSON](#json).
 
 A number inserted encodes as Yjs encodes a JavaScript number (an integer within 31 bits as a varint, otherwise a float32
 or a float64); one read back is a `YValue` number whatever its wire form. A shared type is a value too:
 `array[0].TryGetSharedType<YMap>(out var map)`.
 
+### JSON
+
+Values and shared types are written as JSON without reflection (Native AOT and a source-generated
+`JsonSerializerContext` need no help), the way `JsonNode` does:
+
+| | |
+| --- | --- |
+| `YType.WriteTo(Utf8JsonWriter)`, `YValue.WriteTo(Utf8JsonWriter)` | write into a writer, as a value or after `WritePropertyName` |
+| `YType.ToJsonString(JsonWriterOptions)`, `YValue.ToJsonString(JsonWriterOptions)` | the text; the options are optional (`Indented`, `Encoder`, `MaxDepth`) |
+| `YValue.Parse(string)`, `YValue.FromJson(JsonElement)`, `YValue.FromJson(JsonNode?)` | the value of a JSON text, element or node; a number is always a double, a malformed or too deep text (`UpdateLimits.DefaultMaxDepth`) a `JsonException` |
+
+The JSON of a shared type is what Yjs' `toJSON()` returns, as `JSON.stringify` writes it:
+
+| Value | JSON | Yjs |
+| --- | --- | --- |
+| `YText`, `YXmlText`, `YXmlFragment`, `YXmlElement` | a string: `ToString()` (text without formatting, XML as markup) | the same: `toJSON()` is `toString()` |
+| `YArray` | an array, nested types in place | the same |
+| `YMap`, `YXmlHook` | an object in key order, nested types in place | the same |
+| number | JavaScript's text: `1.0` is `1`, `1e21` is `1e+21`, `1.5e-7`, `-0` is `0`; NaN and the infinities are `null` | the same |
+| string | escaped by the encoder of the options, by default `JavaScriptEncoder.UnsafeRelaxedJsonEscaping`; a lone surrogate is `\udXXX` in a value and U+FFFD in a name | `JSON.stringify` escapes less |
+| bytes | a base64 string (`Utf8JsonWriter.WriteBase64StringValue`) | `toJSON()` keeps the `Uint8Array`, which `JSON.stringify` writes as `{"0":1,"1":2}`; Ycs picks the encoding `System.Text.Json` uses for `byte[]` |
+| BigInteger | a number of its digits | `JSON.stringify` throws a `TypeError`; a JavaScript reader loses what a double cannot hold |
+| subdocument | an object of its root types by name (a root nobody defined by its kind yet is left out) | the same: `Doc.toJSON()` |
+| `null` | `null` | the same |
+
+A type that is a root the document has not been asked for by its kind yet (`GetArray`, `GetMap`, `GetText` ...) throws
+`InvalidOperationException`. There is no `ToJson()` returning an object tree: it needed reflection to serialize, and
+`YValue.Parse(type.ToJsonString())` gives the tree as `YValue`s where one is wanted.
+
 ## Shared types
 
-`YType` is the base of every shared type: `Doc`, `Parent`, `ToJson()` and `ObserveDeep(handler)`. A type made with `new`
+`YType` is the base of every shared type: `Doc`, `Parent`, `WriteTo(writer)` and `ToJsonString()` (see [JSON](#json)) and `ObserveDeep(handler)`. A type made with `new`
 is not in a document yet: its content can be read, changed and then inserted into an array or map (or set as a value).
 
 ### YArray
@@ -86,7 +118,11 @@ is not in a document yet: its content can be read, changed and then inserted int
 `YArray` is an `IReadOnlyList<YValue>`: `Count`, the indexer (an `ArgumentOutOfRangeException` for an index out of range),
 `TryGetValue(index, out value)`, `Add(params ReadOnlySpan<YValue>)` (Yjs' `push`), `Insert(index, params
 ReadOnlySpan<YValue>)`, `RemoveAt(index)`, `RemoveRange(index, count)`, `Slice(start, length)` (so `array[1..3]` works),
-`ToArray()`, `ToArray(snapshot)`, `Clone()` and `ToJson()`. `new YArray(1, "two")` builds one that is not in a document yet.
+`IndexOf(value)`, `Contains(value)` and `Remove(value)` (the first occurrence; true when found), which compare by value, so
+a shared type is found only as the same instance, `ToArray()`, `ToArray(snapshot)` and `Clone()`.
+`new YArray(1, "two")` and `YArray a = [1, 2, 3]` build one that is not in a document yet. `Add` and `Insert` take the
+values to add: `array.Add([1, 2])` appends two values, 1 and 2, not one nested array; for a nested array write
+`array.Add(new YArray(1, 2))`.
 A range that is not within the array throws before anything changes.
 
 ### YMap
@@ -98,18 +134,26 @@ setting is Yjs' `set`), `TryGetValue(key, out value)` and `TryGetValue(key, snap
 
 ### YText
 
-`YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `InsertEmbed(index, YValue,
-attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
-`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `RemoveNonText()`, `CleanupFormatting()`, `ToString()`,
+`YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `Append(string, attributes?)`,
+`InsertEmbed(index, YValue, attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
+`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `RemoveNonText()`, `ToString()`, `Substring(start, length)`,
 `CopyTo(Span<char>)` (returns the characters written; an `ArgumentException` when the span is shorter than the text, and
-`Length` is always enough), `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is null when unset,
-`GetAttributes`, `SetAttribute`, `RemoveAttribute`) and `Clone`. Formatting attributes and embeds are `YValue`s; in the
-attribute dictionary of `Format` or of a `Retain`, a `YValue.Null` removes the attribute.
+`Length` is always enough), `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is `YValue.Null` when
+unset, `TryGetAttribute(name, out value)` tells that from one set to null, as on `YXmlElement`; `GetAttributes`,
+`SetAttribute`, `RemoveAttribute`) and `Clone`. A text that is not in a document yet reads what was inserted into it
+(`ToString()`, `Length`, `ToDelta()`, its attributes), as a detached array or map does; a shared type among that content reads
+as null until the text is added.
+
+Formatting attributes and embeds are `YValue`s. Attributes are a `YAttributes`, a small immutable
+`IReadOnlyDictionary<string, YValue>` that a collection expression builds: `text.Insert(0, "hi", [new("bold", true)])`; one
+pair converts implicitly, `text.Format(0, 2, ("bold", true))`, and so does a `Dictionary<string, YValue>`
+(`YAttributes.From` takes any sequence of pairs). In the attributes of `Format` or of a `Retain`, a `YValue.Null` removes the
+attribute.
 
 A `Delta` is one operation of a delta, one of the sealed cases `Delta.Insert(YValue Value)` (a string, or an embed: a
 shared type or a value; an embed of null is `YValue.Null`), `Delta.InsertItems(IReadOnlyList<YValue> Items)` (what an
 array's or an XML fragment's event inserted), `Delta.Retain(int Length)` and `Delta.Delete(int Length)`, with `Attributes`
-(`IReadOnlyDictionary<string, YValue>?`) on every case. `ToDelta(snapshot, previous)` marks added and removed runs with a
+(`YAttributes?`) on every case. `ToDelta(snapshot, previous)` marks added and removed runs with a
 `ychange` attribute, an object of `type` (`"added"` or `"removed"`) and, when `computeYChange` returns a `YChange(YChangeKind,
 long? User)` with one, `user`. Applying an `InsertItems` to a text throws.
 
@@ -120,7 +164,10 @@ indexer, `TryGetValue`, `FirstChild`, `Add`, `Insert`, `InsertAfter(reference, .
 which throw `ArgumentException` for a child that is not a `YXmlElement`, `YXmlFragment`, `YXmlText` or `YXmlHook`),
 `RemoveAt`, `RemoveRange`, `Slice`, `ToArray()`, `ToArray(snapshot)`, `CreateTreeWalker(filter?)` (a lazy
 `IEnumerable<YType>` of the descendants in document order), `QuerySelector(query)` and `QuerySelectorAll(query)`. A child
-that is none of those, which only another client can have written, reads as null.
+that is none of those, which only another client can have written, counts in `Count` but is not a node: `TryGetValue`
+returns false for it, the indexer throws `InvalidOperationException`, and enumeration, `Slice` and `ToArray` leave it out.
+There is no root element: a document has `GetXmlFragment(name)` (an element needs a node name, which is not part of the
+wire format of a root type), so `fragment.Add(new YXmlElement("article"))` for an element.
 
 `YXmlElement` has `NodeName`, `NextSibling`, `PrevSibling` and attributes as `YValue`s: `GetAttribute` (null when unset),
 `SetAttribute`, `RemoveAttribute`, `HasAttribute` and `GetAttributes(snapshot?)`. `YXmlText` is a `YText` with
@@ -134,12 +181,16 @@ Each shared type observes its own events: `YArray.Observe(Action<YArrayEvent>)`,
 `YXmlText` (`YTextEvent`), `YXmlFragment` and `YXmlElement` (`YXmlEvent`). `YType.ObserveDeep(Action<IReadOnlyList<YEvent>,
 Transaction>)` gets the events of the type and everything nested in it, the outer types' first. Both return an
 `IDisposable`; disposing it removes that registration (one handler registered twice is two registrations). A handler may
-be typed more generally (an `Action<YEvent>` observes any type). Every handler runs even when one threw; the last
+be typed more generally: a delegate variable of type `Action<YEvent>` observes any type (`text.Observe(handler)`); a lambda
+written inline is typed by the parameter, `text.Observe(e => ...)` with `e` a `YTextEvent`, and `(YEvent e) => ...` does not
+compile there. Every handler runs even when one threw; the last
 exception escapes.
 
-An event is read-only: `Target`, `CurrentTarget`, `Transaction`, `Path` (an `IReadOnlyList<PathSegment>`: a map key, or the
+An event is read-only: `Target` (typed in each subclass: `YTextEvent.Target` is a `YText`, `YXmlEvent.Target` a
+`YXmlFragment`; `YEvent.Target` is a `YType`), `CurrentTarget`, `Transaction`, `Doc` (the transaction's document, never null;
+`Target.Doc` is null once the type left its document), `Path` (an `IReadOnlyList<PathSegment>`: a map key, or the
 index in a list when `Key` is null), `Changes` (`YChanges`: `Added`, `Deleted`, `Delta`, `Keys`), `Delta`, `Keys`
-(`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, an `object?`), and `Adds(view)`,
+(`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, a `YValue`, `YValue.Null` for an added key), and `Adds(view)`,
 `Deletes(view)`. The subclasses add `YMapEvent.KeysChanged`, `YTextEvent.KeysChanged` and `ChildListChanged`, and
 `YXmlEvent.AttributesChanged` and `ChildListChanged`. An event is valid during the handler, its transaction's observers
 and cleanup; compute what you keep there.
@@ -229,9 +280,9 @@ converts to a span implicitly.
 | On | Members |
 | --- | --- |
 | `YDoc` | `ApplyUpdate(update, origin = null, format = V1, limits = null)` and `TryApplyUpdate` (the same, returning false for a malformed update); `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
-| `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
-| `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`, `Snapshot.Empty`; equality is `Equals` |
-| `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree) |
+| `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client; clocks count the positions of the id space, not structs, so a struct of a run covers several), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
+| `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`, `Snapshot.Empty`; equality is `Equals`, `==` and `!=` (a decoded snapshot equals the one it was encoded from) |
+| `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree); `ReadSyncMessage` takes `origin = null` as `ApplyUpdate` does |
 
 `Merge` of a single update returns a copy of it, unchecked, as Yjs returns it.
 
@@ -248,10 +299,12 @@ input](#limits-and-untrusted-input)).
 
 `RelativePosition` is a `readonly record struct` that keeps pointing at the same character (or the end of the same
 type) while the document changes; `AbsolutePosition(Type, Index, Assoc)` is the index it resolves to at a moment. Both
-are values: equal positions are equal keys of a `HashSet` or `Dictionary`.
+are values: equal positions are equal keys of a `HashSet` or `Dictionary`. `Assoc` is an enum: `After` (0, the position
+sticks to the character after it) or `Before` (-1, to the one before); a peer's integer reads as `Before` when negative,
+else as `After`.
 
 ```csharp
-var position = RelativePosition.FromIndex(text, 3);          // assoc 0: the character after, -1: before
+var position = RelativePosition.FromIndex(text, 3);          // Assoc.After by default, or Assoc.Before
 text.Insert(0, "abc");
 if (position.TryResolve(doc, out var absolute))              // false: names a struct the document lacks or collected
 {
@@ -259,12 +312,16 @@ if (position.TryResolve(doc, out var absolute))              // false: names a s
 }
 
 byte[] bytes = position.Encode();                            // Yjs' encodeRelativePosition; awareness carries it
-var same = RelativePosition.Decode(bytes);                   // YUpdateException for malformed bytes
+var same = RelativePosition.Decode(bytes);                   // YUpdateException for malformed bytes; same == position
 ```
+
+A position carries only what the bytes carry: the item when there is one, else the root type's name, else the id of the
+type. Yjs' `createRelativePositionFromTypeIndex` sets the type or root name as well and drops it on encoding; here
+`FromIndex` does not set it, so `Decode(Encode(p)) == p` and `FromJson(p.ToJsonString()) == p`.
 
 `Encode(IBufferWriter<byte>)` writes into a buffer. `WriteJson(Utf8JsonWriter)` and `FromJson(JsonElement)` are Yjs'
 `relativePositionToJSON` object (`{"item":{"client":1,"clock":0},"assoc":0}`; `type`, `tname` and `item` only where
-set). `TryResolve(doc, out position, followUndoneDeletions: false)` gives the same result on every client; the
+set); `ToJsonString()` and `FromJson(string)` are the one-line form, for an awareness state. `TryResolve(doc, out position, followUndoneDeletions: false)` gives the same result on every client; the
 default follows undone deletions, which suits the user who undid. `default(RelativePosition)` names nothing: it does
 not resolve and does not encode.
 
@@ -284,7 +341,7 @@ unhook it from the document.
 | --- | --- |
 | `TrackedOrigins` | the transaction origins to track; by default only the null origin, so apply a peer's update with an origin and it is never undone |
 | `CaptureTimeout` | a `TimeSpan` (500 ms by default): changes within it form one step |
-| `TimeProvider` | the clock of `CaptureTimeout`; a test moves it by hand |
+| `TimeProvider` | the clock of `CaptureTimeout`; a test moves it by hand. The manager reads `GetTimestamp` and `GetElapsedTime`, never `GetUtcNow`: a hand-written provider must override those (`FakeTimeProvider` does) |
 | `CaptureTransaction` | `Func<Transaction, bool>`: false keeps a transaction out of the stack |
 | `DeleteFilter` | `Func<ItemView, bool>`: false keeps an undo or redo from deleting the item |
 | `IgnoreRemoteMapChanges` | true: an undo or redo overwrites a map key (or attribute) that another change set since; by default it leaves such a key alone. Also a settable property of the manager |
@@ -303,11 +360,14 @@ ChangedParentTypes, Origin)` (`Operation` is an `UndoOperation`, `Undo` or `Redo
 - `WriteSyncStep2(destination, doc, encodedStateVector, format)`: what a peer with that state vector lacks.
 - `WriteUpdate(destination, update)`: one update.
 
-`ReadSyncMessage(message, reply, doc, origin, format)` handles one whole message (a `ReadOnlySpan<byte>` or a
-`ReadOnlySequence<byte>`; bytes after it are ignored) and returns its type. A step 1 appends the answer, a step 2, to
+`ReadSyncMessage(message, reply, doc, origin = null, format = V1)` handles one whole message (a `ReadOnlySpan<byte>` or a
+`ReadOnlySequence<byte>`; bytes after it are ignored) and returns a `SyncReadResult(Type, Replied)`. A step 1 appends the answer, a step 2, to
 `reply`; a step 2 or an update is applied to `doc` with `origin` and writes nothing. A truncated message, an unknown
 type, or an update that is malformed or beyond a limit throws `YUpdateException`, with the document as it was. Both ends
-must agree on `format`. [Networking](networking.md) shows a server and a client built on it. Awareness is not part of the
+must agree on `format`.
+
+y-websocket puts a message type in front of every message: `SyncProtocol.MessageSync` (0) or `MessageAwareness` (1).
+`WriteMessageType(destination, type)` appends it and `ReadMessageType(message, out body)` strips it. [Networking](networking.md) shows a server and a client built on it. Awareness is not part of the
 library.
 
 ## Item views and decoded structs
@@ -332,6 +392,9 @@ exposes the storage, which is internal.
 `ParentId`, `ParentSub`, and what the kind carries, in exactly one place: `Content` (Any, Json, Binary, Embed), `Text`
 (String), `FormatKey` and `FormatValue` (Format), `TypeRef` and `TypeName` (Type), `DocGuid` (Doc). The others are
 empty, null or -1.
+
+`ParentName` and `ParentId` are both null for an item with an origin: the update leaves the parent out, because the
+origin's item says it. An item has them only when it has neither origin.
 
 | Where | Gets |
 | --- | --- |
@@ -424,12 +487,12 @@ before anything changes:
   recursive walks go before the JavaScript stack runs out, so no Yjs peer writes a deeper document; a
   local insert beyond the document's limit throws `ArgumentException` / `InvalidOperationException`).
   What an update can make Ycs walk, it walks without recursion: decoding and encoding values (binary
-  and JSON), deleting and garbage-collecting nested types, `ToJson`; so a hostile update of any depth
+  and JSON), deleting and garbage-collecting nested types, `WriteTo` and `ToJsonString`; so a hostile update of any depth
   is rejected, and with `UpdateLimits.Unlimited` a document of 100,000 levels is applied, read,
   deleted and encoded, on a thread with a 256 KiB stack. `ToString` of nested XML, `Clone` and the
   UndoManager's redo of nested deleted types recurse once per level of types and throw
-  `InsufficientExecutionStackException` where the stack runs out (at 3,000 levels a 1 MiB stack is
-  enough for all but `Clone`);
+  `InsufficientExecutionStackException` where the stack runs out (3,000 levels, the default `MaxDepth`, fit a 1 MiB
+  stack; `Clone` and `ToString` of 100,000 levels throw on a 256 KiB stack);
 * size: a collection is never allocated larger than the remaining input can fill, and an update holds
   at most `UpdateLimits.MaxStructsPerUpdate` structs (131,072 by default), in either format: the v2
   format run-length encodes its columns (Yjs writes 20,000 deleted items in 42 bytes; 131,072 deleted

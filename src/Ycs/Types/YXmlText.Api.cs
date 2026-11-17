@@ -125,5 +125,5 @@ public sealed partial class YXmlText
         return sb.ToString();
     }
 
-    public override object ToJson() => ToString();
+    internal override object ToJsonTree() => ToString();
 }

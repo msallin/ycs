@@ -8,6 +8,8 @@
     <Nullable>enable</Nullable>
     <!-- An ItemRef compared with null binds to the lifted operator and is always false: compare with IsNull. -->
     <WarningsAsErrors>$(WarningsAsErrors);CS8073</WarningsAsErrors>
+    <!-- Native AOT and trimming are requirements: any trim, AOT or single-file analyzer warning fails the build. -->
+    <WarningsAsErrors>$(WarningsAsErrors);IL2026;IL2046;IL2050;IL2055;IL2057;IL2058;IL2059;IL2060;IL2062;IL2063;IL2065;IL2067;IL2068;IL2069;IL2070;IL2072;IL2073;IL2075;IL2077;IL2080;IL2087;IL2088;IL2089;IL2090;IL2091;IL2092;IL2093;IL2094;IL2095;IL2096;IL2097;IL2098;IL2099;IL2103;IL2106;IL2111;IL2114;IL2115;IL3000;IL3001;IL3002;IL3050;IL3051;IL3056</WarningsAsErrors>
     <Version>0.0.1</Version>
     <Description>.NET implementation of the Yjs CRDT framework.</Description>
     <Copyright>Copyright (c) 2021</Copyright>

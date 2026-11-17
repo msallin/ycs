@@ -79,7 +79,6 @@ public class ValueAliasingTests
         ((byte[])((IList<object?>)doc.GetMap("m")["nested"].ToObject())[0]!)[0] = 9;
         ((byte[])doc.GetArray("a")[0].ToObject())[0] = 9;
         ((byte[])((IDictionary<string, object?>)doc.GetArray("a")[1].ToObject())["b"]!)[0] = 9;
-        ((byte[])doc.GetMap("m").ToJson().As<IDictionary<string, object?>>()["top"]!)[0] = 9;
         foreach (var value in doc.GetArray("a"))
         {
             (value.ToObject() as byte[])?.AsSpan().Fill(9);

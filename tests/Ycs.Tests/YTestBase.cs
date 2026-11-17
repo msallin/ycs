@@ -25,6 +25,15 @@ public class YTestBase
     protected IDictionary<TestYInstance, YMap> Maps { get; set; }
     protected IDictionary<TestYInstance, YText> Texts { get; set; }
 
+    public TestContext TestContext { get; set; }
+
+    /// <summary>A generator from a fixed seed, which the test's output records, so a failing run replays.</summary>
+    protected Random SeededRandom(int seed)
+    {
+        TestContext?.WriteLine($"random seed {seed}");
+        return new Random(seed);
+    }
+
     [TestCleanup]
     public void Cleanup()
     {
@@ -329,7 +338,9 @@ public class YTestBase
     {
         Init(users);
 
-        var rand = new Random();
+        var seed = 20_240_101 + (users * 100_003) + iterations;
+        var rand = SeededRandom(seed);
+        Connector._prng = new Random(seed + 1);
 
         for (int i = 0; i < iterations; i++)
         {

@@ -16,7 +16,7 @@ namespace Ycs;
 /// whichever CLR type or wire form (integer, float32, float64) it came from. Equality is by value, JavaScript's way for numbers
 /// (so <c>0</c> and <c>-0</c> are equal, <c>NaN</c> equals itself) and the order of an object's keys does not matter.
 /// </remarks>
-public readonly struct YValue : IEquatable<YValue>
+public readonly partial struct YValue : IEquatable<YValue>
 {
     private static readonly object BoxedTrue = true;
     private static readonly object BoxedFalse = false;
@@ -73,6 +73,23 @@ public readonly struct YValue : IEquatable<YValue>
             ArgumentNullException.ThrowIfNull(member.Key, nameof(members));
             map.Set(member.Key, Contained(member.Value));
             Raise(map, member.Value);
+        }
+
+        return new YValue(YValueKind.Object, map, 0);
+    }
+
+    /// <summary>An object of <paramref name="members"/>, in this order, as <see cref="Object(ReadOnlySpan{KeyValuePair{string, YValue}})"/>: <c>YValue.Object(("k", 1), ("s", "v"))</c>.</summary>
+    /// <exception cref="ArgumentException">A value is a shared type or a subdocument.</exception>
+    /// <exception cref="ArgumentNullException">A key is null.</exception>
+    [System.Runtime.CompilerServices.OverloadResolutionPriority(1)] // wins the calls both fit: Object(), Object([]), Object([new("k", 1)])
+    public static YValue Object(params ReadOnlySpan<(string Key, YValue Value)> members)
+    {
+        var map = new FrozenMap(members.Length);
+        foreach (var (key, value) in members)
+        {
+            ArgumentNullException.ThrowIfNull(key, nameof(members));
+            map.Set(key, Contained(value));
+            Raise(map, value);
         }
 
         return new YValue(YValueKind.Object, map, 0);
@@ -282,7 +299,7 @@ public readonly struct YValue : IEquatable<YValue>
 
     public bool TryGetBoolean(out bool value)
     {
-        value = _bits != 0;
+        value = _kind == YValueKind.Boolean && _bits != 0;
         return _kind == YValueKind.Boolean;
     }
 

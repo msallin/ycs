@@ -306,6 +306,28 @@ public class CodecReuseTests
     }
 
     [TestMethod]
+    public void UpdateReader_NestedReadsReleasedInnerFirst_AreReusedByTheNextRound()
+    {
+        var first = SampleDoc(1).EncodeStateAsUpdate();
+        var second = SampleDoc(2).EncodeStateAsUpdate();
+        Round();
+        var constructed = UpdateReader.ConstructedOnCurrentThread;
+
+        Round();
+        Round();
+
+        Assert.AreEqual(constructed, UpdateReader.ConstructedOnCurrentThread);
+
+        void Round()
+        {
+            var outer = UpdateReader.Read(first, 0, first.Length, v2: false, long.MaxValue);
+            var inner = UpdateReader.Read(second, 0, second.Length, v2: false, long.MaxValue);
+            inner.Dispose();
+            outer.Dispose();
+        }
+    }
+
+    [TestMethod]
     public void UpdateReader_LeaseDisposedTwice_StaysReleased()
     {
         var update = SampleDoc(1).EncodeStateAsUpdate();

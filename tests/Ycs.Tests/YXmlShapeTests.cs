@@ -178,4 +178,17 @@ public class YXmlShapeTests
         fragment.Add(hook);
         Assert.AreEqual(1, ((YXmlHook)fragment[3])["k"].GetInt32());
     }
+
+    [TestMethod]
+    public void ForeignChild_IsNotANode_ReadsConsistently()
+    {
+        var fragment = new YDoc().GetXmlFragment("x");
+        fragment.Add(new YXmlText("a"));
+        fragment.InsertRaw(1, new object?[] { "foreign" });
+
+        var found = fragment.TryGetValue(1, out var value);
+
+        Assert.AreEqual((2, false, null, true, 1, 1), (fragment.Count, found, value, fragment.TryGetValue(0, out _), fragment.ToArray().Length, fragment.Count(c => c != null)));
+        Assert.ThrowsExactly<InvalidOperationException>(() => fragment[1]);
+    }
 }

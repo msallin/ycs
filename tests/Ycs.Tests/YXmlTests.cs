@@ -75,7 +75,7 @@ public class YXmlTests
         Assert.AreEqual(
             "<paragraph align=\"center\" class=\"intro\"><bold>Hello </bold>world<em title=\"shout\">!!!</em></paragraph>",
             frag.ToString());
-        Assert.AreEqual(frag.ToString(), frag.ToJson());
+        Assert.AreEqual(frag.ToString(), YValue.Parse(frag.ToJsonString()).GetString());
     }
 
     [TestMethod]
@@ -274,14 +274,16 @@ public class YXmlTests
     public void GetXmlElementAndGetXmlTextTopLevelAccessors()
     {
         var doc = new YDoc();
-        doc.GetXmlElement("el").SetAttribute("a", "b");
+        var element = new YXmlElement("el");
+        doc.GetXmlFragment("frag").Add(element);
+        element.SetAttribute("a", "b");
         doc.GetXmlText("txt").Insert(0, "hello", null);
 
         var update = doc.EncodeStateAsUpdate();
         var copy = new YDoc();
         copy.ApplyUpdate(update);
 
-        Assert.AreEqual("b", copy.GetXmlElement("el").GetAttribute("a").ToObject());
+        Assert.AreEqual("b", ((YXmlElement)copy.GetXmlFragment("frag")[0]).GetAttribute("a").ToObject());
         Assert.AreEqual("hello", copy.GetXmlText("txt").ToString());
     }
 
@@ -289,7 +291,8 @@ public class YXmlTests
     public void XmlEventReportsChildListAndAttributeChanges()
     {
         var doc = new YDoc();
-        var el = doc.GetXmlElement("el");
+        var el = new YXmlElement("el");
+        doc.GetXmlFragment("frag").Add(el);
 
         YXmlEvent captured = null;
         el.Observe(e => captured = e as YXmlEvent);

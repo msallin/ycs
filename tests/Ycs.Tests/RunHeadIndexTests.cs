@@ -67,6 +67,7 @@ public class RunHeadIndexTests
     [DataRow(false, 128)]
     [DataRow(true, 4)]
     [DataRow(false, 2)]
+    [TestCategory("Slow")]
     public void RandomEdits_EveryLookupEndsWhereYjsLoopsEnd(bool text, int capacity)
     {
         for (var seed = 0; seed < 60; seed++)
@@ -292,6 +293,7 @@ public class RunHeadIndexTests
         private readonly bool _text;
         private int _armed;
         private long _clients = 10;
+        private long _client = 1;
         private string _errors = "";
 
         public Run(bool text, string walk, int seed)
@@ -368,10 +370,10 @@ public class RunHeadIndexTests
             }
 
             // A document that got structs of its own client in a transaction that is not local takes a random client
-            // id, as Yjs does: the same in every run instead.
-            if (_a.ClientId > 10_000)
+            // id, as Yjs does: the same in every run instead. Any change counts, whatever the random value is.
+            if (_a.ClientId != _client)
             {
-                _a.ClientId = ++_clients;
+                _a.ClientId = _client = ++_clients;
             }
 
             return (Content(_ta), ((YArrayBase)_ta).DescribeSearchMarkers(), Lookups(_a) + _errors, Content(_tb));

@@ -164,4 +164,24 @@ public class YArrayShapeTests
 
         Assert.AreEqual((3, 3), (list.Count, plain.Cast<YValue>().Count()));
     }
+
+    [TestMethod]
+    public void IndexOfContainsRemove_ByValue_FindTheFirst()
+    {
+        var array = new YDoc().GetArray("a");
+        array.Add(1, "x", 1);
+
+        var removed = array.Remove(1);
+
+        Assert.AreEqual((true, 0, true, false, false, 1), (removed, array.IndexOf("x"), array.Contains("x"), array.Contains(2), array.Remove(2), array.IndexOf(1)));
+        Assert.AreEqual(2, array.Count);
+    }
+
+    [TestMethod]
+    public void CollectionExpression_OfValues_BuildsTheArray()
+    {
+        YArray array = [1, 2, 3];
+
+        Assert.AreEqual(3, array.Count);
+    }
 }

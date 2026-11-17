@@ -7,6 +7,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
@@ -22,19 +23,32 @@ jobs:
         run: dotnet build Ycs.sln -c Release
 
       - name: Unit tests
-        run: dotnet test tests/Ycs.Tests -c Release --no-build
+        run: dotnet test tests/Ycs.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m
+
+      - name: Unit tests, collected handles poisoned
+        run: YCS_POISON=1 dotnet test tests/Ycs.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m
+
+      - name: Unit tests, corpus and fuzz with two-entry leaves and one-slot first pages
+        run: |
+          export YCS_LEAF_CAPACITY=2 YCS_SLAB_FIRST=1
+          dotnet test tests/Ycs.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m
+          dotnet test tests/Ycs.Corpus -c Release --no-build --blame-hang --blame-hang-timeout 10m
+          dotnet test tests/Ycs.Fuzz -c Release --no-build --blame-hang --blame-hang-timeout 10m
+
+      - name: Unit tests, arenas with three-slot pages and copy on merge
+        run: YCS_ARENA_PAGE=3 YCS_ARENA_COPY=1 dotnet test tests/Ycs.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m
 
       - name: Unit tests (Debug, overflow checks on)
-        run: dotnet test tests/Ycs.Tests -c Debug
+        run: dotnet test tests/Ycs.Tests -c Debug --blame-hang --blame-hang-timeout 10m
 
       - name: Yjs corpus
-        run: dotnet test tests/Ycs.Corpus -c Release --no-build
+        run: dotnet test tests/Ycs.Corpus -c Release --no-build --blame-hang --blame-hang-timeout 10m
 
       - name: Sync server
-        run: dotnet test tests/Ycs.Server.Tests -c Release --no-build
+        run: dotnet test tests/Ycs.Server.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m
 
       - name: Sync client (the Blazor client's provider)
-        run: dotnet test tests/Ycs.Client.Tests -c Release --no-build
+        run: dotnet test tests/Ycs.Client.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m
 
       - name: Sync server against y-websocket and SignalR clients
         run: |
@@ -46,15 +60,15 @@ jobs:
           cmp interop/signalr/provider.mjs samples/Ycs.Server/demo/src/signalr-provider.mjs
 
       - name: Fuzz the decoders
-        run: dotnet test tests/Ycs.Fuzz -c Release --no-build
+        run: dotnet test tests/Ycs.Fuzz -c Release --no-build --blame-hang --blame-hang-timeout 10m
 
       - name: Differential and property tests against Yjs
         run: |
           (cd interop/properties && npm ci)
-          dotnet test tests/Ycs.Properties -c Release --no-build
+          dotnet test tests/Ycs.Properties -c Release --no-build --blame-hang --blame-hang-timeout 10m
 
       - name: Allocation and time budgets
-        run: dotnet test tests/Ycs.Budgets -c Release --no-build --logger "console;verbosity=detailed"
+        run: dotnet test tests/Ycs.Budgets -c Release --no-build --blame-hang --blame-hang-timeout 10m --logger "console;verbosity=detailed"
 
       - name: Pack
         run: dotnet pack src/Ycs -c Release --no-build -o out/pack
@@ -85,6 +99,7 @@ jobs:
 
   browser:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 

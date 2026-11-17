@@ -301,12 +301,20 @@ public partial class YDoc
             }
             else
             {
-                throw new InvalidOperationException($"Type with the name {name} has already been defined with a different constructor");
+                throw new InvalidOperationException(
+                    $"The root '{name}' is a {type.GetType().Name}; it cannot be read as a {typeof(T).Name}. Use {GetterOf(type.GetType())}(\"{name}\").");
             }
         }
 
         return (T)type;
     }
+
+    private static string GetterOf(Type type) =>
+        type == typeof(YArray) ? nameof(GetArray) :
+        type == typeof(YMap) ? nameof(GetMap) :
+        type == typeof(YText) ? nameof(GetText) :
+        type == typeof(YXmlFragment) ? nameof(GetXmlFragment) :
+        nameof(GetXmlText);
 
     // No reflection: the root types are a closed set. YType asks for the placeholder of a type the document learned
     // of from an update before anyone defined it.
@@ -318,7 +326,6 @@ public partial class YDoc
             typeof(T) == typeof(YMap) ? new YMap() :
             typeof(T) == typeof(YText) ? new YText() :
             typeof(T) == typeof(YXmlFragment) ? new YXmlFragment() :
-            typeof(T) == typeof(YXmlElement) ? new YXmlElement() :
             typeof(T) == typeof(YXmlText) ? new YXmlText() :
             typeof(T) == typeof(YType) ? new YTypePlaceholder() :
             throw new InvalidOperationException($"{typeof(T).Name} is not a type a document can define by name");

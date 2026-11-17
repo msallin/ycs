@@ -12,22 +12,15 @@ public class ClientStructsTests
     /// <summary>Lists made in <paramref name="body"/> have leaves of <paramref name="capacity"/> positions.</summary>
     internal static T WithLeafCapacity<T>(int capacity, Func<T> body)
     {
-        var before = ClientStructs.LeafCapacityForTests;
-        ClientStructs.LeafCapacityForTests = capacity;
-        try
-        {
-            return body();
-        }
-        finally
-        {
-            ClientStructs.LeafCapacityForTests = before;
-        }
+        using var _ = StaticScope.Set(ref ClientStructs.LeafCapacityForTests, capacity);
+        return body();
     }
 
     [TestMethod]
     [DataRow(2)]
     [DataRow(4)]
     [DataRow(128)]
+    [TestCategory("Slow")]
     public void FindIndex_RandomEditsSplitsAndMerges_EqualsLinearScan(int capacity) => WithLeafCapacity(capacity, () =>
     {
         RandomEdits();

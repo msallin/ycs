@@ -13,35 +13,41 @@ namespace Ycs;
 [TestClass]
 public class ChangedTypesTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
+    [TestCategory("Slow")]
     public void Transact_ManyChangedTypesDeleted_IsLinear()
     {
         // Each deleted map is removed from Transaction.Changed.
-        var doc = new YDoc(new YDocOptions { ClientId = 1 });
-        var array = doc.GetArray("a");
-        var maps = new List<YMap>();
-        doc.Transact(_ =>
-        {
-            for (var i = 0; i < 40_000; i++)
+        ScalingProbe.AssertNotQuadratic(
+            n =>
             {
-                var map = new YMap();
-                maps.Add(map);
-                array.Add(map);
-            }
-        });
+                var doc = new YDoc(new YDocOptions { ClientId = 1 });
+                var array = doc.GetArray("a");
+                var maps = new List<YMap>();
+                doc.Transact(_ =>
+                {
+                    for (var i = 0; i < n; i++)
+                    {
+                        var map = new YMap();
+                        maps.Add(map);
+                        array.Add(map);
+                    }
+                });
 
-        var stopwatch = Stopwatch.StartNew();
-        doc.Transact(_ =>
-        {
-            foreach (var map in maps)
-            {
-                map["k"] = 1;
-            }
+                return () => doc.Transact(_ =>
+                {
+                    foreach (var map in maps)
+                    {
+                        map["k"] = 1;
+                    }
 
-            array.RemoveRange(0, array.Length);
-        });
-
-        Assert.IsLessThan(2_000, stopwatch.ElapsedMilliseconds);
+                    array.RemoveRange(0, array.Length);
+                });
+            },
+            40_000,
+            TestContext);
     }
 
     [TestMethod]

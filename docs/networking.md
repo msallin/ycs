@@ -24,13 +24,11 @@ front of each message: `0` for sync, `1` for awareness (who is online, where the
 using System.Buffers;
 using Ycs;
 
-// y-websocket frames: the first byte is the message type (0 = sync), then the sync message.
-const byte MessageSync = 0;
-
+// y-websocket frames: the message type (SyncProtocol.MessageSync = 0), then the sync message.
 static byte[] Step1(YDoc doc)
 {
     var message = new ArrayBufferWriter<byte>();
-    message.Write([MessageSync]);
+    SyncProtocol.WriteMessageType(message, SyncProtocol.MessageSync);
     SyncProtocol.WriteSyncStep1(message, doc);
     return message.WrittenSpan.ToArray();
 }
@@ -38,7 +36,7 @@ static byte[] Step1(YDoc doc)
 static byte[] UpdateMessage(byte[] update)
 {
     var message = new ArrayBufferWriter<byte>();
-    message.Write([MessageSync]);
+    SyncProtocol.WriteMessageType(message, SyncProtocol.MessageSync);
     SyncProtocol.WriteUpdate(message, update);
     return message.WrittenSpan.ToArray();
 }
@@ -46,15 +44,14 @@ static byte[] UpdateMessage(byte[] update)
 // Handles one received frame; returns the answer to send back, or null.
 static byte[] Receive(YDoc doc, byte[] frame, object origin)
 {
-    if (frame.Length == 0 || frame[0] != MessageSync)
+    if (SyncProtocol.ReadMessageType(frame, out var body) != SyncProtocol.MessageSync)
     {
         return null; // awareness and other message types are not handled here
     }
 
     var reply = new ArrayBufferWriter<byte>();
-    reply.Write([MessageSync]);
-    SyncProtocol.ReadSyncMessage(frame.AsSpan(1), reply, doc, origin);
-    return reply.WrittenCount > 1 ? reply.WrittenSpan.ToArray() : null;
+    SyncProtocol.WriteMessageType(reply, SyncProtocol.MessageSync);
+    return SyncProtocol.ReadSyncMessage(body, reply, doc, origin).Replied ? reply.WrittenSpan.ToArray() : null;
 }
 
 var server = new YDoc();
@@ -75,7 +72,9 @@ Console.WriteLine(server.GetText("content").ToString() == client.GetText("conten
 
 - The writers (`WriteSyncStep1`, `WriteSyncStep2`, `WriteUpdate`) append to any `IBufferWriter<byte>`; the readers take
   a whole message as a `ReadOnlySpan<byte>` or a `ReadOnlySequence<byte>` and write the answer to a step 1 to `reply`.
-  Bytes after the message are ignored; `ReadSyncMessage` returns its `SyncMessageType`. Nothing is allocated per
+  Bytes after the message are ignored; `ReadSyncMessage` returns a `SyncReadResult`: the `SyncMessageType` and whether
+  `reply` got an answer. `WriteMessageType` and `ReadMessageType` write and strip y-websocket's outer type
+  (`MessageSync`, `MessageAwareness`). Nothing is allocated per
   message beyond pooled buffers and the update's own decoding.
 - `SyncProtocol` uses the v1 update format, as y-protocols does. Pass `UpdateFormat.V2` as `format` on both ends for v2.
 - A malformed message throws `YUpdateException`, an unknown message type and a truncated one included. y-protocols'

@@ -24,7 +24,7 @@ using var deepSubscription = doc.GetMap("map").ObserveDeep((events, _) => deepOb
 doc.Updated += (_, e) => kept = e.Update;
 
 text.Insert(0, "AOT ");
-text.Format(0, 3, new Dictionary<string, YValue> { ["italic"] = true, ["size"] = 1.5 });
+text.Format(0, 3, [new("italic", true), new("size", 1.5)]);
 doc.GetMap("map")["added"] = YValue.FromObject(new Dictionary<string, object> { ["n"] = 42, ["list"] = new object?[] { "x", 2.5, null } });
 
 doc.GetMap("map")["observed"] = 1;
@@ -75,7 +75,7 @@ foreach (var v2 in new[] { false, true })
     Check(copyXml.Count == 2 && copyXml[0] is YXmlElement { NodeName: "p" } copyPara && copyPara.GetAttributes()["class"] == "intro" && copyXml.ToString() == xml.ToString(), $"v{(v2 ? 2 : 1)}: xml lost");
     Console.WriteLine($"v{(v2 ? 2 : 1)}: {update.Length} bytes, text '{copyText}'");
 
-    var position = RelativePosition.FromIndex(copyText, 4, -1);
+    var position = RelativePosition.FromIndex(copyText, 4, Assoc.Before);
     var buffer = new System.Buffers.ArrayBufferWriter<byte>();
     using (var json = new System.Text.Json.Utf8JsonWriter(buffer))
     {
@@ -88,13 +88,21 @@ foreach (var v2 in new[] { false, true })
     Check(decoded.TryResolve(copy, out var absolute) && absolute.Index == 4, $"v{(v2 ? 2 : 1)}: position resolves elsewhere");
 }
 
+// JSON: the document's shared types as Yjs' toJSON(), written without reflection, and parsed back.
+var mapJson = doc.GetMap("map").ToJsonString();
+var parsedMap = YValue.Parse(mapJson);
+Check(parsedMap["added"]["n"].GetInt32() == 42 && parsedMap["added"]["list"].Length == 3 && parsedMap["observed"] == 1, $"json map: {mapJson}");
+Check(doc.GetArray("list").ToJsonString().StartsWith("[[10,20],\"two\",null,2.5,3000000000,{\"k\":true}]", StringComparison.Ordinal), "json array");
+Check(doc.GetText("text").ToJsonString() == "\"AOT plain bold tail\"" && YValue.FromJson(System.Text.Json.JsonElement.Parse(mapJson)) == parsedMap, "json text and element");
+Console.WriteLine(mapJson);
+
 // The text API: embeds, deltas of both kinds, a snapshot with ychange, the span and writer reads.
 var edited = new YDoc();
 var note = edited.GetText("note");
 note.Insert(0, "ab");
 note.InsertEmbed(1, YValue.Object(new KeyValuePair<string, YValue>("image", "x.png")));
 var before = edited.CreateSnapshot();
-note.ApplyDelta([new Delta.Retain(1), new Delta.Insert("Z") { Attributes = new Dictionary<string, YValue> { ["bold"] = true } }, new Delta.Delete(1)]);
+note.ApplyDelta([new Delta.Retain(1), new Delta.Insert("Z") { Attributes = [new("bold", true)] }, new Delta.Delete(1)]);
 var runs = note.ToDelta();
 Check(runs.Count == 3 && runs[1] is Delta.Insert { Value.Kind: YValueKind.String } && runs[1].Attributes!["bold"] == YValue.True, "text delta lost");
 var changes = note.ToDelta(edited.CreateSnapshot(), before, (kind, id) => new YChange(kind, id.Client));

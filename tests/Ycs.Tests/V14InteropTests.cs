@@ -135,7 +135,7 @@ public class V14InteropTests
             var assoc = p.GetProperty("assoc").GetInt32();
             var encoded = p.GetProperty("encoded").GetString();
             var rpos = RelativePosition.Decode(Convert.FromBase64String(encoded));
-            var own = RelativePosition.FromIndex(RootOf(doc, root, kinds[root]), index, assoc);
+            var own = RelativePosition.FromIndex(RootOf(doc, root, kinds[root]), index, (Assoc)assoc);
             var resolved = rpos.TryResolve(doc, out var absolute) ? absolute.Index : (int?)null;
 
             expected.Add($"{root}@{index},{assoc}: {encoded} {encoded} {p.GetProperty("resolved").GetInt32()}");

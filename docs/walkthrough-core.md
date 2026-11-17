@@ -151,7 +151,7 @@ every reference to it stays valid and reads a GC struct.
 | `load` | `Load` | identical |
 | `getSubdocs`, `getSubdocGuids` | internal `Subdocs`, `GetSubdocGuids` | equivalent |
 | `transact` | `Transact` | equivalent |
-| `get` (placeholder upgrade, "different constructor"), `getArray`, `getText`, `getMap`, `getXmlElement`, `getXmlFragment` | internal `Get<T>`, `GetArray`, `GetText`, `GetMap`, `GetXmlElement`, `GetXmlFragment`, `GetXmlText` | identical (asking for a root as another type throws) |
+| `get` (placeholder upgrade, "different constructor"), `getArray`, `getText`, `getMap`, `getXmlFragment` | internal `Get<T>`, `GetArray`, `GetText`, `GetMap`, `GetXmlFragment`, `GetXmlText` | identical (asking for a root as another type throws) |
 | `toJSON` | none | not ported |
 | `destroy` | `Destroy` | equivalent (iterates a copy of the subdocuments) |
 | events `beforeAllTransactions`, `beforeTransaction`, `beforeObserverCalls`, `afterTransaction`, `afterTransactionCleanup`, `update`, `updateV2`, `subdocs`, `afterAllTransactions`, `destroy` | `BeforeAllTransactions`, `BeforeTransaction`, `BeforeObserverCalls`, `AfterTransaction`, `AfterTransactionCleanup`, `Updated`, `UpdatedV2`, `SubdocsChanged`, `AfterAllTransactions`, `Destroyed` | identical order |

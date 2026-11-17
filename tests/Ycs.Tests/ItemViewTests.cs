@@ -228,34 +228,133 @@ public class ItemViewTests
         Assert.AreEqual((false, true), (ItemView.At(a, new ItemId(1, 0)) == ItemView.At(b, new ItemId(1, 0)), default(ItemView) == default));
     }
 
+    private static StagingTable StagedString(long client, long clock, string text, ItemId? leftOrigin = null, ItemId? rightOrigin = null, string parentSub = null)
+    {
+        var table = new StagingTable();
+        table.BeginClient(client, clock);
+        var i = table.Add(StagedKind.String, text.Length, leftOrigin, rightOrigin);
+        table.SetParentRoot(i, "t");
+        if (parentSub != null)
+        {
+            table.SetParentSub(i, parentSub);
+        }
+
+        text.CopyTo(table.Chars(i));
+        return table;
+    }
+
     [TestMethod]
-    public void Read_DetachedView_ReadsItsDecodedObjectAndEqualsOnlyThatObject()
+    public void Read_DetachedView_ReadsItsStagedStructAndEqualsOnlyThatStruct()
     {
         var doc = NewDoc();
         doc.GetText("t").Insert(0, "x");
-        var decoded = new Item(new ItemId(1, 0), null, null, "t", null, new ContentString("yz"));
-        var view = ItemView.Detached(doc, decoded);
+        var table = StagedString(1, 0, "yz");
+        var view = ItemView.Detached(doc, table, 0);
 
         Assert.AreEqual(
-            (ItemKind.String, 2, "yz", true, false, false, true),
-            (view.Kind, view.Length, Text(view.Content), view.IsDetached, view == ItemView.At(doc, new ItemId(1, 0)), view == ItemView.Detached(doc, new Item(new ItemId(1, 0), null, null, "t", null, new ContentString("yz"))), view == ItemView.Detached(doc, decoded)));
+            (ItemKind.String, 2, "yz", true, false, false, true, false),
+            (view.Kind, view.Length, Text(view.Content), view.IsDetached, view == ItemView.At(doc, new ItemId(1, 0)), view == ItemView.Detached(doc, StagedString(1, 0, "yz"), 0), view == ItemView.Detached(doc, table, 0), view.Deleted));
     }
 
     [TestMethod]
-    public void Read_DetachedViewWithNoDocument_NamesNoStoreStruct()
+    public void Read_DetachedViewWithNoDocument_ReadsOriginsAndNamesNoNeighbourOrParent()
     {
-        var decoded = new Item(new ItemId(2, 4), new ItemId(2, 3), null, "t", null, new ContentString("q"));
-        var view = ItemView.Detached(null, decoded);
+        var table = StagedString(2, 4, "q", new ItemId(2, 3), new ItemId(5, 1), "k");
+        var view = ItemView.Detached(null, table, 0);
 
-        Assert.AreEqual((false, (ItemId?)new ItemId(2, 3), (ItemView?)null, (ItemView?)null, "t", null), (view.IsDefault, view.LeftOrigin, view.Left, view.Right, "t", view.Parent as object));
+        Assert.AreEqual(
+            (false, (ItemId?)new ItemId(2, 3), (ItemId?)new ItemId(5, 1), (ItemView?)null, (ItemView?)null, (string)"k", (object)null, (ItemId?)null, true, false, new ItemId(2, 4), new ItemId(2, 4)),
+            (view.IsDefault, view.LeftOrigin, view.RightOrigin, view.Left, view.Right, view.ParentSub, view.Parent, view.Redone, view.Countable, view.Keep, view.Id, view.LastId));
     }
 
     [TestMethod]
-    public void Read_DetachedSkip_IsASkip()
+    public void Read_DetachedSkipAndGC_AreDeletedWithNoContent()
     {
-        var view = ItemView.Detached(null, new Skip(new ItemId(3, 7), 5));
+        var table = new StagingTable();
+        table.BeginClient(3, 7);
+        table.Add(StagedKind.Skip, 5);
+        table.Add(StagedKind.GC, 2);
+        var skip = ItemView.Detached(null, table, 0);
+        var gc = ItemView.Detached(null, table, 1);
 
-        Assert.AreEqual((ItemKind.Skip, 5, true, 0, new ItemId(3, 11)), (view.Kind, view.Length, view.Deleted, view.Content.Count, view.LastId));
+        Assert.AreEqual(
+            (ItemKind.Skip, 5, true, 0, new ItemId(3, 11), ItemKind.GC, 2, true, 0, new ItemId(3, 13)),
+            (skip.Kind, skip.Length, skip.Deleted, skip.Content.Count, skip.LastId, gc.Kind, gc.Length, gc.Deleted, gc.Content.Count, gc.LastId));
+    }
+
+    [TestMethod]
+    public void Read_DetachedViewsOfOtherKinds_ReadTheirContent()
+    {
+        var table = new StagingTable();
+        table.BeginClient(1, 0);
+        var any = table.Add(StagedKind.Any, 2);
+        table.Values(any)[0] = 5L;
+        table.Values(any)[1] = "s";
+        var deleted = table.Add(StagedKind.Deleted, 3);
+        var type = table.Add(StagedKind.Type, 1);
+        table.SetType(type, 0, null);
+        var embed = table.Add(StagedKind.Embed, 1);
+        table.SetCold(embed, new ContentEmbed("e"));
+        var views = Enumerable.Range(0, 4).Select(i => ItemView.Detached(null, table, i)).ToArray();
+
+        Assert.AreEqual(
+            ("5,s", ItemKind.Deleted, 0, true, ItemKind.Type, 0, ItemKind.Embed, "e"),
+            (string.Join(",", views[0].Content), views[1].Kind, views[1].Content.Count, views[0].Countable, views[2].Kind, views[2].Content.Count, views[3].Kind, (string)views[3].Content.Single()));
+    }
+
+    [TestMethod]
+    public void Read_DetachedViewAfterReset_ReadsTheStoreStructThatHoldsItsId()
+    {
+        var doc = NewDoc();
+        doc.GetText("t").Insert(0, "abcdef");
+        var table = StagedString(1, 2, "XY");
+        var view = ItemView.Detached(doc, table, 0);
+        Assert.AreEqual("XY", Text(view.Content));
+
+        table.Reset();
+
+        Assert.AreEqual(("cdef", 4, new ItemId(1, 2), new ItemId(1, 5)), (Text(view.Content), view.Length, view.Id, view.LastId));
+    }
+
+    [TestMethod]
+    public void Read_DetachedViewAfterTruncate_ReadsTheStore()
+    {
+        var doc = NewDoc();
+        doc.GetText("t").Insert(0, "abc");
+        var table = StagedString(1, 1, "Q");
+        var view = ItemView.Detached(doc, table, 0);
+
+        table.Truncate();
+
+        Assert.AreEqual("bc", Text(view.Content));
+    }
+
+    [TestMethod]
+    public void Read_DetachedViewAfterAnotherStructWasStaged_StillReadsItsStruct()
+    {
+        var table = StagedString(1, 0, "ab");
+        var view = ItemView.Detached(null, table, 0);
+
+        table.Add(StagedKind.GC, 1);
+
+        Assert.AreEqual("ab", Text(view.Content));
+    }
+
+    [TestMethod]
+    public void Read_DetachedViewAfterReleaseWhoseStructIsNotInTheStore_Throws()
+    {
+        var doc = NewDoc();
+        doc.GetText("t").Insert(0, "abc");
+        var beyond = StagedString(1, 3, "x");
+        var other = StagedString(9, 0, "x");
+        var noDocument = StagedString(1, 0, "x");
+        var views = new[] { ItemView.Detached(doc, beyond, 0), ItemView.Detached(doc, other, 0), ItemView.Detached(null, noDocument, 0) };
+
+        beyond.Reset();
+        other.Reset();
+        noDocument.Reset();
+
+        Assert.AreEqual(3, views.Count(v => Throws(() => v.Length)));
     }
 
     [TestMethod]

@@ -17,9 +17,9 @@ internal static class Messages
     public static byte[]? HandleSync(MemoryStream reader, YDoc doc, object origin)
     {
         var reply = new ArrayBufferWriter<byte>();
-        reply.Write([(byte)MessageType.Sync]);
-        SyncProtocol.ReadSyncMessage(reader.ToArray().AsSpan((int)reader.Position), reply, doc, origin);
-        return reply.WrittenCount > 1 ? reply.WrittenSpan.ToArray() : null;
+        SyncProtocol.WriteMessageType(reply, SyncProtocol.MessageSync);
+        var result = SyncProtocol.ReadSyncMessage(reader.ToArray().AsSpan((int)reader.Position), reply, doc, origin);
+        return result.Replied ? reply.WrittenSpan.ToArray() : null;
     }
 
     /// <summary>An awareness message of one client, as y-protocols encodes it; a null state removes it.</summary>
@@ -104,7 +104,7 @@ internal static class Messages
     public static byte[] Sync(Action<IBufferWriter<byte>> write)
     {
         var message = new ArrayBufferWriter<byte>();
-        message.Write([(byte)MessageType.Sync]);
+        SyncProtocol.WriteMessageType(message, SyncProtocol.MessageSync);
         write(message);
         return message.WrittenSpan.ToArray();
     }

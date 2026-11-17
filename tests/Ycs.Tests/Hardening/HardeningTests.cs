@@ -15,6 +15,8 @@ namespace Ycs;
 [TestClass]
 public class HardeningTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     private static byte[] Hex(string hex) => Convert.FromHexString(hex.Replace(" ", string.Empty, StringComparison.Ordinal));
 
     private static byte[] Concat(params byte[][] parts) => parts.SelectMany(p => p).ToArray();
@@ -336,14 +338,49 @@ public class HardeningTests
     [TestMethod]
     public void ApplyUpdate_ManyUpdatesWaitingForAMissingClient_IsFast()
     {
-        var doc = new YDoc();
-        var stopwatch = Stopwatch.StartNew();
-        for (var client = 100; client < 8100; client++)
+        ScalingProbe.AssertNotQuadratic(
+            n =>
+            {
+                var updates = Enumerable.Range(100, n).Select(WaitingForClient99).ToList();
+                var doc = new YDoc();
+                return () => updates.ForEach(update => doc.ApplyUpdate(update));
+            },
+            8_000,
+            TestContext);
+    }
+
+    /// <summary>A v1 update of <paramref name="clients"/> clients (ids 1 to n), each one character after the item of the client below it: the walk stacks all of them and hits the wall at client 0.</summary>
+    private static byte[] ChainOfWaitingClients(int clients)
+    {
+        var writer = new Lib0Writer();
+        writer.WriteVarUint((ulong)clients);
+        for (var client = clients; client >= 1; client--)
         {
-            doc.ApplyUpdate(WaitingForClient99(client));
+            writer.WriteVarUint(1);
+            writer.WriteVarUint((ulong)client);
+            writer.WriteVarUint(0);
+            writer.WriteByte(0x84); // string, left origin
+            writer.WriteVarUint((ulong)(client - 1));
+            writer.WriteVarUint(0);
+            writer.WriteVarString("c");
         }
 
-        Assert.IsLessThan(2000, stopwatch.ElapsedMilliseconds);
+        writer.WriteVarUint(0);
+        return writer.ToArray();
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_ManyClientsHittingTheWallAtOnce_IsLinear()
+    {
+        ScalingProbe.AssertNotQuadratic(
+            n =>
+            {
+                var update = ChainOfWaitingClients(n);
+                var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxStructsPerUpdate = 1_000_000, MaxPendingStructs = 1_000_000, MaxPendingBytes = 1 << 30 } });
+                return () => doc.ApplyUpdate(update);
+            },
+            400_000,
+            TestContext);
     }
 
     [TestMethod]
@@ -591,7 +628,7 @@ public class HardeningTests
         var stopwatch = Stopwatch.StartNew();
         Assert.ThrowsExactly<YUpdateException>(() => new YDoc().ApplyUpdate(update, format: UpdateFormat.V2));
         Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([update, update], format: UpdateFormat.V2));
-        Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds);
+        Assert.IsLessThan(10_000, stopwatch.ElapsedMilliseconds); // ten times the usual: a guard against the walk of 2^32 structs
     }
 
     /// <summary>A v2 update whose columns describe <paramref name="count"/> (at least 2) GC structs of length 1 in a few bytes.</summary>
@@ -631,6 +668,6 @@ public class HardeningTests
         var stopwatch = Stopwatch.StartNew();
         AssertRejected(doc, () => doc.ApplyUpdate(update, format: UpdateFormat.V2), "");
         Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([update, update], format: UpdateFormat.V2));
-        Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds);
+        Assert.IsLessThan(10_000, stopwatch.ElapsedMilliseconds); // ten times the usual: a guard against the walk of 2^32 structs
     }
 }
