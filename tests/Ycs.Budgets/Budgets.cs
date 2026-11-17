@@ -23,7 +23,7 @@ internal static class Budgets
         ["text.to-string-after-edit-100k"] = new(230784, 15000),       // 200 680 B, 800 µs (an insert, then the string built again)
         ["position.relative-from-index-deep-100k"] = new(0, 5000),     // 0 B, 250 µs (walks the list from the start, as Yjs does)
         ["position.absolute-from-relative-deep-100k"] = new(0, 5000), // 0 B, 260 µs (walks the list to the start, as Yjs does)
-        ["map.set-existing-key"] = new(520, 50),                       // 446 B, 1 µs (was 588 B: a HashSet for the changed key, a new list for the deletion, per set; the item is a slot, not an object)
+        ["map.set-existing-key"] = new(488, 50),                       // 422 B, 1 µs (was 588 B: a HashSet for the changed key, a new list for the deletion, per set; the item is a slot, not an object; a deleted item holds no content object)
         ["text.insert-formatted-char-100k"] = new(360, 2000),          // 308 B, 180 µs (finds the position without search markers, as Yjs does; was 508 B)
         ["text.event-delta-read-100k"] = new(976, 6000),              // 844 B, 830 µs (the delta walks the whole text, as Yjs' does)
         ["undo.undo-redo-typing-100k"] = new(3384, 50),                // 2 940 B, 2 µs
@@ -31,7 +31,7 @@ internal static class Budgets
         ["undo.delete-backwards-one-capture-100k"] = new(548, 50),     // 475 B, 3 µs (was 3 100 B: the deleted run was copied on every merge)
         ["array.push-100k-in-one-transaction"] = new(2415904, 800000),  // 2.1 MB, 14 ms (was beyond 8 GiB: each push walked the list, the end of the transaction copied the run into each left neighbour)
         ["text.type-100k-in-one-transaction"] = new(247696, 840000),    // 215 KB, 11 ms (was 58 s and 22 MB: each marker lookup walked back over the transaction's keystrokes, each made an item)
-        ["array.delete-random-100k"] = new(2496, 52),                 // 2 166 B, 4 µs (the marker walks cross the pieces split off the item through the run-head index; Yjs' loops walk them)
+        ["array.delete-random-100k"] = new(2464, 52),                 // 2 142 B, 4 µs (the marker walks cross the pieces split off the item through the run-head index; Yjs' loops walk them)
         ["doc.encode-state-with-pending-100k"] = new(814352, 80000),  // 708 KB, 6.5 ms (the state merged with what is pending, as Yjs does)
     };
 }
