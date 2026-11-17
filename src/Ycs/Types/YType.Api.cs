@@ -1,9 +1,3 @@
-// ------------------------------------------------------------------------------
-//  <copyright company="Microsoft Corporation">
-//      Copyright (c) Microsoft Corporation.  All rights reserved.
-//  </copyright>
-// ------------------------------------------------------------------------------
-
 namespace Ycs;
 
 public abstract partial class YType
@@ -86,6 +80,7 @@ public abstract partial class YType
             switch (value)
             {
                 case YDoc d:
+                    d.CheckCanInsertInto(transaction.Doc);
                     content = new ContentDoc(d);
                     break;
                 case YType at:

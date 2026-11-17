@@ -63,15 +63,6 @@ public class YValueJsonTests
     }
 
     [TestMethod]
-    public void ToJsonString_SubdocumentThatHoldsItself_Throws()
-    {
-        var doc = new YDoc();
-        doc.GetMap("m")["self"] = doc;
-
-        Assert.Throws<InvalidOperationException>(() => doc.GetMap("m").ToJsonString());
-    }
-
-    [TestMethod]
     public void ToJsonString_StringsWithSpecialCharacters_AreEscapedAsJson()
     {
         var value = YValue.Object(("k\"", "é \u2028 <>&\n\ud83d\ude00"), ("lone", "a\ud83db"), ("a\ud83d", 1));

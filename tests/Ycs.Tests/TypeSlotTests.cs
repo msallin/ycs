@@ -131,6 +131,20 @@ public class TypeSlotTests
     }
 
     [TestMethod]
+    public void Insert_RootType_ThrowsAndLeavesTheDocumentUnchanged()
+    {
+        var doc = NewDoc();
+        var array = doc.GetArray("a");
+        var root = doc.GetMap("m");
+        var before = doc.Store.GetState(1);
+
+        Assert.ThrowsExactly<ArgumentException>(() => array.Add(root));
+
+        doc.Store.CheckForTests();
+        Assert.AreEqual((before, 0), (doc.Store.GetState(1), array.Count));
+    }
+
+    [TestMethod]
     public void Insert_SameTypeTwiceInOneBatch_ThrowsAndLeavesTheDocumentUnchanged()
     {
         var doc = NewDoc();

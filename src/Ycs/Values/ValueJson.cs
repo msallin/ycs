@@ -24,7 +24,6 @@ internal static class ValueJson
     {
         public IEnumerator Entries;
         public bool IsObject;
-        public YDoc? Doc;
     }
 
     internal static string ToString(object? tree, JsonWriterOptions options)
@@ -142,16 +141,10 @@ internal static class ValueJson
                 open.Add(new Frame { Entries = list.GetEnumerator(), IsObject = false });
                 return;
             case YDoc doc:
-                foreach (var frame in open)
-                {
-                    if (ReferenceEquals(frame.Doc, doc))
-                    {
-                        throw new InvalidOperationException("A subdocument holds itself, and cannot be written as JSON.");
-                    }
-                }
-
+                // A document is inserted once and never into itself or its own subdocuments (YDoc.CheckCanInsertInto), so no
+                // document is its own descendant.
                 writer.WriteStartObject();
-                open.Add(new Frame { Entries = doc.JsonRoots().GetEnumerator(), IsObject = true, Doc = doc });
+                open.Add(new Frame { Entries = doc.JsonRoots().GetEnumerator(), IsObject = true });
                 return;
             default:
                 if (ReferenceEquals(value, JsValue.Undefined))

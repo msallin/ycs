@@ -1,4 +1,5 @@
 using System.Linq;
+using System;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -142,23 +143,18 @@ public class CollectedTypeFactsTests
     }
 
     [TestMethod]
-    public void Insert_OfACollectedSubdocumentAgain_BelongsToTheNewItem()
+    public void Insert_OfACollectedSubdocumentAgain_Throws()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var m = doc.GetMap("m");
         var sub = new YDoc(new YDocOptions { Guid = "g", ShouldLoad = false });
-        var log = new System.Collections.Generic.List<string>();
-        SubdocLog(doc, log);
         doc.Transact(_ =>
         {
             m["s"] = sub;
             m.Remove("s");
         });
-        m["s2"] = sub;
 
-        sub.Destroy();
-
-        Assert.AreEqual(("L0A1R0,L0A1R1", true), (string.Join(",", log), !ReferenceEquals(m["s2"].ToObject(), sub)));
+        Assert.ThrowsExactly<ArgumentException>(() => m["s2"] = sub);
     }
 
     private static (YDoc Doc, YMap M, YMap Mid, YMap Inner) NestedCollected()

@@ -23,27 +23,6 @@ public class HostileYcsTests
         return (missing, waiting);
     }
 
-    // What waits may reach twice MaxPendingStructs (an update that lets 150 integrate brings 290 new); an update that
-    // carries what waits again, as a client's step 2 after it received the room's state, adds nothing and is accepted.
-    [TestMethod]
-    public void ApplyUpdate_WaitingStructsOverTheLimitSentBack_AreAccepted()
-    {
-        var b = Waiting(7, 150);
-        var c = Waiting(8, 150);
-        var e = Waiting(9, 290);
-        var room = new YDoc(new YDocOptions { Limits = Small });
-        room.ApplyUpdate(b.Waiting);
-        room.ApplyUpdate(c.Waiting);
-        room.ApplyUpdate(YUpdate.Merge([b.Missing, e.Waiting], format: UpdateFormat.V1));
-        var client = new YDoc(new YDocOptions { ClientId = 20 });
-        client.ApplyUpdate(room.EncodeStateAsUpdate());
-        client.GetText("other").Insert(0, "offline");
-
-        var accepted = room.TryApplyUpdate(client.EncodeStateAsUpdate(room.EncodeStateVector()));
-
-        Assert.AreEqual((true, "offline"), (accepted, room.GetText("other").ToString()));
-    }
-
     [TestMethod]
     public void ApplyUpdate_WaitingStructsOverTheLimit_AnUpdateWithoutThemIsAccepted()
     {

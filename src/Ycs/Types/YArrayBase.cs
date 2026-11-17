@@ -1,9 +1,3 @@
-// ------------------------------------------------------------------------------
-//  <copyright company="Microsoft Corporation">
-//      Copyright (c) Microsoft Corporation.  All rights reserved.
-//  </copyright>
-// ------------------------------------------------------------------------------
-
 using System.Diagnostics;
 
 namespace Ycs;
@@ -305,7 +299,7 @@ public abstract partial class YArrayBase : YType
     /// Appends after the last item, deleted ones included (Yjs' <c>typeListPushGenerics</c>): the new
     /// item has no right origin, unlike an insert at <see cref="YType.Length"/>.
     // One instance can be integrated once: a batch naming it twice is refused before any of it is inserted.
-    private static void CheckOnceInBatch(YType nested, ref YType? first, ref HashSet<YType>? seen)
+    private static void CheckOnceInBatch(object nested, ref object? first, ref HashSet<object>? seen)
     {
         if (first == null)
         {
@@ -313,10 +307,10 @@ public abstract partial class YArrayBase : YType
             return;
         }
 
-        seen ??= new HashSet<YType>(ReferenceEqualityComparer.Instance) { first };
+        seen ??= new HashSet<object>(ReferenceEqualityComparer.Instance) { first };
         if (!seen.Add(nested))
         {
-            throw new ArgumentException("The same shared type appears twice in the inserted values. Nothing was inserted.", nameof(nested));
+            throw new ArgumentException("The same shared type or document appears twice in the inserted values. Nothing was inserted.", nameof(nested));
         }
     }
 
@@ -390,28 +384,20 @@ public abstract partial class YArrayBase : YType
         // Indexed where the content allows it: a foreach over the interface boxes the enumerator.
         var list = content as IList<object?>;
         var count = content.Count;
-        YType? firstNested = null;
-        HashSet<YType>? seenNested = null;
+        object? firstNested = null;
+        HashSet<object>? seenNested = null;
         if (list != null)
         {
             for (var i = 0; i < count; i++)
             {
-                if (list[i] is YType nested)
-                {
-                    CheckCanInsert(nested);
-                    CheckOnceInBatch(nested, ref firstNested, ref seenNested);
-                }
+                CheckValue(list[i], ref firstNested, ref seenNested);
             }
         }
         else
         {
             foreach (var c in content)
             {
-                if (c is YType nested)
-                {
-                    CheckCanInsert(nested);
-                    CheckOnceInBatch(nested, ref firstNested, ref seenNested);
-                }
+                CheckValue(c, ref firstNested, ref seenNested);
             }
         }
 
@@ -459,6 +445,20 @@ public abstract partial class YArrayBase : YType
         }
 
         return left;
+
+        void CheckValue(object? c, ref object? first, ref HashSet<object>? seen)
+        {
+            if (c is YType nested)
+            {
+                CheckCanInsert(nested);
+                CheckOnceInBatch(nested, ref first, ref seen);
+            }
+            else if (c is YDoc d)
+            {
+                d.CheckCanInsertInto(doc);
+                CheckOnceInBatch(d, ref first, ref seen);
+            }
+        }
 
         void Insert(object? c)
         {

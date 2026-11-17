@@ -1,9 +1,3 @@
-// ------------------------------------------------------------------------------
-//  <copyright company="Microsoft Corporation">
-//      Copyright (c) Microsoft Corporation.  All rights reserved.
-//  </copyright>
-// ------------------------------------------------------------------------------
-
 namespace Ycs;
 
 internal class ContentDoc : IContentEx
@@ -16,10 +10,8 @@ internal class ContentDoc : IContentEx
     // item is integrated (with the parent's limits), not while an update that may be rejected is decoded.
     private readonly Options _read;
 
-    /// <remarks>
-    /// Yjs logs an error for a document that is integrated already and goes on; the document then
-    /// belongs to the item integrated last.
-    /// </remarks>
+    // The callers refuse a document that is a subdocument already (YDoc.CheckCanInsertInto), where Yjs logs an error
+    // and lets the document move to the item integrated last: a document names one item.
     internal ContentDoc(YDoc doc)
     {
         _doc = doc;
@@ -55,10 +47,7 @@ internal class ContentDoc : IContentEx
 
     public IContent Copy() => new ContentDoc(Options.Parse(Guid, Opts, shouldLoad: null));
 
-    public IContent Splice(int offset)
-    {
-        throw new NotImplementedException();
-    }
+    public IContent Splice(int offset) => throw TypeContent.Unsplittable();
 
     public bool MergeWith(IContent right)
     {

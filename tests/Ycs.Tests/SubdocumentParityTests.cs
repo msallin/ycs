@@ -175,15 +175,13 @@ public class SubdocumentParityTests
     }
 
     [TestMethod]
-    public void Set_SubdocumentInsertedTwice_KeepsTheSameDocument()
+    public void Set_SubdocumentInsertedTwice_Throws()
     {
         var doc = new YDoc();
         var subdoc = new YDoc();
         doc.GetMap("m")["a"] = subdoc;
 
-        doc.GetMap("m")["b"] = subdoc;
-
-        Assert.AreSame(subdoc, doc.GetMap("m")["b"].ToObject());
+        Assert.ThrowsExactly<ArgumentException>(() => doc.GetMap("m")["b"] = subdoc);
     }
 
     [TestMethod]

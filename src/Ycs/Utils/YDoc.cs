@@ -1,9 +1,3 @@
-// ------------------------------------------------------------------------------
-//  <copyright company="Microsoft Corporation">
-//      Copyright (c) Microsoft Corporation.  All rights reserved.
-//  </copyright>
-// ------------------------------------------------------------------------------
-
 using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -41,6 +35,26 @@ public partial class YDoc
         _item = item;
         _itemCollected = false;
         _collectedParentDoc = null;
+    }
+
+    /// <summary>
+    /// Throws, before any item is made, when this document is a subdocument already (or was collected as one and not
+    /// destroyed), or is <paramref name="parent"/> or one of its ancestors: a document names one item.
+    /// </summary>
+    internal void CheckCanInsertInto(YDoc parent)
+    {
+        if (!_item.IsNull || _itemCollected)
+        {
+            throw new ArgumentException("The document is already a subdocument and cannot be inserted again: create a second YDoc with the same guid instead. Nothing was inserted.", "doc");
+        }
+
+        for (var d = parent; d != null; d = d._item.IsNull || d._itemCollected ? null : ((AbstractType)d._item.Parent).Doc)
+        {
+            if (d == this)
+            {
+                throw new ArgumentException("A document cannot be inserted into itself or into a subdocument of its own. Nothing was inserted.", "doc");
+            }
+        }
     }
 
     internal void CollectItem()

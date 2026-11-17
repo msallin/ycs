@@ -1,9 +1,3 @@
-// ------------------------------------------------------------------------------
-//  <copyright company="Microsoft Corporation">
-//      Copyright (c) Microsoft Corporation.  All rights reserved.
-//  </copyright>
-// ------------------------------------------------------------------------------
-
 #nullable disable // Not annotated for nullable reference types yet.
 
 using System.Runtime.ExceptionServices;
@@ -227,18 +221,19 @@ public abstract partial class YType
     /// </summary>
     internal void CheckCanInsert(YType child)
     {
-        if (!child._item.IsNull || child._collected)
+        // A root type has no item but a document: it is part of a document as much as a nested one.
+        if (!child._item.IsNull || child._collected || child.Doc != null)
         {
-            throw new ArgumentException("The type is already part of a document (integrated or collected) and cannot be inserted again. Nothing was inserted.", nameof(child));
+            throw new ArgumentException("The type is already part of a document (a root, integrated or collected) and cannot be inserted again. Nothing was inserted.", nameof(child));
         }
 
         CheckCanNest();
     }
 
-    internal virtual YType InternalCopy() { throw new NotImplementedException(); }
-    internal virtual YType InternalClone() { throw new NotImplementedException(); }
+    internal abstract YType InternalCopy();
+    internal abstract YType InternalClone();
 
-    internal virtual void Write(IUpdateEncoder encoder) { throw new NotImplementedException(); }
+    internal abstract void Write(IUpdateEncoder encoder);
 
     /// <summary>
     /// For a type whose JSON holds the JSON of the types nested in it (a map, an array): its JSON without them,

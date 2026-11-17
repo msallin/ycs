@@ -1,9 +1,3 @@
-// ------------------------------------------------------------------------------
-//  <copyright company="Microsoft Corporation">
-//      Copyright (c) Microsoft Corporation.  All rights reserved.
-//  </copyright>
-// ------------------------------------------------------------------------------
-
 namespace Ycs;
 
 internal class ContentFormat : IContentEx
@@ -34,7 +28,7 @@ internal class ContentFormat : IContentEx
     // Yjs: ContentFormat#getContent returns an empty array - formatting carries no user content.
     public IReadOnlyList<object> GetContent() => System.Array.Empty<object>();
 
-    public IContent Splice(int offset) => throw new NotImplementedException();
+    public IContent Splice(int offset) => throw TypeContent.Unsplittable();
 
     public bool MergeWith(IContent right)
     {
