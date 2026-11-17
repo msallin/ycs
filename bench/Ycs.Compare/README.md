@@ -772,6 +772,28 @@ published tables are JavaScript on other machines and cannot be compared with th
   default (`DocEncoding.Utf16`), as Yjs.
 * **Interop:** every state either library wrote decoded in the other to the same content, in every workload both finished (35 of 36; ycs did not finish `array-push-1txn`).
 
+### The Any values (layout 8.8, 2026-11-17, ycs only)
+
+Base `modernize` b0e9c80 (the value arena shadows each Any content object) against `layout-8-8` (the arena is the only
+holder), interleaved by `ab.py 3 5` (`results/2026-11-17-layout-8-8/ab-3x5.txt`; load 1 to 2, 8 logical cores). `COMPARE_ALLOC_TYPES=1`
+on the new build shows no `ContentAny` and no `List<object>` (`alloc-types.txt`).
+
+| workload | base ms | 8.8 ms | alloc MiB base / 8.8 | held MiB base / 8.8 |
+| --- | ---: | ---: | ---: | ---: |
+| `map-set-distinct` | 37.9 | 32.4 | 31.7 / 22.6 | 34.0 / 24.9 |
+| `map-set-distinct-1txn` | 22.8 | 18.4 | 34.5 / 25.3 | 34.0 / 24.9 |
+| `map-set-same` | 61.1 | 55.8 | 15.2 / 6.8 | 0 / 0 |
+| `array-push` | 23.6 | 21.1 | 6.3 / 4.3 | 10.9 / 9.9 |
+| `array-push-1txn` | 10.4 | 7.3 | 6.3 / 4.3 | 10.4 / 9.4 |
+| `array-insert-random` | 132.9 | 127.2 | 11.1 / 5.4 | 16.1 / 10.4 |
+| `array-delete-random` | 160.7 | 145.5 | 25.1 / 4.2 | 17.7 / 11.6 |
+| `read-map` | 28.1 | 25.8 | 0 / 0 | 29.2 / 20.1 |
+| `read-array` | 18.4 | 20.1 | 0 / 7.6 | 5.8 / 4.8 |
+| `undo-type`, `undo-all`, `redo-all`, `observe-count`, `observe-delta` (text) | | | equal | equal |
+
+`read-array` is the one cost: `StoredContent` of an Any item is a copy of its range (the enumeration survives the
+structs merging or leaving, and a compaction moves the range), 8 B per value, transient.
+
 ## Pinned versions
 
 `YDotNet` 0.7.0 and `YDotNet.Native` 0.7.0 (which pulls `YDotNet.Native.Linux`, `.MacOS`, `.Win32` 0.7.0), source
