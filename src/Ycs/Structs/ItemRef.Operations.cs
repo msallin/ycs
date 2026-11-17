@@ -79,8 +79,25 @@ internal readonly partial struct ItemRef
     public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, IContent content) =>
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, (IContentEx)content);
 
-    /// <summary>A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet).</summary>
-    private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, IContentEx content)
+    /// <summary>
+    /// A new item (not integrated) between <paramref name="left"/> and <paramref name="right"/> with a copy of the content of
+    /// <paramref name="source"/>, a store item that is not collected (what a redone item holds).
+    /// </summary>
+    public static ItemRef NewCopyOf(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ItemRef source) =>
+        source.Kind == SlotKind.String
+            ? NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.String, source.Length, null, default, source)
+            : New(slab, id, left, right, parent, parentSub, source.CopyContent());
+
+    // A decoded String enters as a copy of its text, any other content as the object.
+    private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, IContentEx content) =>
+        content is ContentString text
+            ? NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, SlotKind.String, text.Length, null, text.AsSpan(), default)
+            : NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, (SlotKind)content.Ref, content.Length, content, default, default);
+
+    // A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet): the object
+    // of a kind that has one, else the chars of a String: the span, or the range of the store item copyOf (read after the
+    // compaction hook that opens this method, which may move it).
+    private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, SlotKind kind, int length, IContentEx content, ReadOnlySpan<char> chars, ItemRef copyOf)
     {
         StructStore.CompactForTests(slab, true);
 
@@ -94,9 +111,8 @@ internal readonly partial struct ItemRef
         ref var slot = ref slab.Write(item._handle);
         slot.Clock = id.Clock;
         slot.Client = client;
-        var kind = (SlotKind)content.Ref;
-        slot.Length = content.Length;
-        slot.Info = (kind.IsCountable() ? Slot.CountableFlag : 0) | (content.Ref << 8);
+        slot.Length = length;
+        slot.Info = (kind.IsCountable() ? Slot.CountableFlag : 0) | ((int)kind << 8);
         slot.OriginClient = originClient;
         slot.OriginClock = leftOrigin?.Clock ?? 0;
         slot.ROriginClient = rightOriginClient;
@@ -105,7 +121,15 @@ internal readonly partial struct ItemRef
         slot.Right = right.Handle;
         slot.Parent = parentIndex;
         slab.SetKey(item._handle, parentSub);
-        StoreContent(slab, item._handle, kind, content);
+        if (kind == SlotKind.String)
+        {
+            StoreChars(slab, item._handle, copyOf.IsNull ? chars : copyOf.Chars);
+        }
+        else
+        {
+            StoreContent(slab, item._handle, kind, content);
+        }
+
         return item;
     }
 

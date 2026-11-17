@@ -43,6 +43,7 @@ internal readonly partial struct ItemRef
     {
         SlotKind.Deleted => new ContentDeleted(Length),
         SlotKind.Type => TypeContent.Copy(this),
+        SlotKind.String => throw new InvalidOperationException("A String's text is copied by NewCopyOf, not as an object."),
         _ => (IContentEx)Content.Copy(),
     };
 
@@ -51,7 +52,7 @@ internal readonly partial struct ItemRef
     {
         switch (Kind)
         {
-            case SlotKind.Deleted:
+            case SlotKind.Deleted or SlotKind.String:
                 break;
             case SlotKind.Type:
                 TypeContent.Delete(transaction, this);
@@ -67,7 +68,7 @@ internal readonly partial struct ItemRef
     {
         switch (Kind)
         {
-            case SlotKind.Deleted:
+            case SlotKind.Deleted or SlotKind.String:
                 break;
             case SlotKind.Type:
                 TypeContent.Gc(store, this);
@@ -88,6 +89,8 @@ internal readonly partial struct ItemRef
                 MarkDeleted();
                 transaction.Doc.Store.Refresh(this);
                 break;
+            case SlotKind.String:
+                break;
             case SlotKind.Type:
                 TypeContent.Integrate(transaction, this);
                 break;
@@ -97,7 +100,8 @@ internal readonly partial struct ItemRef
         }
     }
 
-    // Fills the content storage of the new slot at handle from the content object; the slot holds the kind and the length.
+    // Fills the content storage of the new slot at handle from the content object (not a String's: StoreChars); the slot
+    // holds the kind and the length.
     private static void StoreContent(Slab slab, int handle, SlotKind kind, IContentEx content)
     {
         if (kind == SlotKind.Type)
@@ -108,12 +112,7 @@ internal readonly partial struct ItemRef
         else if (kind.HasObject())
         {
             slab.SetRef(handle, content);
-            if (kind == SlotKind.String)
-            {
-                var payload = CopyChars(slab, (ContentString)content);
-                slab.Write(handle).Payload = payload;
-            }
-            else if (kind == SlotKind.Any)
+            if (kind == SlotKind.Any)
             {
                 var payload = CopyValues(slab, (ContentAny)content);
                 slab.Write(handle).Payload = payload;
@@ -131,7 +130,6 @@ internal readonly partial struct ItemRef
             case SlotKind.Type:
                 throw TypeContent.Unsplittable();
             case SlotKind.String:
-                Content = (IContentEx)Content.Splice(offset);
                 CutCharsHead(offset);
                 break;
             case SlotKind.Any:
@@ -156,8 +154,8 @@ internal readonly partial struct ItemRef
             case SlotKind.Type:
                 throw TypeContent.Unsplittable();
             case SlotKind.String:
-                content = (IContentEx)Content.Splice(diff);
-                return (SplitChars(diff), content.Length);
+                content = null;
+                return (SplitChars(diff), Length - diff);
             case SlotKind.Any:
                 content = (IContentEx)Content.Splice(diff);
                 return (SplitValues(diff), content.Length);
@@ -175,7 +173,6 @@ internal readonly partial struct ItemRef
             case SlotKind.Deleted:
                 break;
             case SlotKind.String:
-                MergeObjects(right);
                 MergeChars(right);
                 break;
             case SlotKind.Any:

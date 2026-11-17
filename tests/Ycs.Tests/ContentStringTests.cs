@@ -6,8 +6,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// <see cref="ContentString"/> is a slice of a string while it is short or never grew (split halves share it), and a StringBuilder once
-/// merges make it long; splitting and merging behave the same in both forms, as in Yjs.
+/// <see cref="ContentString"/> is the decoded form of a String item: a string to read, copy and write. A store item holds its
+/// text in the arena, which splits, merges and copies it (<see cref="CharArenaTests"/>).
 /// </summary>
 [TestClass]
 public class ContentStringTests
@@ -22,112 +22,39 @@ public class ContentStringTests
     }
 
     [TestMethod]
-    public void Splice_String_SplitsAtOffset()
+    public void Splice_Decoded_Throws()
     {
-        var left = new ContentString("abcd");
+        var content = new ContentString("abcd");
 
-        var right = (ContentString)left.Splice(1);
-
-        Assert.AreEqual("a|bcd", left.GetString() + "|" + right.GetString());
+        Assert.ThrowsExactly<NotSupportedException>(() => content.Splice(1));
     }
 
     [TestMethod]
-    public void Splice_Builder_SplitsAtOffset()
+    public void MergeWith_Decoded_Throws()
     {
-        var left = Grown(40);
+        var content = new ContentString("ab");
 
-        var right = (ContentString)left.Splice(10);
-
-        Assert.AreEqual(new string('x', 10) + "|" + new string('x', 30), left.GetString() + "|" + right.GetString());
+        Assert.ThrowsExactly<NotSupportedException>(() => content.MergeWith(new ContentString("cd")));
     }
 
     [TestMethod]
-    public void Splice_StringInsideSurrogatePair_ReplacesBothHalves()
+    public void Copy_Decoded_IsAnotherObjectOfTheSameText()
     {
-        var left = new ContentString("a😀b");
-
-        var right = (ContentString)left.Splice(2);
-
-        Assert.AreEqual("a�|�b", left.GetString() + "|" + right.GetString());
-    }
-
-    [TestMethod]
-    public void Splice_BuilderInsideSurrogatePair_ReplacesBothHalves()
-    {
-        var left = Grown(40);
-        left.MergeWith(new ContentString("😀b"));
-
-        var right = (ContentString)left.Splice(41);
-
-        Assert.AreEqual(new string('x', 40) + "�|�b", left.GetString() + "|" + right.GetString());
-    }
-
-    [TestMethod]
-    public void Splice_AfterLowSurrogate_KeepsThePair()
-    {
-        var left = new ContentString("a😀b");
-
-        var right = (ContentString)left.Splice(3);
-
-        Assert.AreEqual("a😀|b", left.GetString() + "|" + right.GetString());
-    }
-
-    [TestMethod]
-    public void MergeWith_ShortRuns_Concatenates()
-    {
-        var left = new ContentString("ab");
-
-        left.MergeWith(new ContentString("cd"));
-
-        Assert.AreEqual("abcd", left.GetString());
-    }
-
-    [TestMethod]
-    public void MergeWith_PastTheThreshold_KeepsEveryCharacter()
-    {
-        var left = new ContentString("");
-        var expected = "";
-        for (var i = 0; i < 100; i++)
-        {
-            var c = ((char)('a' + (i % 26))).ToString();
-            left.MergeWith(new ContentString(c));
-            expected += c;
-        }
-
-        Assert.AreEqual(expected, left.GetString());
-        Assert.AreEqual(100, left.Length);
-    }
-
-    [TestMethod]
-    public void MergeWith_BuilderIntoString_AppendsIt()
-    {
-        var left = new ContentString("ab");
-
-        left.MergeWith(Grown(40));
-
-        Assert.AreEqual("ab" + new string('x', 40), left.GetString());
-    }
-
-    [TestMethod]
-    public void CopyTo_Builder_CopiesTheText()
-    {
-        var content = Grown(40);
-        var destination = new char[40];
-
-        content.CopyTo(destination);
-
-        Assert.AreEqual(new string('x', 40), new string(destination));
-    }
-
-    [TestMethod]
-    public void Copy_Builder_IsIndependent()
-    {
-        var content = Grown(40);
+        var content = new ContentString("abc");
 
         var copy = (ContentString)content.Copy();
-        content.MergeWith(new ContentString("y"));
 
-        Assert.AreEqual(new string('x', 40), copy.GetString());
+        Assert.IsTrue(copy.GetString() == "abc" && !ReferenceEquals(copy, content));
+    }
+
+    [TestMethod]
+    public void CopyTo_Decoded_CopiesTheText()
+    {
+        var destination = new char[5];
+
+        new ContentString("abc").CopyTo(destination);
+
+        Assert.AreEqual("abc\0\0", new string(destination));
     }
 
     [TestMethod]
@@ -151,57 +78,6 @@ public class ContentStringTests
     }
 
     [TestMethod]
-    public void Splice_Repeatedly_HalvesShareTheString()
-    {
-        // Splitting a long run at its front again and again (redoing typing splits the undone run so) copies nothing.
-        var content = new ContentString(new string('x', 10_000));
-        var before = System.GC.GetAllocatedBytesForCurrentThread();
-
-        for (var i = 0; i < 1_000; i++)
-        {
-            content = (ContentString)content.Splice(1);
-        }
-
-        Assert.IsLessThan(200_000, System.GC.GetAllocatedBytesForCurrentThread() - before, "a copy of the rest per split would be about 20 MB");
-        Assert.AreEqual(9_000, content.Length);
-    }
-
-    [TestMethod]
-    public void MergeWith_AdjacentHalves_RejoinsThem()
-    {
-        var left = new ContentString("abcdef");
-        var right = (ContentString)left.Splice(2);
-        var rest = (ContentString)right.Splice(2);
-
-        left.MergeWith(right);
-        left.MergeWith(rest);
-
-        Assert.AreEqual("abcdef", left.GetString());
-    }
-
-    [TestMethod]
-    public void MergeWith_HalvesOutOfOrder_ConcatenatesThem()
-    {
-        var left = new ContentString("abcdef");
-        var right = (ContentString)left.Splice(3);
-
-        right.MergeWith(left);
-
-        Assert.AreEqual("defabc", right.GetString());
-    }
-
-    [TestMethod]
-    public void Splice_SliceInsideSurrogatePair_ReplacesBothHalves()
-    {
-        var left = new ContentString("ab😀c");
-        var right = (ContentString)left.Splice(1);
-
-        var last = (ContentString)right.Splice(2);
-
-        Assert.AreEqual("a|b�|�c", left.GetString() + "|" + right.GetString() + "|" + last.GetString());
-    }
-
-    [TestMethod]
     public void Write_Slice_WritesOnlyItsPart()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
@@ -216,15 +92,4 @@ public class ContentStringTests
     }
 
     private static string Json(IEnumerable<Delta> delta) => string.Join(",", delta.Select(d => $"{d.Inserted()}:{string.Join(";", d.Attributes?.Select(a => a.Key) ?? [])}"));
-
-    private static ContentString Grown(int length)
-    {
-        var content = new ContentString("x");
-        for (var i = 1; i < length; i++)
-        {
-            content.MergeWith(new ContentString("x"));
-        }
-
-        return content;
-    }
 }

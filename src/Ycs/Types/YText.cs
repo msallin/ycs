@@ -784,7 +784,10 @@ public partial class YText : YArrayBase
             return;
         }
 
-        currPos.Right = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, str != null ? new ContentString(str) : content);
+        var id = new ID(ownClientId, doc.Store.GetState(ownClientId));
+        currPos.Right = str != null
+            ? ItemRef.New(doc.Store.Slab, id, currPos.Left, currPos.Right, this, null, str.AsSpan())
+            : ItemRef.New(doc.Store.Slab, id, currPos.Left, currPos.Right, this, null, content!);
         currPos.Right.Integrate(transaction, 0);
         currPos.Forward();
 
@@ -854,7 +857,7 @@ public partial class YText : YArrayBase
         // inserted - i.e. when length is bigger than type.length.
         if (length > 0)
         {
-            curPos.Right = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Right, this, null, new ContentString(new string('\n', length)));
+            curPos.Right = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Right, this, null, new string('\n', length));
             curPos.Right.Integrate(transaction, 0);
             curPos.Forward();
         }

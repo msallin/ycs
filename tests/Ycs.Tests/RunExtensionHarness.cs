@@ -182,7 +182,7 @@ internal sealed class ReferenceRun
 
                 if (s.IsItem)
                 {
-                    sb.Append(s.Content is ContentString cs ? "\"" + Esc(cs.GetString()) + "\"" : StructStore.ContentKindNameForTests(s.Content).Replace("Content", "", StringComparison.Ordinal));
+                    sb.Append(s.Kind == SlotKind.String ? "\"" + Esc(s.Chars.ToString()) + "\"" : StructStore.ContentKindNameForTests(s.Kind).Replace("Content", "", StringComparison.Ordinal));
                     if (s.Keep)
                     {
                         sb.Append('k');

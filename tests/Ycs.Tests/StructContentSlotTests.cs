@@ -62,7 +62,7 @@ public class StructContentSlotTests
 
         var left = doc.Store.Find(new ItemId(1, 0));
         var right = doc.Store.Find(new ItemId(1, 2));
-        Assert.AreEqual((true, true, false), (ReferenceEquals(doc.Store.Slab.GetRef(left.Handle), left.Content), ReferenceEquals(doc.Store.Slab.GetRef(right.Handle), right.Content), ReferenceEquals(left.Content, right.Content)));
+        Assert.AreEqual<(object, object, string, string)>((null, null, "ab", "cd"), (doc.Store.Slab.GetRef(left.Handle), doc.Store.Slab.GetRef(right.Handle), left.Chars.ToString(), right.Chars.ToString()));
     }
 
     [TestMethod]

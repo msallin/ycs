@@ -12,18 +12,18 @@ internal sealed partial class StructStore
     internal static string KindNameForTests(ItemRef str) =>
         str.IsItem ? "Item" : str.IsGC ? "GC" : throw new InvalidOperationException("A null struct has no kind.");
 
-    /// <summary>The name of a content's kind in the tests' dumps, by an explicit mapping (see <see cref="KindNameForTests"/>).</summary>
-    internal static string ContentKindNameForTests(IContent content) => content switch
+    /// <summary>The name of a content's kind in the tests' dumps, by an explicit mapping (see <see cref="KindNameForTests"/>); a collected item is a deleted content.</summary>
+    internal static string ContentKindNameForTests(SlotKind kind) => kind switch
     {
-        ContentAny => "ContentAny",
-        ContentBinary => "ContentBinary",
-        null or ContentDeleted => "ContentDeleted",
-        ContentDoc => "ContentDoc",
-        ContentEmbed => "ContentEmbed",
-        ContentFormat => "ContentFormat",
-        ContentJson => "ContentJson",
-        ContentString => "ContentString",
-        ContentType => "ContentType",
+        SlotKind.Any => "ContentAny",
+        SlotKind.Binary => "ContentBinary",
+        SlotKind.Deleted => "ContentDeleted",
+        SlotKind.Doc => "ContentDoc",
+        SlotKind.Embed => "ContentEmbed",
+        SlotKind.Format => "ContentFormat",
+        SlotKind.Json => "ContentJson",
+        SlotKind.String => "ContentString",
+        SlotKind.Type => "ContentType",
         _ => throw new InvalidOperationException("A content kind of the store has no name for the tests' dumps."),
     };
 
@@ -44,9 +44,8 @@ internal sealed partial class StructStore
                 sb.Append("  ").Append(KindNameForTests(s)).Append(' ').Append(IdText(s)).Append(" len ").Append(s.Length).Append(s.Deleted ? " deleted" : "");
                 if (s.IsItem)
                 {
-                    var content = s.Content;
-                    var contentName = s.Kind == SlotKind.Type ? "ContentType" : ContentKindNameForTests(content);
-                    IReadOnlyList<object> values = s.Kind == SlotKind.Type ? s.Elements : content == null ? [] : content is ContentString str ? [str.GetString()] : content.GetContent();
+                    var contentName = ContentKindNameForTests(s.Kind);
+                    IReadOnlyList<object> values = s.Kind == SlotKind.String ? [s.Chars.ToString()] : s.Elements;
                     sb.Append(" content ").Append(contentName).Append(' ').Append(contentText(contentName, values));
                     sb.Append(" left ").Append(IdText(s.Left)).Append(" right ").Append(IdText(s.Right));
                     sb.Append(" origin ").Append(IdText(s.LeftOrigin)).Append(" rightOrigin ").Append(IdText(s.RightOrigin));

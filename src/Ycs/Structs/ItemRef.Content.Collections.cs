@@ -13,6 +13,7 @@ internal readonly partial struct ItemRef
     {
         SlotKind.Type => TypeOf,
         SlotKind.Any => ValueAt(index),
+        SlotKind.String => Chars[index].ToString(),
         _ => StoredValueAt(Content, index),
     };
 
@@ -25,7 +26,12 @@ internal readonly partial struct ItemRef
     };
 
     /// <summary>The content as it is now, readable after the struct merged into another or left the store.</summary>
-    internal StoredContent Stored => Kind == SlotKind.Type ? new(TypeOf) : new(Content);
+    internal StoredContent Stored => Kind switch
+    {
+        SlotKind.Type => new(TypeOf),
+        SlotKind.String => new(Chars.ToString()),
+        _ => new(Content),
+    };
 }
 
 /// <summary>The content object of an item at one moment; it stays readable when the item's slot is reused.</summary>
@@ -33,11 +39,15 @@ internal readonly struct StoredContent
 {
     private readonly IContent _content;
     private readonly AbstractType _type;
+    private readonly string _text;
 
     internal StoredContent(IContent content) => _content = content;
 
     internal StoredContent(AbstractType type) => _type = type;
 
+    // The text of a String item, one string per UTF-16 code unit.
+    internal StoredContent(string text) => _text = text;
+
     // A type has length 1: the index is ignored.
-    internal object ValueAt(int index) => _type ?? ItemRef.StoredValueAt(_content, index);
+    internal object ValueAt(int index) => _type ?? (_text != null ? _text[index].ToString() : ItemRef.StoredValueAt(_content, index));
 }
