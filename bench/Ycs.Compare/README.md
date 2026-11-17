@@ -889,6 +889,56 @@ not change that; only a run index of deleted items would. `text-append` (+26 %) 
 costs spread over the transaction, the item and the run extension, with no single phase above 10 %. `map-set-same` +15 %,
 `array-push` +8 %, `array-push-1txn` +10 %: the same.
 
+### Step 8 and 9: allocation and held memory (layout 8.12, 2026-11-17, ycs only)
+
+The memory half of the 8.13 table once more, after the last change (12e5ea7), for every workload both builds have: `modernize`
+044bb73 (items as objects, built from `git archive 044bb73` into a folder of its own) against the branch, `ab.py 2 3`
+(`results/2026-11-17-8-12/`). **The timings in that file are not from a quiet machine** (load average 4 to 15: other agents built
+and tested at the same time) and are not reported here; a clean timing round comes later. Allocation per run and held memory are
+deterministic and equal those of the 8.13 table where the workloads overlap. Held memory is the managed heap after a compacting
+collection, inputs included, so a document that holds little shows the inputs' size.
+
+| workload | alloc MiB 044bb73 / branch | held MiB 044bb73 / branch | held |
+| --- | --- | --- | ---: |
+| `trace-replay` | 43.04 / 24.86 | 3.0 / 1.9 | -37 % |
+| `text-random` | 3.74 / 1.68 | 5.3 / 3.2 | -40 % |
+| `text-random-100k` | 18.59 / 7.87 | 27.1 / 16.3 | -40 % |
+| `text-append` | 0.20 / 0.51 | 1.3 / 1.5 | +15 % |
+| `text-append-1txn` | 0.20 / 0.50 | 2.1 / 2.1 | +0 % |
+| `text-append-1txn-observed-25k` | 4.71 / 2.11 | 0.6 / 0.7 | +17 % |
+| `text-append-1txn-observed` | 18.77 / 8.30 | 2.3 / 2.4 | +4 % |
+| `array-insert-random` | 16.93 / 5.41 | 18.9 / 10.4 | -45 % |
+| `array-delete-random` | 32.78 / 4.20 | 20.1 / 11.6 | -42 % |
+| `array-push` | 10.39 / 4.33 | 9.4 / 10.9 | +16 % |
+| `array-push-1txn` | 10.39 / 4.27 | 9.4 / 10.4 | +11 % |
+| `concurrent-20` | 28.55 / 14.32 | 29.1 / 14.3 | -51 % |
+| `map-set-distinct` | 36.55 / 22.57 | 38.9 / 24.9 | -36 % |
+| `map-set-distinct-1txn` | 39.25 / 25.28 | 38.9 / 24.9 | -36 % |
+| `map-set-same` | 28.99 / 6.84 | 0.0 / 0.0 | |
+| `apply-state-v1/ycs` (10 loads) | 33.14 / 38.07 | 4.5 / 2.7 | -40 % |
+| `apply-state-v2/ycs` (10 loads) | 35.14 / 40.07 | 4.4 / 2.8 | -36 % |
+| `apply-updates/ycs` | 59.31 / 11.94 | 18.6 / 17.4 | -6 % |
+| `encode-v1` | 2.76 / 2.76 | 3.2 / 1.9 | -41 % |
+| `encode-v2` | 1.53 / 1.53 | 3.9 / 2.1 | -46 % |
+| `encode-diff` | 1.39 / 1.39 | 3.7 / 1.9 | -49 % |
+| `read-text` | 0.20 / 0.20 | 4.2 / 2.3 | -45 % |
+| `read-array` | 0.00 / 0.00 | 4.3 / 4.8 | +12 % |
+| `read-map` | 0.00 / 0.00 | 34.1 / 20.1 | -41 % |
+| `undo-type` | 21.30 / 18.16 | 12.0 / 12.1 | +1 % |
+| `undo-all` | 30.14 / 26.44 | 12.1 / 12.2 | +1 % |
+| `redo-all` | 35.55 / 32.71 | 21.3 / 17.9 | -16 % |
+| `observe-count` | 36.83 / 17.72 | 1.5 / 1.7 | +13 % |
+| `observe-delta` | 94.81 / 74.18 | 1.5 / 1.7 | +13 % |
+
+`many-clients-200` and `apply-state-x100/ycs` are not in 044bb73's bench: on the branch 2.89 MiB allocated and 0.6 MiB held, and
+479.74 MiB allocated and 253.0 MiB held. Reading: the six workloads of the layout model (`text-random-100k`, `trace-replay`,
+`concurrent-20`, `map-set-distinct`, `array-insert-random`, `array-delete-random`) hold 49 to 64 % of what the object layout held
+(the model: 35 to 45 % with 52-byte slots); every editing workload and `apply-updates` allocates less except `text-append`
+(0.20 to 0.51 MiB, a per-transaction cost spread over the transaction, the item and the run extension, 8.13) and the ten loads
+of `apply-state-*` (the staging table); what grew in held memory is the array pushes (8 bytes a value in the arena, with the
+run's doubling) and, by 0.1 to 0.2 MiB, `text-append`, `observe-*` and the observed appends (not examined). `bench/Ycs.Layout small`,
+rerun on the built layout, is in `bench/Ycs.Layout/README.md`.
+
 ## Pinned versions
 
 `YDotNet` 0.7.0 and `YDotNet.Native` 0.7.0 (which pulls `YDotNet.Native.Linux`, `.MacOS`, `.Win32` 0.7.0), source

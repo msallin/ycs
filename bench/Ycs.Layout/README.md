@@ -126,6 +126,30 @@ client today, 351 (fixed) and 348 (geometric) designed.
   from about 10 structs and cost at most 215 bytes more below that.
 * **Many clients** are cheaper than today: a client's order is two arrays of 4, as today's list.
 
+## Small documents on the built layout (2026-11-17)
+
+`small` rerun on the built layout (slab, arenas, staging; `results/2026-11-17-8-12-small.md`) and, for the comparison, on the
+object layout (044bb73's tree built the same way, `results/2026-11-17-8-12-small-044bb73.md`). "Today" is now the built layout; the
+designed columns are the model's, which did not change. Bytes per document (load average 4, which does not matter for bytes):
+
+| document | object layout | built layout | built / object | model, geometric pages |
+| --- | ---: | ---: | ---: | ---: |
+| empty, a root text | 1,296 | 2,068 | 1.60 | 2,068 |
+| text "hello" (one insert) | 3,113 | 6,025 | 1.94 | 4,020 |
+| 20 characters typed at random positions, 2 deleted | 8,576 | 8,696 | 1.01 | 5,204 |
+| 200 typed, 20 deleted (198 structs) | 49,888 | 28,592 | 0.57 | 20,436 |
+| 1,000 typed, 100 deleted | 227,216 | 97,128 | 0.43 | 75,780 |
+| 5,000 typed, 500 deleted | 1,086,745 | 431,169 | 0.40 | 391,253 |
+| 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,986 | 0.39 | 1,558,665 |
+| empty, a root map | 1,184 | 1,944 | 1.64 | 1,944 |
+| map, 20 keys | 10,179 | 9,523 | 0.94 | 6,496 |
+| map, 1,000 keys | 355,906 | 195,242 | 0.55 | 151,040 |
+
+Many clients (20,000, one map entry each): 665 bytes per client on the object layout, 611 built, 348 in the model. The built layout
+is at the model's figure from about 5,000 structs (0.40 against 0.36) and pays from about 20 structs; below that it holds more
+than the object layout, and an empty document holds 770 bytes more, which the model, built on today's empty document, does not
+show.
+
 ## Editing (2026-11-16)
 
 `edit` (in `run.sh`; results in [`results/2026-11-16-edit.md`](results/2026-11-16-edit.md), ycs at c263413, load

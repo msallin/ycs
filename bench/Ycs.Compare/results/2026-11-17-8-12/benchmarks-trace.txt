@@ -1,0 +1,9 @@
+bench/Ycs.Benchmarks, 3 runs, 2026-11-17, branch 12e5ea7, load average 4.98 5.94 4.59 (a busy machine: the timings are not valid, the allocations are)
+trace: 259778 transactions, 259778 patches, 104852 chars final
+replay      median     350.9 ms  (min     346.3)  alloc      52.6 MiB
+  259778 updates, 5700582 bytes; doc v1 289132 bytes, v2 159927 bytes
+apply-incr  median     229.7 ms  (min     229.3)  alloc      12.1 MiB
+encode-v1   median       5.8 ms  (min       5.7)  alloc       2.8 MiB
+encode-v2   median       7.9 ms  (min       7.8)  alloc       1.5 MiB
+decode-v1   median     141.8 ms  (min     114.1)  alloc      38.1 MiB
+decode-v2   median      84.3 ms  (min      68.1)  alloc      40.1 MiB
