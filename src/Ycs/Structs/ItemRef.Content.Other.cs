@@ -7,9 +7,6 @@ internal readonly partial struct ItemRef
     /// <summary>The elements of the content (Yjs' <c>getContent</c>); a live view, valid until the item's content changes.</summary>
     internal IReadOnlyList<object> Elements => Content.GetContent();
 
-    /// <summary>The element at <paramref name="index"/>; null for collected content, as Yjs' <c>getContent()[index]</c> of <c>[]</c> is <c>undefined</c>.</summary>
-    internal object ElementAt(int index) => AbstractType.ValueAt(Content, index);
-
     /// <summary>The document of a <see cref="SlotKind.Doc"/> item.</summary>
     internal YDoc Subdoc => Typed<ContentDoc>(SlotKind.Doc).Doc;
 

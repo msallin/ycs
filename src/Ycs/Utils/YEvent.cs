@@ -237,7 +237,7 @@ public abstract partial class YEvent
         return _keys;
     }
 
-    private static object? LastValue(ItemRef item) => item.ElementAt(item.Length - 1);
+    private static object? LastValue(ItemRef item) => item.StoredValueAt(item.Length - 1);
 
     // What a run that is not an insertion carries; nothing is ever added to it.
     private static readonly StoredItems NoItems = new();
