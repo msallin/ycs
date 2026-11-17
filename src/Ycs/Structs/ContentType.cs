@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 internal class ContentType : IContentEx

@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 // The values of an Any item live in the slab's value arena and nowhere else: the slot's Payload is the offset of a range,

@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 // What the property tests (a project without InternalsVisibleTo, reading through UnsafeAccessor) ask of a type, in

@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 internal readonly partial struct ItemRef

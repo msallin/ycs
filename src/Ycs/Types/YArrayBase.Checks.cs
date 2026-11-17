@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 public abstract partial class YArrayBase

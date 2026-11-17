@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 internal class DSDecoderV2 : IDSDecoder

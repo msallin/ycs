@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 internal sealed partial class StructStore

@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 public readonly partial struct ItemView

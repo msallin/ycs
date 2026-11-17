@@ -1,4 +1,3 @@
-
 using System.Buffers;
 
 namespace Ycs;

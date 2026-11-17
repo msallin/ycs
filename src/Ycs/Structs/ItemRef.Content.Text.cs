@@ -1,4 +1,3 @@
-
 namespace Ycs;
 
 // The content reads of the text types: a format's attribute and what an embed or an embedded type stands for.
