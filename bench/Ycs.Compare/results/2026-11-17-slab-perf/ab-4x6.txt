@@ -1,0 +1,32 @@
+ 02:27:05 up 4 days, 10:14,  1 user,  load average: 1.30, 1.35, 1.31
+trace-replay             base median     254.8 ms (min 245.0 max 270.1; pass medians 246.6, 253.3, 256.5, 259.5)  alloc    34.75 MiB  held 2.3 MiB  peak RSS 215 MiB  load 1.35
+trace-replay             new  median     234.6 ms (min 226.5 max 247.4; pass medians 241.5, 228.9, 234.7, 234.6)  alloc    34.75 MiB  held 2.3 MiB  peak RSS 214 MiB  load 1.38
+text-random              base median      29.6 ms (min 27.9 max 32.1; pass medians 30.9, 29.3, 29.7, 28.1)  alloc     2.54 MiB  held 4.0 MiB  peak RSS 70 MiB  load 1.33
+text-random              new  median      26.4 ms (min 25.6 max 28.3; pass medians 26.5, 26.4, 26.7, 25.9)  alloc     2.54 MiB  held 4.0 MiB  peak RSS 55 MiB  load 1.35
+text-random-100k         base median     844.5 ms (min 790.1 max 1003.8; pass medians 790.1, 856.0, 833.0, 1003.8)  alloc    12.21 MiB  held 20.7 MiB  peak RSS 80 MiB  load 1.20
+text-random-100k         new  median     781.2 ms (min 743.6 max 819.4; pass medians 743.6, 804.9, 819.4, 757.6)  alloc    12.21 MiB  held 20.7 MiB  peak RSS 79 MiB  load 1.20
+array-delete-random      base median     187.8 ms (min 177.7 max 214.2; pass medians 206.2, 188.7, 187.7, 180.5)  alloc    26.28 MiB  held 16.7 MiB  peak RSS 100 MiB  load 1.19
+array-delete-random      new  median     170.1 ms (min 165.1 max 193.6; pass medians 166.3, 172.5, 179.1, 169.6)  alloc    26.28 MiB  held 16.7 MiB  peak RSS 87 MiB  load 1.21
+array-insert-random      base median     141.6 ms (min 136.7 max 172.0; pass medians 142.4, 144.3, 142.4, 137.6)  alloc    10.70 MiB  held 15.7 MiB  peak RSS 74 MiB  load 1.13
+array-insert-random      new  median     133.7 ms (min 126.9 max 164.8; pass medians 131.8, 134.0, 136.3, 129.7)  alloc    10.70 MiB  held 15.7 MiB  peak RSS 74 MiB  load 1.13
+concurrent-20            base median      74.6 ms (min 73.6 max 78.4; pass medians 74.4, 74.5, 73.9, 76.1)  alloc    32.49 MiB  held 21.7 MiB  peak RSS 111 MiB  load 1.34
+concurrent-20            new  median      68.5 ms (min 67.2 max 71.2; pass medians 68.3, 67.9, 69.2, 67.3)  alloc    32.50 MiB  held 21.7 MiB  peak RSS 109 MiB  load 1.34
+map-set-distinct         base FAILED exit -6 peak 113 MiB YcsCases.cs:line 335
+   at Ycs.Compare.Child.Run(String lib, String caseName, String fixturesDir, String outDir, Int32 runs) in /home/claude/projects/ycs-7-7/bench/Ycs.Compare/Child.cs:line 77
+   at Program.<Main>$(String[] args) in /home/claude/projects/ycs-7-7/bench/Ycs.Compare/Program.cs:line 45
+
+map-set-distinct         new  FAILED exit -6 peak 111 MiB YcsCases.cs:line 335
+   at Ycs.Compare.Child.Run(String lib, String caseName, String fixturesDir, String outDir, Int32 runs) in /home/claude/projects/ycs-7-7/bench/Ycs.Compare/Child.cs:line 77
+   at Program.<Main>$(String[] args) in /home/claude/projects/ycs-7-7/bench/Ycs.Compare/Program.cs:line 45
+
+apply-state-v1/ycs       base median      58.9 ms (min 56.1 max 62.1; pass medians 58.4, 58.0, 59.1, 60.0)  alloc    37.83 MiB  held 3.3 MiB  peak RSS 97 MiB  load 1.22
+apply-state-v1/ycs       new  median      53.9 ms (min 51.6 max 58.3; pass medians 52.8, 53.8, 53.4, 54.7)  alloc    37.83 MiB  held 3.3 MiB  peak RSS 97 MiB  load 1.22
+apply-state-v2/ycs       base median      61.5 ms (min 59.5 max 62.3; pass medians 61.6, 61.6, 61.6, 61.5)  alloc    39.83 MiB  held 3.4 MiB  peak RSS 77 MiB  load 1.29
+apply-state-v2/ycs       new  median      56.7 ms (min 55.2 max 59.7; pass medians 59.1, 56.7, 56.2, 56.1)  alloc    39.83 MiB  held 3.4 MiB  peak RSS 82 MiB  load 1.29
+apply-updates/ycs        base median     267.4 ms (min 258.9 max 287.8; pass medians 273.1, 260.5, 261.6, 270.8)  alloc    51.50 MiB  held 17.8 MiB  peak RSS 158 MiB  load 1.43
+apply-updates/ycs        new  median     242.7 ms (min 237.2 max 250.9; pass medians 240.3, 242.7, 243.4, 243.3)  alloc    51.50 MiB  held 17.8 MiB  peak RSS 153 MiB  load 1.38
+text-append-1txn-observed-25k base median      48.6 ms (min 46.9 max 64.5; pass medians 48.5, 47.8, 48.8, 48.4)  alloc     3.21 MiB  held 0.7 MiB  peak RSS 67 MiB  load 1.31
+text-append-1txn-observed-25k new  median      45.4 ms (min 44.5 max 51.5; pass medians 47.6, 44.8, 46.8, 45.2)  alloc     3.21 MiB  held 0.7 MiB  peak RSS 67 MiB  load 1.31
+text-append-1txn-observed base median     196.4 ms (min 194.3 max 203.3; pass medians 195.4, 196.0, 195.8, 198.7)  alloc    12.40 MiB  held 2.3 MiB  peak RSS 64 MiB  load 1.12
+text-append-1txn-observed new  median     156.2 ms (min 152.9 max 169.2; pass medians 153.8, 167.4, 157.8, 154.6)  alloc    12.40 MiB  held 2.3 MiB  peak RSS 70 MiB  load 1.12
+ 02:31:53 up 4 days, 10:19,  1 user,  load average: 1.11, 1.26, 1.28

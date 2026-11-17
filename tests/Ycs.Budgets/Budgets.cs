@@ -24,7 +24,7 @@ internal static class Budgets
         ["position.relative-from-index-deep-100k"] = new(0, 5000),     // 0 B, 250 µs (walks the list from the start, as Yjs does)
         ["position.absolute-from-relative-deep-100k"] = new(0, 5000), // 0 B, 260 µs (walks the list to the start, as Yjs does)
         ["map.set-existing-key"] = new(520, 50),                       // 446 B, 1 µs (was 588 B: a HashSet for the changed key, a new list for the deletion, per set; the item is a slot, not an object)
-        ["text.insert-formatted-char-100k"] = new(360, 2500),          // 308 B, 210 µs (finds the position without search markers, as Yjs does; was 508 B)
+        ["text.insert-formatted-char-100k"] = new(360, 2000),          // 308 B, 180 µs (finds the position without search markers, as Yjs does; was 508 B)
         ["text.event-delta-read-100k"] = new(976, 6000),              // 844 B, 830 µs (the delta walks the whole text, as Yjs' does)
         ["undo.undo-redo-typing-100k"] = new(3384, 50),                // 2 940 B, 2 µs
         ["undo.redo-after-undoing-typing-100k"] = new(2064, 50),       // 1 808 B, 2 µs (was about 40 KB: each split copied the rest of the undone run)

@@ -619,6 +619,60 @@ shared with other work (load averages from 2 to 90); each row is from the quiete
   array of slots; until then, the marker walk on the object (the experiment above) is the known way to remove the
   rest.
 
+### The slab, performance pass (layout 7.7, 2026-11-17, ycs only)
+
+Base `modernize` efa8a8e (ItemRef = slab + handle, holders keep handles) against `layout-7-7`, built into separate
+folders and run interleaved by `ab.py` (4 rounds of 6 runs, `ab.py 4 6 <cases>`; `results/2026-11-17-slab-perf/ab-4x6.txt`).
+The machine was quiet: load average 1.1 to 1.4 during the run (AMD EPYC-Genoa, 8 logical cores, .NET 11.0.0). Allocation
+and held memory are identical in every case. `map-set-distinct` fails in both builds (its fixture check at
+`YcsCases.cs:335`), so it has no row.
+
+| workload | base ms | 7.7 ms | change |
+| --- | ---: | ---: | ---: |
+| `trace-replay` | 254.8 | 234.6 | -7.9 % |
+| `text-random` | 29.6 | 26.4 | -10.8 % |
+| `text-random-100k` | 844.5 | 781.2 | -7.5 % |
+| `array-delete-random` | 187.8 | 170.1 | -9.4 % |
+| `array-insert-random` | 141.6 | 133.7 | -5.6 % |
+| `concurrent-20` | 74.6 | 68.5 | -8.2 % |
+| `apply-state-v1/ycs` | 58.9 | 53.9 | -8.5 % |
+| `apply-state-v2/ycs` | 61.5 | 56.7 | -7.8 % |
+| `apply-updates/ycs` | 267.4 | 242.7 | -9.2 % |
+| `text-append-1txn-observed-25k` | 48.6 | 45.4 | -6.6 % |
+| `text-append-1txn-observed` | 196.4 | 156.2 | -20.5 % |
+
+What was kept, with what each change did where it was measured alone (the same A/B, 3 to 4 rounds of 5 runs):
+
+* `NewItem` fills the slot through one `ref Slot` taken after `Allocate`, with the client, origin and parent indexes
+  worked out before it; `ClientTable.GetOrAdd` remembers the last client. `IntegrateItem` reads the neighbours by handle
+  (one `ref readonly Slot` at a time) instead of an `ItemRef` accessor per field, `YType` keeps the slab
+  (`_start`, `_item`, the map items and the push hint no longer go through `Doc.Store.Slab`): together within noise on
+  `trace-replay` (255.0 against 250.8) and `concurrent-20` (74.9 against 72.4).
+* The marker walk (`YArrayBase.Walk`), `ItemTextListPosition.Forward`/`FindNextPosition` and `DeleteText` read a slot once per
+  step and test the kind from `Info` instead of loading and type-testing the content object: `text-random-100k`
+  820.9 against 771.6, `text-random` 29.0 against 26.3, `array-delete-random` 189.5 against 175.8.
+* The store finds a client's list by the client's index in the slab's table (`_structsByIndex`) in `AddStruct`,
+  `Refresh`, `TryFindPosition` and `NoteRunExtended`: no hash of the client per struct. `ResolveConflict` compares the
+  origins by index and clock on the slots, `SplitItem` copies the slot's fields instead of rebuilding an `ID` and a
+  new item, `CanMergeItemWith` and `CanExtendRun` read both slots once, `YArrayBase.Insert`/`Delete`, `RelativePosition.FromIndex`
+  and `AbsolutePosition` read a slot once per step: the rest of the table above.
+* Budgets (`tests/Ycs.Budgets`, three runs each, load 0.3 to 2.5, µs per operation, base then 7.7): bytes per operation are
+  unchanged everywhere but +88 B on the two big transactions (the client index array), so no byte budget was lowered;
+  `text.insert-formatted-char-100k` 240.6 to 179.9 µs (its ceiling lowered from 2500 to 2000), `array.push-100k-in-one-transaction`
+  16 778 to 14 798, `text.type-100k-in-one-transaction` 15 313 to 13 410, `array.delete-random-100k` 4.1 to 3.6,
+  `position.absolute-from-relative-deep-100k` 245.5 to 237.5, the rest within 3 %.
+
+Tried and not kept:
+
+* **Field order of the slot** (clock, length, client, links, info and parent in the first 32 bytes, the origins and the
+  payload after): `trace-replay` 238.5 against 236.2, `text-random-100k` 760.6 against 772.4, `concurrent-20` 69.0 against 69.2,
+  `array-delete-random` 168.1 against 174.1: nothing beyond the noise. The array's elements start 16 bytes after its address,
+  but the address is only 8-byte aligned, so which slots straddle a cache line is the array's luck, not the field order's.
+* **Bounds checks** (`DOTNET_JitDisasm=Walk`, FullOpts): a slot read is two checks, the page number against `_slotPages` and the
+  index against the page. The second cannot be proved away without `Unsafe`/`MemoryMarshal` (a page's length is data), so the
+  hot loops keep them; the gain of this pass is in reading each slot once, which removes most of them per step.
+* A profile with `perf` was not possible (`perf_event_paranoid` is 4 here), and no sampling profiler could be run; the changes were found by reading the hot methods and measured by A/B.
+
 ## Not measured yet
 
 Three workloads were added after the last suite run and have no results yet. They cover two cases of
