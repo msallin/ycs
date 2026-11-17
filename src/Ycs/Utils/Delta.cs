@@ -28,7 +28,31 @@ public abstract record Delta
     public sealed record Insert(YValue Value) : Delta;
 
     /// <summary>The items an array or an XML fragment gained, as its events' deltas list them.</summary>
-    public sealed record InsertItems(IReadOnlyList<YValue> Items) : Delta;
+    public sealed record InsertItems(IReadOnlyList<YValue> Items) : Delta
+    {
+        /// <summary>Equal when the attributes and the items, in order, are equal.</summary>
+        public bool Equals(InsertItems? other) =>
+            other is not null && Equals(Attributes, other.Attributes) && Items.SequenceEqual(other.Items);
+
+        public override int GetHashCode()
+        {
+            var hash = new HashCode();
+            hash.Add(Attributes);
+            foreach (var item in Items)
+            {
+                hash.Add(item);
+            }
+
+            return hash.ToHashCode();
+        }
+
+        protected override bool PrintMembers(System.Text.StringBuilder builder)
+        {
+            base.PrintMembers(builder);
+            builder.Append(", Items = [").Append(string.Join(", ", Items)).Append(']');
+            return true;
+        }
+    }
 
     public sealed record Retain(int Length) : Delta;
 

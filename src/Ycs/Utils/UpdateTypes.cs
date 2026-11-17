@@ -47,4 +47,12 @@ public sealed class DecodedUpdate
 /// The clock ranges an update covers: for every client that contributed at least one struct, the clock of its first
 /// struct (<see cref="From"/>) and the clock right after its last (<see cref="To"/>) (<see cref="YUpdate.ParseMeta"/>).
 /// </summary>
-public sealed record UpdateMeta(IReadOnlyDictionary<long, long> From, IReadOnlyDictionary<long, long> To);
+public sealed record UpdateMeta(IReadOnlyDictionary<long, long> From, IReadOnlyDictionary<long, long> To)
+{
+    // The clock ranges as `client: from..to`, by client.
+    private bool PrintMembers(System.Text.StringBuilder builder)
+    {
+        builder.Append("Ranges = [").Append(string.Join(", ", From.OrderBy(static e => e.Key).Select(e => $"{e.Key}: {e.Value}..{To.GetValueOrDefault(e.Key)}"))).Append(']');
+        return true;
+    }
+}

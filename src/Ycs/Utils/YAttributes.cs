@@ -9,12 +9,12 @@ namespace Ycs;
 /// The formatting attributes of a text operation: a few entries, immutable, searched linearly (one array; a dictionary
 /// costs several times the bytes for the one to three attributes an operation has). Build one with a collection
 /// expression, <c>[new("bold", true)]</c>, or take the implicit conversion of one pair, <c>("bold", true)</c>, or of a
-/// <see cref="Dictionary{TKey, TValue}"/>. A key appears once; a later entry of the same key wins. On a
+/// <see cref="Dictionary{TKey, TValue}"/>. A key appears once; a later entry of the same key wins. Two sets are equal when they hold the same keys (ordinal) with equal values, in any order. On a
 /// <see cref="Delta.Retain"/> and on <see cref="YText.Format"/>, a null value removes the attribute from the range.
 /// </summary>
 [CollectionBuilder(typeof(YAttributes), nameof(Create))]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1710:Identifiers should have correct suffix", Justification = "The name says what it holds.")]
-public sealed class YAttributes : IReadOnlyDictionary<string, YValue>
+public sealed class YAttributes : IReadOnlyDictionary<string, YValue>, IEquatable<YAttributes>
 {
     private static readonly KeyValuePair<string, YValue>[] NoEntries = [];
 
@@ -147,4 +147,44 @@ public sealed class YAttributes : IReadOnlyDictionary<string, YValue>
     }
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
+
+    public bool Equals(YAttributes? other)
+    {
+        if (ReferenceEquals(this, other))
+        {
+            return true;
+        }
+
+        if (other is null || _count != other._count)
+        {
+            return false;
+        }
+
+        for (var i = 0; i < _count; i++)
+        {
+            if (!other.TryGetValue(_entries[i].Key, out var value) || !value.Equals(_entries[i].Value))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    public override bool Equals(object? obj) => Equals(obj as YAttributes);
+
+    public override int GetHashCode()
+    {
+        // A sum of the entries' hashes, so the order does not matter.
+        var hash = 0;
+        for (var i = 0; i < _count; i++)
+        {
+            hash += HashCode.Combine(string.GetHashCode(_entries[i].Key, StringComparison.Ordinal), _entries[i].Value);
+        }
+
+        return hash;
+    }
+
+    /// <summary>The attributes as a JSON object, in order: <c>{"bold":true}</c>.</summary>
+    public override string ToString() => YValue.Object(_entries.AsSpan(0, _count)).ToJsonString();
 }
