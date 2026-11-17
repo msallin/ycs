@@ -566,6 +566,9 @@ public abstract partial class YArrayBase : YType
         }
     }
 
+    // The steps in a row within a run after which a walk looks up the run-head index: a lookup costs about as much as this many steps.
+    private const int RunProbeSteps = 8;
+
     /// <summary>
     /// Yjs' three walks of <c>findMarker</c> from <paramref name="p"/> at <paramref name="pIndex"/> towards
     /// <paramref name="index"/>: right while before it, left while beyond it, then left while the left neighbour has
@@ -665,7 +668,8 @@ public abstract partial class YArrayBase : YType
                 break;
             }
 
-            if (store != null && ++steps == literalSteps && store.TryFindPosition(p, out var structs, out var position))
+            // Every step of this walk stays in a run, so the jump to its head always gains: a few steps pay for the lookup.
+            if (store != null && ++steps == Math.Min(literalSteps, RunProbeSteps) && store.TryFindPosition(p, out var structs, out var position))
             {
                 // The rest of the walk: to the run's head, subtracting what it steps onto.
                 p = structs[structs.RunHead(position, out var passed)];
