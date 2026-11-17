@@ -144,7 +144,7 @@ internal sealed class StagingTable
         (long)_structs.Length * StructBytes + _chars.Length * sizeof(char) + (_values.Length + _refs.Length) * (long)IntPtr.Size
         + _clients.Length * sizeof(long) + (_rangeStart.Length + _rangeCount.Length) * sizeof(int);
 
-    /// <summary>9.2: opens the range of <paramref name="client"/>, whose first struct starts at <paramref name="clock"/>.</summary>
+    /// <summary>Opens the range of <paramref name="client"/>, whose first struct starts at <paramref name="clock"/>.</summary>
     public void BeginClient(long client, long clock)
     {
         var index = ClientIndex(client);
@@ -159,7 +159,7 @@ internal sealed class StagingTable
     }
 
     /// <summary>
-    /// 9.2: stages a struct at the end of the open client's range. A String reserves <paramref name="length"/> characters
+    /// Stages a struct at the end of the open client's range. A String reserves <paramref name="length"/> characters
     /// (<see cref="Chars"/>), an Any <paramref name="length"/> values (<see cref="Values"/>). Parent, content object and
     /// type are set after.
     /// </summary>
@@ -219,7 +219,7 @@ internal sealed class StagingTable
         return _count++;
     }
 
-    /// <summary>9.2: the parent of struct <paramref name="i"/> as a root type's name.</summary>
+    /// <summary>The parent of struct <paramref name="i"/> as a root type's name.</summary>
     public void SetParentRoot(int i, string name)
     {
         ref var s = ref _structs[i];
@@ -227,7 +227,7 @@ internal sealed class StagingTable
         s.ParentClient = AddRef(name);
     }
 
-    /// <summary>9.2: the parent of struct <paramref name="i"/> as the id of the item that holds its type.</summary>
+    /// <summary>The parent of struct <paramref name="i"/> as the id of the item that holds its type.</summary>
     public void SetParentId(int i, ID parent)
     {
         var client = ClientIndex(parent.Client);
@@ -239,10 +239,10 @@ internal sealed class StagingTable
 
     public void SetParentSub(int i, string parentSub) => _structs[i].ParentSub = AddRef(parentSub);
 
-    /// <summary>9.2: the content object of a Format, Embed, Binary, Json or Doc struct.</summary>
+    /// <summary>The content object of a Format, Embed, Binary, Json or Doc struct.</summary>
     public void SetCold(int i, object content) => _structs[i].Payload = AddRef(content);
 
-    /// <summary>9.2: a Type struct's type reference and, for an XML element or hook, its node name.</summary>
+    /// <summary>A Type struct's type reference and, for an XML element or hook, its node name.</summary>
     public void SetType(int i, int typeRef, string? name)
     {
         ref var s = ref _structs[i];
@@ -250,7 +250,7 @@ internal sealed class StagingTable
         s.Payload = name == null ? -1 : AddRef(name);
     }
 
-    /// <summary>9.3, 9.4, 9.5: struct <paramref name="i"/>; valid until the next <c>Add*</c>.</summary>
+    /// <summary>Struct <paramref name="i"/>; valid until the next <c>Add*</c>.</summary>
     public ref readonly StagedStruct At(int i)
     {
         Debug.Assert(!Outside(i, _count));
@@ -259,58 +259,58 @@ internal sealed class StagingTable
 
     public ID IdOf(int i) => new(_clients[At(i).Client], At(i).Clock);
 
-    /// <summary>9.3, 9.5.</summary>
+    /// <summary>The left origin, null for none.</summary>
     public ID? LeftOrigin(int i) => At(i).OriginClient < 0 ? null : new ID(_clients[At(i).OriginClient], At(i).OriginClock);
 
-    /// <summary>9.3, 9.5.</summary>
+    /// <summary>The right origin, null for none.</summary>
     public ID? RightOrigin(int i) => At(i).ROriginClient < 0 ? null : new ID(_clients[At(i).ROriginClient], At(i).ROriginClock);
 
-    /// <summary>9.3, 9.5: the root name when <see cref="StagedStruct.ParentKind"/> is Root.</summary>
+    /// <summary>The root name when <see cref="StagedStruct.ParentKind"/> is Root.</summary>
     public string ParentName(int i) => (string)_refs[At(i).ParentClient]!;
 
-    /// <summary>9.3, 9.5: the parent item's id when <see cref="StagedStruct.ParentKind"/> is Id.</summary>
+    /// <summary>The parent item's id when <see cref="StagedStruct.ParentKind"/> is Id.</summary>
     public ID ParentId(int i) => new(_clients[At(i).ParentClient], At(i).ParentClock);
 
     public string? ParentSub(int i) => At(i).ParentSub < 0 ? null : (string)_refs[At(i).ParentSub]!;
 
-    /// <summary>9.2 fills it, 9.3 and 9.5 read it: the characters of a String struct (its length), in UTF-16 units.</summary>
+    /// <summary>The characters of a String struct (its length), in UTF-16 units.</summary>
     public Span<char> Chars(int i)
     {
         Debug.Assert(At(i).Kind == StagedKind.String);
         return _chars.AsSpan(At(i).Payload, At(i).Length);
     }
 
-    /// <summary>9.2 fills it, 9.3 and 9.5 read it: the values of an Any struct (its length).</summary>
+    /// <summary>The values of an Any struct (its length).</summary>
     public Span<object?> Values(int i)
     {
         Debug.Assert(At(i).Kind == StagedKind.Any);
         return _values.AsSpan(At(i).Payload, At(i).Length);
     }
 
-    /// <summary>9.3, 9.5: the object of a Format, Embed, Binary, Json or Doc struct.</summary>
+    /// <summary>The object of a Format, Embed, Binary, Json or Doc struct.</summary>
     public object Cold(int i) => _refs[At(i).Payload]!;
 
-    /// <summary>9.3, 9.5: a Type struct's node name, null for none.</summary>
+    /// <summary>A Type struct's node name, null for none.</summary>
     public string? TypeName(int i) => At(i).Payload < 0 ? null : (string)_refs[At(i).Payload]!;
 
-    /// <summary>9.3: sets the length of a GC or Skip struct (an extended or trimmed range).</summary>
+    /// <summary>Sets the length of a GC or Skip struct (an extended or trimmed range).</summary>
     public void SetLength(int i, int length)
     {
         Debug.Assert(At(i).Kind is StagedKind.GC or StagedKind.Skip);
         _structs[i].Length = length;
     }
 
-    /// <summary>9.3, 9.4: the index of a client in this table, -1 when the table never saw it.</summary>
+    /// <summary>The index of a client in this table, -1 when the table never saw it.</summary>
     public int FindClient(long client) => _clientIndex.TryGetValue(client, out var index) ? index : -1;
 
-    /// <summary>9.3, 9.4: the client id of a client index.</summary>
+    /// <summary>The client id of a client index.</summary>
     public long ClientAt(int clientIndex) => _clients[clientIndex];
 
-    /// <summary>9.3, 9.4: the structs of a client, in clock order; an empty range for a client only named by an origin.</summary>
+    /// <summary>The structs of a client, in clock order; an empty range for a client only named by an origin.</summary>
     public (int Start, int Count) RangeOf(int clientIndex) => (_rangeStart[clientIndex], _rangeCount[clientIndex]);
 
     /// <summary>
-    /// 9.4: the index of the struct that holds <paramref name="clock"/> in the range of a client, -1 when the range is
+    /// The index of the struct that holds <paramref name="clock"/> in the range of a client, -1 when the range is
     /// empty or does not cover the clock. <paramref name="hint"/> is the index the last lookup found (any value is
     /// valid): lookups that stay near it cost one comparison, any other the logarithm of the client's range.
     /// </summary>
