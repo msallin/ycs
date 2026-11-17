@@ -1,6 +1,6 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 
 namespace Ycs;
 
@@ -22,7 +22,7 @@ internal sealed partial class StructStore
     private ClientStructs[] _structsByIndex = new ClientStructs[4];
 
     /// <summary>The list of the struct's client; null when the store holds no struct of that client.</summary>
-    private ClientStructs StructsOf(ItemRef item)
+    private ClientStructs? StructsOf(ItemRef item)
     {
         var index = item.ClientIndex;
         return (uint)index < (uint)_structsByIndex.Length ? _structsByIndex[index] : null;
@@ -68,7 +68,7 @@ internal sealed partial class StructStore
     /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="ItemRef.ExtendRun"/>).</summary>
     internal void NoteRunExtended(ItemRef item, int length)
     {
-        StructsOf(item).LastExtended(length);
+        StructsOf(item)!.LastExtended(length);
         Version++;
         RunsExtended++;
     }
@@ -167,7 +167,7 @@ internal sealed partial class StructStore
     /// </summary>
     internal void Refresh(ItemRef item)
     {
-        var structs = StructsOf(item);
+        var structs = StructsOf(item)!;
         var index = structs.FindIndex(item.Clock);
         Debug.Assert(structs[index] == item, "Only a struct of the store changes the run-head index.");
 
@@ -176,7 +176,7 @@ internal sealed partial class StructStore
     }
 
     /// <summary>The list and position of <paramref name="item"/>, if the store holds it (a collected type's items it does not).</summary>
-    internal bool TryFindPosition(ItemRef item, out ClientStructs structs, out int index)
+    internal bool TryFindPosition(ItemRef item, [NotNullWhen(true)] out ClientStructs? structs, out int index)
     {
         structs = StructsOf(item);
         if (structs != null && item.Clock < structs.End)
@@ -224,7 +224,7 @@ internal sealed partial class StructStore
     }
 
     // Capacities for the lists of clients the store does not have yet, from ReserveStructs (for the update being integrated).
-    private Dictionary<long, int> _capacityHints;
+    private Dictionary<long, int>? _capacityHints;
 
     internal void ForgetReservations() => _capacityHints?.Clear();
 
@@ -437,7 +437,7 @@ internal sealed partial class StructStore
         if (restUpdate != null)
         {
             Pending ??= new PendingStructs();
-            foreach (var kvp in plan.Missing)
+            foreach (var kvp in plan.Missing!)
             {
                 if (!Pending.Missing.TryGetValue(kvp.Key, out var mclock) || mclock > kvp.Value)
                 {
@@ -477,7 +477,7 @@ internal sealed partial class StructStore
         {
             // Something the pending structs were waiting for arrived: read them again, from their
             // encoded form, as Yjs does.
-            var update = Pending.Merge();
+            var update = Pending!.Merge();
             var count = Pending.Structs;
             Pending = null;
 
@@ -540,7 +540,9 @@ internal sealed partial class StructStore
         foreach (var (client, deletes) in ds.Clients)
         {
             var state = GetState(client);
-            Clients.TryGetValue(client, out var structs);
+            // Used only for a clock below the state, which the client's list holds.
+            Clients.TryGetValue(client, out var found);
+            var structs = found!;
             var hint = 0;
 
             foreach (var delete in deletes)

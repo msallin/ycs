@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
 using System.Runtime.ExceptionServices;
@@ -31,12 +30,12 @@ public sealed partial class Transaction
 
     // Handed to the events of an ended transaction, so that their lazily computed changes throw
     // instead of reading the transaction that reuses the object.
-    private static readonly Transaction Ended = new Transaction(null);
+    private static readonly Transaction Ended = new Transaction(null!);
 
     private static readonly Comparison<(int PathLength, YEvent Event)> ByPathLength = static (a, b) => a.PathLength - b.PathLength;
 
     private readonly YDoc _doc;
-    private object _origin;
+    private object? _origin;
     private bool _local;
     private bool _ended;
 
@@ -47,9 +46,9 @@ public sealed partial class Transaction
     // AfterTransaction handlers.
     internal bool _needFormattingCleanup;
 
-    private DeleteSet _deleteSet;
-    private Dictionary<long, long> _beforeState;
-    private Dictionary<long, long> _afterState;
+    private DeleteSet _deleteSet = new();
+    private Dictionary<long, long> _beforeState = new();
+    private Dictionary<long, long> _afterState = new();
 
     // What the undo manager keeps beyond the transaction; replaced, not cleared, when it ends.
     private bool _deleteSetTaken;
@@ -74,7 +73,7 @@ public sealed partial class Transaction
     // the transaction, so the store ends up the same; until then, everything that could tell the two apart
     // (observers and their events, encoding the store, applying an update, undo) first splits the runs at these
     // clocks (MaterializeRunExtensions), which makes exactly the items Yjs has.
-    private List<(long Client, long Start, long Step, int Count)> _runExtensions;
+    private List<(long Client, long Start, long Step, int Count)>? _runExtensions;
 
     internal bool HasRunExtensions => _runExtensions is { Count: > 0 };
 
@@ -118,13 +117,13 @@ public sealed partial class Transaction
     private readonly List<(YType Type, IList<YEvent> Events)> _deepCalls = new();
 
     // Rarely used, so created on first use.
-    private Dictionary<string, object> _meta;
-    private HashSet<YDoc> _subdocsAdded;
-    private HashSet<YDoc> _subdocsRemoved;
-    private HashSet<YDoc> _subdocsLoaded;
+    private Dictionary<string, object?>? _meta;
+    private HashSet<YDoc>? _subdocsAdded;
+    private HashSet<YDoc>? _subdocsRemoved;
+    private HashSet<YDoc>? _subdocsLoaded;
 
     // The document's free list of ended transactions.
-    internal Transaction _nextFree;
+    internal Transaction? _nextFree;
 
     internal Transaction(YDoc doc)
     {
@@ -164,15 +163,12 @@ public sealed partial class Transaction
         "handler that receives it, and keep that instead.");
 
     /// <summary>Starts the transaction: the state before it is the document's state now.</summary>
-    internal void Begin(object origin, bool local)
+    internal void Begin(object? origin, bool local)
     {
         Debug.Assert(_ended && _doc != null);
         _ended = false;
         _origin = origin;
         _local = local;
-        _deleteSet ??= new DeleteSet();
-        _afterState ??= new Dictionary<long, long>();
-        _beforeState ??= new Dictionary<long, long>();
         _doc.Store.GetStateVector(_beforeState);
     }
 
@@ -220,7 +216,7 @@ public sealed partial class Transaction
 
         if (_deleteSetTaken || _deleteSet.Clients.Count > KeepCapacity)
         {
-            _deleteSet = null;
+            _deleteSet = new DeleteSet();
         }
         else
         {
@@ -228,11 +224,12 @@ public sealed partial class Transaction
             _deleteSet.ClearForReuse();
         }
 
-        _beforeState = _beforeStateTaken || _beforeState.Count > KeepCapacity ? null : Cleared(_beforeState);
-        _afterState = _afterStateTaken || _afterState.Count > KeepCapacity ? null : Cleared(_afterState);
+        _beforeState = _beforeStateTaken || _beforeState.Count > KeepCapacity ? new Dictionary<long, long>() : Cleared(_beforeState);
+        _afterState = _afterStateTaken || _afterState.Count > KeepCapacity ? new Dictionary<long, long>() : Cleared(_afterState);
         _deleteSetTaken = _beforeStateTaken = _afterStateTaken = false;
 
         static void Clear<TKey, TValue>(Dictionary<TKey, TValue> dictionary)
+            where TKey : notnull
         {
             var large = dictionary.Count > KeepCapacity;
             dictionary.Clear();
@@ -258,7 +255,7 @@ public sealed partial class Transaction
     /// If 'type.parent' was added in current transaction, 'type' technically did not change,
     /// it was just added and we should not fire events for 'type'.
     /// </summary>
-    internal void AddChangedTypeToTransaction(YType type, string parentSub)
+    internal void AddChangedTypeToTransaction(YType type, string? parentSub)
     {
         if (type.IsRoot || (_beforeState.TryGetValue(type.ItemId.Client, out var clock) && type.ItemId.Clock < clock && !type.ItemDeleted))
         {
@@ -280,7 +277,7 @@ public sealed partial class Transaction
     /// </summary>
     private static void BuildSkippedEvents(Transaction transaction)
     {
-        List<KeyValuePair<YType, ISet<string>>> skipped = null;
+        List<KeyValuePair<YType, ISet<string?>>>? skipped = null;
         foreach (var kvp in transaction._changed)
         {
             var type = kvp.Key;
@@ -398,7 +395,7 @@ public sealed partial class Transaction
     internal static void CleanupTransactions(YDoc doc)
     {
         var transactionCleanups = doc._transactionCleanups;
-        ExceptionDispatchInfo error = null;
+        ExceptionDispatchInfo? error = null;
         for (var i = 0; i < transactionCleanups.Count; i++)
         {
             error = CleanupTransaction(transactionCleanups[i]) ?? error;
@@ -449,13 +446,13 @@ public sealed partial class Transaction
     /// merged and the document's handlers called (Yjs' <c>finally</c> part); every handler step runs even if one
     /// before threw, and the last exception is returned.
     /// </summary>
-    private static ExceptionDispatchInfo CleanupTransaction(Transaction transaction)
+    private static ExceptionDispatchInfo? CleanupTransaction(Transaction transaction)
     {
         var doc = transaction._doc;
         var store = doc.Store;
         var ds = transaction._deleteSet;
         var mergeStructs = transaction._mergeStructs;
-        ExceptionDispatchInfo error = null;
+        ExceptionDispatchInfo? error = null;
 
         doc._transaction = null;
 
@@ -471,7 +468,7 @@ public sealed partial class Transaction
             }
             else
             {
-                transaction._runExtensions.Clear();
+                transaction._runExtensions!.Clear();
             }
         }
 
@@ -729,7 +726,7 @@ public sealed partial class Transaction
         return error;
     }
 
-    private static void Step(Action<Transaction> step, Transaction transaction, ref ExceptionDispatchInfo error)
+    private static void Step(Action<Transaction> step, Transaction transaction, ref ExceptionDispatchInfo? error)
     {
         try
         {
@@ -749,7 +746,7 @@ public sealed partial class Transaction
             transaction.Meta["splitSnapshotAffectedStructs"] = metaObj;
         }
 
-        var meta = metaObj as ISet<Snapshot>;
+        var meta = (ISet<Snapshot>)metaObj!;
         var store = transaction.Doc.Store;
 
         // Check if we already split for this snapshot.
