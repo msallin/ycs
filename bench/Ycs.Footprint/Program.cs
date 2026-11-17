@@ -91,7 +91,7 @@ void VisitField(FieldInfo f, object o)
     try
     {
         var v = f.GetValue(o);
-        label = o.GetType().Namespace != null && o.GetType().Namespace.StartsWith("System") ? owners.GetValueOrDefault(o, "?") : o.GetType().Name + "." + f.Name;
+        label = o.GetType().Namespace != null && o.GetType().Namespace.StartsWith("System", StringComparison.Ordinal) ? owners.GetValueOrDefault(o, "?") : o.GetType().Name + "." + f.Name;
         if (f.FieldType.IsValueType)
         {
             WalkStruct(v);
