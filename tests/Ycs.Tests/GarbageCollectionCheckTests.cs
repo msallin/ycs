@@ -50,6 +50,20 @@ public class GarbageCollectionCheckTests
         Assert.IsTrue(doc.CreateSnapshot().DeleteSet.IsDeleted(new ItemId(70000, 3)));
     }
 
+    [TestMethod]
+    public void ApplyUpdate_DeletesATypeWhoseKeyWasSplitByAnEarlierUpdate_RejectsAndLeavesTheDocumentUnchanged()
+    {
+        // The earlier update splits the value of key "l" and keeps its first part live; this one only deletes the map.
+        var doc = new YDoc(new YDocOptions { GarbageCollection = true });
+        doc.ApplyUpdate(Convert.FromBase64String(Base));
+        doc.ApplyUpdate(DeleteRange(70000, 3, 1));
+        var before = Convert.ToBase64String(doc.EncodeStateAsUpdate());
+
+        var thrown = Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(DeleteRange(2147483000, 0, 3)));
+
+        Assert.AreEqual((before, true), (Convert.ToBase64String(doc.EncodeStateAsUpdate()), thrown.Message.Contains("unchanged", StringComparison.Ordinal)));
+    }
+
     /// <summary>A v1 update with no structs and one deleted range.</summary>
     private static byte[] DeleteRange(long client, long clock, long length)
     {
