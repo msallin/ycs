@@ -576,8 +576,5 @@ internal sealed partial class StructStore
             var client = _table.FindClient(id.Client);
             return client < 0 ? -1 : _table.FindByClock(client, id.Clock, ref _plannedHint);
         }
-
-        /// <summary>The view the garbage collection filter is asked about for <paramref name="item"/>, a planned item or a stored one.</summary>
-        private ItemView GcViewOf(YDoc doc, PlanItem item) => item.IsStaged ? ItemView.Detached(doc, StructAt(item.Index)) : item.GcView(doc);
     }
 }

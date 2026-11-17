@@ -73,6 +73,9 @@ internal sealed partial class StructStore
             }
         }
 
+        // The only decoded object the pre-check reads: the filter is given a detached view of a planned item's struct.
+        private ItemView GcViewOf(YDoc doc, PlanItem item) => item.IsStaged ? ItemView.Detached(doc, StructAt(item.Index)) : item.GcView(doc);
+
         private static YUpdateException MapValueSplit() => new(
             "The update deletes a type in which a key has two values (its value was split, by this update or an earlier one), " +
             "which the garbage collection cannot remove. The document is unchanged.");
