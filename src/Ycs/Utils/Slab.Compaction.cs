@@ -42,7 +42,7 @@ internal sealed partial class Slab
         }
 
         var ranges = new List<(long Offset, int Length, int Tag)>();
-        for (var number = 0; number < _pages.Count; number++)
+        for (var number = 0; number < _pageCount; number++)
         {
             if (_pages[number] is not { } page)
             {

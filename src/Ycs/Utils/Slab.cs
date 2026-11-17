@@ -66,7 +66,8 @@ internal sealed partial class Slab
     internal static int FirstPageSlotsForTests;
 
     // Pages are released as a whole: the list holds null for a released one, and its index is on _released.
-    private readonly List<Page?> _pages = [];
+    private Page?[] _pages = [];
+    private int _pageCount;
 
     // The pages' arrays by page number, for the reads: two indexes reach a slot. Published whenever a page is made, grown,
     // gets its object pages or is released.
@@ -75,7 +76,9 @@ internal sealed partial class Slab
     private Stack<int>? _released;
 
     // Pages that may have room, most recently opened last; an entry for a released or full page is dropped when met.
-    private Stack<int>? _open;
+    // The most recent is _openTop (-1 for none) and the ones before it are in _openBefore, which a document of one page never makes.
+    private int _openTop = -1;
+    private Stack<int>? _openBefore;
     private List<int>? _pending;
     private readonly int _firstSlots;
     private int _live;
@@ -121,10 +124,10 @@ internal sealed partial class Slab
     public int LiveCount => _live;
 
     /// <summary>The pages held, released ones excluded.</summary>
-    public int PageCount => _pages.Count - (_released?.Count ?? 0);
+    public int PageCount => _pageCount - (_released?.Count ?? 0);
 
     /// <summary>The slots page 0 holds room for (0 before the first allocation).</summary>
-    public int FirstPageCapacity => _pages.Count == 0 ? 0 : _pages[0]!.Slots.Length;
+    public int FirstPageCapacity => _pageCount == 0 ? 0 : _pages[0]!.Slots.Length;
 
     public static int PageOf(int handle) => handle >> PageBits;
 
@@ -190,7 +193,7 @@ internal sealed partial class Slab
     public bool TryRead(int handle, out Slot slot)
     {
         var number = handle >> PageBits;
-        var page = handle >= 0 && number < _pages.Count ? _pages[number] : null;
+        var page = handle >= 0 && number < _pageCount ? _pages[number] : null;
         if (page == null || IndexOf(handle) >= page.Used)
         {
             slot = default;
@@ -236,7 +239,7 @@ internal sealed partial class Slab
     {
 #if DEBUG
         var number = handle >> PageBits;
-        var page = handle >= 0 && number < _pages.Count ? _pages[number] : null;
+        var page = handle >= 0 && number < _pageCount ? _pages[number] : null;
         if (page == null || IndexOf(handle) >= page.Used)
         {
             throw new InvalidOperationException($"The handle {handle} names no slot of the slab (its page was released, or it was never allocated): a reference outlived its struct. Nothing was changed.");
@@ -258,7 +261,7 @@ internal sealed partial class Slab
     public int Generation(int handle)
     {
         var number = handle >> PageBits;
-        var page = handle >= 0 && number < _pages.Count ? _pages[number] : null;
+        var page = handle >= 0 && number < _pageCount ? _pages[number] : null;
         if (page == null || IndexOf(handle) >= page.Used || page.Slots[IndexOf(handle)].IsFree)
         {
             throw new InvalidOperationException($"The handle {handle} names a free slot or none: a link or a reference outlived its target. Nothing was changed.");
@@ -381,7 +384,7 @@ internal sealed partial class Slab
             else if (!page.Open)
             {
                 page.Open = true;
-                (_open ??= []).Push(number);
+                PushOpen(number);
             }
         }
 
@@ -394,7 +397,7 @@ internal sealed partial class Slab
         var found = new List<string>();
         var live = 0;
         var released = 0;
-        for (var number = 0; number < _pages.Count; number++)
+        for (var number = 0; number < _pageCount; number++)
         {
             var page = _pages[number];
             if (page == null)
@@ -490,7 +493,7 @@ internal sealed partial class Slab
     private Page PageAt(int handle)
     {
         var number = PageOf(handle);
-        var page = handle >= 0 && number < _pages.Count ? _pages[number] : null;
+        var page = handle >= 0 && number < _pageCount ? _pages[number] : null;
         if (page == null || IndexOf(handle) >= page.Used)
         {
             throw new ArgumentException("The handle names no slot of this slab (a released page or a handle never allocated).", nameof(handle));
@@ -507,18 +510,38 @@ internal sealed partial class Slab
         }
     }
 
+    private void PushOpen(int number)
+    {
+        if (_openTop >= 0)
+        {
+            (_openBefore ??= []).Push(_openTop);
+        }
+
+        _openTop = number;
+    }
+
+    private void AddPageEntry()
+    {
+        if (_pageCount == _pages.Length)
+        {
+            Array.Resize(ref _pages, Math.Max(1, _pageCount * 2));
+        }
+
+        _pageCount++;
+    }
+
     private Page FindPage(out int number)
     {
-        while (_open is { Count: > 0 })
+        while (_openTop >= 0)
         {
-            number = _open.Peek();
+            number = _openTop;
             var page = _pages[number];
             if (page != null && (page.FreeHead >= 0 || page.Used < PageSlots))
             {
                 return page;
             }
 
-            _open.Pop();
+            _openTop = _openBefore is { Count: > 0 } ? _openBefore.Pop() : -1;
             if (page != null)
             {
                 page.Open = false;
@@ -531,8 +554,8 @@ internal sealed partial class Slab
         }
         else
         {
-            number = _pages.Count;
-            _pages.Add(null);
+            number = _pageCount;
+            AddPageEntry();
             if (number > int.MaxValue >> PageBits)
             {
                 throw new InvalidOperationException("The slab holds the most slots a 32-bit handle can name.");
@@ -543,7 +566,7 @@ internal sealed partial class Slab
         NewGenerations(fresh);
         _pages[number] = fresh;
         Publish(number, fresh);
-        (_open ??= []).Push(number);
+        PushOpen(number);
         return fresh;
     }
 
