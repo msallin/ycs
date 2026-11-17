@@ -28,7 +28,6 @@ public partial class YDoc
         ClientId = _opts.ClientId ?? GenerateNewClientId();
         _share = new Dictionary<string, YType>();
         Store = new StructStore();
-        Subdocs = new HashSet<YDoc>();
         ShouldLoad = _opts.ShouldLoad;
         CollectionId = _opts.CollectionId;
     }
@@ -52,13 +51,13 @@ public partial class YDoc
 
     public IEnumerable<string> GetSubdocGuids()
     {
-        return new HashSet<string>(Subdocs.Select(sd => sd.Guid));
+        return _subdocs == null ? new HashSet<string>() : new HashSet<string>(_subdocs.Select(sd => sd.Guid));
     }
 
     public void Destroy()
     {
         // A subdocument's Destroy runs a transaction here whose cleanup changes Subdocs.
-        foreach (var sd in Subdocs.ToArray())
+        foreach (var sd in _subdocs?.ToArray() ?? [])
         {
             sd.Destroy();
         }

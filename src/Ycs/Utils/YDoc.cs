@@ -16,7 +16,10 @@ public partial class YDoc
     // The list of the batch before, kept for the next one (see Transaction.CleanupTransactions).
     internal List<Transaction>? _spareTransactionCleanups;
     internal Transaction? _transaction;
-    internal readonly HashSet<YDoc> Subdocs;
+    // Made by the first subdocument.
+    private HashSet<YDoc>? _subdocs;
+
+    internal HashSet<YDoc> Subdocs => _subdocs ??= [];
 
     // Ended transactions for reuse, linked by Transaction._nextFree.
     private Transaction? _freeTransactions;
