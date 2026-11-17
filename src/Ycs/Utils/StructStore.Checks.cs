@@ -257,7 +257,7 @@ internal sealed partial class StructStore
         return kind switch
         {
             SlotKind.String => RangeViolation(id, slot),
-            SlotKind.Any => ValueRangeViolation(id, slot, (ContentAny)content),
+            SlotKind.Any => ValueRangeViolation(id, slot, content),
             _ => null,
         };
     }

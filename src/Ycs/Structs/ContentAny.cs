@@ -31,6 +31,9 @@ internal class ContentAny : IContentEx
         _content = content;
     }
 
+    /// <summary>The Any content a slot holds (the store's checks compare it with the arena).</summary>
+    internal static ContentAny Of(object content) => (ContentAny)content;
+
     /// <summary>Content of one value.</summary>
     internal static ContentAny Single(object value) => new ContentAny(new List<object>(1) { value });
 

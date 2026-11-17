@@ -7,8 +7,9 @@ namespace Ycs;
 internal sealed partial class StructStore
 {
     // The range of an Any slot holds the objects of its content's list (the same references).
-    private string ValueRangeViolation(string id, in Slot slot, ContentAny content)
+    private string ValueRangeViolation(string id, in Slot slot, object held)
     {
+        var content = ContentAny.Of(held);
         var values = Slab.ValuesOrNull;
         if (values == null || !values.Holds(slot.Payload, slot.Length))
         {
