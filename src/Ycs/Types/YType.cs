@@ -426,12 +426,6 @@ public abstract partial class YType
 
     private protected IEnumerable<KeyValuePair<string, ItemRef>> TypeMapEnumerate() => _map.Select(kvp => new KeyValuePair<string, ItemRef>(kvp.Key, MapItem(kvp.Value))).Where(kvp => !kvp.Value.Deleted);
 
-    /// <summary>
-    /// The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.
-    /// Null for collected content, as Yjs' <c>getContent()[index]</c> of <c>[]</c> is <c>undefined</c>.
-    /// </summary>
-    internal static object ValueAt(IContent content, int index) => ItemRef.StoredValueAt(content, index);
-
     /// <summary>How many keys have a value that is not deleted, by walking the map (<see cref="_mapCount"/> is kept instead).</summary>
     internal int TypeMapCount()
     {
