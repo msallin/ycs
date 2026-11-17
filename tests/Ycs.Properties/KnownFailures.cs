@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -32,7 +33,7 @@ internal sealed record KnownFailure(string Name, string Severity, string Reason,
 /// reason while Ycs still differs, and fails once it agrees, so that the entry (and its
 /// normalization) is removed with the fix. See docs/testing.md.
 /// </summary>
-internal static class KnownFailures
+internal static partial class KnownFailures
 {
     public static readonly IReadOnlyList<KnownFailure> All =
     [
@@ -83,7 +84,46 @@ internal static class KnownFailures
             Matches = (m, script) => m.Op == "raw" && (m.Primary == "pend"
                 || (Step(script, m) is var step && step.Str("via") == "v1to2" && ScriptRun.HasUnorderedDeleteSet(step.Str("u")))),
         },
+        new("yjs-pending-retry-deferred", "documented",
+            "Not a Ycs bug: Yjs' pending.missing keeps one clock per client and ends with the higher one, so when a lower " +
+            "missing clock arrives Yjs does not retry, and a struct stays pending although every dependency is present " +
+            "(here B:1, which waits for C:0 and C:2 while C:2 is delivered first). Ycs retries and integrates it: its text, " +
+            "state vector and update events are ahead of Yjs'. docs/api.md, Pending structs, retried.",
+            """{"clients":[{"gc":false,"id":55967,"quiet":true},{"gc":false,"id":849942},{"gc":false,"gcf":2,"id":785458,"quiet":true}],"roots":[{"kind":"text","name":"t"},{"kind":"array","name":"a"}],"steps":[{"at":0,"c":2,"op":"insert","path":["t"],"text":"a"},{"at":0,"c":1,"op":"insert","path":["t"],"text":"a"},{"at":0,"c":2,"op":"insert","path":["t"],"text":"a"},{"from":2,"k":0,"op":"deliver","to":1,"via":"v1"},{"at":0,"c":1,"op":"insert","path":["t"],"text":"a"},{"c":2,"op":"push","path":["a"],"values":["s"]},{"from":2,"k":2,"op":"deliver","to":0,"via":"v1to2"},{"from":1,"k":1,"op":"deliver","to":0,"via":"v1"},{"from":1,"k":0,"op":"deliver","to":0,"via":"v1to2"},{"from":2,"k":0,"op":"deliver","to":0,"via":"v2"}]}""")
+        {
+            Documented = true,
+            Matches = (m, _) => m.Op == "deliver" && (m.Primary is "roots" or "ev:update") && YcsAheadOnly(m),
+        },
     ];
+
+    // The differences of a deliver step are the retried struct's: the update events, the roots and the state vector, with
+    // Ycs' clocks higher than Yjs' in at least one place and lower in none.
+    [GeneratedRegex(@"^\.st\.\d+\.sv\.\d+: yjs (\d+) \| ycs (\d+)$")]
+    private static partial Regex StateVectorLine();
+
+    private static bool YcsAheadOnly(Mismatch m)
+    {
+        var ahead = false;
+        foreach (var d in m.Differences)
+        {
+            if (StateVectorLine().Match(d) is { Success: true } sv)
+            {
+                var (yjs, ycs) = (long.Parse(sv.Groups[1].Value, CultureInfo.InvariantCulture), long.Parse(sv.Groups[2].Value, CultureInfo.InvariantCulture));
+                if (ycs <= yjs)
+                {
+                    return false;
+                }
+
+                ahead = true;
+            }
+            else if (!Regex.IsMatch(d, @"^\.(ev\[\d+\]\.u|st\.\d+\.(svb|roots\..*)):"))
+            {
+                return false;
+            }
+        }
+
+        return ahead;
+    }
 
     private static bool Threw(string observation) => Json.Parse(observation) is Dictionary<string, object> o && o.Get("err") is true;
 

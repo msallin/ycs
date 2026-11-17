@@ -507,6 +507,11 @@ the document holds a causally complete part of what it was given, whose `EncodeS
 v2) applies to a fresh document, with the same state vector when nothing is pending
 (`tests/Ycs.Fuzz` checks this after every input, with the representation invariants of its item lists).
 
+Ycs retries a pending struct whenever any clock it waited for arrives. Yjs 13.6.32 keeps one missing clock per client in
+`pending.missing` and ends with the higher one, so when a lower clock arrives last it does not retry, and a struct stays
+pending although every dependency is present; Ycs integrates it, and its state vector and update events are ahead of Yjs'
+(recorded as `yjs-pending-retry-deferred`, `tests/Ycs.Properties/KnownFailures.cs`).
+
 **Trusted input.** A document's own state can hold far more structs than the defaults allow (a million characters
 typed one at a time are a million structs). Apply it with `UpdateLimits.Unlimited`, or limits of your own, for that
 call ([example](untrusted-input.md#trusted-input)); the limits of an update from an untrusted peer stay the document's.
