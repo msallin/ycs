@@ -52,6 +52,33 @@ public class ContentAccessArchitectureTests
         Assert.AreEqual(string.Empty, string.Join("\n", found));
     }
 
+    // A store slot holds no ContentDeleted: the kind and the length say it. Only the decoded form, the reading of an
+    // update (ContentDeleted.Read) and ItemRef (the copy a decoded or encoded form needs) make one.
+    [TestMethod]
+    public void Library_EveryMethodBody_MakesContentDeletedOnlyInTheDecodedFormAndItemRef()
+    {
+        using var scan = IlScan.Read();
+        var (_, ops, md) = scan;
+        var found = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var (type, method, outer, _, op) in ops)
+        {
+            var outerName = md.GetString(md.GetTypeDefinition(outer).Name);
+            if (outerName.StartsWith("ItemRef", StringComparison.Ordinal) || outerName.StartsWith("ContentDeleted", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (op.Op == OpCodes.Newobj && op.Token.Kind == HandleKind.MethodDefinition
+                && md.GetString(md.GetTypeDefinition(md.GetMethodDefinition((MethodDefinitionHandle)op.Token).GetDeclaringType()).Name) == "ContentDeleted")
+            {
+                found.Add($"{outerName} ({type}.{method})");
+            }
+        }
+
+        Assert.AreEqual(string.Empty, string.Join("\n", found));
+    }
+
     private static string? ReadsContent(MetadataReader md, IlScan.TokenOp op)
     {
         if (op.Op == OpCodes.Isinst || op.Op == OpCodes.Castclass)

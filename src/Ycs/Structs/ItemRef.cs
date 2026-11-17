@@ -339,7 +339,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         {
             ref var slot = ref Write();
             slot.Info = (slot.Info & ~(0xFF << 8)) | (value.Ref << 8);
-            _slab.SetRef(_handle, value);
+            _slab.SetRef(_handle, value is ContentDeleted ? null : value);
         }
     }
 

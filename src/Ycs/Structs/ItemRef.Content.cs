@@ -32,10 +32,16 @@ internal readonly partial struct ItemRef
     internal IContentEx Cold => Kind.IsCold() ? (IContentEx)_slab.ReadRef(HandleChecked()) : null;
 
     /// <summary>Appends the elements of the content (Yjs' <c>getContent</c>) to <paramref name="destination"/>.</summary>
-    internal void AppendContentTo(List<object> destination) => destination.AddRange(Content.GetContent());
+    internal void AppendContentTo(List<object> destination)
+    {
+        if (Kind != SlotKind.Deleted)
+        {
+            destination.AddRange(Content.GetContent());
+        }
+    }
 
     /// <summary>A copy of the content that belongs to no item (what a redone item holds).</summary>
-    internal IContentEx CopyContent() => (IContentEx)Content.Copy();
+    internal IContentEx CopyContent() => Kind == SlotKind.Deleted ? new ContentDeleted(Length) : (IContentEx)Content.Copy();
 
     /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
     internal void AppendChars(string text) => Typed<ContentString>(SlotKind.String).Append(text);

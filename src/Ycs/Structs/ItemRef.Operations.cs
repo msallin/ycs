@@ -108,7 +108,11 @@ internal readonly partial struct ItemRef
         slot.Right = right.Handle;
         slot.Parent = parentIndex;
         slab.SetKey(item._handle, parentSub);
-        slab.SetRef(item._handle, content);
+        if (content is not ContentDeleted)
+        {
+            slab.SetRef(item._handle, content);
+        }
+
         return item;
     }
 
@@ -278,8 +282,7 @@ internal readonly partial struct ItemRef
             l.Clock + l.Length == r.Clock &&
             ((l.Info ^ r.Info) & Slot.DeletedFlag) == 0 &&
             ((l.Info | r.Info) & Slot.HasRedoneFlag) == 0 &&
-            Content.GetType() == right.Content.GetType() &&
-            Content.Mergeable;
+            (l.Kind == (int)SlotKind.Deleted || Content.Mergeable);
     }
 
     /// <summary>Try to merge two items.</summary>
@@ -290,7 +293,7 @@ internal readonly partial struct ItemRef
             return false;
         }
 
-        if (!Content.MergeWith(right.Content))
+        if (Kind != SlotKind.Deleted && !Content.MergeWith(right.Content))
         {
             throw new InvalidOperationException(
                 $"The content of {right.Id.Client}:{right.Id.Clock} did not merge into its left neighbour's although its kind merges (a bug of " +
@@ -373,7 +376,7 @@ internal readonly partial struct ItemRef
             && !transaction.Doc.RunExtensionsDisabledForTests
             && !parent.IsObserved(transaction)
             && !transaction.Doc.HasBeforeObserverCallsListeners
-            && Content.GetType() == kind))
+            && Content?.GetType() == kind))
         {
             return false;
         }
@@ -413,7 +416,7 @@ internal readonly partial struct ItemRef
     /// </summary>
     private void DeleteItem(Transaction transaction)
     {
-        if (MarkDeleted(transaction))
+        if (MarkDeleted(transaction) && Kind != SlotKind.Deleted)
         {
             Content.Delete(transaction);
         }
@@ -468,7 +471,11 @@ internal readonly partial struct ItemRef
             }
 
             LeftOrigin = Left.IsItem ? Left.LastId : null;
-            Content = (IContentEx)Content.Splice(offset);
+            if (Kind != SlotKind.Deleted)
+            {
+                Content = (IContentEx)Content.Splice(offset);
+            }
+
             Length -= offset;
         }
 
@@ -623,7 +630,16 @@ internal readonly partial struct ItemRef
             }
 
             transaction.Doc.Store.AddStruct(this);
-            Content.Integrate(transaction, this);
+            if (Kind == SlotKind.Deleted)
+            {
+                transaction.DeleteSet.Add(Id.Client, Id.Clock, Length);
+                MarkDeleted();
+                transaction.Doc.Store.Refresh(this);
+            }
+            else
+            {
+                Content.Integrate(transaction, this);
+            }
 
             // Counted once its content is integrated: deleted content marks the item deleted.
             if (mapParent != null)
@@ -657,7 +673,10 @@ internal readonly partial struct ItemRef
             throw new InvalidOperationException();
         }
 
-        Content.Gc(store);
+        if (Kind != SlotKind.Deleted)
+        {
+            Content.Gc(store);
+        }
 
         if (parentGCd)
         {
@@ -665,8 +684,16 @@ internal readonly partial struct ItemRef
         }
         else
         {
-            Content = new ContentDeleted(Length);
+            BecomeDeletedContent();
         }
+    }
+
+    // Countable stays what the content was (Yjs' item.countable is not touched by gc); no object is held.
+    private void BecomeDeletedContent()
+    {
+        ref var slot = ref Write();
+        slot.Info = (slot.Info & ~(0xFF << 8)) | (ContentDeleted._ref << 8);
+        _slab.SetRef(_handle, null);
     }
 
     /// <summary>
@@ -707,6 +734,13 @@ internal readonly partial struct ItemRef
             }
         }
 
+        if (Kind == SlotKind.Deleted)
+        {
+            Item.WriteItemHeader(encoder, ContentDeleted._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
+            encoder.WriteLength(Length - offset);
+            return;
+        }
+
         Item.WriteItem(encoder, offset, Id, LeftOrigin, RightOrigin, ParentSub, Content, root, parentId);
     }
 
@@ -715,14 +749,19 @@ internal readonly partial struct ItemRef
     /// </summary>
     public ItemRef SplitItem(Transaction transaction, int diff)
     {
-        var content = (IContentEx)Content.Splice(diff);
+        var kind = Kind;
+        var content = kind == SlotKind.Deleted ? null : (IContentEx)Content.Splice(diff);
+        var rightLength = kind == SlotKind.Deleted ? Length - diff : content.Length;
         var parent = Parent;
         var parentSub = ParentSub;
         var parentIndex = parent?.TableIndex(_slab.Types) ?? -1;
         var handle = _slab.Allocate();
         var rightItem = new ItemRef(_slab, handle);
         _slab.SetKey(handle, parentSub);
-        _slab.SetRef(handle, content);
+        if (content != null)
+        {
+            _slab.SetRef(handle, content);
+        }
 
         // Rule: both slots are taken here, after the method's only allocation, and no call below allocates.
         ref var left = ref Write();
@@ -730,9 +769,9 @@ internal readonly partial struct ItemRef
         var clock = left.Clock + diff;
         right.Clock = clock;
         right.Client = left.Client;
-        right.Length = content.Length;
+        right.Length = rightLength;
         // Countable comes from the right part's kind, not from the left's Info: the right part of a collected item is Deleted.
-        right.Info = (((SlotKind)content.Ref).IsCountable() ? Slot.CountableFlag : 0) | (content.Ref << 8) | (left.Info & (Slot.DeletedFlag | Slot.KeepFlag));
+        right.Info = (kind.IsCountable() ? Slot.CountableFlag : 0) | ((int)kind << 8) | (left.Info & (Slot.DeletedFlag | Slot.KeepFlag));
         right.OriginClient = left.Client;
         right.OriginClock = clock - 1;
         right.ROriginClient = left.ROriginClient;

@@ -17,7 +17,7 @@ internal sealed partial class StructStore
     {
         ContentAny => "ContentAny",
         ContentBinary => "ContentBinary",
-        ContentDeleted => "ContentDeleted",
+        null or ContentDeleted => "ContentDeleted",
         ContentDoc => "ContentDoc",
         ContentEmbed => "ContentEmbed",
         ContentFormat => "ContentFormat",
@@ -45,8 +45,9 @@ internal sealed partial class StructStore
                 if (s.IsItem)
                 {
                     var content = s.Content;
-                    IReadOnlyList<object> values = content is ContentString str ? [str.GetString()] : content.GetContent();
-                    sb.Append(" content ").Append(ContentKindNameForTests(content)).Append(' ').Append(contentText(ContentKindNameForTests(content), values));
+                    var contentName = ContentKindNameForTests(content);
+                    IReadOnlyList<object> values = content == null ? [] : content is ContentString str ? [str.GetString()] : content.GetContent();
+                    sb.Append(" content ").Append(contentName).Append(' ').Append(contentText(contentName, values));
                     sb.Append(" left ").Append(IdText(s.Left)).Append(" right ").Append(IdText(s.Right));
                     sb.Append(" origin ").Append(IdText(s.LeftOrigin)).Append(" rightOrigin ").Append(IdText(s.RightOrigin));
                     sb.Append(" parent ").Append(parentText(s.Parent));

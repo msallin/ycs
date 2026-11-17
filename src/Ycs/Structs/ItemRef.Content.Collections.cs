@@ -15,7 +15,7 @@ internal readonly partial struct ItemRef
     {
         ContentAny any => any.ValueAt(index),
         ContentJson json => json.ValueAt(index),
-        ContentDeleted => null,
+        null => null,
         _ => content.GetContent()[index],
     };
 

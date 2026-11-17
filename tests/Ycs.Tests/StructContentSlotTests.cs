@@ -66,7 +66,7 @@ public class StructContentSlotTests
     }
 
     [TestMethod]
-    public void Remove_MapValue_PutsContentDeletedInTheSlot()
+    public void Remove_MapValue_LeavesTheKindDeletedAndNoObjectInTheSlot()
     {
         var doc = NewDoc();
         var map = doc.GetMap("m");
@@ -75,7 +75,7 @@ public class StructContentSlotTests
 
         map.Remove("k");
 
-        Assert.AreEqual(true, doc.Store.Slab.GetRef(handle) is ContentDeleted);
+        Assert.AreEqual((SlotKind.Deleted, null), (new ItemRef(doc.Store.Slab, handle).Kind, doc.Store.Slab.GetRef(handle)));
     }
 
     [TestMethod]

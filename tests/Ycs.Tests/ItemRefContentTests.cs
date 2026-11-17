@@ -239,6 +239,27 @@ public class ItemRefContentTests
     }
 
     [TestMethod]
+    public void New_DeletedContent_HoldsNoObjectAndTheLengthOfTheSlot()
+    {
+        var slab = new Slab();
+
+        var item = NewItem(slab, new ContentDeleted(3));
+
+        Assert.AreEqual((null, 3, 0, 0), (slab.GetRef(item.Handle), item.Length, item.Elements.Count, item.CopyContent().Length - 3));
+    }
+
+    [TestMethod]
+    public void Content_SetDeleted_DropsTheObject()
+    {
+        var slab = new Slab();
+        var item = NewItem(slab, new ContentString("abc"));
+
+        item.Content = new ContentDeleted(3);
+
+        Assert.AreEqual((null, 3), (slab.GetRef(item.Handle), item.Length));
+    }
+
+    [TestMethod]
     public void BecomeGC_Item_IsKindGcAndNotCountable()
     {
         var item = NewItem(new Slab(), new ContentString("abc"));

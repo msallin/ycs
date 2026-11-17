@@ -538,7 +538,7 @@ internal sealed partial class StructStore
         {
             var (target, start) = Target(id);
             if (!target.IsNull && start < boundary && boundary < target.Id.Clock + target.Length
-                && !target.Deleted && target.Content is not ContentDeleted && (target.ParentSub != null || target.Parent == null))
+                && !target.Deleted && !target.HasDeletedContent && (target.ParentSub != null || target.Parent == null))
             {
                 splits ??= new Dictionary<PlanItem, List<(long, int)>>();
                 if (!splits.TryGetValue(target, out var list))
@@ -635,7 +635,7 @@ internal sealed partial class StructStore
                 return default;
             }
 
-            if (item.Content is ContentDeleted || key == null)
+            if (item.HasDeletedContent || key == null)
             {
                 return default;
             }
@@ -738,7 +738,7 @@ internal sealed partial class StructStore
                             {
                                 var item = PlanItem.Decoded(decoded);
                                 LandsLast(doc, item, offset, chains);
-                                if (!chains.Deleted.Contains(item) && item.Content is not ContentDeleted && KeyOf(item).Key != null)
+                                if (!chains.Deleted.Contains(item) && !item.HasDeletedContent && KeyOf(item).Key != null)
                                 {
                                     values.Add(item);
                                 }

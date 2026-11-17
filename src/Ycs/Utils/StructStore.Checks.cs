@@ -204,13 +204,20 @@ internal sealed partial class StructStore
                 : $"the slot of the GC struct {id} holds more than a range";
         }
 
-        if (content is not IContentEx held || held.Ref != slot.Kind || held.Length != slot.Length)
+        if (slot.Kind == (int)SlotKind.Deleted)
+        {
+            if (content != null)
+            {
+                return $"the slot of {id} holds the kind Deleted and a {content.GetType().Name}";
+            }
+        }
+        else if (content is not IContentEx held || held.Ref != slot.Kind || held.Length != slot.Length)
         {
             return $"the slot of {id} holds the kind {slot.Kind} and length {slot.Length}, its content another";
         }
 
         var kind = (SlotKind)slot.Kind;
-        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || content.GetType() != ContentClassOf(kind))
+        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || (kind != SlotKind.Deleted && content.GetType() != ContentClassOf(kind)))
         {
             return $"the slot of {id} holds the kind {kind}, its content is a {content.GetType().Name}";
         }
@@ -233,7 +240,6 @@ internal sealed partial class StructStore
     {
         SlotKind.String => typeof(ContentString),
         SlotKind.Any => typeof(ContentAny),
-        SlotKind.Deleted => typeof(ContentDeleted),
         SlotKind.Type => typeof(ContentType),
         SlotKind.Format => typeof(ContentFormat),
         SlotKind.Embed => typeof(ContentEmbed),

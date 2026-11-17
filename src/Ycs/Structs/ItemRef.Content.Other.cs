@@ -5,7 +5,7 @@ namespace Ycs;
 internal readonly partial struct ItemRef
 {
     /// <summary>The elements of the content (Yjs' <c>getContent</c>); a live view, valid until the item's content changes.</summary>
-    internal IReadOnlyList<object> Elements => Content.GetContent();
+    internal IReadOnlyList<object> Elements => Kind == SlotKind.Deleted ? Array.Empty<object>() : Content.GetContent();
 
     /// <summary>The document of a <see cref="SlotKind.Doc"/> item.</summary>
     internal YDoc Subdoc => Typed<ContentDoc>(SlotKind.Doc).Doc;

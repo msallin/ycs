@@ -167,7 +167,11 @@ internal class ContentType : IContentEx
             }
             else
             {
-                item.Content.Gc(store);
+                if (item.Kind != SlotKind.Deleted)
+                {
+                    item.Content.Gc(store);
+                }
+
                 store.ReplaceWithGC(item);
             }
         }
