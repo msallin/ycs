@@ -379,9 +379,8 @@ public class HardeningTests
                 var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxStructsPerUpdate = 1_000_000, MaxPendingStructs = 1_000_000, MaxPendingBytes = 1 << 30 } });
                 return () => doc.ApplyUpdate(update);
             },
-            160_000,
-            TestContext,
-            maxRatio: 3.5);
+            400_000,
+            TestContext);
     }
 
     [TestMethod]
