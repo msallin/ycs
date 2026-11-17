@@ -35,10 +35,13 @@ internal class ContentJson : IContentEx
 
     public IContent Splice(int offset)
     {
-        var right = new ContentJson(_content.GetRange(offset, _content.Count - offset), _mayHoldUndefined);
+        var right = Tail(offset);
         _content.RemoveRange(offset, _content.Count - offset);
         return right;
     }
+
+    /// <summary>The values from <paramref name="offset"/> on as a new content; this one is not changed.</summary>
+    internal ContentJson Tail(int offset) => new(_content.GetRange(offset, _content.Count - offset), _mayHoldUndefined);
 
     public bool MergeWith(IContent right)
     {
