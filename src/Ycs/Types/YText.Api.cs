@@ -141,9 +141,9 @@ public partial class YText
             {
                 if (n.IsVisible(snapshot) || (prevSnapshot != null && n.IsVisible(prevSnapshot)))
                 {
-                    switch (n.Content)
+                    switch (n.Kind)
                     {
-                        case ContentString cs:
+                        case SlotKind.String:
                             if (!currentAttributes.TryGetValue(ChangeKey, out var val))
                             {
                                 val = null;
@@ -173,18 +173,18 @@ public partial class YText
                                 currentAttributes.Remove(ChangeKey);
                             }
 
-                            str.Append(cs.GetString());
+                            str.Append(n.Chars);
                             break;
-                        case ContentType:
-                        case ContentEmbed:
+                        case SlotKind.Type:
+                        case SlotKind.Embed:
                             packStr();
-                            ops.Add(new Delta.Insert(EmbedOf(n.Content)) { Attributes = currentAttributes.Count > 0 ? AttributeValues(currentAttributes, skipNull: false) : null });
+                            ops.Add(new Delta.Insert(n.Embedded) { Attributes = currentAttributes.Count > 0 ? AttributeValues(currentAttributes, skipNull: false) : null });
                             break;
-                        case ContentFormat cf:
+                        case SlotKind.Format:
                             if (n.IsVisible(snapshot))
                             {
                                 packStr();
-                                UpdateCurrentAttributes(currentAttributes, cf);
+                                UpdateCurrentAttributes(currentAttributes, n.FormatKey, n.FormatValue);
                             }
                             break;
                     }
@@ -333,7 +333,7 @@ public partial class YText
         List<ItemRef>? remove = null;
         for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
-            if (!n.Deleted && (n.Content is ContentFormat || (n.Countable && n.Content is not ContentString)))
+            if (!n.Deleted && (n.Kind == SlotKind.Format || (n.Countable && n.Kind != SlotKind.String)))
             {
                 (remove ??= new List<ItemRef>()).Add(n);
             }
@@ -406,15 +406,16 @@ public partial class YText
         var written = 0;
         for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
-            if (!n.Deleted && n.Countable && n.Content is ContentString cs)
+            if (!n.Deleted && n.Countable && n.Kind == SlotKind.String)
             {
-                if (cs.Length > destination.Length - written)
+                var length = n.Length;
+                if (length > destination.Length - written)
                 {
                     throw new ArgumentException($"The destination holds {destination.Length} characters; the text has more. Pass at least Length ({Length}).", nameof(destination));
                 }
 
-                cs.CopyTo(destination.Slice(written));
-                written += cs.Length;
+                n.CopyCharsTo(destination.Slice(written));
+                written += length;
             }
         }
 
@@ -435,10 +436,9 @@ public partial class YText
             Debug.Assert(Doc != null);
             var id = n.Id;
             var departures = Doc.Store.Departures;
-            if (!n.Deleted && n.Countable && n.Content is ContentString cs)
+            if (!n.Deleted && n.Countable && n.Kind == SlotKind.String)
             {
-                cs.CopyTo(writer.GetSpan(cs.Length));
-                writer.Advance(cs.Length);
+                n.WriteCharsTo(writer);
             }
 
             n = Doc.Store.NextAfter(n, id, departures);
@@ -516,10 +516,10 @@ public partial class YText
             {
                 if (!end.Deleted)
                 {
-                    switch (end.Content)
+                    switch (end.Kind)
                     {
-                        case ContentFormat cf:
-                            UpdateCurrentAttributes(ref currentAttributes, cf);
+                        case SlotKind.Format:
+                            UpdateCurrentAttributes(ref currentAttributes, end.FormatKey, end.FormatValue);
                             break;
                         default:
                             res += CleanupFormattingGap(transaction, start, end, startAttributes, ref currentAttributes);
