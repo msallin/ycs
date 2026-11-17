@@ -106,7 +106,7 @@ every reference to it stays valid and reads a GC struct.
 | JS | C# | Verdict |
 | --- | --- | --- |
 | `writeStructs`, `writeClientsStructs` | `EncodingUtils.WriteStructs`, `WriteClientsStructs` | identical, equivalent |
-| `readClientsStructRefs` | `UpdateReader`, `StructCursor`, `EncodingUtils.ReadStruct` | differs: input checks |
+| `readClientsStructRefs` | `UpdateReader`, `StructCursor` | differs: input checks |
 | `integrateStructs` | `StructStore.IntegrationPlan` (`Plan`, `Execute`, `EncodeRest`) | equivalent (the same visiting order, stack and rest handling, including Yjs' `restStructs.clients.set(client, [item])` overwrite) |
 | `writeStructsFromTransaction` | inline in `WriteUpdateMessageFromTransaction` | identical |
 | `readUpdateV2`, `readUpdate` | `YDoc.ApplyUpdate`, `StructStore.ApplyUpdate` | equivalent in flow: structs, the rest to pending, the update's deletes, the waiting deletes, retry |

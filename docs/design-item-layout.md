@@ -224,7 +224,7 @@ of a live type, the push hint, the clock order) are kept current by split and me
   `small`, `text` 1,000 each, `big` 500), each run item by item and through the index with leaves of 2, 16 and 128, the
   lists recounted after every operation: 0 differing.
 * `ItemRefTests` (null, identity, hashing, the members on an item and on a GC struct), `ItemRefBoxingTests` (a sabotage,
-  the `(object)type._item ?? type` above put back, fails it), `ItemRefSignatureTests`. `PublicApi.txt` unchanged; no
+  the `(object)type._item ?? type` above put back, fails it). `PublicApi.txt` unchanged; no
   unsafe code; no new warning in `src` (two fewer); the Native AOT sample publishes without a warning.
 
 **Measured** (`bench/Ycs.Compare`, `ab.py`, c263413 against the branch, interleaved):
