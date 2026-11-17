@@ -250,7 +250,7 @@ internal static class YcsCases
                     last = new YDoc();
                     if (v2)
                     {
-                        last.ApplyUpdate(update, null, UpdateFormat.V2, limits: UpdateLimits.Unlimited);
+                        last.ApplyUpdate(update, UpdateFormat.V2, limits: UpdateLimits.Unlimited);
                     }
                     else
                     {

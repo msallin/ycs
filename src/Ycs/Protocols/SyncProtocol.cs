@@ -17,7 +17,7 @@ public enum SyncMessageType : uint
     Update = 2,
 }
 
-/// <summary>What <see cref="SyncProtocol.ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, UpdateFormat)"/> did with a message.</summary>
+/// <summary>What <see cref="SyncProtocol.ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object)"/> did with a message.</summary>
 /// <param name="Type">The type of the message.</param>
 /// <param name="Replied">Whether an answer was appended to the reply buffer: true for a step 1, false for the others.</param>
 public readonly record struct SyncReadResult(SyncMessageType Type, bool Replied);
@@ -54,7 +54,7 @@ public static class SyncProtocol
 
     /// <summary>
     /// Reads the y-websocket message type a message starts with; <paramref name="body"/> is what follows it, such as
-    /// the sync message <see cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, UpdateFormat)"/> takes.
+    /// the sync message <see cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object)"/> takes.
     /// </summary>
     /// <exception cref="YUpdateException">The message is empty or its type is truncated.</exception>
     public static uint ReadMessageType(ReadOnlySpan<byte> message, out ReadOnlySpan<byte> body)
@@ -94,6 +94,22 @@ public static class SyncProtocol
     }
 
     /// <summary>
+    /// Returns a whole y-websocket sync update message, the message type, the sync type, the length and
+    /// <paramref name="update"/>, in one array: what <see cref="WriteMessageType"/> followed by <see cref="WriteUpdate"/> write.
+    /// </summary>
+    public static byte[] CreateUpdateMessage(ReadOnlySpan<byte> update)
+    {
+        Span<byte> header = stackalloc byte[3 * MaxVarUintBytes];
+        var count = WriteVarUint(header, MessageSync);
+        count += WriteVarUint(header[count..], (uint)SyncMessageType.Update);
+        count += WriteVarUint(header[count..], (uint)update.Length);
+        var message = new byte[count + update.Length];
+        header[..count].CopyTo(message);
+        update.CopyTo(message.AsSpan(count));
+        return message;
+    }
+
+    /// <summary>
     /// Handles one sync message, as the y-websocket message type has been stripped from it: a step 1 appends the answer (a step 2) to
     /// <paramref name="reply"/>; a step 2 or an update is applied to <paramref name="doc"/> with
     /// <paramref name="origin"/> as the transaction origin, and writes nothing. The result tells the type and whether
@@ -101,10 +117,15 @@ public static class SyncProtocol
     /// </summary>
     /// <exception cref="YUpdateException">
     /// The message is truncated or of an unknown type, or its update is malformed or beyond a limit of the
-    /// document (<see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, object, UpdateFormat, UpdateLimits)"/>; the document is then as
+    /// document (<see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, UpdateFormat, object, UpdateLimits)"/>; the document is then as
     /// it was). An exception of an observer propagates as it is.
     /// </exception>
-    public static SyncReadResult ReadSyncMessage(ReadOnlySpan<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin = null, UpdateFormat format = UpdateFormat.V1)
+    public static SyncReadResult ReadSyncMessage(ReadOnlySpan<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin = null) =>
+        ReadSyncMessage(message, reply, doc, UpdateFormat.V1, origin);
+
+    /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object)"/>
+    /// <param name="format">The encoding of the updates the message carries and of the answer to a step 1.</param>
+    public static SyncReadResult ReadSyncMessage(ReadOnlySpan<byte> message, IBufferWriter<byte> reply, YDoc doc, UpdateFormat format, object? origin = null)
     {
         ArgumentNullException.ThrowIfNull(reply);
         ArgumentNullException.ThrowIfNull(doc);
@@ -124,7 +145,7 @@ public static class SyncProtocol
                 break;
             case (uint)SyncMessageType.SyncStep2:
             case (uint)SyncMessageType.Update:
-                doc.ApplyUpdate(payload, origin, format);
+                doc.ApplyUpdate(payload, format, origin);
                 break;
             default:
                 throw new YUpdateException($"Unknown sync message type: {type}.");
@@ -133,12 +154,16 @@ public static class SyncProtocol
         return new SyncReadResult((SyncMessageType)type, type == (uint)SyncMessageType.SyncStep1);
     }
 
-    /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object, UpdateFormat)"/>
-    public static SyncReadResult ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin = null, UpdateFormat format = UpdateFormat.V1)
+    /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object)"/>
+    public static SyncReadResult ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, object? origin = null) =>
+        ReadSyncMessage(message, reply, doc, UpdateFormat.V1, origin);
+
+    /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, UpdateFormat, object)"/>
+    public static SyncReadResult ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, UpdateFormat format, object? origin = null)
     {
         if (message.IsSingleSegment)
         {
-            return ReadSyncMessage(message.FirstSpan, reply, doc, origin, format);
+            return ReadSyncMessage(message.FirstSpan, reply, doc, format, origin);
         }
 
         // A message of several segments is copied once, to one array, as the length comes from the peer: the
@@ -148,7 +173,7 @@ public static class SyncProtocol
         try
         {
             message.CopyTo(rented);
-            return ReadSyncMessage(rented.AsSpan(0, length), reply, doc, origin, format);
+            return ReadSyncMessage(rented.AsSpan(0, length), reply, doc, format, origin);
         }
         finally
         {

@@ -4,7 +4,7 @@ using System.Buffers;
 
 namespace Ycs;
 
-public partial class YDoc
+public sealed partial class YDoc
 {
     /// <summary>
     /// Applies an update (Yjs' <c>Y.applyUpdate</c>, <c>Y.applyUpdateV2</c>). The transaction it runs in is not local, as
@@ -17,19 +17,27 @@ public partial class YDoc
     /// dropped and the update stands whole: <see cref="PendingDropped"/> reports it (docs/api.md,
     /// "Pending structs, retried").
     /// </summary>
-    /// <param name="update">The update, in <paramref name="format"/>.</param>
+    /// <param name="update">The update, in the original (v1) format.</param>
     /// <param name="origin">Stored on the transaction; observers and the undo manager see it.</param>
-    /// <param name="format">The encoding of <paramref name="update"/>.</param>
     /// <param name="limits">For this update instead of <see cref="YDocOptions.Limits"/>, e.g. <see cref="UpdateLimits.Unlimited"/> for a stored state the application trusts.</param>
     /// <exception cref="YUpdateException">The update is malformed or beyond a limit; the document is unchanged unless <see cref="YUpdateException.PartlyApplied"/>.</exception>
-    public void ApplyUpdate(ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null) =>
+    public void ApplyUpdate(ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null) =>
+        ApplyPooledCopy(update, false, origin!, limits!);
+
+    /// <inheritdoc cref="ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/>
+    /// <param name="format">The encoding of <paramref name="update"/>.</param>
+    public void ApplyUpdate(ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null) =>
         ApplyPooledCopy(update, format.IsV2(), origin!, limits!);
 
     /// <summary>
-    /// Like <see cref="ApplyUpdate"/>, but returns false instead of throwing <see cref="YUpdateException"/>; the document
+    /// Like <see cref="ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/>, but returns false instead of throwing <see cref="YUpdateException"/>; the document
     /// is then unchanged, except when the update was cut short (see <see cref="YUpdateException.PartlyApplied"/>).
     /// </summary>
-    public bool TryApplyUpdate(ReadOnlySpan<byte> update, object? origin = null, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null) =>
+    public bool TryApplyUpdate(ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null) =>
+        TryApply(update, false, origin!, limits!);
+
+    /// <inheritdoc cref="TryApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/>
+    public bool TryApplyUpdate(ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null) =>
         TryApply(update, format.IsV2(), origin!, limits!);
 
     /// <summary>

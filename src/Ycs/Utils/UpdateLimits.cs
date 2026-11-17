@@ -4,7 +4,7 @@ namespace Ycs;
 
 /// <summary>
 /// What one update from a peer may cost a document (<see cref="YDocOptions.Limits"/>, or per call of
-/// <see cref="YDoc.ApplyUpdate(byte[], object, UpdateLimits)"/>) or the functions of
+/// <see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/>) or the functions of
 /// <see cref="UpdateOperations"/> (their <c>limits</c> parameter). An update beyond a limit is
 /// rejected with a <see cref="YUpdateException"/> before anything changes. Immutable, so one instance
 /// can be shared by any number of documents and threads.

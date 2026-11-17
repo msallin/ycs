@@ -14,6 +14,20 @@ namespace Ycs;
 /// </summary>
 public static class YUpdate
 {
+    /// <inheritdoc cref="Merge(ReadOnlySpan{ReadOnlyMemory{byte}}, UpdateFormat, UpdateLimits)"/>
+    public static byte[] Merge(IEnumerable<ReadOnlyMemory<byte>> updates, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(updates);
+        return Merge(updates.ToArray(), format, limits);
+    }
+
+    /// <inheritdoc cref="Merge(ReadOnlySpan{ReadOnlyMemory{byte}}, UpdateFormat, UpdateLimits)"/>
+    public static byte[] Merge(IEnumerable<byte[]> updates, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(updates);
+        return Merge(updates.Select(static u => (ReadOnlyMemory<byte>)u).ToArray(), format, limits);
+    }
+
     /// <summary>
     /// Merges updates into one. The result is associative and idempotent, and can be fed updates an earlier merge produced.
     /// As in Yjs, not where one update holds a GC struct and another an item for the same clock: the struct kept then

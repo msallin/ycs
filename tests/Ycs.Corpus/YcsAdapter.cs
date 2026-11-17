@@ -57,7 +57,7 @@ internal sealed class CorpusDoc
 
     public void ApplyV1(byte[] update) => _doc.ApplyUpdate(update, Remote);
 
-    public void ApplyV2(byte[] update) => _doc.ApplyUpdate(update, Remote, UpdateFormat.V2);
+    public void ApplyV2(byte[] update) => _doc.ApplyUpdate(update, UpdateFormat.V2, Remote);
 
     public byte[] EncodeStateV1(byte[] stateVector = null) => _doc.EncodeStateAsUpdate(stateVector);
 

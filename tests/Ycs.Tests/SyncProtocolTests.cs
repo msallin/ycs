@@ -81,7 +81,7 @@ public class SyncProtocolTests
         var doc = new YDoc();
         var reply = new ArrayBufferWriter<byte>();
 
-        var type = SyncProtocol.ReadSyncMessage(message, reply, doc, null, format: UpdateFormat.V2);
+        var type = SyncProtocol.ReadSyncMessage(message, reply, doc, UpdateFormat.V2);
 
         Assert.AreEqual((new SyncReadResult(SyncMessageType.Update, false), 0, "v2"), (type, reply.WrittenCount, doc.GetText("t").ToString()));
     }
@@ -191,5 +191,33 @@ public class SyncProtocolTests
                 previous.Next = this;
             }
         }
+    }
+
+    [TestMethod]
+    public void ReadSyncMessage_FormatAsFourthArgument_AppliesTheV2Update()
+    {
+        var source = new YDoc();
+        source.GetText("t").Insert(0, "abc");
+        var message = new ArrayBufferWriter<byte>();
+        SyncProtocol.WriteUpdate(message, source.EncodeStateAsUpdate(format: UpdateFormat.V2));
+        var target = new YDoc();
+
+        SyncProtocol.ReadSyncMessage(message.WrittenSpan, new ArrayBufferWriter<byte>(), target, UpdateFormat.V2);
+        var sequence = new YDoc();
+        SyncProtocol.ReadSyncMessage(new ReadOnlySequence<byte>(message.WrittenMemory), new ArrayBufferWriter<byte>(), sequence, UpdateFormat.V2);
+
+        Assert.AreEqual(("abc", "abc"), (target.GetText("t").ToString(), sequence.GetText("t").ToString()));
+    }
+
+    [TestMethod]
+    public void CreateUpdateMessage_Update_EqualsTheTypeAndUpdateWrittenSeparately()
+    {
+        var update = new byte[300];
+        new Random(1).NextBytes(update);
+        var writer = new ArrayBufferWriter<byte>();
+        SyncProtocol.WriteMessageType(writer, SyncProtocol.MessageSync);
+        SyncProtocol.WriteUpdate(writer, update);
+
+        CollectionAssert.AreEqual(writer.WrittenSpan.ToArray(), SyncProtocol.CreateUpdateMessage(update));
     }
 }

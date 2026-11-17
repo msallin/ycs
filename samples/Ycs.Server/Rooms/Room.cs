@@ -360,12 +360,8 @@ internal sealed partial class Room
     // Runs under the lock: the document changes only there.
     private void OnUpdate(object? sender, UpdateEventArgs e)
     {
-        var message = new ArrayBufferWriter<byte>(e.Update.Length + 16);
-        SyncProtocol.WriteMessageType(message, SyncProtocol.MessageSync);
-        SyncProtocol.WriteUpdate(message, e.Update.Span);
-
         // One array for every session: readers must not modify it.
-        var bytes = message.WrittenSpan.ToArray();
+        var bytes = SyncProtocol.CreateUpdateMessage(e.Update.Span);
         foreach (var session in sessions)
         {
             if (updateReachesOrigin || !ReferenceEquals(session, e.Origin))

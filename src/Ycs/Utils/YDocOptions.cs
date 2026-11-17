@@ -31,7 +31,7 @@ public sealed record YDocOptions
     public Func<ItemView, bool>? GarbageCollectionFilter { get; init; }
 
     /// <summary>
-    /// What an update applied to the document may cost; <see cref="YDoc.ApplyUpdate(byte[], object, UpdateLimits)"/> can
+    /// What an update applied to the document may cost; <see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/> can
     /// override it for one update. A subdocument read from an update takes its parent's.
     /// </summary>
     public UpdateLimits Limits

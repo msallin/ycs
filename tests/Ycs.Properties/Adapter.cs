@@ -290,12 +290,12 @@ namespace Ycs.Properties
                     to.Doc.ApplyUpdate(u, Net);
                     return Missing.Value;
                 case "v2":
-                    to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
+                    to.Doc.ApplyUpdate(u, UpdateFormat.V2, Net);
                     return Missing.Value;
                 case "v1to2":
                     {
                         var c = YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2);
-                        to.Doc.ApplyUpdate(c, Net, UpdateFormat.V2);
+                        to.Doc.ApplyUpdate(c, UpdateFormat.V2, Net);
                         return Obj(("u", B64(c)));
                     }
                 case "v2to1":
@@ -339,11 +339,11 @@ namespace Ycs.Properties
             else
             {
                 var m2 = new System.Buffers.ArrayBufferWriter<byte>();
-                SyncProtocol.ReadSyncMessage(step1, m2, from.Doc, Net, v2 ? UpdateFormat.V2 : UpdateFormat.V1);
+                SyncProtocol.ReadSyncMessage(step1, m2, from.Doc, v2 ? UpdateFormat.V2 : UpdateFormat.V1, Net);
                 step2 = m2.WrittenSpan.ToArray();
             }
 
-            SyncProtocol.ReadSyncMessage(step2, new System.Buffers.ArrayBufferWriter<byte>(), to.Doc, Net, v2 ? UpdateFormat.V2 : UpdateFormat.V1);
+            SyncProtocol.ReadSyncMessage(step2, new System.Buffers.ArrayBufferWriter<byte>(), to.Doc, v2 ? UpdateFormat.V2 : UpdateFormat.V1, Net);
             return Obj(("s1", B64(step1)), ("s2", B64(step2)));
         }
 
@@ -390,12 +390,12 @@ namespace Ycs.Properties
                         to.Doc.ApplyUpdate(u, Net);
                         return Missing.Value;
                     case "v2":
-                        to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
+                        to.Doc.ApplyUpdate(u, UpdateFormat.V2, Net);
                         return Missing.Value;
                     case "v1to2":
                         {
                             var c = YUpdate.Convert(u, UpdateFormat.V1, UpdateFormat.V2);
-                            to.Doc.ApplyUpdate(c, Net, UpdateFormat.V2);
+                            to.Doc.ApplyUpdate(c, UpdateFormat.V2, Net);
                             return Obj(("u", B64(c)));
                         }
                     default:
@@ -446,7 +446,7 @@ namespace Ycs.Properties
                 ("to", Clocks(meta.To)));
             if (v2)
             {
-                to.Doc.ApplyUpdate(u, Net, UpdateFormat.V2);
+                to.Doc.ApplyUpdate(u, UpdateFormat.V2, Net);
             }
             else
             {
@@ -1278,7 +1278,7 @@ namespace Ycs.Properties
 
         public void ApplyV1(byte[] update, object origin = null) => Doc.ApplyUpdate(update, origin ?? ScriptRun.Net);
 
-        public void ApplyV2(byte[] update, object origin = null) => Doc.ApplyUpdate(update, origin ?? ScriptRun.Net, UpdateFormat.V2);
+        public void ApplyV2(byte[] update, object origin = null) => Doc.ApplyUpdate(update, UpdateFormat.V2, origin ?? ScriptRun.Net);
 
         public bool HasPending => Doc.HasPending;
 

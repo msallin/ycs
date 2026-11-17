@@ -158,7 +158,7 @@ public class EncodingEntryPointTests
         var message = new ArrayBufferWriter<byte>();
         SyncProtocol.WriteSyncStep2(message, source, target.EncodeStateVector(), UpdateFormat.V2);
 
-        SyncProtocol.ReadSyncMessage(message.WrittenSpan, new ArrayBufferWriter<byte>(), target, null, UpdateFormat.V2);
+        SyncProtocol.ReadSyncMessage(message.WrittenSpan, new ArrayBufferWriter<byte>(), target, UpdateFormat.V2);
 
         Assert.AreEqual("hello", target.GetText("t").ToString());
     }

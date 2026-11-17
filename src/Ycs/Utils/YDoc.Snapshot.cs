@@ -2,7 +2,7 @@
 
 namespace Ycs;
 
-public partial class YDoc
+public sealed partial class YDoc
 {
     /// <summary>
     /// Yjs parity: <c>createDocFromSnapshot(originDoc, snapshot, newDoc)</c> (src/utils/Snapshot.js).
@@ -29,7 +29,7 @@ public partial class YDoc
 
         var update = Snapshot.EncodeRestoreUpdateV2(this, snapshot.DeleteSet, snapshot.StateVector);
         var target = newDoc ?? new YDoc();
-        target.ApplyUpdate(update, "snapshot", UpdateFormat.V2);
+        target.ApplyUpdate(update, UpdateFormat.V2, "snapshot");
         return target;
     }
 }

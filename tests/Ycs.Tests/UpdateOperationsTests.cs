@@ -593,4 +593,25 @@ public class UpdateOperationsTests
     }
 
     private static string Hex(byte[] bytes) => Convert.ToHexStringLower(bytes);
+
+    [TestMethod]
+    public void Merge_ListOfByteArrays_EqualsTheSpanMerge()
+    {
+        var doc = new YDoc();
+        var updates = new List<byte[]>();
+        doc.UpdatedV2 += (_, e) => updates.Add(e.Update.ToArray());
+        doc.GetText("t").Insert(0, "a");
+        doc.GetText("t").Insert(1, "b");
+        var list = new List<ReadOnlyMemory<byte>>(updates.Select(u => (ReadOnlyMemory<byte>)u));
+
+        var merged = new[]
+        {
+            YUpdate.Merge(updates, UpdateFormat.V2),
+            YUpdate.Merge(list, UpdateFormat.V2),
+        };
+
+        var expected = YUpdate.Merge(updates.Select(u => (ReadOnlyMemory<byte>)u).ToArray(), UpdateFormat.V2);
+        CollectionAssert.AreEqual(expected, merged[0]);
+        CollectionAssert.AreEqual(expected, merged[1]);
+    }
 }
