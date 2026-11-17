@@ -43,7 +43,7 @@ Check(paragraph.Parent == frag, "paragraph.Parent does not point back to the fra
 
 var attrs = paragraph.GetAttributes();
 Check(attrs.Count == 2 && attrs["align"] == "center" && attrs["class"] == "intro",
-    $"paragraph attributes mismatch: {JsonSerializer.Serialize(attrs, jsonOptions)}");
+    $"paragraph attributes mismatch: {string.Join(", ", attrs.Select(a => $"{a.Key}={a.Value.ToJsonString()}"))}");
 
 var children = paragraph.ToArray();
 Check(children.Length == 2, $"expected 2 children under <paragraph>, got {children.Length}");
@@ -58,7 +58,7 @@ Check(delta.Any(d => d is Delta.Insert { Value: var inserted } && inserted.TryGe
 
 var em = children[1] as YXmlElement;
 Check(em != null && em.NodeName == "em", "second paragraph child is not <em>");
-Check(Equals(em.GetAttribute("title"), "shout"), "em/@title lost on read");
+Check(em.GetAttribute("title") == "shout", "em/@title lost on read");
 Check(ReferenceEquals(em.PrevSibling, boldText), "em.PrevSibling should be the bold text node");
 Check(ReferenceEquals(boldText.NextSibling, em), "boldText.NextSibling should be <em>");
 
@@ -96,9 +96,9 @@ Console.WriteLine(JsonSerializer.Serialize(new
     readTree = new
     {
         paragraphNodeName = paragraph.NodeName,
-        attributes = attrs,
+        attributes = attrs.ToDictionary(a => a.Key, a => a.Value.ToObject()),
         emNodeName = em.NodeName,
-        emTitle = em.GetAttribute("title"),
+        emTitle = em.GetAttribute("title").ToObject(),
         emText = emText.ToString()
     },
     toStringBeforeEdit,
