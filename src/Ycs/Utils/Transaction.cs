@@ -644,8 +644,6 @@ public sealed partial class Transaction
         }
 
         // Try to merge mergeStructs.
-        // TODO: It makes more sense to transform mergeStructs to a DS, sort it, and merge from right to left
-        //       but at the moment DS does not handle duplicates.
         for (int j = mergeStructs.Count - 1; j >= 0; j--)
         {
             var structs = store.Clients[mergeStructs[j].Client];

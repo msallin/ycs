@@ -13,7 +13,6 @@ internal sealed partial class StructStore
     /// <summary>The types that items of this store name as their parent, by the index a slot holds.</summary>
     internal TypeTable Types => Slab.Types;
 
-    // TODO: [alekseyk] To private?
     public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
 
     // The values of Clients by the client's index in the slab's client table (what a slot names its client by): the paths

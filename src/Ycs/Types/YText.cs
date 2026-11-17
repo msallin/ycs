@@ -496,7 +496,6 @@ public partial class YText : YArrayBase
         }
     }
 
-    // TODO: [alekseyk] To util class? Might not be needed here.
     internal const int YTextRefId = 2;
     internal const string ChangeKey = "ychange";
 
