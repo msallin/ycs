@@ -40,6 +40,11 @@ public partial class YText
             {
                 throw new ArgumentException("A text takes Insert, Retain and Delete operations; InsertItems is for arrays. Nothing was applied.", nameof(delta));
             }
+
+            if (op is Delta.Insert insert)
+            {
+                CheckNotDocument(insert.Value, nameof(delta));
+            }
         }
 
         if (Doc != null)
@@ -247,8 +252,10 @@ public partial class YText
     /// Inserts an embed: a shared type (which becomes part of this text, as in an array), or any
     /// other value as JSON. It counts one towards <see cref="Length"/>.
     /// </summary>
+    /// <exception cref="ArgumentException">The embed is a <see cref="YDoc"/>: a subdocument goes into an array or a map, as a value; nothing was inserted.</exception>
     public void InsertEmbed(int index, YValue embed, YAttributes? attributes = null)
     {
+        CheckNotDocument(embed, nameof(embed));
         if (Doc != null)
         {
             Doc.Transact((self: this, index, embed: embed.Stored(), attributes: StoredAttributes(attributes)), static (s, tr) =>
@@ -260,6 +267,14 @@ public partial class YText
         else
         {
             AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, attributes ?? YAttributes.Empty));
+        }
+    }
+
+    private static void CheckNotDocument(YValue embed, string paramName)
+    {
+        if (embed.Kind == YValueKind.Document)
+        {
+            throw new ArgumentException("A text cannot embed a subdocument. Put the YDoc in a YArray or a YMap, as a value. Nothing was inserted.", paramName);
         }
     }
 
@@ -396,20 +411,53 @@ public partial class YText
         return result;
     }
 
-    /// <summary>The characters of <see cref="ToString"/> from <paramref name="start"/>, <paramref name="length"/> of them. It walks the text (a pooled copy, no string of the whole), so reading a character at a time is quadratic: use <see cref="CopyTo"/>.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">The range is not within the text.</exception>
+    /// <summary>
+    /// The characters of the range <paramref name="start"/>, <paramref name="length"/> long, in the index space of <see cref="Length"/>,
+    /// <see cref="Insert"/>, <see cref="Remove"/> and <see cref="Format"/>: an embed in the range counts one but adds nothing to the
+    /// result. It walks the text (a pooled copy, no string of the whole), so reading a character at a time is quadratic: use <see cref="CopyTo"/>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The range is not within the text, that is within 0 and <see cref="Length"/>.</exception>
     public string Substring(int start, int length)
     {
-        var buffer = ArrayPool<char>.Shared.Rent(Length);
+        var total = Length;
+        if (start < 0 || length < 0 || start > total - length)
+        {
+            throw new ArgumentOutOfRangeException(nameof(start), $"The range {start}..{(long)start + length} is not within the text of {total} positions.");
+        }
+
+        if (Doc == null)
+        {
+            return Preview()?.Substring(start, length) ?? string.Empty;
+        }
+
+        var buffer = ArrayPool<char>.Shared.Rent(total);
         try
         {
-            var written = CopyTo(buffer);
-            if (start < 0 || length < 0 || start > written - length)
+            // The characters before the range, and before its end, in the string without the embeds.
+            var from = 0;
+            var to = 0;
+            var written = 0;
+            var position = 0;
+            for (var n = _start; !n.IsNull; n = n.Right.AsItem)
             {
-                throw new ArgumentOutOfRangeException(nameof(start), $"The range {start}..{(long)start + length} is not within the text of {written} characters.");
+                if (n.Deleted || !n.Countable)
+                {
+                    continue;
+                }
+
+                var count = n.Length;
+                if (n.Kind == SlotKind.String)
+                {
+                    n.CopyCharsTo(buffer.AsSpan(written));
+                    written += count;
+                    from += Math.Clamp(start - position, 0, count);
+                    to += Math.Clamp(start + length - position, 0, count);
+                }
+
+                position += count;
             }
 
-            return new string(buffer, start, length);
+            return new string(buffer, from, to - from);
         }
         finally
         {
@@ -418,9 +466,29 @@ public partial class YText
     }
 
     /// <summary>
-    /// Copies the text, as <see cref="ToString"/> returns it, into <paramref name="destination"/>
+    /// The characters of the text as of <paramref name="snapshot"/>, as <see cref="ToString()"/> returns the current ones: embeds are left out.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The text is not in a document yet.</exception>
+    public string ToString(Snapshot snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        var result = new StringBuilder();
+        foreach (var op in ComputeDelta(snapshot, null, null))
+        {
+            if (op is Delta.Insert insert && insert.Value.TryGetString(out var str))
+            {
+                result.Append(str);
+            }
+        }
+
+        return result.ToString();
+    }
+
+    /// <summary>
+    /// Copies the text, as <see cref="ToString()"/> returns it, into <paramref name="destination"/>
     /// without allocating. <see cref="Length"/> is always enough room (it also counts
-    /// embeds, which the text leaves out).
+    /// embeds, which add nothing to the characters).
     /// </summary>
     /// <returns>How many characters were written.</returns>
     /// <exception cref="ArgumentException"><paramref name="destination"/> is too short; it may have been written to.</exception>
@@ -535,22 +603,29 @@ public partial class YText
         return false;
     }
 
-    public IEnumerable<KeyValuePair<string, YValue>> GetAttributes()
+    /// <summary>
+    /// All attribute name/value pairs (null values included), as of <paramref name="snapshot"/> when it is given (it only reads:
+    /// an item merged across the snapshot's boundary is seen whole, as in Yjs).
+    /// </summary>
+    public IReadOnlyDictionary<string, YValue> GetAttributes(Snapshot? snapshot = null)
     {
+        if (snapshot != null)
+        {
+            return MapAtSnapshot(snapshot);
+        }
+
         if (Doc == null)
         {
-            return Preview()?.GetAttributes() ?? [];
+            return Preview()?.GetAttributes() ?? new Dictionary<string, YValue>();
         }
 
-        return EnumerateAttributes();
-    }
-
-    private IEnumerable<KeyValuePair<string, YValue>> EnumerateAttributes()
-    {
+        var attributes = new Dictionary<string, YValue>();
         foreach (var kvp in TypeMapEnumerateValues())
         {
-            yield return new KeyValuePair<string, YValue>(kvp.Key, YValue.FromStored(kvp.Value));
+            attributes[kvp.Key] = YValue.FromStored(kvp.Value);
         }
+
+        return attributes;
     }
 
     /// <summary>

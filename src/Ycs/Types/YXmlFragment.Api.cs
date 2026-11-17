@@ -164,6 +164,23 @@ public partial class YXmlFragment : IReadOnlyList<YType>
     /// <exception cref="ArgumentException">A child is not a <see cref="YXmlFragment"/> (an element is one), a <see cref="YXmlText"/> or a <see cref="YXmlHook"/>.</exception>
     public void Add(params ReadOnlySpan<YType> children) => Insert(Count, children);
 
+    /// <summary>Appends <paramref name="children"/>, which are read once, before anything is inserted.</summary>
+    /// <exception cref="ArgumentException">A child is not a <see cref="YXmlFragment"/> (an element is one), a <see cref="YXmlText"/> or a <see cref="YXmlHook"/>.</exception>
+    public void AddRange(IEnumerable<YType> children)
+    {
+        ArgumentNullException.ThrowIfNull(children);
+        Insert(Count, children.ToArray());
+    }
+
+    /// <summary>Inserts <paramref name="children"/>, which are read once, at <paramref name="index"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is beyond <see cref="Count"/>.</exception>
+    /// <exception cref="ArgumentException">A child is not a <see cref="YXmlFragment"/> (an element is one), a <see cref="YXmlText"/> or a <see cref="YXmlHook"/>.</exception>
+    public void InsertRange(int index, IEnumerable<YType> children)
+    {
+        ArgumentNullException.ThrowIfNull(children);
+        Insert(index, children.ToArray());
+    }
+
     /// <exception cref="ArgumentOutOfRangeException"><paramref name="index"/> is not in 0 to <see cref="Count"/> - 1.</exception>
     public void RemoveAt(int index)
     {

@@ -210,23 +210,96 @@ public abstract partial class YType
         var maxDepth = (Doc?.Limits ?? UpdateLimits.Default).MaxDepth;
         if (Depth + 1 > maxDepth)
         {
-            throw new InvalidOperationException($"Shared types cannot be nested deeper than {maxDepth} levels (UpdateLimits.MaxDepth).");
+            ThrowTooDeep(maxDepth);
+        }
+    }
+
+    private static void ThrowTooDeep(int maxDepth) =>
+        throw new InvalidOperationException($"Shared types cannot be nested deeper than {maxDepth} levels (UpdateLimits.MaxDepth). Nothing was inserted.");
+
+    /// <summary>
+    /// <see cref="CheckCanNest"/> for <paramref name="child"/>, which must also belong to no document yet: an integrated
+    /// or collected type is already named by a slot. The content that <paramref name="child"/> holds while it is detached is
+    /// checked the same way, to any depth and before anything is integrated: each type in it is detached and appears once,
+    /// each document may be inserted here, and none lies deeper than the limit.
+    /// </summary>
+    internal void CheckCanInsert(YType child)
+    {
+        CheckDetached(child);
+        CheckCanNest();
+
+        List<object>? held = null;
+        child.CollectDetachedContent(ref held);
+        if (held == null)
+        {
+            return;
+        }
+
+        var maxDepth = (Doc?.Limits ?? UpdateLimits.Default).MaxDepth;
+        var seen = new HashSet<object>(ReferenceEqualityComparer.Instance) { child };
+        var work = new Stack<(List<object> Held, int Level)>();
+        work.Push((held, Depth + 2));
+        while (work.Count > 0)
+        {
+            var (list, level) = work.Pop();
+            foreach (var content in list)
+            {
+                if (!seen.Add(content))
+                {
+                    throw new ArgumentException("The same shared type or document appears twice in the inserted values. Nothing was inserted.", nameof(child));
+                }
+
+                if (content is YDoc d)
+                {
+                    if (Doc != null)
+                    {
+                        d.CheckCanInsertInto(Doc);
+                    }
+
+                    continue;
+                }
+
+                var nested = (YType)content;
+                CheckDetached(nested);
+                if (level > maxDepth)
+                {
+                    ThrowTooDeep(maxDepth);
+                }
+
+                List<object>? deeper = null;
+                nested.CollectDetachedContent(ref deeper);
+                if (deeper != null)
+                {
+                    work.Push((deeper, level + 1));
+                }
+            }
+        }
+    }
+
+    private static void CheckDetached(YType type)
+    {
+        // A root type has no item but a document: it is part of a document as much as a nested one.
+        if (!type._item.IsNull || type._collected || type.Doc != null)
+        {
+            throw new ArgumentException("The type is already part of a document (a root, integrated or collected) and cannot be inserted again. Nothing was inserted.", nameof(type));
         }
     }
 
     /// <summary>
-    /// <see cref="CheckCanNest"/> for <paramref name="child"/>, which must also belong to no document yet: an integrated
-    /// or collected type is already named by a slot.
+    /// Adds to <paramref name="into"/> (made when null) the shared types and documents this type holds while it is not in a
+    /// document, and inserts when it is: the content that <see cref="CheckCanInsert"/> must check before it. Throws when
+    /// the content cannot be inserted for a reason of its own, whatever the document.
     /// </summary>
-    internal void CheckCanInsert(YType child)
+    internal virtual void CollectDetachedContent(ref List<object>? into)
     {
-        // A root type has no item but a document: it is part of a document as much as a nested one.
-        if (!child._item.IsNull || child._collected || child.Doc != null)
-        {
-            throw new ArgumentException("The type is already part of a document (a root, integrated or collected) and cannot be inserted again. Nothing was inserted.", nameof(child));
-        }
+    }
 
-        CheckCanNest();
+    private protected static void AddDetached(object? value, ref List<object>? into)
+    {
+        if (value is YType or YDoc)
+        {
+            (into ??= new List<object>()).Add(value);
+        }
     }
 
     internal abstract YType InternalCopy();

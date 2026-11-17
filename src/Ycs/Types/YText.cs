@@ -2,6 +2,7 @@ using System.Buffers;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
+using System.Runtime.ExceptionServices;
 using System.Text;
 
 namespace Ycs;
@@ -531,10 +532,49 @@ public partial class YText : YArrayBase
     // can only be integrated into one document, and that is the real one). Dropped by every further operation.
     private YText? _preview;
 
+    // What the replay into the preview threw: the same operation throws it when the text is integrated.
+    private Exception? _previewError;
+
     private void AddPending(PendingOperation operation)
     {
         (_pending ??= new List<PendingOperation>()).Add(operation);
         _preview = null;
+        _previewError = null;
+    }
+
+    internal override void CollectDetachedContent(ref List<object>? into)
+    {
+        if (_pending == null)
+        {
+            return;
+        }
+
+        // An operation that cannot be applied (a removal beyond the text) throws before anything is integrated.
+        Preview();
+        if (_previewError != null)
+        {
+            ExceptionDispatchInfo.Throw(_previewError);
+        }
+
+        foreach (var op in _pending)
+        {
+            switch (op.Kind)
+            {
+                case PendingKind.InsertEmbed or PendingKind.SetAttribute:
+                    AddDetached(((YValue)op.Value!).Stored(), ref into);
+                    break;
+                case PendingKind.ApplyDelta:
+                    foreach (var delta in (Delta[])op.Value!)
+                    {
+                        if (delta is Delta.Insert insert)
+                        {
+                            AddDetached(insert.Value.Stored(), ref into);
+                        }
+                    }
+
+                    break;
+            }
+        }
     }
 
     private YText? Preview()
@@ -552,9 +592,10 @@ public partial class YText : YArrayBase
             {
                 ReplayPending(preview, _pending, standIn: true);
             }
-            catch (Exception)
+            catch (Exception e)
             {
-                // As Integrate: an operation that throws ends the replay.
+                // A read does not throw: the preview holds what preceded the operation that does, and inserting the text throws it.
+                _previewError = e;
             }
 
             _preview = preview;
@@ -597,15 +638,9 @@ public partial class YText : YArrayBase
             return;
         }
 
-        // As Yjs: an operation that throws ends the replay, and the operations after it are dropped.
-        try
-        {
-            ReplayPending(this, pending, standIn: false);
-        }
-        catch (Exception)
-        {
-            // Yjs logs it to the console; the integration of the text goes on.
-        }
+        // CheckCanInsert has checked the shared types among the content, so what can still throw here is an attribute
+        // value deeper than the document's limit. It propagates: the text is part of the document with what preceded it.
+        ReplayPending(this, pending, standIn: false);
     }
 
     private static void ReplayPending(YText text, List<PendingOperation> pending, bool standIn)
@@ -655,8 +690,59 @@ public partial class YText : YArrayBase
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
         var text = new YText();
-        text.ApplyDelta(ToDelta());
+        CloneContentInto(text);
         return text;
+    }
+
+    // The content as a delta, as Yjs' clone, with the shared types cloned: a detached text copies what it holds (its own
+    // read stands in for them), an integrated one its delta. The text's own attributes are not part of it.
+    private protected void CloneContentInto(YText text)
+    {
+        if (Doc != null)
+        {
+            text.ApplyDelta(ToDelta().Select(op => CloneOf(op)).ToList());
+            return;
+        }
+
+        if (_pending == null)
+        {
+            return;
+        }
+
+        foreach (var op in _pending)
+        {
+            switch (op.Kind)
+            {
+                case PendingKind.InsertEmbed:
+                    text.AddPending(op with { Value = CloneOf((YValue)op.Value!) });
+                    break;
+                case PendingKind.ApplyDelta:
+                    text.AddPending(op with { Value = Array.ConvertAll((Delta[])op.Value!, op => CloneOf(op)) });
+                    break;
+                case PendingKind.SetAttribute or PendingKind.RemoveAttribute:
+                    break;
+                default:
+                    text.AddPending(op);
+                    break;
+            }
+        }
+    }
+
+    private static Delta CloneOf(Delta op) =>
+        op is Delta.Insert { Value.Kind: YValueKind.SharedType or YValueKind.Document } insert
+            ? new Delta.Insert(CloneOf(insert.Value)) { Attributes = insert.Attributes }
+            : op;
+
+    private static YValue CloneOf(YValue value)
+    {
+        if (value.TryGetSharedType<YType>(out var type))
+        {
+            return type.InternalClone();
+        }
+
+        return value.Kind == YValueKind.Document
+            ? throw new ArgumentException("A subdocument cannot be cloned: a document is part of one parent only. Nothing was cloned.")
+            : value;
     }
 
     internal override void CallObserver(Transaction transaction, ISet<string?> parentSubs)

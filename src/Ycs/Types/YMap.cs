@@ -88,6 +88,17 @@ public partial class YMap : YType
         }
     }
 
+    internal override void CollectDetachedContent(ref List<object>? into)
+    {
+        if (_prelimContent != null)
+        {
+            foreach (var value in _prelimContent.Values)
+            {
+                AddDetached(value, ref into);
+            }
+        }
+    }
+
     internal override void CallObserver(Transaction transaction, ISet<string?> parentSubs)
     {
         if (IsObserved(transaction))

@@ -65,7 +65,7 @@ public class YTextUsabilityTests
         var writer = new System.Buffers.ArrayBufferWriter<char>();
         text.WriteTo(writer);
 
-        Assert.AreEqual(("ello world", 11, 10, "en", true, "ello world", 1), (text.ToString(), text.Length, text.CopyTo(buffer), (string)text.GetAttribute("lang"), text.TryGetAttribute("lang", out _), new string(writer.WrittenSpan), text.GetAttributes().Count()));
+        Assert.AreEqual(("ello world", 11, 10, "en", true, "ello world", 1), (text.ToString(), text.Length, text.CopyTo(buffer), (string)text.GetAttribute("lang"), text.TryGetAttribute("lang", out _), new string(writer.WrittenSpan), text.GetAttributes().Count));
     }
 
     [TestMethod]
@@ -103,7 +103,7 @@ public class YTextUsabilityTests
 
         Assert.AreEqual((0, "", 0, 0, false, true), (text.Length, text.ToString(), text.ToDelta().Count, text.CopyTo(new char[1]), text.TryGetAttribute("a", out _), text.GetAttribute("a").IsNull));
         text.WriteTo(new System.Buffers.ArrayBufferWriter<char>());
-        Assert.AreEqual(0, text.GetAttributes().Count());
+        Assert.AreEqual(0, text.GetAttributes().Count);
     }
 
     [TestMethod]

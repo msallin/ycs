@@ -261,16 +261,17 @@ public class YjsTypeParityTests
     }
 
     [TestMethod]
-    public void TextNotInADocument_ChangeThatFailsOnReplay_DropsItAndTheRest()
+    public void TextNotInADocument_ChangeThatFailsOnReplay_ThrowsBeforeInsertingTheText()
     {
         var doc = new YDoc();
+        var map = doc.GetMap("m");
         var text = new YText();
         text.Remove(0, 1);
         text.Insert(0, "a");
 
-        doc.GetMap("m")["t"] = text;
+        Assert.ThrowsExactly<System.InvalidOperationException>(() => map["t"] = text);
 
-        Assert.AreEqual(string.Empty, text.ToString());
+        Assert.AreEqual((0, string.Empty), (map.Count, text.ToString()));
     }
 
     [TestMethod]

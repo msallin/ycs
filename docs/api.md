@@ -137,13 +137,14 @@ setting is Yjs' `set`), `TryGetValue(key, out value)` and `TryGetValue(key, snap
 
 `YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `Append(string, attributes?)`,
 `InsertEmbed(index, YValue, attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
-`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `RemoveNonText()`, `ToString()`, `Substring(start, length)`,
+`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `RemoveNonText()`, `ToString()`, `ToString(snapshot)`, `Substring(start, length)`
+(indexed as `Length` and `Insert` are: an embed in the range counts one and adds no character),
 `CopyTo(Span<char>)` (returns the characters written; an `ArgumentException` when the span is shorter than the text, and
 `Length` is always enough), `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is `YValue.Null` when
-unset, `TryGetAttribute(name, out value)` tells that from one set to null, as on `YXmlElement`; `GetAttributes`,
-`SetAttribute`, `RemoveAttribute`) and `Clone`. A text that is not in a document yet reads what was inserted into it
+unset, `TryGetAttribute(name, out value)` tells that from one set to null, as on `YXmlElement`; `GetAttributes(snapshot?)`
+returns an `IReadOnlyDictionary<string, YValue>`, `SetAttribute`, `RemoveAttribute`) and `Clone`. A text that is not in a document yet reads what was inserted into it
 (`ToString()`, `Length`, `ToDelta()`, its attributes), as a detached array or map does; a shared type among that content reads
-as null until the text is added.
+as null until the text is added. Inserting a detached type into a document checks everything it holds first (a shared type that is part of a document already, one that appears twice, a subtree beyond `UpdateLimits.MaxDepth`, an operation of a text that cannot be applied) and throws before anything is inserted. A text cannot embed a `YDoc`: `InsertEmbed` throws `ArgumentException`; a subdocument goes into an array or a map.
 
 Formatting attributes and embeds are `YValue`s. Attributes are a `YAttributes`, a small immutable
 `IReadOnlyDictionary<string, YValue>` that a collection expression builds: `text.Insert(0, "hi", [new("bold", true)])`; one
@@ -161,7 +162,8 @@ long? User)` with one, `user`. Applying an `InsertItems` to a text throws.
 ### XML
 
 `YXmlFragment` (and `YXmlElement`, which derives from it) is an `IReadOnlyList<YType>` of its children: `Count`, the
-indexer, `TryGetValue`, `FirstChild`, `Add`, `Insert`, `InsertAfter(reference, ...)` (all `params ReadOnlySpan<YType>`,
+indexer, `TryGetValue`, `FirstChild`, `Add`, `Insert`, `InsertAfter(reference, ...)` (all `params ReadOnlySpan<YType>`;
+`AddRange` and `InsertRange` take an `IEnumerable<YType>`;
 which throw `ArgumentException` for a child that is not a `YXmlElement`, `YXmlFragment`, `YXmlText` or `YXmlHook`),
 `RemoveAt`, `RemoveRange`, `Slice`, `ToArray()`, `ToArray(snapshot)`, `CreateTreeWalker(filter?)` (a lazy
 `IEnumerable<YType>` of the descendants in document order), `QuerySelector(query)` and `QuerySelectorAll(query)`. A child
@@ -170,7 +172,7 @@ returns false for it, the indexer throws `InvalidOperationException`, and enumer
 There is no root element: a document has `GetXmlFragment(name)` (an element needs a node name, which is not part of the
 wire format of a root type), so `fragment.Add(new YXmlElement("article"))` for an element.
 
-`YXmlElement` has `NodeName`, `NextSibling`, `PrevSibling` and attributes as `YValue`s: `GetAttribute` (null when unset),
+`YXmlElement` has `NodeName`, `NextSibling`, `PrevSibling` and attributes as `YValue`s: `GetAttribute` (`YValue.Null` when unset),
 `SetAttribute`, `RemoveAttribute`, `HasAttribute` and `GetAttributes(snapshot?)`. `YXmlText` is a `YText` with
 `NextSibling` and `PrevSibling`. `YXmlHook` is a `YMap` with a `HookName`.
 A node that was removed and collected still answers `NextSibling`, `PrevSibling` and `InsertAfter(node, ...)` from the place it

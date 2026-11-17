@@ -24,7 +24,7 @@ public sealed partial class YXmlText : YText
         // Recurses once per level of nested types: an exception, not a crash, where the stack runs out.
         RuntimeHelpers.EnsureSufficientExecutionStack();
         var text = new YXmlText();
-        text.ApplyDelta(ToDelta());
+        CloneContentInto(text);
         return text;
     }
 
