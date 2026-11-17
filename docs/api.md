@@ -491,8 +491,8 @@ before anything changes:
   is rejected, and with `UpdateLimits.Unlimited` a document of 100,000 levels is applied, read,
   deleted and encoded, on a thread with a 256 KiB stack. `ToString` of nested XML, `Clone` and the
   UndoManager's redo of nested deleted types recurse once per level of types and throw
-  `InsufficientExecutionStackException` where the stack runs out (at 3,000 levels a 1 MiB stack is
-  enough for all but `Clone`);
+  `InsufficientExecutionStackException` where the stack runs out (3,000 levels, the default `MaxDepth`, fit a 1 MiB
+  stack; `Clone` and `ToString` of 100,000 levels throw on a 256 KiB stack);
 * size: a collection is never allocated larger than the remaining input can fill, and an update holds
   at most `UpdateLimits.MaxStructsPerUpdate` structs (131,072 by default), in either format: the v2
   format run-length encodes its columns (Yjs writes 20,000 deleted items in 42 bytes; 131,072 deleted

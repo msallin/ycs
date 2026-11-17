@@ -90,7 +90,6 @@ public class YValueTryGetTests
     }
 
     [TestMethod]
-    [Ignore("bug: TryGetBoolean sets the out value to true for a number or a BigInteger whose bits are not 0, though it returns false (YValue.cs TryGetBoolean: value = _bits != 0 regardless of the kind); TryGetDouble and TryGetBigInteger return default")]
     [DataRow("double")]
     [DataRow("int")]
     [DataRow("long")]

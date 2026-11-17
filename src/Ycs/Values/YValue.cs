@@ -299,7 +299,7 @@ public readonly partial struct YValue : IEquatable<YValue>
 
     public bool TryGetBoolean(out bool value)
     {
-        value = _bits != 0;
+        value = _kind == YValueKind.Boolean && _bits != 0;
         return _kind == YValueKind.Boolean;
     }
 
