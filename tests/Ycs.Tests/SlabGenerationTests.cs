@@ -131,7 +131,7 @@ public class SlabGenerationTests
     }
 
     [TestMethod]
-    public void Compare_ReferenceToAFreedSlot_NeverThrows()
+    public void Compare_ReferenceToAFreedSlot_ComparesByHandleAndGeneration()
     {
         var (doc, first, second) = TwoItems();
         var again = new ItemRef(doc.Store.Slab, first.Handle);

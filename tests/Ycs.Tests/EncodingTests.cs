@@ -14,6 +14,10 @@ namespace Ycs;
 [TestClass]
 public class EncodingTests
 {
+    private const int RandomSeed = 163;
+
+    public TestContext TestContext { get; set; } = null!;
+
     /// <summary>
     /// Check if binary encoding is compatible with golang binary encoding.
     /// Result: is compatible up to 32 bit: [0, 4294967295] / [0, 0xFFFFFFFF].
@@ -160,7 +164,8 @@ public class EncodingTests
     [TestMethod]
     public void TestRepeatVarUintEncoding()
     {
-        var rand = new Random();
+        var rand = new Random(RandomSeed);
+        TestContext.WriteLine($"random seed {RandomSeed}");
         for (int i = 0; i < 10; i++)
         {
             var n = rand.Next(0, (1 << 28) - 1);
@@ -171,7 +176,8 @@ public class EncodingTests
     [TestMethod]
     public void TestRepeatVarIntEncoding()
     {
-        var rand = new Random();
+        var rand = new Random(RandomSeed);
+        TestContext.WriteLine($"random seed {RandomSeed}");
         for (int i = 0; i < 10; i++)
         {
             var n = rand.Next(0, int.MaxValue);

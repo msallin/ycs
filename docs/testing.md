@@ -26,6 +26,20 @@ timings or allocation limits.
 | `bench/Ycs.Benchmarks` | Not a test: the editing-trace benchmark behind the README's numbers; `limits`, what updates at the default `UpdateLimits` cost (the table in [api.md](api.md#untrusted-input)); `sizes`, what one item holds and costs by kind; `loop`, one operation repeated on the trace's document (time and bytes per operation, what to attach a profiler to). | `bench/Ycs.Benchmarks/get-trace.sh`, then `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`; `... -- limits`; `... -- sizes`; `... -- loop <trace.json.gz> encode-v1 2000` |
 | `bench/Ycs.Compare` | Not a test: CI builds it with the solution and does not run it (it depends on YDotNet and its native library): ycs against YDotNet (yrs) on the same workloads, results checked equal and cross-applied; Native AOT, wasm and hostile-input probes. Results in its [README](../bench/Ycs.Compare/README.md). | `bench/Ycs.Compare/run.sh` |
 
+## Inner loop and the slow tests
+
+Tests that take over a second (random scripts, the growth checks of `ScalingTests`, the million-struct apply) carry
+`[TestCategory("Slow")]`. The inner loop leaves them out; CI and the merge run everything:
+
+```
+dotnet test tests/Ycs.Tests -c Release --filter "TestCategory!=Slow"   # the inner loop
+dotnet test tests/Ycs.Tests -c Release --filter "TestCategory=Slow"    # only the slow ones
+```
+
+Tag a new test `Slow` when it takes over a second alone, never to hide a flaky one. A timing assertion measures growth,
+not a clock (`ScalingProbe`: the time at four times the size against the time at the base size, about 4 for linear
+work, about 16 for quadratic) or uses a ceiling ten times the usual (a hang guard).
+
 ## Runs extended in place and search markers
 
 An insert that continues its client's run extends that item in place (`ItemRef.ExtendRun`) where nobody

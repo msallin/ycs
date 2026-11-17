@@ -67,6 +67,7 @@ public class RunHeadIndexTests
     [DataRow(false, 128)]
     [DataRow(true, 4)]
     [DataRow(false, 2)]
+    [TestCategory("Slow")]
     public void RandomEdits_EveryLookupEndsWhereYjsLoopsEnd(bool text, int capacity)
     {
         for (var seed = 0; seed < 60; seed++)

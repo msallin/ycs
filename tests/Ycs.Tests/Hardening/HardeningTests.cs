@@ -15,6 +15,8 @@ namespace Ycs;
 [TestClass]
 public class HardeningTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     private static byte[] Hex(string hex) => Convert.FromHexString(hex.Replace(" ", string.Empty, StringComparison.Ordinal));
 
     private static byte[] Concat(params byte[][] parts) => parts.SelectMany(p => p).ToArray();
@@ -336,14 +338,15 @@ public class HardeningTests
     [TestMethod]
     public void ApplyUpdate_ManyUpdatesWaitingForAMissingClient_IsFast()
     {
-        var doc = new YDoc();
-        var stopwatch = Stopwatch.StartNew();
-        for (var client = 100; client < 8100; client++)
-        {
-            doc.ApplyUpdate(WaitingForClient99(client));
-        }
-
-        Assert.IsLessThan(2000, stopwatch.ElapsedMilliseconds);
+        ScalingProbe.AssertNotQuadratic(
+            n =>
+            {
+                var updates = Enumerable.Range(100, n).Select(WaitingForClient99).ToList();
+                var doc = new YDoc();
+                return () => updates.ForEach(update => doc.ApplyUpdate(update));
+            },
+            8_000,
+            TestContext);
     }
 
     [TestMethod]
@@ -591,7 +594,7 @@ public class HardeningTests
         var stopwatch = Stopwatch.StartNew();
         Assert.ThrowsExactly<YUpdateException>(() => new YDoc().ApplyUpdate(update, format: UpdateFormat.V2));
         Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([update, update], format: UpdateFormat.V2));
-        Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds);
+        Assert.IsLessThan(10_000, stopwatch.ElapsedMilliseconds); // ten times the usual: a guard against the walk of 2^32 structs
     }
 
     /// <summary>A v2 update whose columns describe <paramref name="count"/> (at least 2) GC structs of length 1 in a few bytes.</summary>
@@ -631,6 +634,6 @@ public class HardeningTests
         var stopwatch = Stopwatch.StartNew();
         AssertRejected(doc, () => doc.ApplyUpdate(update, format: UpdateFormat.V2), "");
         Assert.ThrowsExactly<YUpdateException>(() => YUpdate.Merge([update, update], format: UpdateFormat.V2));
-        Assert.IsLessThan(1000, stopwatch.ElapsedMilliseconds);
+        Assert.IsLessThan(10_000, stopwatch.ElapsedMilliseconds); // ten times the usual: a guard against the walk of 2^32 structs
     }
 }

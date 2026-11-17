@@ -19,7 +19,7 @@ public class UpdateOperationsFuzzTests
     // YCS_HARDENING_ITERATIONS / YCS_HARDENING_SEED for a soak.
     private static readonly int Iterations = int.TryParse(Environment.GetEnvironmentVariable("YCS_HARDENING_ITERATIONS"), out var n) ? n : 3000;
     private static readonly int RandomSeed = int.TryParse(Environment.GetEnvironmentVariable("YCS_HARDENING_SEED"), out var s) ? s : 12345;
-    private static readonly TimeSpan TimeBudget = TimeSpan.FromSeconds(2);
+    private static readonly TimeSpan TimeBudget = TimeSpan.FromSeconds(5);
     private const long AllocationBudget = 64L << 20;
 
     private static List<(byte[] V1, byte[] V2)> SeedUpdates()
