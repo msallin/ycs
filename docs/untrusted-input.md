@@ -53,6 +53,16 @@ struct: any other shape keeps at most 75 MiB). Honest updates
 stay far below: the largest in the Yjs corpus took 102 conflict steps. Clocks beyond 2^31 - 1 and client ids beyond
 2^53 - 1 are rejected whatever the limits.
 
+What waits is read again whenever an update advances a client that something waits on: every retry decodes,
+plans and encodes all of it, so a small update (23 bytes) may cost as much as the pending limit allows. Measured
+on a peer that queues m structs, each waiting on another struct of one client, and then sends that client's structs
+one at a time: about 27 ns per waiting struct and 5 bytes allocated per struct and update, so 110 µs with 4,096
+waiting (the sample server's limit), and about 10 ms and 10 MB with the default 131,072 (extrapolated from 2.2 ms at
+32,000). Yjs pays the same retry, with no limit at all. A server that applies updates under a lock should set
+`MaxPendingStructs` and `MaxPendingBytes` to what honest clients leave waiting, which is little when they send
+their updates in order (y-websocket does), and treat the exceeded limit as a reason to close that connection: the
+client reconnects and syncs again.
+
 The limits bound one update, not a document. A document grows with every update it accepts; bounding that (the
 number of documents, their size, the rate of updates per peer) is the application's job.
 

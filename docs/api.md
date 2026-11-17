@@ -520,6 +520,10 @@ before anything changes:
   up to the limits on top of what waits, which is then read again and integrated, wholly or in part;
   so what waits, and what that re-read decodes, never exceeds twice the limits. A peer can hold what waits at
   that bound for good; deletions that wait count once, a range that what waits covers already adds nothing;
+  an update that advances a client something waits on reads all that waits again, so one small update costs up to
+  about 27 ns per waiting struct (110 µs at 4,096 structs, about 10 ms at the default), see
+  [untrusted-input.md](untrusted-input.md#what-one-update-may-cost): a server that applies updates under a lock
+  sets both limits to what its honest clients leave waiting (the sample server: 4,096 structs, 1 MiB);
 
 What the defaults allow, measured (`dotnet run -c Release --project bench/Ycs.Benchmarks -- limits`;
 .NET 11, x64; the updates are valid ones made through the API, so an honest update of that many

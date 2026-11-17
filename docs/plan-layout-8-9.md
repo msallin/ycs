@@ -271,3 +271,9 @@ removal); the design's `AbstractType` is `YType` and its `ID` is `ItemId`; a new
    hooks, 8.m follows the review's shape. Who writes 8.m: the 8.3 author knows the hooks.
 6. **Type-table index reuse**: backlog (above) or a package after 9.6? Recommendation: backlog, measured first on a
    workload that creates and collects many nested types.
+7. **Pending structs as a staging table** (final review, perf 2): a retry of what waits decodes, plans and encodes
+   all of it again (about 27 ns per waiting struct, 10 ms at the default 131,072 structs). Keeping the set-aside
+   structs as a staging table instead of an encoded update would skip the encode and decode and roughly halve the
+   constant; D8 deferred it. Not built: the sample server's limit (4,096) caps the retry near 100 µs. Skipping the
+   clients whose `Missing` clock the plan did not pass would not help (each update unlocks one struct) and changes
+   semantics. Build it if a server needs the default limits.
