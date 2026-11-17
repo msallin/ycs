@@ -600,6 +600,14 @@ internal sealed partial class ClientStructs
                 return $"leaf {k} has the bits (break, format) {bits}, its counts {leaf.Breaks} and {leaf.Formats}";
             }
 
+            // A removal merges a sparse leaf into a neighbour that it fits with, so two neighbours never are both sparse. A
+            // sparse leaf beside a larger one may stay (a split makes halves beside it, a removal in a far leaf changes
+            // nothing here). At capacity 2 and 3 a split's halves are themselves sparse.
+            if (k > 0 && _leafCapacity >= 4 && _leaves[k - 1].Count + leaf.Count <= _leafCapacity && Math.Max(_leaves[k - 1].Count, leaf.Count) <= Math.Max(1, _leafCapacity / 4))
+            {
+                return $"leaves {k - 1} and {k} hold {_leaves[k - 1].Count} and {leaf.Count} structs: both are at or below a quarter";
+            }
+
             position += leaf.Count;
             tree[k + 1] = leaf.Sum;
         }
