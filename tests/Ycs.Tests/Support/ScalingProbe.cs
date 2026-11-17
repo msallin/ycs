@@ -14,7 +14,7 @@ internal static class ScalingProbe
 
     /// <summary>
     /// <paramref name="prepare"/> builds the scenario of a size outside the clock and returns the part to time. One warm-up,
-    /// then the best of three at each size.
+    /// then the best of five at each size.
     /// </summary>
     public static void AssertNotQuadratic(Func<int, Action> prepare, int size, TestContext context, double maxRatio = DefaultMaxRatio)
     {
@@ -32,9 +32,12 @@ internal static class ScalingProbe
     private static TimeSpan Best(Func<int, Action> prepare, int size)
     {
         var best = TimeSpan.MaxValue;
-        for (var run = 0; run < 3; run++)
+        for (var run = 0; run < 5; run++)
         {
             var timed = prepare(size);
+
+            // The heap the earlier tests left would be collected inside the clock otherwise.
+            System.GC.Collect();
             var stopwatch = Stopwatch.StartNew();
             timed();
             stopwatch.Stop();
