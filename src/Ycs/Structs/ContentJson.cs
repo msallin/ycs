@@ -23,8 +23,6 @@ internal class ContentJson : IContentEx
 
     int IContentEx.Ref => _ref;
 
-    bool IContentEx.Mergeable => true;
-
     public bool Countable => true;
     public int Length => _content?.Count ?? 0;
 

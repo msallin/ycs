@@ -114,7 +114,7 @@ internal sealed partial class StructStore
         {
             if (structs.Count == 0)
             {
-                throw new Exception($"{nameof(StructStore)} failed integrity check: no structs for client");
+                throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: no structs for client");
             }
 
             for (int i = 1; i < structs.Count; i++)
@@ -124,14 +124,14 @@ internal sealed partial class StructStore
 
                 if (left.Clock + left.Length != right.Clock)
                 {
-                    throw new Exception($"{nameof(StructStore)} failed integrity check: missing struct");
+                    throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: missing struct");
                 }
             }
         }
 
         if (PendingDs.Count != 0 || Pending != null)
         {
-            throw new Exception($"{nameof(StructStore)} failed integrity check: still have pending items");
+            throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: still have pending items");
         }
     }
 
@@ -140,7 +140,7 @@ internal sealed partial class StructStore
         var structs = StructsOf(str);
         if (structs != null && structs.End != str.Clock)
         {
-            throw new Exception("Unexpected");
+            throw new InvalidOperationException($"The struct {str.Id.Client}:{str.Clock} does not continue its client's list, which ends at {structs.End}; nothing was added.");
         }
 
         if (structs == null)
@@ -255,13 +255,13 @@ internal sealed partial class StructStore
     {
         if (!Clients.TryGetValue(id.Client, out var structs))
         {
-            throw new Exception($"No structs for client: {id.Client}");
+            throw new InvalidOperationException($"No structs for client: {id.Client}");
         }
 
         int index = FindIndexSS(structs, id.Clock);
         if (index < 0 || index >= structs.Count)
         {
-            throw new Exception($"Invalid struct index: {index}, max: {structs.Count}");
+            throw new InvalidOperationException($"Invalid struct index: {index}, max: {structs.Count}");
         }
 
         return structs[index];
@@ -290,7 +290,7 @@ internal sealed partial class StructStore
     {
         if (!Clients.TryGetValue(client, out var structs))
         {
-            throw new Exception();
+            throw new InvalidOperationException("No structs for the client of the clock asked for; the struct it refers to is not in the store.");
         }
 
         int indexCleanStart = FindIndexCleanStart(transaction, structs, clock);
@@ -302,7 +302,7 @@ internal sealed partial class StructStore
     {
         if (!Clients.TryGetValue(id.Client, out var structs))
         {
-            throw new Exception();
+            throw new InvalidOperationException($"No structs for client: {id.Client}");
         }
 
         int index = FindIndexSS(structs, id.Clock);
@@ -324,7 +324,7 @@ internal sealed partial class StructStore
     {
         if (!Clients.TryGetValue(item.Id.Client, out var structs))
         {
-            throw new Exception();
+            throw new InvalidOperationException($"No structs for client: {item.Id.Client}");
         }
 
         int index = FindIndexSS(structs, item.Clock);

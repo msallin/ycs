@@ -90,13 +90,13 @@ internal readonly partial struct ItemRef
         var originClient = leftOrigin is { } lo ? clients.GetOrAdd(lo.Client) : -1;
         var rightOriginClient = rightOrigin is { } ro ? clients.GetOrAdd(ro.Client) : -1;
         var parentIndex = parent?.TableIndex(slab.Types) ?? -1;
-        var typeIndex = content is ContentType { Type: var type } ? type.TableIndex(slab.Types) : -1;
         var item = new ItemRef(slab, slab.Allocate());
         ref var slot = ref slab.Write(item._handle);
         slot.Clock = id.Clock;
         slot.Client = client;
+        var kind = (SlotKind)content.Ref;
         slot.Length = content.Length;
-        slot.Info = (((SlotKind)content.Ref).IsCountable() ? Slot.CountableFlag : 0) | (content.Ref << 8);
+        slot.Info = (kind.IsCountable() ? Slot.CountableFlag : 0) | (content.Ref << 8);
         slot.OriginClient = originClient;
         slot.OriginClock = leftOrigin?.Clock ?? 0;
         slot.ROriginClient = rightOriginClient;
@@ -105,123 +105,8 @@ internal readonly partial struct ItemRef
         slot.Right = right.Handle;
         slot.Parent = parentIndex;
         slab.SetKey(item._handle, parentSub);
-        if (typeIndex >= 0)
-        {
-            slot.Payload = typeIndex;
-        }
-        else if (content is not ContentDeleted)
-        {
-            slab.SetRef(item._handle, content);
-            if (content is ContentString text)
-            {
-                slot.Payload = CopyChars(slab, text);
-            }
-        }
-
+        StoreContent(slab, item._handle, kind, content);
         return item;
-    }
-
-    /// <summary>
-    /// Where a decoded struct enters the store (the one place). <paramref name="decoded"/> is a struct of an update the
-    /// integration plan has put in order, with everything it refers to in the store or planned before it. An item's
-    /// references are resolved first, whether or not it is integrated, in the order of Yjs: the origins' structs are split
-    /// where an origin points into one, and the parent is resolved (to nothing when a neighbour is a GC struct or the
-    /// parent type is collected: the item then enters as a GC struct). Then, when <paramref name="integrate"/> is set, the
-    /// struct gets a slot and is integrated from <paramref name="offset"/>, which is the part of its range the store holds
-    /// already; a GC struct is trimmed by it. Without <paramref name="integrate"/> nothing enters the store. The decoded
-    /// object is read, never changed. A <see cref="Skip"/> struct is never adopted: it throws.
-    /// </summary>
-    public static void Adopt(AbstractStruct decoded, Transaction transaction, int offset, bool integrate)
-    {
-        var store = transaction.Doc.Store;
-        switch (decoded)
-        {
-            case Item item:
-                var (left, leftOrigin, right, rightOrigin, parent, parentSub) = ResolveReferences(item, transaction, store);
-                if (integrate)
-                {
-                    var adopted = NewItem(store.Slab, item.Id, left, leftOrigin, right, rightOrigin, parent, parentSub, item.Content);
-                    var start = item.Id.Clock + offset;
-                    try
-                    {
-                        adopted.IntegrateItem(transaction, offset);
-                    }
-                    catch when (store.GetState(item.Id.Client) <= start)
-                    {
-                        // Not in its list yet, and nothing links to it: the slot would live without a struct.
-                        adopted.FreeSlot();
-                        throw;
-                    }
-                }
-
-                break;
-            case GC gc:
-                if (integrate)
-                {
-                    store.AddStruct(NewGC(store.Slab, new ID(gc.Id.Client, gc.Id.Clock + offset), gc.Length - offset));
-                }
-
-                break;
-            default:
-                throw new InvalidOperationException("Only items and GC structs are adopted; a Skip struct stands for a gap and never enters a store.");
-        }
-    }
-
-    /// <summary>
-    /// Finds the structs a decoded item refers to, once they are all there (the second half of Yjs' <c>Item.getMissing</c>):
-    /// left and right are the store's structs, split where needed, the origins are the ids of what they ended up naming,
-    /// and the parent is resolved to a type, or to null when the item is to be integrated as a GC struct.
-    /// </summary>
-    private static (ItemRef Left, ID? LeftOrigin, ItemRef Right, ID? RightOrigin, AbstractType Parent, string ParentSub) ResolveReferences(Item item, Transaction transaction, StructStore store)
-    {
-        var parent = item.Parent;
-        var parentSub = item.ParentSub;
-        var leftOrigin = item.LeftOrigin;
-        var rightOrigin = item.RightOrigin;
-        ItemRef left = default;
-        ItemRef right = default;
-        if (parent is string rootName)
-        {
-            parent = transaction.Doc.Get<AbstractType>(rootName);
-        }
-
-        if (leftOrigin != null)
-        {
-            left = store.GetItemCleanEnd(transaction, leftOrigin.Value);
-            leftOrigin = left.IsItem ? left.LastId : null;
-        }
-
-        if (rightOrigin != null)
-        {
-            right = store.GetItemCleanStart(transaction, rightOrigin.Value);
-            rightOrigin = right.Id;
-        }
-
-        if (left.IsGC || right.IsGC)
-        {
-            parent = null;
-        }
-        else if (parent == null)
-        {
-            // Only set parent if this shouldn't be garbage collected; the left neighbour first, as Yjs.
-            if (left.IsItem)
-            {
-                parent = left.Parent;
-                parentSub = left.ParentSub;
-            }
-            else if (right.IsItem)
-            {
-                parent = right.Parent;
-                parentSub = right.ParentSub;
-            }
-        }
-        else if (parent is ID pid)
-        {
-            var parentItem = store.Find(pid);
-            parent = parentItem.IsItem && parentItem.Kind == SlotKind.Type ? parentItem.TypeOf : null;
-        }
-
-        return (left, leftOrigin, right, rightOrigin, parent as AbstractType, parentSub);
     }
 
     public bool CanMergeWith(ItemRef right) => IsItem ? CanMergeItemWith(right) : right.IsGC;
@@ -241,19 +126,6 @@ internal readonly partial struct ItemRef
         Length += right.Length;
         right.FreeSlot();
         return true;
-    }
-
-    public void Write(IUpdateEncoder encoder, int offset)
-    {
-        if (IsItem)
-        {
-            WriteItem(encoder, offset);
-        }
-        else
-        {
-            encoder.WriteInfo(GC.StructGCRefNumber);
-            encoder.WriteLength(Length - offset);
-        }
     }
 
     // The run-head index holds whether an item is deleted: for an item the store holds, the caller then calls
@@ -287,8 +159,7 @@ internal readonly partial struct ItemRef
             l.Clock + l.Length == r.Clock &&
             ((l.Info ^ r.Info) & Slot.DeletedFlag) == 0 &&
             ((l.Info | r.Info) & Slot.HasRedoneFlag) == 0 &&
-            l.Kind != (int)SlotKind.Type &&
-            (l.Kind == (int)SlotKind.Deleted || Content.Mergeable);
+            ((SlotKind)l.Kind).IsMergeable();
     }
 
     /// <summary>Try to merge two items.</summary>
@@ -299,17 +170,7 @@ internal readonly partial struct ItemRef
             return false;
         }
 
-        if (Kind != SlotKind.Deleted && !Content.MergeWith(right.Content))
-        {
-            throw new InvalidOperationException(
-                $"The content of {right.Id.Client}:{right.Id.Clock} did not merge into its left neighbour's although its kind merges (a bug of " +
-                "Ycs). Nothing was changed.");
-        }
-
-        if (Kind == SlotKind.String)
-        {
-            MergeChars(right);
-        }
+        MergeContent(right);
 
         var parent = Parent;
         parent?.Doc?.Store.NoteDeparture();
@@ -338,7 +199,7 @@ internal readonly partial struct ItemRef
     /// </summary>
     public void FreeSlot()
     {
-        ReleaseChars();
+        ReleaseContent();
         FreeSlotKeepingChars();
     }
 
@@ -361,7 +222,7 @@ internal readonly partial struct ItemRef
     /// </summary>
     internal void BecomeGC()
     {
-        ReleaseChars();
+        ReleaseContent();
         ref var slot = ref Write();
         if (slot.Kind == (int)SlotKind.Type)
         {
@@ -384,62 +245,6 @@ internal readonly partial struct ItemRef
         _slab.SetRef(_handle, null);
         _slab.SetKey(_handle, null);
         _slab.SetRedone(_handle, null);
-    }
-
-    /// <summary>
-    /// Whether an insert of <paramref name="kind"/> content into <paramref name="parent"/> between this item and
-    /// <paramref name="right"/>, as the next struct of <paramref name="client"/>, can continue this item in place: the
-    /// new item would merge into this one at the end of the transaction (<see cref="CanMergeItemWith"/>: it would be this
-    /// item's continuation by clock and origin, with this right origin, undeleted, not redone), this item is not kept,
-    /// does not end with the first half of a surrogate pair (splitting there later would replace it), the parent
-    /// is not deleted (the new item would be deleted at once), nobody observes the parent, and the transaction is
-    /// the only one of its batch.
-    /// </summary>
-    public bool CanExtendRun(Transaction transaction, AbstractType parent, ItemRef right, Type kind, long client)
-    {
-        // Not when the run would be split again at the end of the transaction (someone observes it), which costs
-        // more than the item: a split copies a long run's text out of its builder.
-        // Not in a transaction started while another one is cleaned up (from its observers): Yjs integrates the new
-        // item before the other one's merge, which merges it on its own terms, and the other one's events, read
-        // then, see it as an item of its own.
-        if (!(transaction.Local
-            && transaction.Doc._transactionCleanups.Count == 1
-            && !transaction.Doc.RunExtensionsDisabledForTests
-            && !parent.IsObserved(transaction)
-            && !transaction.Doc.HasBeforeObserverCallsListeners
-            && Content?.GetType() == kind))
-        {
-            return false;
-        }
-
-        // No allocation here: the slot stays valid. The right origin compares by client index and clock.
-        ref readonly var slot = ref Read();
-        return _slab.Clients[slot.Client] == client
-            && slot.Clock + slot.Length == transaction.Doc.Store.GetState(client)
-            && Parent == parent
-            && ParentSub == null
-            && slot.Right == right.Handle
-            && (right.IsNull ? slot.ROriginClient < 0 : slot.ROriginClient == right.ClientIndex && slot.ROriginClock == right.Clock)
-            && (slot.Info & (Slot.DeletedFlag | Slot.KeepFlag | Slot.HasRedoneFlag)) == 0
-            && !parent.ItemDeleted
-            && !(Content is ContentString str && str.EndsWithHighSurrogate);
-    }
-
-    /// <summary>
-    /// Continues this item in place by <paramref name="length"/> new elements its content took in already (see
-    /// <see cref="CanExtendRun"/>): what integrating them as an item of their own after it would do (the parent's
-    /// length, the client's clock, the transaction's changed types), and the transaction records where that item
-    /// would have started.
-    /// </summary>
-    public void ExtendRun(Transaction transaction, int length)
-    {
-        var start = new ID(Id.Client, Id.Clock + Length);
-        Length += length;
-        var parent = Parent;
-        parent.Length += length;
-        transaction.Doc.Store.NoteRunExtended(this, length);
-        transaction.AddChangedTypeToTransaction(parent, null);
-        transaction.RecordRunExtension(start);
     }
 
     /// <summary>
@@ -502,22 +307,7 @@ internal readonly partial struct ItemRef
             }
 
             LeftOrigin = Left.IsItem ? Left.LastId : null;
-            switch (Kind)
-            {
-                case SlotKind.Deleted:
-                    break;
-                case SlotKind.Type:
-                    throw TypeContent.Unsplittable();
-                default:
-                    Content = (IContentEx)Content.Splice(offset);
-                    if (Kind == SlotKind.String)
-                    {
-                        CutCharsHead(offset);
-                    }
-
-                    break;
-            }
-
+            CutContentHead(offset);
             Length -= offset;
         }
 
@@ -721,9 +511,9 @@ internal readonly partial struct ItemRef
     // Countable stays what the content was (Yjs' item.countable is not touched by gc); no object is held.
     private void BecomeDeletedContent()
     {
-        ReleaseChars();
+        ReleaseContent();
         ref var slot = ref Write();
-        slot.Info = (slot.Info & ~(0xFF << 8)) | (ContentDeleted._ref << 8);
+        slot.Info = (slot.Info & ~(0xFF << 8)) | ((int)SlotKind.Deleted << 8);
         slot.Payload = 0;
         _slab.SetRef(_handle, null);
     }
@@ -749,54 +539,13 @@ internal readonly partial struct ItemRef
             : snap.StateVector.TryGetValue(Id.Client, out long value) && value > Id.Clock && !snap.DeleteSet.IsDeleted(Id);
     }
 
-    private void WriteItem(IUpdateEncoder encoder, int offset)
-    {
-        string root = null;
-        ID parentId = default;
-        if (offset == 0 && LeftOrigin == null && RightOrigin == null)
-        {
-            var parent = Parent ?? throw new InvalidOperationException("An item without origins has no parent.");
-            if (parent.IsRoot)
-            {
-                root = parent.FindRootTypeKey();
-            }
-            else
-            {
-                parentId = parent.ItemId;
-            }
-        }
-
-        if (Kind == SlotKind.Deleted)
-        {
-            Item.WriteItemHeader(encoder, ContentDeleted._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
-            encoder.WriteLength(Length - offset);
-            return;
-        }
-
-        if (Kind == SlotKind.Type)
-        {
-            Item.WriteItemHeader(encoder, ContentType._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
-            TypeOf.Write(encoder);
-            return;
-        }
-
-        Item.WriteItem(encoder, offset, Id, LeftOrigin, RightOrigin, ParentSub, Content, root, parentId);
-    }
-
     /// <summary>
     /// Split 'leftItem' into two items.
     /// </summary>
     public ItemRef SplitItem(Transaction transaction, int diff)
     {
         var kind = Kind;
-        if (kind == SlotKind.Type)
-        {
-            throw TypeContent.Unsplittable();
-        }
-
-        var content = kind == SlotKind.Deleted ? null : (IContentEx)Content.Splice(diff);
-        var rightChars = kind == SlotKind.String ? SplitChars(diff) : 0;
-        var rightLength = kind == SlotKind.Deleted ? Length - diff : content.Length;
+        var (rightPayload, rightLength) = SplitContent(diff, out var content);
         var parent = Parent;
         var parentSub = ParentSub;
         var parentIndex = parent?.TableIndex(_slab.Types) ?? -1;
@@ -824,7 +573,7 @@ internal readonly partial struct ItemRef
         right.Left = _handle;
         right.Right = left.Right;
         right.Parent = parentIndex;
-        right.Payload = rightChars;
+        right.Payload = rightPayload;
 
         if ((left.Info & Slot.HasRedoneFlag) != 0)
         {
