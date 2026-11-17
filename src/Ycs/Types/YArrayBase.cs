@@ -304,6 +304,22 @@ public abstract partial class YArrayBase : YType
     /// <summary>
     /// Appends after the last item, deleted ones included (Yjs' <c>typeListPushGenerics</c>): the new
     /// item has no right origin, unlike an insert at <see cref="YType.Length"/>.
+    // One instance can be integrated once: a batch naming it twice is refused before any of it is inserted.
+    private static void CheckOnceInBatch(YType nested, ref YType? first, ref HashSet<YType>? seen)
+    {
+        if (first == null)
+        {
+            first = nested;
+            return;
+        }
+
+        seen ??= new HashSet<YType>(ReferenceEqualityComparer.Instance) { first };
+        if (!seen.Add(nested))
+        {
+            throw new ArgumentException("The same shared type appears twice in the inserted values. Nothing was inserted.", nameof(nested));
+        }
+    }
+
     /// </summary>
     private protected void PushGenerics(Transaction transaction, ICollection<object?> content)
     {
@@ -374,6 +390,8 @@ public abstract partial class YArrayBase : YType
         // Indexed where the content allows it: a foreach over the interface boxes the enumerator.
         var list = content as IList<object?>;
         var count = content.Count;
+        YType? firstNested = null;
+        HashSet<YType>? seenNested = null;
         if (list != null)
         {
             for (var i = 0; i < count; i++)
@@ -381,6 +399,7 @@ public abstract partial class YArrayBase : YType
                 if (list[i] is YType nested)
                 {
                     CheckCanInsert(nested);
+                    CheckOnceInBatch(nested, ref firstNested, ref seenNested);
                 }
             }
         }
@@ -391,6 +410,7 @@ public abstract partial class YArrayBase : YType
                 if (c is YType nested)
                 {
                     CheckCanInsert(nested);
+                    CheckOnceInBatch(nested, ref firstNested, ref seenNested);
                 }
             }
         }
