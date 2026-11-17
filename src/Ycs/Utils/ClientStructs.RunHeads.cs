@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Buffers;
 using System.Diagnostics;
@@ -334,7 +333,7 @@ internal sealed partial class ClientStructs
     }
 
     /// <summary>What is wrong with the run-head index against a recount, or null.</summary>
-    private string IndexViolations()
+    private string? IndexViolations()
     {
         var position = 0;
         for (var k = 0; k < _leafCount; k++)

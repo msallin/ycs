@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Collections;
 using System.Diagnostics;
@@ -473,7 +472,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
     }
 
     /// <summary>What is wrong with the starts or the run-head index (against a recount), or null (for tests and Debug checks).</summary>
-    internal string Violations()
+    internal string? Violations()
     {
         if (LeafViolations() is { } violation)
         {

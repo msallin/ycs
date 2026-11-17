@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
 using System.Numerics;
@@ -35,19 +34,21 @@ internal sealed partial class ClientStructs
     private readonly int _leafCapacity = LeafCapacityForTests == 0 ? LeafCapacity : Math.Max(2, LeafCapacityForTests);
 
     // The one leaf while there is no directory; null while there is one (the directory's leaf 0 then).
-    private Leaf _single;
+    private Leaf _single = null!;
 
     // The directory, null up to one leaf: the leaves in clock order (entries from _leafCount on are null), per leaf the
     // start of its first struct and its first position, a bit per leaf "has a break" and "has a live format" in 64-bit
     // words (bits from _leafCount on are 0), and a Fenwick tree of the leaves' visible sums (1-based: _sumTree[i]
     // holds the sums of the leaves [i - (i & -i), i)). All are kept with the leaves (a recount gives the same) but the
     // tree, which a change of the leaves marks stale and the next read rebuilds (_sumTreeStale).
-    private Leaf[] _leaves;
-    private long[] _firstStarts;
-    private int[] _firstPositions;
-    private ulong[] _hasBreak;
-    private ulong[] _hasFormat;
-    private long[] _sumTree;
+    // The six are null together, exactly while there is no directory (_leaves == null tells); they are typed non-null so
+    // the code that runs with a directory needs no annotation. _single is null exactly while there is one.
+    private Leaf[] _leaves = null!;
+    private long[] _firstStarts = null!;
+    private int[] _firstPositions = null!;
+    private ulong[] _hasBreak = null!;
+    private ulong[] _hasFormat = null!;
+    private long[] _sumTree = null!;
     private bool _sumTreeStale;
 
     // 1 without a directory.
@@ -59,7 +60,7 @@ internal sealed partial class ClientStructs
     // The cursor's leaf's structs, first position and count, for the lookup by position (the indexer): valid while
     // _cursorCount is not 0. A change of the leaves' positions sets it to 0 (ForgetCursor); one that only appends
     // leaves it valid, the count it holds then being at most the leaf's.
-    private ItemHandle[] _cursorStructs;
+    private ItemHandle[] _cursorStructs = [];
     private int _cursorFirst;
     private int _cursorCount;
 
@@ -238,7 +239,7 @@ internal sealed partial class ClientStructs
         _hasFormat = hasFormat;
         _sumTree = sumTree;
         _sumTreeStale = true;
-        _single = null;
+        _single = null!;
     }
 
     /// <summary>
@@ -270,18 +271,18 @@ internal sealed partial class ClientStructs
         Array.Copy(_leaves, k + 1, _leaves, k, _leafCount - k);
         Array.Copy(_firstStarts, k + 1, _firstStarts, k, _leafCount - k);
         Array.Copy(_firstPositions, k + 1, _firstPositions, k, _leafCount - k);
-        _leaves[_leafCount] = null;
+        _leaves[_leafCount] = null!;
         _cursor = 0;
         ForgetCursor();
         if (_leafCount == 1)
         {
             _single = _leaves[0];
-            _leaves = null;
-            _firstStarts = null;
-            _firstPositions = null;
-            _hasBreak = null;
-            _hasFormat = null;
-            _sumTree = null;
+            _leaves = null!;
+            _firstStarts = null!;
+            _firstPositions = null!;
+            _hasBreak = null!;
+            _hasFormat = null!;
+            _sumTree = null!;
         }
     }
 
@@ -542,7 +543,7 @@ internal sealed partial class ClientStructs
     internal bool IsLeafStartForTests(int position) => _leaves != null && Array.BinarySearch(_firstPositions, 1, _leafCount - 1, position) >= 0;
 
     /// <summary>What is wrong with the leaves and the directory against a recount, or null.</summary>
-    private string LeafViolations()
+    private string? LeafViolations()
     {
         if (_leaves == null)
         {
@@ -625,7 +626,7 @@ internal sealed partial class ClientStructs
         return null;
     }
 
-    private string LeafCountViolations(int k)
+    private string? LeafCountViolations(int k)
     {
         var leaf = LeafAt(k);
         var sum = LeafVisible(k, 0, leaf.Count);
