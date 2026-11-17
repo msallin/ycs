@@ -47,7 +47,9 @@ public class YTextUsabilityTests
         Assert.AreEqual((true, false, 0, 1, "a"), (attributes.ContainsKey("a"), attributes.TryGetValue("x", out _), none.Count, attributes.Values.Count(), attributes.Keys.Single()));
         Assert.ThrowsExactly<KeyNotFoundException>(() => _ = attributes["x"]);
         Assert.AreSame(attributes, YAttributes.From(attributes));
-        Assert.IsNull((YAttributes)(Dictionary<string, YValue>)null);
+        Dictionary<string, YValue>? noDictionary = null;
+        YAttributes? converted = noDictionary;
+        Assert.IsNull(converted);
         Assert.AreEqual(1, ((System.Collections.IEnumerable)attributes).Cast<object>().Count());
     }
 
