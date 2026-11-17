@@ -340,4 +340,30 @@ public class SessionTests
     }
 
     private static string Format(uint[][] messages) => string.Join(" | ", messages.Select(m => string.Join(",", m)));
+
+    [TestMethod]
+    public void Receive_MoreWaitingStructsThanTheRoomKeeps_ClosesTheSessionAndAReconnectedOneSyncs()
+    {
+        var room = new Room("r");
+        var forger = new YDoc(new YDocOptions { ClientId = 7 });
+        HostileUpdates.Edit(forger, d => d.GetText("text").Insert(0, "m"));
+        var waiting = HostileUpdates.Edit(forger, d =>
+        {
+            for (var i = 0; i < 5_000; i++)
+            {
+                d.GetText("text").Insert(1, "w");
+            }
+        });
+        var hostile = new Session(room);
+        hostile.Start();
+        hostile.Receive(Messages.Update(waiting));
+        var reconnected = new TestClient(2);
+        reconnected.Connect(room);
+        reconnected.Insert(0, "ok");
+        TestClient.PumpAll(reconnected);
+
+        Assert.AreEqual(
+            (SessionCloseReason.ProtocolError, true, 1, "ok"),
+            (hostile.CloseReason, hostile.CloseCause is YUpdateException e && e.Message.Contains("MaxPendingStructs", StringComparison.Ordinal), room.SessionCount, reconnected.Text));
+    }
 }

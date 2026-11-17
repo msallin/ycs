@@ -49,8 +49,22 @@ internal sealed partial class Room
     /// one 16 MiB message (the transports' default) is about that many structs. One such update makes Ycs allocate
     /// about 560 MiB and keep about 480 MiB (16 times the measured cost of the default, docs/api.md), whether it is a
     /// document's state or a hostile client's.
+    /// <para>
+    /// What may wait for structs the room does not have is bounded far lower. A y-websocket client sends its updates
+    /// in order and a step 2 whole, so honest traffic leaves nothing waiting (a reordering is a few structs). Every
+    /// update that advances a client something waits on re-reads all that waits, under the room's lock: a peer that
+    /// queues m structs, each waiting on another struct of one client, and then sends that client's structs one by
+    /// one, makes each cost a retry of about 27 ns per waiting struct (110 µs at 4,096; 10 ms at the default 131,072).
+    /// 4,096 structs keep a retry near 100 µs. The bytes allow 256 per waiting struct on average, so 1 MiB: a retry
+    /// copies what waits twice.
+    /// </para>
     /// </summary>
-    public static readonly UpdateLimits DocumentLimits = new() { MaxStructsPerUpdate = 1 << 21 };
+    public static readonly UpdateLimits DocumentLimits = new()
+    {
+        MaxStructsPerUpdate = 1 << 21,
+        MaxPendingStructs = 4_096,
+        MaxPendingBytes = 1 << 20,
+    };
 
     /// <summary>
     /// The most awareness clients one session may hold a state for, and name in one message. A y-websocket client
