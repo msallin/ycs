@@ -269,20 +269,13 @@ internal sealed partial class StructStore
                     }
                     else
                     {
+                        // Before the offset, as in Yjs: a struct the document holds in part or whole waits all the same
+                        // when it refers to structs the document lacks. A Yjs peer writes one: the update of a
+                        // transaction that ran during another's observer calls carries what later transactions of that
+                        // cleanup created, which their own updates carry again, as a GC struct once collected.
                         var missing = FindMissing(stackHead);
                         if (missing >= 0)
                         {
-                            if (offset > 0)
-                            {
-                                // What an item refers to is there when it is integrated, and a part of it that is there was
-                                // integrated by an item of the same id: a second struct under that id (no update holds two:
-                                // a client is listed once, so one was waiting). Waiting, it would hold up what follows it
-                                // in its client for good, which the document, having the id, no longer lacks.
-                                throw new YUpdateException(
-                                    $"The struct {headClient}:{head.Clock} refers to structs this document does not have, " +
-                                    "but the document has a struct under its id already. The document is unchanged.");
-                            }
-
                             stack.Add(stackHead);
 
                             // Get the struct reader that has the missing struct.

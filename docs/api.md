@@ -481,14 +481,6 @@ before anything changes:
   then writes them as one, and every fresh document refuses it) and by an item integrated from an offset, so such a check
   would make the state unloadable. A check on document order would be needed; until then the divergence stays
   (`docs/findings-server.md`, 4);
-* no struct that waits for structs the document lacks while the document has a struct under its id already (a part
-  of an item is there, so everything the item refers to was). Yjs keeps it waiting, and the structs of its client that
-  follow with it, also once the other struct under that id integrated; a client that joins reads the document's
-  state, where they no longer wait, and is ahead of the document for good. An update cannot hold two structs under one
-  id (a client is listed once, and its structs follow one another by clock), so the two come in updates
-  of their own, one waiting. A deliberate divergence: the update that makes the waiting one retry drops it
-  (see [pending structs](#pending-structs-retried), reported as partly applied), and the one planned with such a
-  struct is rejected, the document unchanged;
 * nesting: 'any' and JSON values, and shared types inside each other, at most
   `UpdateLimits.MaxDepth` levels deep (3,000 by default, each counted on its own: about as deep as Yjs'
   recursive walks go before the JavaScript stack runs out, so no Yjs peer writes a deeper document; a
@@ -585,6 +577,16 @@ Ycs retries a pending struct whenever any clock it waited for arrives. Yjs 13.6.
 `pending.missing` and ends with the higher one, so when a lower clock arrives last it does not retry, and a struct stays
 pending although every dependency is present; Ycs integrates it, and its state vector and update events are ahead of Yjs'
 (recorded as `yjs-pending-retry-deferred`, `tests/Ycs.Properties/KnownFailures.cs`).
+
+A struct under an id the document holds already, in part or whole, whose references the document lacks waits like any
+other, with the structs of its client behind it, as in Yjs (the references are checked before the offset, as Yjs'
+`getMissing` is). A Yjs peer writes one: the update of a transaction that ran during another transaction's observer
+calls (reading an event's delta opens one) carries what later transactions of the same cleanup created, and their own
+updates carry it again, as a GC struct once its type was collected; delivered out of order, the item arrives under the
+id of the GC struct, with a right origin the document may lack. Retried, it is known and changes nothing; until then a
+client that joins reads it among the waiting structs. Two different structs under one id, which only a crafted update or
+two clients that drew one client id produce, are not told apart from that, as in Yjs: the first, waiting, keeps the
+structs of its client behind it waiting for good, while a client that joins integrates them (`docs/findings-server.md`, 5).
 
 **Trusted input.** A document's own state can hold far more structs than the defaults allow (a million characters
 typed one at a time are a million structs). Apply it with `UpdateLimits.Unlimited`, or limits of your own, for that

@@ -153,10 +153,12 @@ public class SyncServerFindingsTests
         Assert.AreEqual("amb", joiner.GetText("text").ToString());
     }
 
-    // Two structs under one id, the first waiting for a client nobody sends (an update cannot hold two: a client is listed
-    // once): the structs that follow the first stay waiting, also once the second is integrated.
+    // Two different structs under one id (crafted, or two clients that drew one id), the first waiting for a client nobody
+    // sends: as in Yjs, the structs that follow the first stay waiting, also once the second is integrated, so a joiner
+    // (which reads the document's state, the waiting structs included) is ahead of the document for good. A struct under
+    // a known id with missing references cannot be told from an honest one (the test below), so none is rejected.
     [TestMethod]
-    public void ApplyUpdate_TwoStructsUnderOneId_AJoinerIsNotAheadOfTheRoom()
+    public void ApplyUpdate_TwoStructsUnderOneId_KeepsWhatWaitedAndAJoinerIsAheadAsInYjs()
     {
         var a = new YDoc(new YDocOptions { ClientId = 1L << 40 });
         a.GetText("text").Insert(0, "ab");
@@ -182,30 +184,42 @@ public class SyncServerFindingsTests
         var joiner = new YDoc();
         joiner.ApplyUpdate(room.EncodeStateAsUpdate());
 
-        Assert.AreEqual((1, 1L, 1L, false), (dropped, room.Store.GetState(7), joiner.Store.GetState(7), room.HasPending));
+        Assert.AreEqual((0, 1L, 2L, true), (dropped, room.Store.GetState(7), joiner.Store.GetState(7), room.HasPending));
     }
 
+    // An honest item under the id of a GC struct the document has, with a right origin the document lacks. A Yjs peer
+    // writes the two: the update of a transaction that ran during another's observer calls (reading an event's delta opens
+    // one) carries the item a later transaction of that cleanup created, whose own update carries it as a GC struct once
+    // its type was collected; delivered out of order, the GC struct comes first. The item waits, as in Yjs (found by the
+    // property soak: FixedFailures, known-id-with-missing-references-rejected), and is known when it is retried.
     [TestMethod]
-    public void ApplyUpdate_StructWaitingUnderTheIdOfOneTheDocumentHas_IsRefusedAndTheDocumentIsUnchanged()
+    public void ApplyUpdate_ItemUnderTheIdOfAGcStructItHasWithMissingReferences_WaitsAsInYjs()
     {
-        var a = new YDoc(new YDocOptions { ClientId = 1L << 40 });
-        a.GetText("text").Insert(0, "ab");
-        var unknown = new YDoc(new YDocOptions { ClientId = 999 });
-        unknown.ApplyUpdate(a.EncodeStateAsUpdate());
-        unknown.GetText("text").Insert(1, "z");
-        var waiting = new YDoc(new YDocOptions { ClientId = 7 });
-        waiting.ApplyUpdate(unknown.EncodeStateAsUpdate());
-        var first = Edit(waiting, d => d.GetText("text").Insert(1, "u"));
-        var integrating = new YDoc(new YDocOptions { ClientId = 7 });
-        integrating.ApplyUpdate(a.EncodeStateAsUpdate());
-        var room = new YDoc();
-        room.ApplyUpdate(a.EncodeStateAsUpdate());
-        room.ApplyUpdate(Edit(integrating, d => d.GetText("text").Insert(1, "u")));
-        var before = Convert.ToHexString(room.EncodeStateAsUpdate());
+        var origin = new YDoc(new YDocOptions { ClientId = 1 });
+        origin.GetMap("m")["t"] = new YText("b");
+        var originState = origin.EncodeStateAsUpdate();
+        var typist = new YDoc(new YDocOptions { ClientId = 7, GarbageCollection = false });
+        typist.ApplyUpdate(originState);
+        static YText Text(YDoc d) => d.GetMap("m")["t"].TryGetSharedType<YText>(out var t) ? t : throw new InvalidOperationException();
+        var item = Edit(typist, d => Text(d).Insert(0, "a"));
+        var collector = new YDoc(new YDocOptions { ClientId = 7 });
+        collector.ApplyUpdate(originState);
+        var gc = Edit(collector, d =>
+        {
+            Text(d).Insert(0, "a");
+            d.GetMap("m").Remove("t");
+        });
+        var room = new YDoc(new YDocOptions { GarbageCollection = false });
+        room.ApplyUpdate(gc);
 
-        Assert.ThrowsExactly<YUpdateException>(() => room.ApplyUpdate(first));
+        room.ApplyUpdate(item);
+        var waiting = (Convert.ToHexString(room.EncodeStateAsUpdate()), room.HasPending);
+        room.ApplyUpdate(originState);
 
-        Assert.AreEqual((before, false), (Convert.ToHexString(room.EncodeStateAsUpdate()), room.HasPending));
+        // The bytes Yjs 13.6.32 writes: with the item waiting (the state holds it, not the GC struct), and once it was retried.
+        Assert.AreEqual(
+            (("010107004401010161020701000101010002", true), ("0201070000010201002701016D017402040001000162020701000101010002", false, 0)),
+            (waiting, (Convert.ToHexString(room.EncodeStateAsUpdate()), room.HasPending, room.GetMap("m").Count)));
     }
 
     // An honest client's step 2 carries back the deletions of unknown structs it was sent along with the waiting structs.
@@ -241,10 +255,10 @@ public class SyncServerFindingsTests
         Assert.AreEqual((true, "offline"), (accepted, room.GetText("other").ToString()));
     }
 
-    // A forged struct under the honest client's next ids, waiting for a client nobody sends: when the honest update
-    // arrives, the forged one is dropped (known, with references that are missing), and the sender is not blamed.
+    // A forged struct under the honest client's next ids (1:5, origin 99:0), waiting for a client nobody sends: when the
+    // honest update arrives, it is applied whole, and the forged struct, known now, keeps waiting, as in Yjs.
     [TestMethod]
-    public void ApplyUpdate_HonestUpdateRetriesAForgedStructUnderItsIds_StandsAndReportsTheDrop()
+    public void ApplyUpdate_HonestUpdateRetriesAForgedStructUnderItsIds_StandsAndTheForgedOneKeepsWaiting()
     {
         var honest = new YDoc(new YDocOptions { ClientId = 1 });
         honest.GetText("text").Insert(0, "abc");
@@ -256,6 +270,6 @@ public class SyncServerFindingsTests
 
         room.ApplyUpdate(Edit(honest, d => d.GetText("text").Insert(3, "def")));
 
-        Assert.AreEqual(("abcdef", false, 1), (room.GetText("text").ToString(), room.HasPending, dropped.Count));
+        Assert.AreEqual(("abcdef", true, 0), (room.GetText("text").ToString(), room.HasPending, dropped.Count));
     }
 }

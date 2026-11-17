@@ -159,12 +159,12 @@ public class HostileSyncTests
         Assert.AreEqual((SessionCloseReason.None, structs), (client.Session!.CloseReason, copy.GetText("text").Length));
     }
 
-    // Two structs under one id, the first waiting for a client nobody sends: Yjs 13.6.32 keeps it waiting, and the
-    // structs behind it, also once the second one is integrated, so a client that joins is ahead of the room for
-    // good. Ycs applies the second and drops what waited (reported by PendingDropped, the session stays open); a joiner has what
-    // the room has. Only a crafted update reuses an id.
+    // Two different structs under one id, the first waiting for a client nobody sends: the room, as Yjs 13.6.32, keeps it
+    // waiting with the structs behind it, also once the second one is integrated, so a client that joins is ahead of the
+    // room for good (docs/findings-server.md, 5). Only a crafted update, or two clients that drew one id, reuses an id;
+    // a struct under a known id with missing references cannot be told from an honest one, so the session stays open.
     [TestMethod]
-    public void Receive_TwoStructsUnderOneId_DropsWhatWaitedAndAJoinerHasWhatTheRoomHas()
+    public void Receive_TwoStructsUnderOneId_KeepsWhatWaitedAndAJoinerIsAheadAsInYjs()
     {
         var room = new Room("r");
         var a = new TestClient(HonestA);
@@ -191,7 +191,7 @@ public class HostileSyncTests
         TestClient.PumpAll(a, joiner);
 
         Assert.AreEqual(
-            (SessionCloseReason.None, 1UL, 1UL),
+            (SessionCloseReason.None, 1UL, 2UL),
             (hostile.CloseReason, Clock(room.EncodeStateVector(), 7), Clock(joiner.Doc.EncodeStateVector(), 7)));
     }
 
