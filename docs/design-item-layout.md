@@ -299,11 +299,12 @@ replaced by a GC struct (`StructStore.ReplaceWithGC`). It is the enumerators' va
 
 `Utils/Slab.cs`, `Utils/TypeTable.cs`, `Utils/ClientTable.cs`, `Structs/ItemHandle.cs`, `Structs/ItemRef*.cs`. Every struct
 of a store (an item or a GC struct) is a slot of its document's `Slab`; no `Item` or `GC` object is allocated for one.
-The content stays an object, beside the slot. What a reader needs:
+The content of the other kinds stays an object, beside the slot; a Deleted slot holds none and a Type slot holds the index of its type. What a reader needs:
 
 * **A slot** is the 64-byte sequential struct of 2.1 with no reference field. Its kind (`Info`, bits 8 to 15) is the
   content's wire reference number: 0 for a GC struct, `Slot.FreeKind` (0xFF) for a slot on a free list. `Payload` holds
-  the free-list link of a free slot and nothing else until step 8.
+  the free-list link of a free slot and the type-table index of a Type slot; a Deleted and a GC slot hold 0 (step 8 adds
+  the arena offsets).
 * **Pages** (2.2): page 0 starts at 16 slots (`Slab.FirstPageSlotsForTests` changes it for the test runs; 1 makes every
   allocation copy) and doubles by copy up to 1,024; the next pages hold 1,024 and never move. A handle is
   `page << 10 | index`; a read is two array indexes (the slab publishes the pages' arrays by number). Beside each page
@@ -316,8 +317,10 @@ The content stays an object, beside the slot. What a reader needs:
   it also keeps the slot's generation (below). Code that reads several fields of a slot takes one `ref Slot` or
   `ref readonly Slot` after the method's last allocation (`Allocate` may move page 0) and reads it once per step.
 * **A client and a parent are indexes.** `ClientTable` numbers the clients of a document and `TypeTable` its types, both
-  never reused; a slot names them in four bytes each. A type gets its index when a slot first names it; a collected
-  type's entry is cleared and stays (a slot inserted into a collected type puts it back).
+  never reused; a slot names them in four bytes each. A type gets its index when its item is made (`ItemRef.New`, `Adopt`); a collected
+  type's entry is cleared and stays (a slot inserted into a collected type puts it back). Each type ever created costs
+  one 8-byte entry, null after its collection and never reused: 1,000 nested maps created and collected leave 1,001
+  entries. That cost is accepted; a free list of indexes can reuse them later.
 * **Free and reuse.** A merge frees the right part's slot (`ItemRef.FreeSlot`: its kind becomes Free, its objects and
   redone id are dropped, its generation changes). It joins the free list only at `Slab.AllowReuse`, which
   `Transaction` calls at the end of the outermost batch, nested transactions of observers and `Update` handlers
@@ -367,7 +370,7 @@ client a hostile update pushes past 2^32 in three structs (M8); see open questio
 | `Left`, `Right` (handles, -1 none) | 8 |
 | `Parent` (index into the type table; -1: a GC struct) | 4 |
 | `Info` (keep, countable, deleted, marker, has-redone; the kind in bits 8..15) | 4 |
-| `Payload` (step 8: an arena offset or a type index; today only a free slot's list link) | 8 |
+| `Payload` (step 8: an arena offset or a type index; today a free slot's list link and a Type slot's table index) | 8 |
 | **total** | **64** (the model measured 52 with 32-bit clocks) |
 
 Beside the slab, by handle: `Refs` (`object[]` pages allocated on first use: the content object, until step 8 moves
@@ -449,7 +452,7 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   store check also compares the generation. `YDoc._item` stays an `ItemRef`: a subdocument's item is in its parent's
   slab, which the subdocument does not hold.
 * **Type table**: an index is never reused; a collected type's entry is cleared and its `YType` keeps its index, and its
-  search markers and `_start` are cleared at collection (`ContentType.cs`), so a user-held collected `YArray` writes no
+  search markers and `_start` are cleared at collection (`TypeContent.cs`), so a user-held collected `YArray` writes no
   marker flag through a handle that now names another type's item (H5).
 * **A collected type keeps its item's facts** (7.0e). The struct that held a collected type can merge away and its slot
   be reused while user code holds the type (or, for a subdocument, the `YDoc`); a handle read after that names another
