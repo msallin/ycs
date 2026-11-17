@@ -1,0 +1,15 @@
+bench/Ycs.Benchmarks limits, branch 8503d9d (8.14), 2026-11-17 (alloc and kept are deterministic; ms are from a shared machine, load 1.02)
+UpdateLimits.Default: 131072 structs per update, 131072 pending structs, 16777216 pending bytes
+shape                                                           v1 B      v2 B      ms  alloc MiB  kept MiB  B/struct
+characters (prepended, one item each)                         900998    131111     194       29.0      12.4       231
+deleted items                                                 769932        42     184       31.9      11.8       255
+YText                                                         769926        36     332      103.2      72.9       825
+YArray                                                        769926        36     201      109.2      74.9       873
+YMap                                                          769926        36     125       97.2      56.9       777
+YXmlElement                                                  1032070    131120     137      122.5      72.9       979
+subdocuments                                                 5750662   4980778     346      178.4     134.8      1427
+YText, pending                                                769922        35      25       18.0       2.0       144
+  EncodeStateAsUpdate with them pending                            0         0      54        2.5       1.0        19
+  an update lets them integrate and brings N more                  0        45     157      137.2      72.9       548
+GC structs, pending (hand-written v2)                              0        23       5       18.0       2.0       144
+  EncodeStateAsUpdate with them pending                            0         0      22        1.0       0.5         8

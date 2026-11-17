@@ -59,6 +59,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ycs.Client.Tests", "tests\Y
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ycs.Blazor", "samples\Ycs.Blazor\Ycs.Blazor.csproj", "{E0914132-62C5-4376-900A-FA168665EC8F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ycs.Footprint", "bench\Ycs.Footprint\Ycs.Footprint.csproj", "{51752D0E-6A43-45A2-84F8-004928B21017}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -345,6 +347,18 @@ Global
 		{E0914132-62C5-4376-900A-FA168665EC8F}.Release|x64.Build.0 = Release|Any CPU
 		{E0914132-62C5-4376-900A-FA168665EC8F}.Release|x86.ActiveCfg = Release|Any CPU
 		{E0914132-62C5-4376-900A-FA168665EC8F}.Release|x86.Build.0 = Release|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Debug|x64.Build.0 = Debug|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Debug|x86.Build.0 = Debug|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|Any CPU.Build.0 = Release|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|x64.ActiveCfg = Release|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|x64.Build.0 = Release|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|x86.ActiveCfg = Release|Any CPU
+		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -370,6 +384,7 @@ Global
 		{A449BDED-9E53-4074-9687-5D7CD4E34F57} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{33AAFF5B-085E-4494-8B4C-4198EDE53718} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{E0914132-62C5-4376-900A-FA168665EC8F} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
+		{51752D0E-6A43-45A2-84F8-004928B21017} = {760AB15A-8938-8D9B-BEDE-5CE1484B84C3}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {3D7D58AD-F6FB-4263-A6DA-C9D0E655D3C2}

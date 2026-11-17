@@ -48,7 +48,7 @@ A few bytes of the v2 format can describe millions of items. Yjs has no limits; 
 | `MaxIntegrationSteps` | 2^24 | the conflict resolution of one update, about 0.1 s (up to 1.5 s); beyond it the update is applied in part |
 | `MaxDepth` | 3,000 | how deeply values and shared types nest |
 
-With the defaults, one update makes a document allocate at most about 290 MiB and keep about 240 MiB (a subdocument is the dearest
+With the defaults, one update makes a document allocate at most about 180 MiB and keep about 135 MiB (a subdocument is the dearest
 struct: any other shape keeps at most 75 MiB). Honest updates
 stay far below: the largest in the Yjs corpus took 102 conflict steps. Clocks beyond 2^31 - 1 and client ids beyond
 2^53 - 1 are rejected whatever the limits.

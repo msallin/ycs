@@ -1,0 +1,13 @@
+ab.py 3 3 (bench/Ycs.Compare/ab.py), 2026-11-17: base = a30363f (modernize before 8.14), new = the branch layout-8-14 at 8503d9d; load average 1.6 to 2.6 (shared machine: trust only differences beyond 5 %).
+text-append              base median      21.8 ms (min 20.4 max 22.9; pass medians 21.5, 22.9, 20.5)  alloc     0.51 MiB  held 1.5 MiB  peak RSS 63 MiB  load 2.50
+text-append              new  median      20.6 ms (min 19.4 max 22.9; pass medians 20.6, 22.6, 19.4)  alloc     0.57 MiB  held 1.5 MiB  peak RSS 63 MiB  load 2.38
+text-random              base median      25.0 ms (min 24.8 max 25.6; pass medians 25.2, 24.9, 25.0)  alloc     1.68 MiB  held 3.2 MiB  peak RSS 58 MiB  load 2.17
+text-random              new  median      25.3 ms (min 24.7 max 26.1; pass medians 25.0, 25.1, 25.9)  alloc     1.68 MiB  held 3.2 MiB  peak RSS 67 MiB  load 2.15
+array-push               base median      20.0 ms (min 19.0 max 21.2; pass medians 19.7, 20.0, 21.1)  alloc     4.33 MiB  held 10.9 MiB  peak RSS 74 MiB  load 1.98
+array-push               new  median      19.4 ms (min 18.2 max 20.3; pass medians 18.8, 19.7, 19.7)  alloc     4.34 MiB  held 10.9 MiB  peak RSS 67 MiB  load 1.98
+apply-updates/ycs        base median     227.2 ms (min 225.4 max 234.0; pass medians 228.8, 225.5, 229.6)  alloc    11.94 MiB  held 17.4 MiB  peak RSS 109 MiB  load 1.84
+apply-updates/ycs        new  median     231.8 ms (min 226.2 max 242.6; pass medians 237.6, 226.2, 231.8)  alloc    11.95 MiB  held 17.4 MiB  peak RSS 109 MiB  load 1.77
+trace-replay             base median     238.2 ms (min 235.7 max 255.3; pass medians 250.7, 235.8, 238.2)  alloc    24.86 MiB  held 1.9 MiB  peak RSS 207 MiB  load 1.67
+trace-replay             new  median     248.0 ms (min 246.5 max 253.4; pass medians 248.4, 249.6, 247.4)  alloc    24.86 MiB  held 1.9 MiB  peak RSS 207 MiB  load 1.67
+many-clients-200         base median       2.0 ms (min 1.9 max 2.0; pass medians 2.0, 2.0, 1.9)  alloc     2.89 MiB  held 0.6 MiB  peak RSS 52 MiB  load 1.60
+many-clients-200         new  median       2.0 ms (min 1.9 max 2.2; pass medians 2.0, 2.1, 1.9)  alloc     2.89 MiB  held 0.6 MiB  peak RSS 65 MiB  load 1.60

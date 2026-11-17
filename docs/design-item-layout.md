@@ -305,8 +305,7 @@ The content of a String or an Any item is a range of an arena (1.8), a Deleted s
   content's wire reference number: 0 for a GC struct, `Slot.FreeKind` (0xFF) for a slot on a free list. `Payload` holds
   the free-list link of a free slot, the type-table index of a Type slot and the arena offset of a String or Any slot
   (1.8); a Deleted and a GC slot hold 0.
-* **Pages** (2.2): page 0 starts at 16 slots (`Slab.FirstPageSlotsForTests` changes it for the test runs; 1 makes every
-  allocation copy) and doubles by copy up to 1,024; the next pages hold 1,024 and never move. A handle is
+* **Pages** (2.2): page 0 starts at 1 slot (`Slab.FirstPageSlotsForTests` changes it for the test runs) and doubles by copy up to 1,024; the next pages hold 1,024 and never move. A handle is
   `page << 10 | index`; a read is two array indexes (the slab publishes the pages' arrays by number). Beside each page
   two `object[]` pages, `Refs` (the content object of a cold kind) and `Keys` (a map item's key), are allocated on first use, null for a
   free slot; beside the slab, `Redone` (`Dictionary<int, ItemId>`, flag `HasRedone`) holds the id each redone item names.
@@ -487,11 +486,10 @@ Yjs.
 The first draft allocated a page of 1,024 slots (53 KB) at the first struct and arena pages of 64 Ki characters (128
 KB, on the large object heap) at the first character: "hello" would hold 194 KB. The design takes geometric pages:
 
-* **Slab**: page 0 starts at 16 slots and doubles by copy up to 1,024; pages 1 and on hold 1,024 slots and never move.
+* **Slab**: page 0 starts at 1 slot (a slot is 64 bytes) and doubles by copy up to 1,024; pages 1 and on hold 1,024 slots and never move.
   A handle is `page << 10 | index`. While page 0 grows, no `ref Slot` may live across an allocation: slots are taken
-  by `ref` only after the last allocation of a method (tests run with page 0 starting at one slot, so every
-  allocation copies, and Debug builds poison the old array).
-* **Arenas**: page k holds min(256 · 2^k, 32 Ki) characters or min(64 · 2^k, 8 Ki) values, so every page stays below
+  by `ref` only after the last allocation of a method (page 0 starts at one slot, so the first allocations copy, and Debug builds poison the old array).
+* **Arenas**: page k holds min(16 · 2^k, 32 Ki) characters or min(16 · 2^k, 8 Ki) values, so every page stays below
   85 KB; a run longer than a page gets a page of its own.
 
 Measured (`bench/Ycs.Layout small`, `results/2026-11-15-small.md`, the model's 52-byte slots): today's document
@@ -513,27 +511,30 @@ below that it costs at most 215 bytes more (one struct: 3,176 against 2,961 byte
 more for each of page 0's 16 slots: 1.14 of today; 20 structs 0.57). So there is no separate representation for small
 documents.
 
-The built layout, measured the same way (`bench/Ycs.Layout small`, `results/2026-11-17-8-12-small.md`; the object layout from the
+The built layout, measured the same way (`bench/Ycs.Layout small`, `results/2026-11-17-8-14-small.md`; the object layout from the
 same bench built at 044bb73, `results/2026-11-17-8-12-small-044bb73.md`; bytes per document, the machine shared but the figures
 deterministic). The last column is the model of the table above (today's empty document plus what the model's store holds).
 
 | document | object layout | built layout | built / object | model |
 | --- | ---: | ---: | ---: | ---: |
-| empty, a root text | 1,296 | 2,068 | 1.60 | 2,068 |
-| text "hello" (1 struct) | 3,113 | 6,025 | 1.94 | 4,020 |
-| 20 characters typed at random positions, 2 deleted (20 structs) | 8,576 | 8,696 | 1.01 | 5,204 |
-| 200 typed, 20 deleted (198 structs) | 49,888 | 28,592 | 0.57 | 20,436 |
-| 1,000 typed, 100 deleted | 227,216 | 97,128 | 0.43 | 75,780 |
-| 5,000 typed, 500 deleted | 1,086,745 | 431,169 | 0.40 | 391,253 |
-| 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,986 | 0.39 | 1,558,665 |
-| empty, a root map | 1,184 | 1,944 | 1.64 | 1,944 |
-| map, 20 keys | 10,179 | 9,523 | 0.94 | 6,496 |
-| map, 1,000 keys | 355,906 | 195,242 | 0.55 | 151,040 |
+| empty, a root text | 1,296 | 1,304 | 1.01 | 1,304 |
+| text "hello" (1 struct) | 3,113 | 3,329 | 1.07 | 3,256 |
+| 20 characters typed at random positions, 2 deleted (20 structs) | 8,576 | 7,256 | 0.85 | 4,440 |
+| 200 typed, 20 deleted (198 structs) | 49,888 | 27,656 | 0.55 | 19,672 |
+| 1,000 typed, 100 deleted | 227,216 | 94,696 | 0.42 | 75,016 |
+| 5,000 typed, 500 deleted | 1,086,745 | 430,969 | 0.40 | 390,489 |
+| 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,786 | 0.39 | 1,557,901 |
+| empty, a root map | 1,184 | 1,176 | 0.99 | 1,176 |
+| map, 20 keys | 10,179 | 8,235 | 0.81 | 5,728 |
+| map, 1,000 keys | 355,906 | 186,290 | 0.52 | 150,272 |
 
-Many clients (20,000, one map entry each): 665 bytes per client in the object layout, 611 built, 348 in the model. The built
-layout pays from about 20 structs, not from about 10; below that it holds more than the object layout (the first struct of a
-document costs about 3.9 KB: the first slab page of 16 slots is 1 KB and the arena's first page 0.5 KB; the rest is not
-attributed), and a document with no struct holds 770 bytes more than before (not attributed either). There is still no separate representation for small documents.
+Many clients (20,000, one map entry each): 665 bytes per client in the object layout, 590 built, 348 in the model. The built layout
+pays from a few structs (20 typed characters: 0.85); a document of one struct holds 216 bytes more than before (3,329 against 3,113):
+the first slab page is one slot (64 bytes) and the arena's first page 16 characters, and what remains is the slab's and the arena's own
+objects and the client and type tables. The first built layout (8.12) held 2,068 bytes for an empty document and 6,025 for one struct: a
+16-slot first page and a 256-character first page were 1.5 KB of that, and about thirty small collections that every document made
+whether used or not were the rest; they are made at their first use now (`bench/Ycs.Layout/README.md`, "Where the bytes of a small
+document went"). There is still no separate representation for small documents.
 
 ### 2.3 The arenas
 

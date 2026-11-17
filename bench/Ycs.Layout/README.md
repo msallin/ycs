@@ -128,27 +128,82 @@ client today, 351 (fixed) and 348 (geometric) designed.
 
 ## Small documents on the built layout (2026-11-17)
 
-`small` rerun on the built layout (slab, arenas, staging; `results/2026-11-17-8-12-small.md`) and, for the comparison, on the
-object layout (044bb73's tree built the same way, `results/2026-11-17-8-12-small-044bb73.md`). "Today" is now the built layout; the
-designed columns are the model's, which did not change. Bytes per document (load average 4, which does not matter for bytes):
+`small` rerun on the built layout (slab, arenas, staging; `results/2026-11-17-8-12-small.md`, a30363f), for the comparison on the
+object layout (044bb73's tree built the same way, `results/2026-11-17-8-12-small-044bb73.md`) and after work package 8.14, which cut
+the fixed cost of a document (`results/2026-11-17-8-14-small.md`, load average 0.9). The designed columns are the model's, which
+did not change. Bytes per document:
 
-| document | object layout | built layout | built / object | model, geometric pages |
-| --- | ---: | ---: | ---: | ---: |
-| empty, a root text | 1,296 | 2,068 | 1.60 | 2,068 |
-| text "hello" (one insert) | 3,113 | 6,025 | 1.94 | 4,020 |
-| 20 characters typed at random positions, 2 deleted | 8,576 | 8,696 | 1.01 | 5,204 |
-| 200 typed, 20 deleted (198 structs) | 49,888 | 28,592 | 0.57 | 20,436 |
-| 1,000 typed, 100 deleted | 227,216 | 97,128 | 0.43 | 75,780 |
-| 5,000 typed, 500 deleted | 1,086,745 | 431,169 | 0.40 | 391,253 |
-| 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,986 | 0.39 | 1,558,665 |
-| empty, a root map | 1,184 | 1,944 | 1.64 | 1,944 |
-| map, 20 keys | 10,179 | 9,523 | 0.94 | 6,496 |
-| map, 1,000 keys | 355,906 | 195,242 | 0.55 | 151,040 |
+| document | object layout | built layout, 8.12 | built layout, 8.14 | 8.14 / object | model, geometric pages |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| empty, a root text | 1,296 | 2,068 | 1,304 | 1.01 | 1,304 |
+| text "hello" (one insert) | 3,113 | 6,025 | 3,329 | 1.07 | 3,256 |
+| 20 characters typed at random positions, 2 deleted | 8,576 | 8,696 | 7,256 | 0.85 | 4,440 |
+| 200 typed, 20 deleted (198 structs) | 49,888 | 28,592 | 27,656 | 0.55 | 19,672 |
+| 1,000 typed, 100 deleted | 227,216 | 97,128 | 94,696 | 0.42 | 75,016 |
+| 5,000 typed, 500 deleted | 1,086,745 | 431,169 | 430,969 | 0.40 | 390,489 |
+| 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,986 | 1,686,786 | 0.39 | 1,557,901 |
+| empty, a root map | 1,184 | 1,944 | 1,176 | 0.99 | 1,176 |
+| map, 20 keys | 10,179 | 9,523 | 8,235 | 0.81 | 5,728 |
+| map, 1,000 keys | 355,906 | 195,242 | 186,290 | 0.52 | 150,272 |
 
-Many clients (20,000, one map entry each): 665 bytes per client on the object layout, 611 built, 348 in the model. The built layout
-is at the model's figure from about 5,000 structs (0.40 against 0.36) and pays from about 20 structs; below that it holds more
-than the object layout, and an empty document holds 770 bytes more, which the model, built on today's empty document, does not
-show.
+Many clients (20,000, one map entry each): 665 bytes per client on the object layout, 611 built (8.12), 590 built (8.14), 348 in the
+model. The built layout is at the model's figure from about 5,000 structs and pays from about 20 structs; a document of one struct holds
+216 bytes more than on the object layout (3,329 against 3,113, see below), an empty document 8 bytes more (a root map 8 less).
+
+### Where the bytes of a small document went (8.14)
+
+`bench/Ycs.Footprint` loads the Ycs.dll of any build by path and walks the object graph of one document (reflection, 64-bit layout
+estimate: 16-byte header, fields, array elements; shared statics such as empty arrays and comparers listed apart), so the same
+estimate applies to every build. Its totals run 5 to 10 percent above `small`'s measured heap (the estimate counts what `small`
+shares), but the differences between builds agree with it. Estimated bytes of one document, by what holds them
+(`results/2026-11-17-8-14-footprint.md` has the object lists):
+
+| part | 044bb73 empty | 8.12 empty | 8.14 empty | 044bb73 one insert | 8.12 one insert | 8.14 one insert |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| the document: `YDoc`, its options, root table, event fields, subdocument set | 776 | 792 | 648 | 896 | 792 | 648 |
+| root text, client and type tables | 344 | 504 | 360 | 344 | 752 | 424 |
+| slab: slot page and its bookkeeping (the object layout: the `Item` and its content) | 0 | 504 | 200 | 200 | 1,712 | 432 |
+| character arena (the object layout: in the `Item`'s content) | 0 | 0 | 0 | 0 | 856 | 224 |
+| the store: dictionary by client, table by index, pending deletes; the client's struct list | 200 | 256 | 80 | 544 | 712 | 536 |
+| the pooled transaction (kept for reuse: delete set, state dictionaries, changed types) | 32 | 32 | 32 | 1,208 | 1,216 | 1,080 |
+| shared statics | 160 | 280 | 264 | 224 | 296 | 232 |
+| total, estimated | 1,512 | 2,368 | 1,584 | 3,416 | 6,336 | 3,576 |
+| measured by `small` | 1,296 | 2,068 | 1,304 | 3,113 | 6,025 | 3,329 |
+
+The 8.12 agent's 1.5 KB for the first slab page and the arena page (a 16-slot page of 64-byte slots, 1,048 B, for one struct;
+a 256-character page, 536 B) was real; the rest of the one-insert difference (about 2.4 KB) and the 770 bytes of the empty document
+were not one object but about thirty small ones made by every document, whether used or not: the client table (a dictionary
+and a list), the type table (a list), the slab's three page tables of four, its three lists, the page list, the arena's list, stack,
+reservation dictionary and page list, the store's table by client index, the pending deletes and their dictionary, the delete set
+and its dictionary in the pooled transaction, the set of subdocuments, the root table, eleven event fields, and the options record of
+a document made without options. The cuts, one hypothesis each (estimated bytes of the one-insert document; empty in parentheses):
+
+| change | one insert (empty) |
+| --- | ---: |
+| first slab page of 4 slots, later of 1 (a slot is 64 bytes) | -960 |
+| first arena pages of 32 characters and 16 values, then 16 characters | -480 |
+| client table: scan up to 8 clients, dictionary after (and a type table that is an array) | -328 (-144) |
+| slab: released, open and pending lists and the page tables made when needed; the store's table by client index starts empty | -184 (-296) |
+| delete set of the transaction made at the first delete | -136 |
+| pending deletes made at the first update that needs them | -120 (-120) |
+| subdocument set made at the first subdocument | -80 (-80) |
+| root table made at the first root (a document that never asked for one: -80; the measured documents have a root) | 0 (0) |
+| the slab's three page tables as one array of three-reference entries | -64 (-40) |
+| slab page list as an array, open pages starting in one field | -120 (-24) |
+| arena page list as an array, released-pages stack at the first release | -112 |
+| first reservation of an arena in a field, not a dictionary | -64 |
+| the eleven event handlers of a document in a holder made at the first handler | -80 (-80) |
+| a client's struct list starts with room for one struct | -32 |
+| documents made without options share one default options record (`new YDoc()`; `small` passes options) | -96 (-96) |
+
+What remains above the object layout for one struct, 216 measured bytes, is the structure the layout needs and the object layout does
+not: the slab with its page record, a page table entry and the one slot (the `Item` object is that slot), the client table and
+the type table (the object layout names clients and parents by reference), and the character arena with its page record,
+page list and one 16-character page (the object layout keeps the string in the content object). The pooled transaction, 1.1 KB
+in either layout, is the largest single cost of a one-insert document; it is the transaction reuse that the hot paths rely on, so it stays.
+
+The subdocument case (`Ycs.Benchmarks limits`, 131,072 subdocuments in one update, `bench/Ycs.Compare/results/2026-11-17-8-14/limits-branch.txt`)
+is the same fixed cost multiplied: 284.4 MiB allocated and 240.8 kept (8.12) became 178.4 and 134.8 (the object layout: 180.8 and 156.3).
 
 ## Editing (2026-11-16)
 
