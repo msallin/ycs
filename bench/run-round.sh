@@ -50,7 +50,8 @@ for mode in trace limits sizes perf; do
   done_ "benchmarks-$mode" $?
 done
 
-step layout; dotnet run -c Release --project bench/Ycs.Layout -- small > "$OUT/layout-small.txt" 2>&1; done_ layout $?
+mkdir -p "$WORK/layout" && cp "$TRACE" "$WORK/layout/trace.json.gz"
+step layout; dotnet run -c Release --project bench/Ycs.Layout -- "$WORK/layout" small > "$OUT/layout-small.txt" 2>&1; done_ layout $?
 
 step server; bench/server/run.sh all --out "$OUT/server" > "$OUT/server.out" 2>&1; done_ server $?
 rm -rf "$WORK/base" "$WORK/base-bin"
