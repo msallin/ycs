@@ -58,15 +58,19 @@ coordinator merges the rows).
 
 ## Done
 
-Step 8: 8.0 (`Arena<T>`), 8.1 (slot kind and the content accessors), 8.2a/b/c (every caller on the accessors), 8.9
-(Deleted inline), 8.10 (Type inline, `Payload` the type-table index). Step 9: 9.0 (`StagingTable`), 9.1 (strings read as
-spans), 9.2 (`StructCursor.NextStaged`; `UpdateReader` always stages), 9.3 (`UpdateOperations` on
-staging, `DecodeUpdate` from staging), 9.4a (the integration plan on staging; the planned raise of a remote-update
-budget row (D11) was not needed). **8.3** (the char arena as a shadow of String content, `Slab.Chars`,
-`ItemRef.Chars.cs`, `CharsViolation` after every test transaction, the switches tiny pages and `CopyOnMergeForTests`) is
-built on `layout-8-3` and under review. Its reviewer may note two performance points, both for 8.3a, neither a
-correctness issue: `Arena.Extend` looks the tail table up before it tests the write end, and a page of its own carries a
-tail entry, so typing into a run longer than a page costs two or three dictionary operations a keystroke.
+Step 8: 8.0 (`Arena<T>`), 8.1 (slot kind and the content accessors), 8.2a/b/c (every caller on the accessors), 8.3 and
+8.3a (the char arena, `Slab.Chars`), 8.4 (compaction at the end of the outermost batch, amortised), 8.5 (String reads
+from the arena), 8.6 (String objects removed), 8.7 and 8.8 (the value arena; Any objects removed), 8.9 (Deleted inline),
+8.10 (Type inline, `Payload` the type-table index); 8.11 not built (D5). Step 9: 9.0 (`StagingTable`), 9.1 (strings read
+as spans), 9.2 (`StructCursor.NextStaged`; `UpdateReader` always stages), 9.3 (`UpdateOperations` on staging), 9.4a
+(the integration plan on staging), 9.4b (detached views on staging), 9.4c (the garbage-collection pre-check on staged
+items), 9.5 (adoption from staging; the `YType` is created at adoption). Open: 8.13, 9.6, 8.12.
+
+9.5's review left for 9.6: `ContentJson.Splice` mutates the object the table still holds when a Json struct is adopted
+at an offset (`Adopt` says the table is only read); `ContentType`'s throwing `Type` getter and decoded constructor;
+`PendingDrop` reads `lease.Structs.Keys` instead of the table's clients; `bench/Ycs.Layout/Editing.cs` stages decoded
+objects by hand; step numbers in `StagingTable`'s XML docs; `StructStaging`'s `YUpdate.Decode` path creates a
+subdocument to read its guid (`ContentDoc` keeps the guid privately).
 
 ## Step 8: inline content and the arenas
 
