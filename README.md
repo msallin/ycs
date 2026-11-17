@@ -1,24 +1,21 @@
-Ycs
--------
+# Ycs
 
-Ycs is a .NET implementation of [Yjs](https://github.com/yjs/yjs), the CRDT for shared editing. A Ycs document and a
-Yjs document exchange the same bytes, so a .NET server, desktop app or Blazor WebAssembly page can edit the same
-text, map or XML tree as Yjs clients in browsers, and every copy converges without a central lock. Ycs is pure C#:
-no native library and no reflection, so it runs under Native AOT and in WebAssembly.
+Ycs is a .NET implementation of [Yjs](https://github.com/yjs/yjs), the CRDT for shared editing. A Ycs document and a Yjs
+document exchange the same bytes, so a .NET server, desktop app or Blazor WebAssembly page can edit the same text, map or
+XML tree as Yjs clients in browsers, and every copy converges without a central lock. Ycs is pure C#: no native library
+and no reflection, so it runs under Native AOT and in WebAssembly.
 
-This is a modernized fork of [yjs/ycs](https://github.com/yjs/ycs), at parity with Yjs 13.6.
+## Features
 
-Documentation: [msallin.github.io/ycs](https://msallin.github.io/ycs/) (the same pages are in [`docs/`](docs/index.md)).
-
-## Install
-
-Ycs is not on NuGet. It needs the .NET 11 SDK. Clone it (or add it as a git submodule) and reference the project:
-
-```xml
-<ProjectReference Include="path/to/ycs/src/Ycs/Ycs.csproj" />
-```
-
-Or build a package for a local feed: `dotnet pack src/Ycs -c Release -o ./packages` (package `Ycs`, version 0.0.1).
+- **Shared types:** `YText` (with formatting and embeds), `YMap`, `YArray`, `YXmlFragment`, `YXmlElement`, `YXmlText`,
+  `YXmlHook`, nested types and subdocuments.
+- **Yjs compatibility:** update formats v1 and v2 and the y-protocols sync protocol, byte for byte. Tested against Yjs
+  13.6.32 and 13.6.33, and against Yjs 14 (`@y/y`) on the wire.
+- **Also:** undo and redo, snapshots, relative positions, and merging, diffing and converting updates without a document.
+- **Untrusted input:** a malformed or hostile update throws `YUpdateException` and leaves the document unchanged; what one
+  update may cost is bounded by `UpdateLimits`.
+- **Runtime:** .NET 11, Native AOT and trimming without warnings, Blazor WebAssembly. A document is not thread-safe, as
+  in Yjs: use one lock or one channel per document.
 
 ## Example
 
@@ -29,8 +26,8 @@ var alice = new YDoc();
 var bob = new YDoc();
 
 // Each local change raises Updated with the bytes to send to the other replicas.
-alice.Updated += (_, e) => { if (e.Origin != bob) bob.ApplyUpdate(e.Update.ToArray(), alice); };
-bob.Updated += (_, e) => { if (e.Origin != alice) alice.ApplyUpdate(e.Update.ToArray(), bob); };
+alice.Updated += (_, e) => { if (e.Origin != bob) bob.ApplyUpdate(e.Update.Span, alice); };
+bob.Updated += (_, e) => { if (e.Origin != alice) alice.ApplyUpdate(e.Update.Span, bob); };
 
 alice.GetText("content").Insert(0, "Hello");
 bob.GetText("content").Insert(5, ", world");
@@ -39,32 +36,40 @@ Console.WriteLine(alice.GetText("content")); // Hello, world
 Console.WriteLine(bob.GetText("content"));   // Hello, world
 ```
 
-## At a glance
+## Use it
 
-| | |
-| --- | --- |
-| Shared types | `YText`, `YMap`, `YArray`, `YXmlFragment`, `YXmlElement`, `YXmlText`, `YXmlHook`, subdocuments |
-| Also | undo and redo, snapshots, relative positions, merging and diffing updates without a document |
-| Wire formats | Yjs update formats v1 (the default) and v2, y-protocols sync; the same bytes as Yjs |
-| Tested against | Yjs 13.6.32 and 13.6.33; Yjs 14.0.0-16 and `@y/y` 14.0.0-rc.30 |
-| Untrusted input | a malformed or hostile update throws `YUpdateException` and leaves the document unchanged; its cost is bounded by `UpdateLimits` |
-| Threads | a document is not thread-safe, as in Yjs: one lock or one channel per document |
-| Runtime | .NET 11; Native AOT and trimming without warnings; Blazor WebAssembly |
-| Speed | the automerge-paper trace (260k edits) replays in about 0.4 s |
+Ycs needs the .NET 11 SDK. Clone the repository (or add it as a git submodule) and reference the project:
+
+```xml
+<ProjectReference Include="path/to/ycs/src/Ycs/Ycs.csproj" />
+```
 
 ## Documentation
 
 - [Getting started](docs/getting-started.md): documents, shared types, syncing, events, undo, saving.
-- [Networking](docs/networking.md): the y-protocols sync, the sample sync server, .NET and browser clients.
+- [Networking](docs/networking.md): the y-protocols sync, the sample sync server, the .NET and browser clients.
 - [Compatibility](docs/compatibility.md): Yjs versions, wire formats, what is not supported, performance.
 - [Untrusted input and threads](docs/untrusted-input.md): limits, errors, thread safety.
-- [API reference](docs/api.md): the API compared with Yjs and YDotNet, and every contract in detail.
+- [API reference](docs/api.md): the public API and every contract in detail.
 
-## Contributing
+For contributors:
 
-`dotnet test tests/Ycs.Tests` runs the main suite without Node. [`docs/testing.md`](docs/testing.md) says what each
-suite checks and how to run the interop checks against Yjs. The design notes and walkthroughs are in
-[`docs/`](docs/).
+- [Testing](docs/testing.md): what each test project guards, how to run it, and the `YCS_*` switches.
+- [Item layout](docs/design-item-layout.md): how the store holds items (slots in a slab, linked by handles).
+- Walkthroughs of the code against the Yjs source: [core](docs/walkthrough-core.md),
+  [shared types and events](docs/walkthrough-types.md),
+  [undo, snapshots, positions and protocols](docs/walkthrough-undo-snapshots-protocols.md).
+
+## Build and test
+
+```bash
+dotnet build Ycs.sln
+dotnet test tests/Ycs.Tests -c Release       # the main suite; no Node needed
+```
+
+The other projects (`tests/Ycs.Corpus`, `Ycs.Fuzz`, `Ycs.Properties`, `Ycs.Budgets`, `Ycs.Server.Tests`,
+`Ycs.Client.Tests`) and the interop checks against real Yjs (Node 24) are described in [docs/testing.md](docs/testing.md).
+`dotnet run --project samples/Ycs.Server` starts a sync server with a demo editor on `http://localhost:5000/`.
 
 ## License
 
