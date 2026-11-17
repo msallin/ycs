@@ -2,7 +2,7 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-internal class ContentJson : IContentEx
+internal class ContentJson : IContent
 {
     internal const int _ref = 2;
 
@@ -19,7 +19,7 @@ internal class ContentJson : IContentEx
         _mayHoldUndefined = mayHoldUndefined;
     }
 
-    int IContentEx.Ref => _ref;
+    int IContent.Ref => _ref;
 
     public bool Countable => true;
     public int Length => _content.Count;
@@ -50,22 +50,22 @@ internal class ContentJson : IContentEx
         return true;
     }
 
-    void IContentEx.Integrate(Transaction transaction, ItemRef item)
+    void IContent.Integrate(Transaction transaction, ItemRef item)
     {
         // Do nothing.
     }
 
-    void IContentEx.Delete(Transaction transaction)
+    void IContent.Delete(Transaction transaction)
     {
         // Do nothing.
     }
 
-    void IContentEx.Gc(StructStore store)
+    void IContent.Gc(StructStore store)
     {
         // Do nothing.
     }
 
-    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    void IContent.Write(IUpdateEncoder encoder, int offset)
     {
         var len = _content.Count;
         encoder.WriteLength(len - offset);

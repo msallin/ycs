@@ -13,22 +13,22 @@ namespace Ycs;
 [TestClass]
 public class CharArenaTests
 {
-    private static (int First, int Max, bool Copy, StructStore.CompactionMode Compaction) _mode;
+    private static (int First, int Max, bool Copy, TestHooks.CompactionMode Compaction) _mode;
 
     [ClassInitialize]
-    public static void SaveMode(TestContext context) => _mode = (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests);
+    public static void SaveMode(TestContext context) => _mode = (TestHooks.ArenaPages<char>.First, TestHooks.ArenaPages<char>.Max, TestHooks.CopyOnMerge, TestHooks.Compaction);
 
     [TestInitialize]
     public void NoMode()
     {
-        Arena<char>.FirstPageForTests = 0;
-        Arena<char>.MaxPageForTests = 0;
-        ItemRef.CopyOnMergeForTests = false;
-        StructStore.CompactionForTests = StructStore.CompactionMode.None;
+        TestHooks.ArenaPages<char>.First = 0;
+        TestHooks.ArenaPages<char>.Max = 0;
+        TestHooks.CopyOnMerge = false;
+        TestHooks.Compaction = TestHooks.CompactionMode.None;
     }
 
     [TestCleanup]
-    public void RestoreMode() => (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests) = _mode;
+    public void RestoreMode() => (TestHooks.ArenaPages<char>.First, TestHooks.ArenaPages<char>.Max, TestHooks.CopyOnMerge, TestHooks.Compaction) = _mode;
 
     private static YDoc NewDoc(long client = 1) => new(new YDocOptions { ClientId = client }) { RunExtensionsDisabledForTests = true };
 
@@ -56,7 +56,7 @@ public class CharArenaTests
     [TestMethod]
     public void Typing_ExtendingARun_KeepsTheOffsetAndCountsNothingDead()
     {
-        using var first256 = StaticScope.Set(ref Arena<char>.FirstPageForTests, 256);
+        using var first256 = StaticScope.Set(ref TestHooks.ArenaPages<char>.First, 256);
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("t");
         text.Insert(0, "a");
@@ -144,7 +144,7 @@ public class CharArenaTests
     [TestMethod]
     public void Merge_CopyOnMergeSwitch_CopiesAdjacentRanges()
     {
-        ItemRef.CopyOnMergeForTests = true;
+        TestHooks.CopyOnMerge = true;
         var doc = NewDoc();
         var text = doc.GetText("t");
         doc.Transact(_ =>

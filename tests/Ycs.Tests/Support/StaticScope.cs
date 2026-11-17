@@ -5,7 +5,7 @@ namespace Ycs;
 /// <summary>
 /// Sets a static test switch for the life of a <c>using</c> and puts back the value it had, whatever the test did, so
 /// a run mode that sets the switch for the whole run (YCS_POISON, YCS_LEAF_CAPACITY, YCS_SLAB_FIRST) stays set.
-/// <c>using var _ = StaticScope.Set(ref Slab.FirstPageSlotsForTests, 1);</c>
+/// <c>using var _ = StaticScope.Set(ref TestHooks.SlabFirstPageSlots, 1);</c>
 /// </summary>
 internal static class StaticScope
 {

@@ -17,12 +17,12 @@ public class CollectedXmlSiblingTests
     [TestInitialize]
     public void SwitchPoisonOff()
     {
-        _poisonBefore = YType.PoisonCollectedHandleForTests;
-        YType.PoisonCollectedHandleForTests = false;
+        _poisonBefore = TestHooks.PoisonCollectedHandle;
+        TestHooks.PoisonCollectedHandle = false;
     }
 
     [TestCleanup]
-    public void RestorePoison() => YType.PoisonCollectedHandleForTests = _poisonBefore;
+    public void RestorePoison() => TestHooks.PoisonCollectedHandle = _poisonBefore;
 
     private static bool IsFree(YDoc doc, int handle) => doc.Store.Slab.TryRead(handle, out var slot) && slot.IsFree;
 

@@ -76,7 +76,7 @@ internal readonly partial struct ItemRef
     /// which are its origins (Yjs' <c>new Item(id, left, left &amp;&amp; left.lastId, right, right &amp;&amp; right.id, parent, parentSub, content)</c>).
     /// </summary>
     public static ItemRef New(Slab slab, ItemId id, ItemRef left, ItemRef right, YType? parent, string? parentSub, IContent content) =>
-        NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, (IContentEx)content);
+        NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, content);
 
     /// <summary>
     /// A new item (not integrated) between <paramref name="left"/> and <paramref name="right"/> with a copy of the content of
@@ -87,16 +87,16 @@ internal readonly partial struct ItemRef
             ? NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, source.Kind, source.Length, null, default, default, source)
             : New(slab, id, left, right, parent, parentSub, source.CopyContent());
 
-    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType? parent, string? parentSub, IContentEx content) =>
+    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType? parent, string? parentSub, IContent content) =>
         NewItem(slab, id, left, leftOrigin, right, rightOrigin, parent, parentSub, (SlotKind)content.Ref, content.Length, content, default, default, default);
 
     // A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet): the object
     // of a kind that has one, the given type of a Type (else the one of its content object), else the chars of a String or
     // the values of an Any: the span, or the range of the store item copyOf (read after the compaction hook that opens
     // this method, which may move it). firstReplaced: the first char of the span is U+FFFD (see StoreChars).
-    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType? parent, string? parentSub, SlotKind kind, int length, IContentEx? content, ReadOnlySpan<char> chars, ReadOnlySpan<object?> values, ItemRef copyOf, YType? type = null, bool firstReplaced = false)
+    private static ItemRef NewItem(Slab slab, ItemId id, ItemRef left, ItemId? leftOrigin, ItemRef right, ItemId? rightOrigin, YType? parent, string? parentSub, SlotKind kind, int length, IContent? content, ReadOnlySpan<char> chars, ReadOnlySpan<object?> values, ItemRef copyOf, YType? type = null, bool firstReplaced = false)
     {
-        StructStore.CompactForTests(slab, true);
+        TestHooks.Compact(slab, true);
 
         // Everything that can grow a table is done before the slot is taken: Allocate may move page 0 (see Slab.At).
         var clients = slab.Clients;

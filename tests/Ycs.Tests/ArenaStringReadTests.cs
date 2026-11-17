@@ -15,22 +15,22 @@ namespace Ycs;
 [TestClass]
 public class ArenaStringReadTests
 {
-    private static (int First, int Max, bool Copy, StructStore.CompactionMode Compaction) _mode;
+    private static (int First, int Max, bool Copy, TestHooks.CompactionMode Compaction) _mode;
 
     [ClassInitialize]
-    public static void SaveMode(TestContext context) => _mode = (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests);
+    public static void SaveMode(TestContext context) => _mode = (TestHooks.ArenaPages<char>.First, TestHooks.ArenaPages<char>.Max, TestHooks.CopyOnMerge, TestHooks.Compaction);
 
     [TestInitialize]
     public void NoMode()
     {
-        Arena<char>.FirstPageForTests = 0;
-        Arena<char>.MaxPageForTests = 0;
-        ItemRef.CopyOnMergeForTests = false;
-        StructStore.CompactionForTests = StructStore.CompactionMode.None;
+        TestHooks.ArenaPages<char>.First = 0;
+        TestHooks.ArenaPages<char>.Max = 0;
+        TestHooks.CopyOnMerge = false;
+        TestHooks.Compaction = TestHooks.CompactionMode.None;
     }
 
     [TestCleanup]
-    public void RestoreMode() => (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests) = _mode;
+    public void RestoreMode() => (TestHooks.ArenaPages<char>.First, TestHooks.ArenaPages<char>.Max, TestHooks.CopyOnMerge, TestHooks.Compaction) = _mode;
 
     private static YDoc NewDoc() => new(new YDocOptions { ClientId = 1 }) { RunExtensionsDisabledForTests = true };
 
@@ -64,7 +64,7 @@ public class ArenaStringReadTests
     [TestMethod]
     public void WriteTo_WriterCompactsTheArenaInGetSpan_WritesTheText()
     {
-        using var first256 = StaticScope.Set(ref Arena<char>.FirstPageForTests, 256);
+        using var first256 = StaticScope.Set(ref TestHooks.ArenaPages<char>.First, 256);
         var doc = NewDoc();
         var text = ThreeItems(doc);
         var other = doc.GetText("u");
@@ -85,7 +85,7 @@ public class ArenaStringReadTests
     [TestMethod]
     public void WriteTo_WriterEditsAnotherTextEnoughToCompact_WritesTheText()
     {
-        using var first256 = StaticScope.Set(ref Arena<char>.FirstPageForTests, 256);
+        using var first256 = StaticScope.Set(ref TestHooks.ArenaPages<char>.First, 256);
         var doc = NewDoc();
         var text = ThreeItems(doc);
         var other = doc.GetText("u");
@@ -173,8 +173,8 @@ public class ArenaStringReadTests
     [TestMethod]
     public void Chars_StringItemInATinyArena_ReadsTheArena()
     {
-        Arena<char>.FirstPageForTests = 3;
-        Arena<char>.MaxPageForTests = 3;
+        TestHooks.ArenaPages<char>.First = 3;
+        TestHooks.ArenaPages<char>.Max = 3;
         var doc = NewDoc();
         var text = doc.GetText("t");
         text.Insert(0, "hello world");

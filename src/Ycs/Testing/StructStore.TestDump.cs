@@ -2,8 +2,7 @@ using System.Text;
 
 namespace Ycs;
 
-// What the property tests (a project without InternalsVisibleTo, reading through UnsafeAccessor) and the internal
-// readers of the tests ask of the store, in primitives and public types: no struct or content class leaves.
+// What the tests ask of the store, in primitives and public types: no struct or content class leaves.
 internal sealed partial class StructStore
 {
     /// <summary>The name of a struct's kind in the tests' dumps; fixed here, not <c>GetType().Name</c>, so that a rename or a merged representation leaves the dumps as they are.</summary>

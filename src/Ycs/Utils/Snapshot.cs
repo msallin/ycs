@@ -93,7 +93,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
                 }
 
                 var structs = originDoc.Store.Clients[client];
-                var lastStructIndex = StructStore.FindIndexSS(structs, clock - 1);
+                var lastStructIndex = structs.FindIndex(clock - 1);
 
                 // Write # encoded structs.
                 encoder.RestWriter.WriteVarUint((uint)(lastStructIndex + 1));

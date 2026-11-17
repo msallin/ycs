@@ -6,7 +6,6 @@
 
 using System.Collections;
 using System.Numerics;
-using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using static Ycs.Properties.Json;
@@ -127,7 +126,7 @@ namespace Ycs.Properties
                 if (c.Doc.ClientId != c.Id)
                 {
                     c.Id = 5_000_000_000 + _renamed++;
-                    Replica.SetClientId(c.Doc, c.Id);
+                    c.Doc.ClientId = c.Id;
                 }
             }
         }
@@ -819,7 +818,7 @@ namespace Ycs.Properties
                     }
                     else
                     {
-                        InsertRaw((YXmlFragment)target, ((YXmlFragment)target).Count, Values(s));
+                        ((YXmlFragment)target).InsertRaw(((YXmlFragment)target).Count, Values(s));
                     }
 
                     return Missing.Value;
@@ -835,7 +834,7 @@ namespace Ycs.Properties
                     }
                     else
                     {
-                        InsertRaw((YXmlFragment)target, 0, Values(s));
+                        ((YXmlFragment)target).InsertRaw(0, Values(s));
                     }
 
                     return Missing.Value;
@@ -1057,9 +1056,6 @@ namespace Ycs.Properties
 
         private static List<object> Values(Dictionary<string, object> s) => s.List("values").Select(Val).ToList();
 
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "InsertRaw")]
-        private static extern void InsertRaw(YXmlFragment fragment, int index, ICollection<object> content);
-
         // An XML fragment takes any value from a foreign client, which the typed Insert refuses: the script drives the raw insert.
         private static void SeqInsert(YType t, int at, List<object> values)
         {
@@ -1069,7 +1065,7 @@ namespace Ycs.Properties
             }
             else
             {
-                InsertRaw((YXmlFragment)t, at, values);
+                ((YXmlFragment)t).InsertRaw(at, values);
             }
         }
 
@@ -1545,17 +1541,11 @@ namespace Ycs.Properties
         {
             (YArray a, null) => a.Select(v => v.ToObject()).ToList(),
             (YArray a, _) => a.ToArray(snap).Select(v => v.ToObject()).ToList(),
-            (_, null) => RawValues((YXmlFragment)t).ToList(),
-            _ => Snapshotted((YArrayBase)t, snap),
+            (_, null) => ((YXmlFragment)t).EnumerateValues().ToList(),
+            _ => ((YArrayBase)t).ContentAtSnapshot(snap),
         };
 
         // The children of a fragment as stored: a foreign client may have written a value that is not a type, which the typed reads give as null.
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "EnumerateValues")]
-        private static extern IEnumerable<object> RawValues(YXmlFragment fragment);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "ContentAtSnapshot")]
-        private static extern List<object> Snapshotted(YArrayBase list, Snapshot snapshot);
-
         private static Dictionary<string, object> MapView(IEnumerable<KeyValuePair<string, YValue>> entries)
         {
             var o = new Dictionary<string, object>();
@@ -1747,84 +1737,29 @@ namespace Ycs.Properties
 
         // ---- the internals the reference comparisons read and switch (search markers off, Yjs' merge order)
 
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "SearchMarkersDisabledForTests")]
-        private static extern ref bool SearchMarkersDisabled(YDoc doc);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_Store")]
-        [return: UnsafeAccessorType("Ycs.StructStore, Ycs")]
-        private static extern object StoreOf(YDoc doc);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "PairwiseMergeForTests")]
-        private static extern ref bool PairwiseMerge([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DumpForTests")]
-        private static extern void DumpOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store, StringBuilder sb, bool markers, Func<object, string> parentText, Func<string, IReadOnlyList<object>, string> contentText);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "NestedListsForTests")]
-        private static extern IEnumerable<(ItemId Item, YArrayBase List)> NestedListsOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "MapIdsForTests")]
-        private static extern IEnumerable<KeyValuePair<string, ItemId>> MapIdsOf(YType type);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_OwnerIdForTests")]
-        private static extern ItemId? OwnerIdOf(YType type);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "InDeletedTypeForTests")]
-        private static extern bool InDeletedTypeOf(YType type);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "CountedForTests")]
-        private static extern (int Length, string Text) CountedOf(YType type);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "ListForTests")]
-        private static extern List<(long Client, long Clock, int Length, ItemId? LeftOrigin, ItemId? RightOrigin, bool Deleted, string Kind, bool LinkedBack, bool InParent)> ListOf(YType type);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "DescribeSearchMarkers")]
-        private static extern string DescribeSearchMarkers(YArrayBase type);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "SearchMarkerViolations")]
-        private static extern string SearchMarkerViolations(YArrayBase type);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "RunExtensionsDisabledForTests")]
-        private static extern ref bool RunExtensionsDisabled(YDoc doc);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "set_ClientId")]
-        internal static extern void SetClientId(YDoc doc, long id);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Method, Name = "get_RunsExtended")]
-        private static extern long RunsExtendedOf([UnsafeAccessorType("Ycs.StructStore, Ycs")] object store);
-
         /// <summary>How many inserts extended a run in place in this document.</summary>
-        internal long RunsExtended => RunsExtendedOf(StoreOf(Doc));
+        internal long RunsExtended => Doc.Store.RunsExtended;
 
         /// <param name="walk">"plain": the marker lookups walk item by item (Yjs' loops); "eager": they ask the run-head
         /// index at once (instead of after 32 steps); null: as by default. Either way every lookup is logged.</param>
         internal void UseReferences(bool markers, bool pairwiseMerge, bool extendRuns, string walk = null)
         {
-            SearchMarkersDisabled(Doc) = !markers;
-            PairwiseMerge(StoreOf(Doc)) = pairwiseMerge;
-            RunExtensionsDisabled(Doc) = !extendRuns;
-            RunHeadIndexDisabled(Doc) = walk == "plain";
+            Doc.SearchMarkersDisabledForTests = !markers;
+            Doc.Store.PairwiseMergeForTests = pairwiseMerge;
+            Doc.RunExtensionsDisabledForTests = !extendRuns;
+            Doc.RunHeadIndexDisabledForTests = walk == "plain";
             if (walk == "eager")
             {
-                LiteralWalkStepsForTests(Doc) = 1;
+                Doc.LiteralWalkStepsForTests = 1;
             }
 
-            MarkerLookups(Doc) = walk == null ? null : [];
+            Doc.MarkerLookupsForTests = walk == null ? null : [];
         }
-
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "RunHeadIndexDisabledForTests")]
-        private static extern ref bool RunHeadIndexDisabled(YDoc doc);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "LiteralWalkStepsForTests")]
-        private static extern ref int LiteralWalkStepsForTests(YDoc doc);
-
-        [UnsafeAccessor(UnsafeAccessorKind.Field, Name = "MarkerLookupsForTests")]
-        private static extern ref List<(ItemId Item, int Index)> MarkerLookups(YDoc doc);
 
         /// <summary>The marker lookups since the last call, as "client:clock@index" (with the script option "walk"), and forgets them.</summary>
         public string TakeMarkerLookups()
         {
-            var lookups = MarkerLookups(Doc);
+            var lookups = Doc.MarkerLookupsForTests;
             if (lookups == null)
             {
                 return "";
@@ -1847,7 +1782,7 @@ namespace Ycs.Properties
                 }
             }
 
-            return OwnerIdOf(t) is { } owner ? "in:" + IdOf(owner) : "detached";
+            return t.OwnerIdForTests is { } owner ? "in:" + IdOf(owner) : "detached";
         }
 
         /// <summary>
@@ -1864,8 +1799,7 @@ namespace Ycs.Properties
                 types.Add(Root(name));
             }
 
-            DumpOf(
-                StoreOf(Doc),
+            Doc.Store.DumpForTests(
                 sb,
                 markers,
                 parent => parent is YType pt ? TypeName(pt) : parent?.ToString() ?? "-",
@@ -1874,14 +1808,14 @@ namespace Ycs.Properties
             foreach (var t in types)
             {
                 sb.Append(TypeName(t)).Append(" map");
-                foreach (var (key, item) in MapIdsOf(t).OrderBy(kv => kv.Key, StringComparer.Ordinal))
+                foreach (var (key, item) in t.MapIdsForTests().OrderBy(kv => kv.Key, StringComparer.Ordinal))
                 {
                     sb.Append(' ').Append(key).Append('=').Append(IdOf(item));
                 }
 
                 if (markers && t is YArrayBase list)
                 {
-                    sb.Append(" markers ").Append(DescribeSearchMarkers(list));
+                    sb.Append(" markers ").Append(list.DescribeSearchMarkers());
                 }
 
                 sb.Append('\n');
@@ -1921,9 +1855,9 @@ namespace Ycs.Properties
         /// </summary>
         public string SearchMarkerProblems()
         {
-            foreach (var (item, nested) in NestedListsOf(StoreOf(Doc)))
+            foreach (var (item, nested) in Doc.Store.NestedListsForTests())
             {
-                if (!InDeletedTypeOf(nested) && SearchMarkerViolations(nested) is { } v)
+                if (!nested.InDeletedTypeForTests() && nested.SearchMarkerViolations() is { } v)
                 {
                     return IdOf(item) + ": " + v;
                 }
@@ -1931,7 +1865,7 @@ namespace Ycs.Properties
 
             foreach (var (name, _) in _roots)
             {
-                if (Root(name) is YArrayBase list && SearchMarkerViolations(list) is { } v)
+                if (Root(name) is YArrayBase list && list.SearchMarkerViolations() is { } v)
                 {
                     return name + ": " + v;
                 }
@@ -1960,7 +1894,7 @@ namespace Ycs.Properties
         }
 
         private static List<ItemRun> ItemsOf(YType type) =>
-            [.. ListOf(type).Select(r => new ItemRun(
+            [.. type.ListForTests().Select(r => new ItemRun(
                 r.Client,
                 r.Clock,
                 r.Length,
@@ -1993,7 +1927,7 @@ namespace Ycs.Properties
                     continue;
                 }
 
-                var (length, text) = CountedOf(t);
+                var (length, text) = t.CountedForTests();
 
                 if (TypeLength.Of(t) != length)
                 {

@@ -244,7 +244,7 @@ internal sealed class LayoutStore
         }
 
         var left = 0;
-        var end = (long)last + 1; // the pivot of FindIndexSS needs the end; the last start is close enough for a pivot
+        var end = (long)last + 1; // the pivot of FindIndex needs the end; the last start is close enough for a pivot
         var mid = (int)(clock * (long)right / end);
         while (left <= right)
         {

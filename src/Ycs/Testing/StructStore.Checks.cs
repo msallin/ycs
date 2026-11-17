@@ -230,7 +230,7 @@ internal sealed partial class StructStore
                 return $"the Type slot of {id} has length {slot.Length}";
             }
         }
-        else if (content is not IContentEx held || held.Ref != slot.Kind || held.Length != slot.Length)
+        else if (content is not IContent held || held.Ref != slot.Kind || held.Length != slot.Length)
         {
             return $"the slot of {id} holds the kind {slot.Kind} and length {slot.Length}, its content another";
         }

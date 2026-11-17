@@ -13,22 +13,22 @@ public class ArenaCompactionTests
 {
     public TestContext TestContext { get; set; }
 
-    private static (int First, int Max, bool Copy, StructStore.CompactionMode Compaction) _mode;
+    private static (int First, int Max, bool Copy, TestHooks.CompactionMode Compaction) _mode;
 
     [ClassInitialize]
-    public static void SaveMode(TestContext context) => _mode = (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests);
+    public static void SaveMode(TestContext context) => _mode = (TestHooks.ArenaPages<char>.First, TestHooks.ArenaPages<char>.Max, TestHooks.CopyOnMerge, TestHooks.Compaction);
 
     [TestInitialize]
     public void NoMode()
     {
-        Arena<char>.FirstPageForTests = 0;
-        Arena<char>.MaxPageForTests = 0;
-        ItemRef.CopyOnMergeForTests = false;
-        StructStore.CompactionForTests = StructStore.CompactionMode.None;
+        TestHooks.ArenaPages<char>.First = 0;
+        TestHooks.ArenaPages<char>.Max = 0;
+        TestHooks.CopyOnMerge = false;
+        TestHooks.Compaction = TestHooks.CompactionMode.None;
     }
 
     [TestCleanup]
-    public void RestoreMode() => (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests) = _mode;
+    public void RestoreMode() => (TestHooks.ArenaPages<char>.First, TestHooks.ArenaPages<char>.Max, TestHooks.CopyOnMerge, TestHooks.Compaction) = _mode;
 
     private static YDoc NewDoc(bool gc = true) => new(new YDocOptions { ClientId = 1, GarbageCollection = gc }) { RunExtensionsDisabledForTests = true };
 
@@ -63,7 +63,7 @@ public class ArenaCompactionTests
     [TestMethod]
     public void EndOfBatch_DeadOutweighsLiveAndFillsAPage_Compacts()
     {
-        using var first256 = StaticScope.Set(ref Arena<char>.FirstPageForTests, 256);
+        using var first256 = StaticScope.Set(ref TestHooks.ArenaPages<char>.First, 256);
         var doc = NewDoc();
         var expected = TypeAndDeleteMost(doc);
 
@@ -76,7 +76,7 @@ public class ArenaCompactionTests
     public void EndOfBatch_DeadOutweighsLiveButFewerThanTheSlots_DoesNotCompact()
     {
         // A compaction walks every slot: the garbage must amount to as many elements as there are slots.
-        using var max = StaticScope.Set(ref Arena<char>.MaxPageForTests, 16);
+        using var max = StaticScope.Set(ref TestHooks.ArenaPages<char>.Max, 16);
         var doc = NewDoc();
         var array = doc.GetArray("a");
         doc.Transact(_ =>
@@ -293,8 +293,8 @@ public class ArenaCompactionTests
     [TestMethod]
     public void MidBatchCompaction_EveryTimeInALargeDocument_KeepsTheRangesOfTheTextEdited()
     {
-        using var _ = StaticScope.Set(ref Slab.CompactEveryTimeForTests, true);
-        using var __ = StaticScope.Set(ref StructStore.CompactionForTests, StructStore.CompactionMode.MidBatch);
+        using var _ = StaticScope.Set(ref TestHooks.CompactEveryTime, true);
+        using var __ = StaticScope.Set(ref TestHooks.Compaction, TestHooks.CompactionMode.MidBatch);
         var doc = NewDoc();
         var text = doc.GetText("t");
         var expected = new System.Text.StringBuilder();

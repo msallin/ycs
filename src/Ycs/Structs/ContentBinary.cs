@@ -1,6 +1,6 @@
 namespace Ycs;
 
-internal class ContentBinary : IContentEx
+internal class ContentBinary : IContent
 {
     internal const int _ref = 3;
 
@@ -11,7 +11,7 @@ internal class ContentBinary : IContentEx
         _content = data;
     }
 
-    int IContentEx.Ref => _ref;
+    int IContent.Ref => _ref;
 
     public bool Countable => true;
     public int Length => 1;
@@ -27,22 +27,22 @@ internal class ContentBinary : IContentEx
         return false;
     }
 
-    void IContentEx.Integrate(Transaction transaction, ItemRef item)
+    void IContent.Integrate(Transaction transaction, ItemRef item)
     {
         // Do nothing.
     }
 
-    void IContentEx.Delete(Transaction transaction)
+    void IContent.Delete(Transaction transaction)
     {
         // Do nothing.
     }
 
-    void IContentEx.Gc(StructStore store)
+    void IContent.Gc(StructStore store)
     {
         // Do nothing.
     }
 
-    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    void IContent.Write(IUpdateEncoder encoder, int offset)
     {
         encoder.WriteBuffer(_content);
     }

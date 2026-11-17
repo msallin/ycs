@@ -21,12 +21,12 @@ public class CollectedTypeFactsTests
     [TestInitialize]
     public void SetPoison()
     {
-        _poisonBefore = YType.PoisonCollectedHandleForTests;
-        YType.PoisonCollectedHandleForTests = PoisonHandles || _poisonBefore;
+        _poisonBefore = TestHooks.PoisonCollectedHandle;
+        TestHooks.PoisonCollectedHandle = PoisonHandles || _poisonBefore;
     }
 
     [TestCleanup]
-    public void RestorePoison() => YType.PoisonCollectedHandleForTests = _poisonBefore;
+    public void RestorePoison() => TestHooks.PoisonCollectedHandle = _poisonBefore;
 
     // inner's item is a GC struct that merges with its neighbours' (all one client, consecutive clocks); outer's item
     // is a deleted item that merges into the deleted item left of it.

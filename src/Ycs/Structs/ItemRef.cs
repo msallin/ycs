@@ -312,13 +312,13 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     }
 
     // A GC struct holds no content object; the code asks an item for it (by its Kind) and never a GC struct.
-    public IContentEx Content
+    public IContent Content
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         get
         {
             Check();
-            return (IContentEx)_slab.ReadRef(_handle)!;
+            return (IContent)_slab.ReadRef(_handle)!;
         }
     }
 

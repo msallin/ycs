@@ -239,12 +239,6 @@ internal class DeleteSet
         }
     }
 
-    public void TryGc(StructStore store, YDoc doc)
-    {
-        TryGcDeleteSet(store, doc);
-        TryMergeDeleteSet(store);
-    }
-
     public void TryGcDeleteSet(StructStore store, YDoc doc)
     {
         var gcFilter = doc.GcFilter;
@@ -260,7 +254,7 @@ internal class DeleteSet
                 var deleteItem = deleteItems[di];
                 var endDeleteItemClock = deleteItem.Clock + deleteItem.Length;
 
-                for (int si = StructStore.FindIndexSS(structs, deleteItem.Clock, ref hint); si < structs.Count; si++)
+                for (int si = structs.FindIndex(deleteItem.Clock, ref hint); si < structs.Count; si++)
                 {
                     var str = structs[si];
                     if (str.Id.Clock >= endDeleteItemClock)
@@ -293,7 +287,7 @@ internal class DeleteSet
                 var deleteItem = deleteItems[di];
 
                 // Start with merging the item next to the last deleted item.
-                var mostRightIndexToCheck = Math.Min(structs.Count - 1, 1 + StructStore.FindIndexSS(structs, deleteItem.Clock + deleteItem.Length - 1, ref hint));
+                var mostRightIndexToCheck = Math.Min(structs.Count - 1, 1 + structs.FindIndex(deleteItem.Clock + deleteItem.Length - 1, ref hint));
                 for (int si = mostRightIndexToCheck; si > 0 && structs[si].Id.Clock >= deleteItem.Clock;)
                 {
                     si -= 1 + TryToMergeWithLefts(store, structs, si);

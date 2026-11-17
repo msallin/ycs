@@ -9,11 +9,11 @@ public static class StoreChecks
     [AssemblyInitialize]
     public static void RecountAfterEveryTransaction(TestContext context)
     {
-        StructStore.CheckAfterTransactionsForTests = true;
+        TestHooks.CheckAfterTransactions = true;
 
         if (Environment.GetEnvironmentVariable("YCS_SLAB_FIRST") is { Length: > 0 } first)
         {
-            Slab.FirstPageSlotsForTests = int.Parse(first, System.Globalization.CultureInfo.InvariantCulture);
+            TestHooks.SlabFirstPageSlots = int.Parse(first, System.Globalization.CultureInfo.InvariantCulture);
         }
     }
 }

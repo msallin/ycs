@@ -171,15 +171,11 @@ public abstract partial class YType
             Doc!.Store.Types.Collect(_tableIndex);
         }
 
-        if (PoisonCollectedHandleForTests)
+        if (TestHooks.PoisonCollectedHandle)
         {
             _item = Doc!.Store.OtherItemForTests(_item);
         }
     }
-
-    // Test switch: after collection the type's handle names an unrelated live item, as a reused slot would (7.6), so
-    // any read of the struct instead of the facts changes behaviour.
-    internal static bool PoisonCollectedHandleForTests;
 
     // The slot is in a slab of its own, which no store's checks count.
     internal static ItemRef PoisonItem() =>

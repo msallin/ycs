@@ -13,7 +13,7 @@ internal sealed partial class StructStore
     /// <summary>The types that items of this store name as their parent, by the index a slot holds.</summary>
     internal TypeTable Types => Slab.Types;
 
-    public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
+    internal readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
 
     // The values of Clients by the client's index in the slab's client table (what a slot names its client by): the paths
     // that start from a struct find its list without hashing the client. Set where Clients is, by AddStruct.
@@ -76,11 +76,8 @@ internal sealed partial class StructStore
     /// <summary>How many inserts extended a run in place (the tests count how often the comparisons with Yjs see one).</summary>
     internal long RunsExtended { get; private set; }
 
-    /// <summary>
-    /// Return the states as a Map<int,int>.
-    /// Note that clock refers to the next expected clock id.
-    /// </summary>
-    public IDictionary<long, long> GetStateVector()
+    /// <summary>The state vector; a clock is the next expected clock of its client.</summary>
+    internal IDictionary<long, long> GetStateVector()
     {
         var result = new Dictionary<long, long>(Clients.Count);
         GetStateVector(result);
@@ -97,7 +94,7 @@ internal sealed partial class StructStore
         }
     }
 
-    public long GetState(long clientId)
+    internal long GetState(long clientId)
     {
         if (Clients.TryGetValue(clientId, out var structs))
         {
@@ -107,34 +104,7 @@ internal sealed partial class StructStore
         return 0;
     }
 
-    public void IntegrityCheck()
-    {
-        foreach (var structs in Clients.Values)
-        {
-            if (structs.Count == 0)
-            {
-                throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: no structs for client");
-            }
-
-            for (int i = 1; i < structs.Count; i++)
-            {
-                var left = structs[i - 1];
-                var right = structs[i];
-
-                if (left.Clock + left.Length != right.Clock)
-                {
-                    throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: missing struct");
-                }
-            }
-        }
-
-        if (PendingDsCount != 0 || Pending != null)
-        {
-            throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: still have pending items");
-        }
-    }
-
-    public void AddStruct(ItemRef str)
+    internal void AddStruct(ItemRef str)
     {
         var structs = StructsOf(str);
         if (structs != null && structs.End != str.Clock)
@@ -160,7 +130,7 @@ internal sealed partial class StructStore
         LogChange(structs, str.Id.Client);
         structs.Add(str);
         Version++;
-        CompactForTests(Slab, true);
+        TestHooks.Compact(Slab, true);
     }
 
     /// <summary>
@@ -252,23 +222,17 @@ internal sealed partial class StructStore
         return item.SplitItem(transaction, diff);
     }
 
-    /// <inheritdoc cref="ClientStructs.FindIndex(long)"/>
-    public static int FindIndexSS(ClientStructs structs, long clock) => structs.FindIndex(clock);
-
-    /// <inheritdoc cref="ClientStructs.FindIndex(long, ref int)"/>
-    public static int FindIndexSS(ClientStructs structs, long clock, ref int hint) => structs.FindIndex(clock, ref hint);
-
     /// <summary>
     /// Expects that id is actually in store. This function throws or is an infinite loop otherwise.
     /// </summary>
-    public ItemRef Find(ItemId id)
+    internal ItemRef Find(ItemId id)
     {
         if (!Clients.TryGetValue(id.Client, out var structs))
         {
             throw new InvalidOperationException($"No structs for client: {id.Client}");
         }
 
-        int index = FindIndexSS(structs, id.Clock);
+        int index = structs.FindIndex(id.Clock);
         if (index < 0 || index >= structs.Count)
         {
             throw new InvalidOperationException($"Invalid struct index: {index}, max: {structs.Count}");
@@ -277,9 +241,9 @@ internal sealed partial class StructStore
         return structs[index];
     }
 
-    public int FindIndexCleanStart(Transaction transaction, ClientStructs structs, long clock)
+    internal int FindIndexCleanStart(Transaction transaction, ClientStructs structs, long clock)
     {
-        int index = FindIndexSS(structs, clock);
+        int index = structs.FindIndex(clock);
         var str = structs[index];
         if (str.Clock < clock && str.IsItem)
         {
@@ -290,13 +254,13 @@ internal sealed partial class StructStore
         return index;
     }
 
-    public ItemRef GetItemCleanStart(Transaction transaction, ItemId id) => GetItemCleanStart(transaction, id.Client, id.Clock);
+    internal ItemRef GetItemCleanStart(Transaction transaction, ItemId id) => GetItemCleanStart(transaction, id.Client, id.Clock);
 
     /// <summary>
     /// <see cref="GetItemCleanStart(Transaction, ItemId)"/> for a clock that can be negative (no <see cref="ItemId"/> is made of
     /// one): it throws then, as <see cref="ClientStructs.FindIndex(long)"/> does for any clock not in the store.
     /// </summary>
-    public ItemRef GetItemCleanStart(Transaction transaction, long client, long clock)
+    internal ItemRef GetItemCleanStart(Transaction transaction, long client, long clock)
     {
         if (!Clients.TryGetValue(client, out var structs))
         {
@@ -308,14 +272,14 @@ internal sealed partial class StructStore
         return structs[indexCleanStart];
     }
 
-    public ItemRef GetItemCleanEnd(Transaction transaction, ItemId id)
+    internal ItemRef GetItemCleanEnd(Transaction transaction, ItemId id)
     {
         if (!Clients.TryGetValue(id.Client, out var structs))
         {
             throw new InvalidOperationException($"No structs for client: {id.Client}");
         }
 
-        int index = FindIndexSS(structs, id.Clock);
+        int index = structs.FindIndex(id.Clock);
         var str = structs[index];
 
         if ((id.Clock != str.Clock + str.Length - 1) && !str.IsGC)
@@ -330,20 +294,20 @@ internal sealed partial class StructStore
     /// Replaces <paramref name="item"/> in its list by a GC struct of the same range, which keeps its slot: the
     /// references to it stay valid and read the GC struct.
     /// </summary>
-    public void ReplaceWithGC(ItemRef item)
+    internal void ReplaceWithGC(ItemRef item)
     {
         if (!Clients.TryGetValue(item.Id.Client, out var structs))
         {
             throw new InvalidOperationException($"No structs for client: {item.Id.Client}");
         }
 
-        int index = FindIndexSS(structs, item.Clock);
+        int index = structs.FindIndex(item.Clock);
         item.BecomeGC();
         structs.Replace(index, item);
         Departures++;
     }
 
-    public void IterateStructs(Transaction transaction, ClientStructs structs, long clockStart, long length, Predicate<ItemRef> fun)
+    internal void IterateStructs(Transaction transaction, ClientStructs structs, long clockStart, long length, Predicate<ItemRef> fun)
     {
         if (length <= 0)
         {
@@ -373,7 +337,7 @@ internal sealed partial class StructStore
         } while (index < structs.Count && structs[index].Clock < clockEnd);
     }
 
-    public (ItemRef item, int diff) FollowRedone(ItemId id)
+    internal (ItemRef item, int diff) FollowRedone(ItemId id)
     {
         ItemId? nextId = id;
         int diff = 0;
@@ -572,7 +536,7 @@ internal sealed partial class StructStore
                     PendingDs.Add(client, state, clockEnd - state);
                 }
 
-                var index = FindIndexSS(structs, clock, ref hint);
+                var index = structs.FindIndex(clock, ref hint);
 
                 // We can ignore the case of GC and Delete structs, because we are going to skip them.
                 var str = structs[index];

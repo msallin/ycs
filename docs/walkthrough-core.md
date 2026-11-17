@@ -67,9 +67,9 @@ every reference to it stays valid and reads a GC struct.
 | JS | C# | Verdict |
 | --- | --- | --- |
 | `getStateVector`, `getState` | `GetStateVector`, `GetState` | identical |
-| `integrityCheck` | `IntegrityCheck` | equivalent (also fails on pending data) |
+| `integrityCheck` | `StructStore.IntegrityCheckForTests` (tests only) | equivalent (also fails on pending data) |
 | `addStruct` | `AddStruct` | identical |
-| `findIndexSS` | `FindIndexSS`, over `ClientStructs` (the start clocks beside the structs, in leaves) | equivalent |
+| `findIndexSS` | `ClientStructs.FindIndex` (the start clocks beside the structs, in leaves) | equivalent |
 | `find`, `getItem` | `Find` | identical |
 | `findIndexCleanStart`, `getItemCleanStart`, `getItemCleanEnd` | the same names | identical |
 | `replaceStruct` | `ReplaceWithGC` | equivalent |
@@ -81,10 +81,9 @@ every reference to it stays valid and reads a GC struct.
 | --- | --- | --- |
 | `Transaction` constructor | `Transaction.Begin`, `End` (objects are reused) | equivalent |
 | `writeUpdateMessageFromTransaction` | `WriteUpdateMessageFromTransaction` | identical |
-| `nextID` | `GetNextId` | identical |
 | `addChangedTypeToTransaction` | `AddChangedTypeToTransaction` | equivalent (shared read-only sets) |
 | `tryToMergeWithLefts` | `DeleteSet.TryToMergeWithLefts` | equivalent (see [Merging](#merging)) |
-| `tryGcDeleteSet`, `tryGc` | `DeleteSet.TryGcDeleteSet`, `TryGc` | identical |
+| `tryGcDeleteSet`, `tryGc` | `DeleteSet.TryGcDeleteSet` (the cleanup calls `tryGc`'s two steps itself) | identical |
 | `tryMergeDeleteSet` | `DeleteSet.TryMergeDeleteSet` | equivalent |
 | `cleanupTransactions` | `Transaction.CleanupTransactions`, `CleanupTransaction` | differs: throwing handlers |
 | `transact` | `YDoc.Transact` | differs: throwing handlers |

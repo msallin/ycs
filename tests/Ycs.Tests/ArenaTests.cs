@@ -12,17 +12,17 @@ public class ArenaTests
     private static (int First, int Max) _mode;
 
     [ClassInitialize]
-    public static void SaveMode(TestContext context) => _mode = (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests);
+    public static void SaveMode(TestContext context) => _mode = (TestHooks.ArenaPages<char>.First, TestHooks.ArenaPages<char>.Max);
 
     [TestInitialize]
     public void NoMode()
     {
-        Arena<char>.FirstPageForTests = 0;
-        Arena<char>.MaxPageForTests = 0;
+        TestHooks.ArenaPages<char>.First = 0;
+        TestHooks.ArenaPages<char>.Max = 0;
     }
 
     [TestCleanup]
-    public void RestoreMode() => (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests) = _mode;
+    public void RestoreMode() => (TestHooks.ArenaPages<char>.First, TestHooks.ArenaPages<char>.Max) = _mode;
 
     private static char[] Text(int length, char from = 'a') => Enumerable.Range(0, length).Select(i => (char)(from + i % 26)).ToArray();
 
@@ -53,10 +53,10 @@ public class ArenaTests
     [TestMethod]
     public void Constructor_LayoutSizes_FirstPageHoldsTheFirstSize()
     {
-        using var firstChars = StaticScope.Set(ref Arena<char>.FirstPageForTests, 0);
-        using var maxChars = StaticScope.Set(ref Arena<char>.MaxPageForTests, 0);
-        using var firstRefs = StaticScope.Set(ref Arena<object>.FirstPageForTests, 0);
-        using var maxRefs = StaticScope.Set(ref Arena<object>.MaxPageForTests, 0);
+        using var firstChars = StaticScope.Set(ref TestHooks.ArenaPages<char>.First, 0);
+        using var maxChars = StaticScope.Set(ref TestHooks.ArenaPages<char>.Max, 0);
+        using var firstRefs = StaticScope.Set(ref TestHooks.ArenaPages<object>.First, 0);
+        using var maxRefs = StaticScope.Set(ref TestHooks.ArenaPages<object>.Max, 0);
         var chars = new Arena<char>(Arena.CharFirstPage, Arena.CharMaxPage);
         var refs = new Arena<object>(Arena.RefFirstPage, Arena.RefMaxPage);
 
@@ -69,8 +69,8 @@ public class ArenaTests
     [TestMethod]
     public void Constructor_HooksSet_UsesTinyPages()
     {
-        Arena<char>.FirstPageForTests = 1;
-        Arena<char>.MaxPageForTests = 4;
+        TestHooks.ArenaPages<char>.First = 1;
+        TestHooks.ArenaPages<char>.Max = 4;
         try
         {
             var arena = new Arena<char>(256, 32768);
@@ -83,8 +83,8 @@ public class ArenaTests
         }
         finally
         {
-            Arena<char>.FirstPageForTests = 0;
-            Arena<char>.MaxPageForTests = 0;
+            TestHooks.ArenaPages<char>.First = 0;
+            TestHooks.ArenaPages<char>.Max = 0;
         }
     }
 

@@ -5,17 +5,14 @@ internal sealed partial class Slab
     // The calls of CompactForTests that were skipped to stay linear.
     private long _forced;
 
-    /// <summary>Test switch: <see cref="CompactForTests"/> compacts every time, whatever the size of the slab.</summary>
-    internal static bool CompactEveryTimeForTests;
-
     /// <summary>
     /// <see cref="CompactChars"/> and <see cref="CompactValues"/> as the tests force them: every time for a slab of up to
     /// 2,048 live slots, else every count/64th time, so that a test of many edits stays linear in them
-    /// (<see cref="CompactEveryTimeForTests"/> lifts that).
+    /// (<see cref="TestHooks.CompactEveryTime"/> lifts that).
     /// </summary>
     internal void CompactForTests()
     {
-        if (CompactEveryTimeForTests || _live <= 2048 || ++_forced % (_live / 64) == 0)
+        if (TestHooks.CompactEveryTime || _live <= 2048 || ++_forced % (_live / 64) == 0)
         {
             CompactChars();
             CompactValues();

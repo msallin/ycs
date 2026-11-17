@@ -38,7 +38,7 @@ internal readonly partial struct ItemRef
         var leftLength = Read().Length;
         var rightStart = right.Read().Payload;
         var rightLength = right.Read().Length;
-        if (!CopyOnMergeForTests && leftStart + leftLength == rightStart)
+        if (!TestHooks.CopyOnMerge && leftStart + leftLength == rightStart)
         {
             return;
         }
@@ -91,7 +91,7 @@ internal readonly partial struct ItemRef
     /// <summary>Appends <paramref name="values"/> to a <see cref="SlotKind.Any"/> item; the caller adjusts <see cref="Length"/>.</summary>
     internal void AppendValues(ReadOnlySpan<object?> values)
     {
-        StructStore.CompactForTests(_slab, true);
+        TestHooks.Compact(_slab, true);
         if (Kind != SlotKind.Any)
         {
             throw new InvalidOperationException($"The struct holds {Kind}, not {SlotKind.Any} content.");

@@ -405,7 +405,7 @@ internal static class Editing
         foreach (var (clock, length) in ranges)
         {
             var clockEnd = clock + length;
-            var index = StructStore.FindIndexSS(structs, clock, ref hint);
+            var index = structs.FindIndex(clock, ref hint);
             var str = structs[index];
             if (!str.Deleted && str.Id.Clock < clock)
             {

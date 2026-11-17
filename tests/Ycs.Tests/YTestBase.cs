@@ -97,7 +97,7 @@ public class YTestBase
 
         foreach (var u in Users)
         {
-            u.Store.IntegrityCheck();
+            u.Store.IntegrityCheckForTests();
         }
 
         // Test array iterator.

@@ -61,10 +61,10 @@ internal readonly partial struct ItemRef
                 adopted = NewItem(store.Slab, start, left, leftOrigin, right, rightOrigin, parent, parentSub, SlotKind.Deleted, length, null, default, default, default);
                 break;
             default:
-                var cold = (IContentEx)table.Cold(i);
+                var cold = (IContent)table.Cold(i);
                 if (offset > 0)
                 {
-                    cold = cold is ContentJson json ? json.Tail(offset) : (IContentEx)cold.Splice(offset);
+                    cold = cold is ContentJson json ? json.Tail(offset) : cold.Splice(offset);
                 }
 
                 adopted = NewItem(store.Slab, start, left, leftOrigin, right, rightOrigin, parent, parentSub, (SlotKind)kind, length, cold, default, default, default);

@@ -1,6 +1,6 @@
 namespace Ycs;
 
-internal class ContentFormat : IContentEx
+internal class ContentFormat : IContent
 {
     internal const int _ref = 6;
 
@@ -16,7 +16,7 @@ internal class ContentFormat : IContentEx
     /// <summary>The attribute's value; a byte array as a copy.</summary>
     public object? Value => ValueFreezer.OnRead(_value);
 
-    int IContentEx.Ref => _ref;
+    int IContent.Ref => _ref;
 
     public bool Countable => false;
     public int Length => 1;
@@ -33,7 +33,7 @@ internal class ContentFormat : IContentEx
         return false;
     }
 
-    void IContentEx.Integrate(Transaction transaction, ItemRef item)
+    void IContent.Integrate(Transaction transaction, ItemRef item)
     {
         // Search markers are currently unsupported for rich text documents.
         (item.Parent as YArrayBase)?.DisableSearchMarkers();
@@ -43,17 +43,17 @@ internal class ContentFormat : IContentEx
         }
     }
 
-    void IContentEx.Delete(Transaction transaction)
+    void IContent.Delete(Transaction transaction)
     {
         // Do nothing.
     }
 
-    void IContentEx.Gc(StructStore store)
+    void IContent.Gc(StructStore store)
     {
         // Do nothing.
     }
 
-    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    void IContent.Write(IUpdateEncoder encoder, int offset)
     {
         encoder.WriteKey(Key);
         encoder.WriteJson(_value);

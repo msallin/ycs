@@ -5,10 +5,35 @@ internal sealed partial class StructStore
     /// <summary>Merges at the end of a transaction in Yjs' order, pair by pair (the tests' reference; see <see cref="DeleteSet.TryToMergeWithLefts(ClientStructs, int)"/>).</summary>
     internal bool PairwiseMergeForTests;
 
-    /// <summary>Recounts the struct lists after every transaction and throws on a difference (the tests switch it on).</summary>
-    internal static bool CheckAfterTransactionsForTests;
-
     private long _checks;
+
+    /// <summary>Yjs' <c>integrityCheck</c>: every client's structs are contiguous and nothing is pending (also fails on pending data).</summary>
+    internal void IntegrityCheckForTests()
+    {
+        foreach (var structs in Clients.Values)
+        {
+            if (structs.Count == 0)
+            {
+                throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: no structs for client");
+            }
+
+            for (int i = 1; i < structs.Count; i++)
+            {
+                var left = structs[i - 1];
+                var right = structs[i];
+
+                if (left.Clock + left.Length != right.Clock)
+                {
+                    throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: missing struct");
+                }
+            }
+        }
+
+        if (PendingDsCount != 0 || Pending != null)
+        {
+            throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: still have pending items");
+        }
+    }
 
     /// <summary>A live item of the store other than <paramref name="except"/> (<paramref name="except"/> itself when there is none).</summary>
     internal ItemRef OtherItemForTests(ItemRef except)
@@ -36,7 +61,7 @@ internal sealed partial class StructStore
     }
 
     /// <summary>
-    /// What <see cref="CheckAfterTransactionsForTests"/> checks: every list (<see cref="ClientStructs.Violations"/>), the
+    /// What <see cref="TestHooks.CheckAfterTransactions"/> checks: every list (<see cref="ClientStructs.Violations"/>), the
     /// links and holders around its structs (<c>ConsistencyViolation</c>), the slot of every struct (<c>SlotViolation</c>)
     /// and the slab; the structs a transaction touched always, a list of more than 1,024 structs only every count/256th time, so that a test stays linear in its
     /// edits.

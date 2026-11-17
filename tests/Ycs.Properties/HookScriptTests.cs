@@ -59,8 +59,8 @@ public sealed class HookScriptTests
 
         var count = int.Parse(Environment.GetEnvironmentVariable("YCS_PROP_HOOKS") is { Length: > 0 } n ? n : "300", CultureInfo.InvariantCulture);
         var first = ulong.Parse(Environment.GetEnvironmentVariable("YCS_PROP_SEED") is { Length: > 0 } s ? s : "190001", CultureInfo.InvariantCulture);
-        var before = StoreChecks.FirstPageSlots;
-        StoreChecks.FirstPageSlots = 1;
+        var before = TestHooks.SlabFirstPageSlots;
+        TestHooks.SlabFirstPageSlots = 1;
         try
         {
             using var oracle = new Oracle();
@@ -79,7 +79,7 @@ public sealed class HookScriptTests
         }
         finally
         {
-            StoreChecks.FirstPageSlots = before;
+            TestHooks.SlabFirstPageSlots = before;
         }
     }
 }

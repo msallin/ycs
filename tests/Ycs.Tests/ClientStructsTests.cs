@@ -12,7 +12,7 @@ public class ClientStructsTests
     /// <summary>Lists made in <paramref name="body"/> have leaves of <paramref name="capacity"/> positions.</summary>
     internal static T WithLeafCapacity<T>(int capacity, Func<T> body)
     {
-        using var _ = StaticScope.Set(ref ClientStructs.LeafCapacityForTests, capacity);
+        using var _ = StaticScope.Set(ref TestHooks.LeafCapacity, capacity);
         return body();
     }
 

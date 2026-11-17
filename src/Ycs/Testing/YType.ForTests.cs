@@ -1,7 +1,6 @@
 namespace Ycs;
 
-// What the property tests (a project without InternalsVisibleTo, reading through UnsafeAccessor) ask of a type, in
-// primitives and public types: no struct or content class leaves.
+// What the tests ask of a type, in primitives and public types: no struct or content class leaves.
 public abstract partial class YType
 {
     /// <summary>The id of the item that holds this type, or null for a root or a type not yet integrated.</summary>

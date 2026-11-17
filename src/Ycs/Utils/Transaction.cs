@@ -236,11 +236,6 @@ public sealed partial class Transaction
         }
     }
 
-    internal ItemId GetNextId()
-    {
-        return new ItemId(_doc.ClientId, _doc.Store.GetState(_doc.ClientId));
-    }
-
     /// <summary>
     /// If 'type.parent' was added in current transaction, 'type' technically did not change,
     /// it was just added and we should not fire events for 'type'.
@@ -624,14 +619,14 @@ public sealed partial class Transaction
             ds?.TryGcDeleteSet(store, doc);
         }
 
-        StructStore.CompactForTests(store.Slab, true);
+        TestHooks.Compact(store.Slab, true);
         ds?.TryMergeDeleteSet(store);
 
         // On all affected store.clients props, try to merge.
         var beforeState = transaction._beforeState;
         foreach (var (_, structs, beforeClock, _) in transaction.ChangedClients)
         {
-            var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
+            var firstChangePos = Math.Max(structs.FindIndex(beforeClock), 1);
             for (int j = structs.Count - 1; j >= firstChangePos;)
             {
                 j -= 1 + DeleteSet.TryToMergeWithLefts(store, structs, j);
@@ -642,7 +637,7 @@ public sealed partial class Transaction
         for (int j = mergeStructs.Count - 1; j >= 0; j--)
         {
             var structs = store.Clients[mergeStructs[j].Client];
-            var replacedStructPos = StructStore.FindIndexSS(structs, mergeStructs[j].Clock);
+            var replacedStructPos = structs.FindIndex(mergeStructs[j].Clock);
 
             // Both neighbours merged already when more than one struct went.
             if (replacedStructPos + 1 < structs.Count && DeleteSet.TryToMergeWithLefts(store, structs, replacedStructPos + 1) > 1)
@@ -656,9 +651,9 @@ public sealed partial class Transaction
             }
         }
 
-        StructStore.CompactForTests(store.Slab, false);
+        TestHooks.Compact(store.Slab, false);
 
-        if (StructStore.CheckAfterTransactionsForTests)
+        if (TestHooks.CheckAfterTransactions)
         {
             store.CheckForTests(transaction);
         }
@@ -678,11 +673,9 @@ public sealed partial class Transaction
             if (afterClock != beforeClock)
             {
                 doc.ClientId = YDoc.GenerateNewClientId();
-                // Debug.WriteLine($"{nameof(Transaction)}: Changed the client-id because another client seems to be using it.");
             }
         }
 
-        // @todo: Merge all the transactions into one and provide send the data as a single update message.
         // Unlike Yjs, a throwing handler skips none of the later steps, nor the cleanup of the next transaction.
         Step(static t => t._doc.InvokeOnAfterTransactionCleanup(t), transaction, ref error);
         Step(static t => t._doc.InvokeUpdateV1(t), transaction, ref error);

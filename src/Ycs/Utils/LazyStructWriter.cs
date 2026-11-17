@@ -134,7 +134,7 @@ internal sealed class LazyStructWriter
 
                 break;
             default:
-                ((IContentEx)table.Cold(i)).Write(encoder, offset);
+                ((IContent)table.Cold(i)).Write(encoder, offset);
                 break;
         }
     }

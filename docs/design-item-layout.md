@@ -61,14 +61,14 @@ them without the visit.
 * **Short walks stay literal** for 32 steps (`YDoc.LiteralWalkStepsForTests`, 32 by default), so an ordinary edit pays no position lookup; a
   collected type's items fall back to the literal walk (`StructStore.TryFindPosition`). An item continuing a collected
   struct is rejected (`YUpdateException`, as Yjs throws), so a GC struct is never an item's `Left`.
-* **Checks**: a recount of every list after every test transaction (`StructStore.CheckAfterTransactionsForTests`); the
+* **Checks**: a recount of every list after every test transaction (`TestHooks.CheckAfterTransactions`); the
   `walk-index` property (each lookup through the index against Yjs' loops item by item, with run extension on and off);
   `interop/markers` and `interop/properties` soaks against Yjs.
 
 ### 1.3 The leaf order
 
 `ClientStructs.Leaves.cs`. A client's structs, starts and flags are in leaves of at most 128 positions
-(`ClientStructs.LeafCapacity`; `LeafCapacityForTests` sets another in the tests), each with its visible sum, break count
+(`ClientStructs.LeafCapacity`; `TestHooks.LeafCapacity` sets another in the tests), each with its visible sum, break count
 and live-format count. From two leaves on there is a directory: the leaves, their first starts (the search by clock: the
 last leaf, the leaf of the last lookup, then a binary search), their first positions (the search by position, the same
 way), a has-break and a has-live-format bit per leaf in 64-bit words, and a Fenwick tree of the leaves' sums. Positions
@@ -153,7 +153,7 @@ struct of a store is a slot of its document's `Slab`.
   content's wire reference number: 0 for a GC struct, `Slot.FreeKind` (0xFF) for a slot on a free list. `Payload` holds
   the free-list link of a free slot, the type-table index of a Type slot and the arena offset of a String or Any slot
   (1.7); a Deleted and a GC slot hold 0.
-* **Pages** (2.2): page 0 starts at 1 slot (`Slab.FirstPageSlotsForTests` changes it for the test runs) and doubles by
+* **Pages** (2.2): page 0 starts at 1 slot (`TestHooks.SlabFirstPageSlots` changes it for the test runs) and doubles by
   copy up to 1,024; the next pages hold 1,024 and never move. A handle is `page << 10 | index`; a read is two array
   indexes. Beside each page two `object[]` pages, `Refs` (the content object of a cold kind) and `Keys` (a map item's
   key), are allocated on first use, null for a free slot; beside the slab, `Redone` (`Dictionary<int, ItemId>`, flag
@@ -211,7 +211,7 @@ reference numbers, with `Skip` for the staged form only and `Free` for a slot on
 * **One dispatcher per event, one partial per kind.** `ItemRef.Operations.cs` (integrate, split, merge, free, collect)
   reaches content only through the hooks of `ItemRef.Content.cs`: store at `NewItem`, split (`SplitContent`), merge
   (`MergeContent`), release (`ReleaseContent`), write, copy, delete, collect, integrate. A String's work is in
-  `ItemRef.Chars.cs`, an Any's in `ItemRef.Values.cs`, the cold kinds' through their `IContentEx` object, a Type's in
+  `ItemRef.Chars.cs`, an Any's in `ItemRef.Values.cs`, the cold kinds' through their `IContent` object, a Type's in
   `TypeContent.cs`, a Deleted's in the hub.
 * **Split** gives the right part the range from `payload + diff`: no copy, no allocation, for a String and an Any. A
   cut between the two halves of a surrogate pair writes U+FFFD over both in place (the ranges of an arena are
@@ -427,7 +427,7 @@ compacts every count/64th time (`YCS_COMPACT_EVERY=1` lifts that), so that a tes
   insert refuses a type or a document that has an item (or a collected one) before any item is made, so `_item` is set
   once, until `YDoc.Destroy` clears it. The rule: code that may meet a collected type asks `IsRoot`, `ParentType`,
   `ItemId`, `ItemParentSub`, `ItemDeleted` or `ItemKeep`, never `_item`. A test switch
-  (`YType.PoisonCollectedHandleForTests`, `YCS_POISON=1` for `Ycs.Tests`) replaces the handle after collection with an
+  (`TestHooks.PoisonCollectedHandle`, `YCS_POISON=1` for `Ycs.Tests`) replaces the handle after collection with an
   unrelated live item, as a reused slot would; the suite passes with it on.
 * **The position of a collected type**: the XML siblings (`NextSibling`, `PrevSibling`, `InsertAfter`) need where the
   type was, not a fact. A collected type holds an id (`_collectedId`), and `YType.CurrentItem` finds the struct that

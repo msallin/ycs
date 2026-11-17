@@ -28,12 +28,6 @@ internal static class Arena
 /// </remarks>
 internal sealed class Arena<T>
 {
-    /// <summary>The first page size of arenas made while it is not 0 (the arena's own when it is).</summary>
-    internal static int FirstPageForTests;
-
-    /// <summary>The largest page size of arenas made while it is not 0.</summary>
-    internal static int MaxPageForTests;
-
     private const int MaxArrayLength = 0x7FFFFFC7;
 
     private Page?[] _pages = [];
@@ -53,8 +47,8 @@ internal sealed class Arena<T>
 
     public Arena(int firstPage, int maxPage)
     {
-        _max = Math.Max(1, MaxPageForTests != 0 ? MaxPageForTests : maxPage);
-        _first = Math.Clamp(FirstPageForTests != 0 ? FirstPageForTests : firstPage, 1, _max);
+        _max = Math.Max(1, TestHooks.ArenaPages<T>.Max != 0 ? TestHooks.ArenaPages<T>.Max : maxPage);
+        _first = Math.Clamp(TestHooks.ArenaPages<T>.First != 0 ? TestHooks.ArenaPages<T>.First : firstPage, 1, _max);
     }
 
     /// <summary>Elements in live runs: what was appended, less what was reported dead.</summary>

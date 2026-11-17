@@ -62,9 +62,6 @@ internal sealed partial class Slab
     internal const int PageSlots = 1 << PageBits;
     private const int DefaultFirstSlots = 1;
 
-    /// <summary>The first size of page 0 for slabs made without one: 1 makes every allocation of page 0 copy.</summary>
-    internal static int FirstPageSlotsForTests;
-
     // Pages are released as a whole: the list holds null for a released one, and its index is on _released.
     private Page?[] _pages = [];
     private int _pageCount;
@@ -115,7 +112,7 @@ internal sealed partial class Slab
 
     public Slab(int firstPageSlots = 0, ClientTable? clients = null, TypeTable? types = null)
     {
-        var first = firstPageSlots != 0 ? firstPageSlots : FirstPageSlotsForTests != 0 ? FirstPageSlotsForTests : DefaultFirstSlots;
+        var first = firstPageSlots != 0 ? firstPageSlots : TestHooks.SlabFirstPageSlots != 0 ? TestHooks.SlabFirstPageSlots : DefaultFirstSlots;
         _firstSlots = Math.Clamp(first, 1, PageSlots);
         Clients = clients ?? new ClientTable();
         Types = types ?? new TypeTable();

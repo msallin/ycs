@@ -79,7 +79,7 @@ internal static class Ops
             a = 0;
             for (var i = 0; i < n; i++)
             {
-                a += StructStore.FindIndexSS(lists[store.ClientIds[clients[i]]], clocks[i]);
+                a += lists[store.ClientIds[clients[i]]].FindIndex(clocks[i]);
             }
         }, n);
         var proto = Best(() =>

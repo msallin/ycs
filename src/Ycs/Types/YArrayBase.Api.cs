@@ -233,7 +233,7 @@ public abstract partial class YArrayBase
     }
 
     /// <summary>The countable content visible in <paramref name="snapshot"/> (Yjs' <c>typeListToArraySnapshot</c>), as stored.</summary>
-    private protected List<object?> ContentAtSnapshot(Snapshot snapshot)
+    internal List<object?> ContentAtSnapshot(Snapshot snapshot)
     {
         // Visibility is decided per item, by its first clock: Yjs' items.
         Doc?.MaterializeRunExtensions();

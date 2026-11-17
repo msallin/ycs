@@ -42,7 +42,7 @@ internal static class EncodingUtils
     {
         // Write first id.
         clock = Math.Max(clock, structs[0].Id.Clock);
-        int startNewStructs = StructStore.FindIndexSS(structs, clock);
+        int startNewStructs = structs.FindIndex(clock);
 
         // Write # encoded structs.
         encoder.RestWriter.WriteVarUint((uint)(structs.Count - startNewStructs));

@@ -16,22 +16,22 @@ namespace Ycs;
 [TestClass]
 public class ValueArenaTests
 {
-    private static (int First, int Max, bool Copy, StructStore.CompactionMode Compaction) _mode;
+    private static (int First, int Max, bool Copy, TestHooks.CompactionMode Compaction) _mode;
 
     [ClassInitialize]
-    public static void SaveMode(TestContext context) => _mode = (Arena<object?>.FirstPageForTests, Arena<object?>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests);
+    public static void SaveMode(TestContext context) => _mode = (TestHooks.ArenaPages<object?>.First, TestHooks.ArenaPages<object?>.Max, TestHooks.CopyOnMerge, TestHooks.Compaction);
 
     [TestInitialize]
     public void NoMode()
     {
-        Arena<object?>.FirstPageForTests = 0;
-        Arena<object?>.MaxPageForTests = 0;
-        ItemRef.CopyOnMergeForTests = false;
-        StructStore.CompactionForTests = StructStore.CompactionMode.None;
+        TestHooks.ArenaPages<object?>.First = 0;
+        TestHooks.ArenaPages<object?>.Max = 0;
+        TestHooks.CopyOnMerge = false;
+        TestHooks.Compaction = TestHooks.CompactionMode.None;
     }
 
     [TestCleanup]
-    public void RestoreMode() => (Arena<object?>.FirstPageForTests, Arena<object?>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests) = _mode;
+    public void RestoreMode() => (TestHooks.ArenaPages<object?>.First, TestHooks.ArenaPages<object?>.Max, TestHooks.CopyOnMerge, TestHooks.Compaction) = _mode;
 
     private static YDoc NewDoc(long client = 1) => new(new YDocOptions { ClientId = client }) { RunExtensionsDisabledForTests = true };
 
@@ -67,7 +67,7 @@ public class ValueArenaTests
     [TestMethod]
     public void Pushing_ExtendingARun_KeepsTheOffsetAndCountsNothingDead()
     {
-        using var first64 = StaticScope.Set(ref Arena<object>.FirstPageForTests, 64);
+        using var first64 = StaticScope.Set(ref TestHooks.ArenaPages<object>.First, 64);
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         array.Add(0);
@@ -82,7 +82,7 @@ public class ValueArenaTests
     [TestMethod]
     public void Pushing_RunOutgrowsItsRoom_CopiesWithSlackAndTheOldRangeIsDeadAndCleared()
     {
-        using var first64 = StaticScope.Set(ref Arena<object>.FirstPageForTests, 64);
+        using var first64 = StaticScope.Set(ref TestHooks.ArenaPages<object>.First, 64);
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         AddRange(array, 0, 63);
@@ -143,7 +143,7 @@ public class ValueArenaTests
     [TestMethod]
     public void Merge_CopyOnMergeSwitch_CopiesAdjacentRanges()
     {
-        ItemRef.CopyOnMergeForTests = true;
+        TestHooks.CopyOnMerge = true;
         var doc = NewDoc();
         var array = doc.GetArray("a");
         doc.Transact(_ =>
@@ -158,7 +158,7 @@ public class ValueArenaTests
     [TestMethod]
     public void Split_RunWithAReservation_TheRightPartKeepsItAndNothingIsDeadBut64()
     {
-        using var first64 = StaticScope.Set(ref Arena<object>.FirstPageForTests, 64);
+        using var first64 = StaticScope.Set(ref TestHooks.ArenaPages<object>.First, 64);
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
         AddRange(array, 0, 63);
@@ -462,7 +462,7 @@ public class ValueArenaTests
     [TestMethod]
     public void Merge_CopyOnMergeSwitch_ValuesAreCollectibleBeforeAnyCompaction()
     {
-        ItemRef.CopyOnMergeForTests = true;
+        TestHooks.CopyOnMerge = true;
         var doc = NewDoc();
         var array = doc.GetArray("a");
         WeakReference[] weak = null;

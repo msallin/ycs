@@ -21,16 +21,10 @@ internal sealed partial class ClientStructs
     /// </summary>
     internal const int LeafCapacity = 128;
 
-    /// <summary>
-    /// When not 0, the leaf capacity of the lists made from now on instead of <see cref="LeafCapacity"/> (at least 2).
-    /// The property and corpus suites make leaves of 2 to 4, so that their short lists split and merge leaves.
-    /// </summary>
-    internal static int LeafCapacityForTests;
-
     // Per list, so that lists of different leaf capacities live side by side (the differential tests compare them in
-    // one process) and a change of LeafCapacityForTests leaves the lists already made intact. At least 2: a full leaf
+    // one process) and a change of TestHooks.LeafCapacity leaves the lists already made intact. At least 2: a full leaf
     // splits into two that are not empty.
-    private readonly int _leafCapacity = LeafCapacityForTests == 0 ? LeafCapacity : Math.Max(2, LeafCapacityForTests);
+    private readonly int _leafCapacity = TestHooks.LeafCapacity == 0 ? LeafCapacity : Math.Max(2, TestHooks.LeafCapacity);
 
     // The one leaf while there is no directory; null while there is one (the directory's leaf 0 then).
     private Leaf _single = null!;

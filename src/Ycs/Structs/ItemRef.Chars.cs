@@ -15,9 +15,6 @@ internal readonly partial struct ItemRef
 {
     private const char Replacement = '\uFFFD';
 
-    /// <summary>Test switch: a merge of two Strings copies even when the right range follows the left.</summary>
-    internal static bool CopyOnMergeForTests;
-
     // Copies the text into the arena and makes the range the slot's. firstReplaced: the text starts after the first half of a
     // surrogate pair that the store holds (an item adopted at an offset), so its first character becomes U+FFFD, as the right
     // part of a split does (SplitChars).
@@ -62,7 +59,7 @@ internal readonly partial struct ItemRef
         var leftLength = Read().Length;
         var rightStart = right.Read().Payload;
         var rightLength = right.Read().Length;
-        if (!CopyOnMergeForTests && leftStart + leftLength == rightStart)
+        if (!TestHooks.CopyOnMerge && leftStart + leftLength == rightStart)
         {
             return;
         }
@@ -110,7 +107,7 @@ internal readonly partial struct ItemRef
     /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
     internal void AppendChars(string text)
     {
-        StructStore.CompactForTests(_slab, true);
+        TestHooks.Compact(_slab, true);
         if (Kind != SlotKind.String)
         {
             throw new InvalidOperationException($"The struct holds {Kind}, not {SlotKind.String} content.");

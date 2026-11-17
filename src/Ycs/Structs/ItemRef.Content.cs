@@ -31,7 +31,7 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>The content object of a format, embed, binary, JSON or document item; null for any other kind.</summary>
-    internal IContentEx? Cold => Kind.IsCold() ? (IContentEx)_slab.ReadRef(HandleChecked())! : null;
+    internal IContent? Cold => Kind.IsCold() ? (IContent)_slab.ReadRef(HandleChecked())! : null;
 
     /// <summary>Appends the elements of the content (Yjs' <c>getContent</c>) to <paramref name="destination"/>; an Any's without a copy.</summary>
     internal void AppendContentTo(List<object?> destination)
@@ -49,11 +49,11 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>A copy of the content that belongs to no item (what a redone item holds).</summary>
-    internal IContentEx CopyContent() => Kind switch
+    internal IContent CopyContent() => Kind switch
     {
         SlotKind.Type => TypeContent.Copy(this),
         SlotKind.Deleted or SlotKind.String or SlotKind.Any => throw new InvalidOperationException($"The {Kind} content of an item is copied by NewCopyOf, not as an object."),
-        _ => (IContentEx)Content.Copy(),
+        _ => Content.Copy(),
     };
 
     /// <summary>Deletes what the content of the item holds (a type's nested items); the item is marked deleted by the caller.</summary>
@@ -111,7 +111,7 @@ internal readonly partial struct ItemRef
 
     // Fills the content storage of the new slot at handle from the content object (not a String's or an Any's: StoreChars,
     // StoreValues) or, for a Type, from type or else the type of the content object; the slot holds the kind and the length.
-    private static void StoreContent(Slab slab, int handle, SlotKind kind, IContentEx? content, YType? type)
+    private static void StoreContent(Slab slab, int handle, SlotKind kind, IContent? content, YType? type)
     {
         if (kind == SlotKind.Type)
         {
@@ -126,7 +126,7 @@ internal readonly partial struct ItemRef
 
     // Splits the content at diff, which this item keeps the part before: the right part's object (null for Deleted), its
     // length and its payload; a Type cannot be split.
-    private (long Payload, int Length) SplitContent(int diff, out IContentEx? content)
+    private (long Payload, int Length) SplitContent(int diff, out IContent? content)
     {
         switch (Kind)
         {
@@ -142,7 +142,7 @@ internal readonly partial struct ItemRef
                 content = null;
                 return (SplitValues(diff), Length - diff);
             default:
-                content = (IContentEx)Content.Splice(diff);
+                content = Content.Splice(diff);
                 return (0, content.Length);
         }
     }
@@ -196,7 +196,7 @@ internal readonly partial struct ItemRef
     }
 
     private T Typed<T>(SlotKind kind)
-        where T : class, IContentEx
+        where T : class, IContent
     {
         var actual = Kind;
         return actual == kind

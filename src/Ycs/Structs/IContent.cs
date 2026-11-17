@@ -8,10 +8,6 @@ internal interface IContent
     IContent Copy();
     IContent Splice(int offset);
     bool MergeWith(IContent right);
-}
-
-internal interface IContentEx : IContent
-{
     int Ref { get; }
 
     void Integrate(Transaction transaction, ItemRef item);

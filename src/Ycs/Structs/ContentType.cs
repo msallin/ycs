@@ -1,6 +1,6 @@
 namespace Ycs;
 
-internal class ContentType : IContentEx
+internal class ContentType : IContent
 {
     internal const int _ref = 7;
 
@@ -9,7 +9,7 @@ internal class ContentType : IContentEx
         Type = type;
     }
 
-    int IContentEx.Ref => _ref;
+    int IContent.Ref => _ref;
 
     public bool Countable => true;
     public int Length => 1;
@@ -26,16 +26,16 @@ internal class ContentType : IContentEx
 
     // A store slot of kind Type holds the type-table index of its type (TypeContent), never this object: this is the form
     // a new item arrives in, and what a redone item is made from.
-    void IContentEx.Integrate(Transaction transaction, ItemRef item) => throw StoreSide();
+    void IContent.Integrate(Transaction transaction, ItemRef item) => throw StoreSide();
 
-    void IContentEx.Delete(Transaction transaction) => throw StoreSide();
+    void IContent.Delete(Transaction transaction) => throw StoreSide();
 
-    void IContentEx.Gc(StructStore store) => throw StoreSide();
+    void IContent.Gc(StructStore store) => throw StoreSide();
 
     private static InvalidOperationException StoreSide() =>
         new("The content of a type is integrated, deleted, collected and written through its store slot (TypeContent), not as an object.");
 
-    void IContentEx.Write(IUpdateEncoder encoder, int offset) => throw StoreSide();
+    void IContent.Write(IUpdateEncoder encoder, int offset) => throw StoreSide();
 
     /// <summary>Reads a type's reference and, for an XML element or hook, its node name; throws for a reference no type has.</summary>
     internal static int ReadHeader(IUpdateDecoder decoder, out string? typeName)

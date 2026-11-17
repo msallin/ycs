@@ -1,6 +1,6 @@
 namespace Ycs;
 
-internal class ContentEmbed : IContentEx
+internal class ContentEmbed : IContent
 {
     internal const int _ref = 5;
 
@@ -14,7 +14,7 @@ internal class ContentEmbed : IContentEx
     /// <summary>The embedded value, null for an embed of JSON null (Yjs' <c>insertEmbed(null)</c>); a byte array as a copy.</summary>
     public object? Embed => ValueFreezer.OnRead(_embed);
 
-    int IContentEx.Ref => _ref;
+    int IContent.Ref => _ref;
 
     public bool Countable => true;
     public int Length => 1;
@@ -30,22 +30,22 @@ internal class ContentEmbed : IContentEx
         return false;
     }
 
-    void IContentEx.Integrate(Transaction transaction, ItemRef item)
+    void IContent.Integrate(Transaction transaction, ItemRef item)
     {
         // Do nothing.
     }
 
-    void IContentEx.Delete(Transaction transaction)
+    void IContent.Delete(Transaction transaction)
     {
         // Do nothing.
     }
 
-    void IContentEx.Gc(StructStore store)
+    void IContent.Gc(StructStore store)
     {
         // Do nothing.
     }
 
-    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    void IContent.Write(IUpdateEncoder encoder, int offset)
     {
         encoder.WriteJson(_embed);
     }

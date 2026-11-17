@@ -351,10 +351,10 @@ transactions); `markers-invisible` without (where Yjs leaves markers stale, mark
 | `run-extension` | inserts that continue a run extend it in place | every insert an item of its own (`YDoc.RunExtensionsDisabledForTests`, option `extend: false`), merged pair by pair | the store as above, search markers included (between steps every marker sits where Yjs' would), and the observations; once as the script has it (quiet clients extend runs), once with every client quiet (script option `quiet`) |
 
 The test suites (`Ycs.Tests`, `Ycs.Corpus`, `Ycs.Fuzz`, `Ycs.Properties`) recount the struct lists after every
-transaction (`StructStore.CheckAfterTransactionsForTests`: the start clocks, the leaves and their directory (fill,
+transaction (`TestHooks.CheckAfterTransactions`: the start clocks, the leaves and their directory (fill,
 first starts and positions, the has-break and has-format bits, the tree of the sums), the run-head index's flags,
 links and per-leaf sums and counts; lists over 1,024 structs every count/256th time); `Ycs.Corpus` uses leaves of 2
-positions and `Ycs.Properties` leaves of 4 (`ClientStructs.LeafCapacityForTests`; `YCS_LEAF_CAPACITY` sets it in
+positions and `Ycs.Properties` leaves of 4 (`TestHooks.LeafCapacity`; `YCS_LEAF_CAPACITY` sets it in
 `Ycs.Tests` and `Ycs.Properties`), so that short lists split and merge leaves (`YCS_NO_RECOUNT=1` leaves the recount
 out, to see what a property alone finds). `walk-index` fails when the index misses an update: the refresh of an item
 another one was integrated before, the leaf sums after a split, the leaf sums after a merge.
@@ -427,12 +427,18 @@ record the fixtures again. Its script stays as a regression case: a divergence's
 ## Environment variables
 
 The switches the tests and scripts read. A value is a number unless the table says otherwise. All are off or at their
-default when unset.
+default when unset. The ones that switch library code (`YCS_ARENA_COPY`, `YCS_ARENA_PAGE`, `YCS_COMPACT`,
+`YCS_COMPACT_EVERY`, `YCS_LEAF_CAPACITY`, `YCS_POISON`, `YCS_SLAB_FIRST`) are static fields of
+`src/Ycs/Testing/TestHooks.cs`, which names the variable and what it forces and reads them in
+`TestHooks.ApplyEnvironment`; a test sets one for its length through `StaticScope.Set(ref TestHooks.Field, value)`. The
+per-document switches (`YDoc.*ForTests`, `StructStore.PairwiseMergeForTests`) are fields of the document and the store.
+The test-only code in `src` (the recount `StructStore.Checks*`, the dumps, the `*ForTests` readers) is the folder
+`src/Ycs/Testing/`; `Ycs.Tests`, `Ycs.Corpus`, `Ycs.Fuzz` and `Ycs.Properties` use it directly through `InternalsVisibleTo`.
 
 | Variable | Read by | What it does |
 | --- | --- | --- |
 | `YCS_ACCEPT_API=1` | `PublicApiTests` | writes the current public surface into `tests/Ycs.Tests/PublicApi.txt` instead of comparing |
-| `YCS_ARENA_COPY=1` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | a merge of two String or Any runs always copies the left run to a new place (`ItemRef.CopyOnMergeForTests`), so that the in-place and the copy paths both run |
+| `YCS_ARENA_COPY=1` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | a merge of two String or Any runs always copies the left run to a new place (`TestHooks.CopyOnMerge`), so that the in-place and the copy paths both run |
 | `YCS_ARENA_PAGE=<n>` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | arena pages of at most n characters and n values, the first n/4 (at least 1), so that runs outgrow pages and cross them |
 | `YCS_COMPACT=always\|midbatch` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | `always` compacts the arenas after every transaction's cleanup; `midbatch` also in the middle of a batch (each struct added, each item made, each append to a run, between gc and merge) |
 | `YCS_COMPACT_EVERY=1` | `StoreChecks` of `Ycs.Tests` and `Ycs.Corpus` | compacts at every one of those points; without it a store of more than 2,048 slots compacts every count/64th time, so that a test stays linear in its edits |

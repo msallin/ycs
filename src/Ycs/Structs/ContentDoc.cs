@@ -1,6 +1,6 @@
 namespace Ycs;
 
-internal class ContentDoc : IContentEx
+internal class ContentDoc : IContent
 {
     internal const int _ref = 9;
 
@@ -24,7 +24,7 @@ internal class ContentDoc : IContentEx
         Opts = OptsOf(read.Gc, read.AutoLoad, read.Meta);
     }
 
-    int IContentEx.Ref => _ref;
+    int IContent.Ref => _ref;
 
     public bool Countable => true;
     public int Length => 1;
@@ -53,7 +53,7 @@ internal class ContentDoc : IContentEx
         return false;
     }
 
-    void IContentEx.Integrate(Transaction transaction, ItemRef item)
+    void IContent.Integrate(Transaction transaction, ItemRef item)
     {
         _doc ??= _read.Create(transaction.Doc.Limits);
 
@@ -67,7 +67,7 @@ internal class ContentDoc : IContentEx
         }
     }
 
-    void IContentEx.Delete(Transaction transaction)
+    void IContent.Delete(Transaction transaction)
     {
         if (transaction.AddedSubdocs.Contains(Doc))
         {
@@ -79,12 +79,12 @@ internal class ContentDoc : IContentEx
         }
     }
 
-    void IContentEx.Gc(StructStore store)
+    void IContent.Gc(StructStore store)
     {
         _doc?.CollectItem();
     }
 
-    void IContentEx.Write(IUpdateEncoder encoder, int offset)
+    void IContent.Write(IUpdateEncoder encoder, int offset)
     {
         encoder.WriteString(Guid);
         encoder.WriteAny(Opts);

@@ -88,7 +88,7 @@ public class PlanItemKeysTests
     [TestMethod]
     public void ApplyUpdate_PeerItemNextToItemInCollectedType_AppliesWithPoisonedHandles()
     {
-        using var _ = StaticScope.Set(ref YType.PoisonCollectedHandleForTests, true);
+        using var _ = StaticScope.Set(ref TestHooks.PoisonCollectedHandle, true);
         var (doc, update) = Scenario();
 
         doc.ApplyUpdate(update);
