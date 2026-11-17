@@ -463,8 +463,9 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   | `YType._item` | `Parent`, `IsRoot`; the item's id (relative positions, `WriteItem`'s parent id, `YEvent.Path`); whether it is deleted (`Transaction`, `CanExtendRun`, `Integrate`); its key (`YEvent.Path`); its keep (`KeepItemAndParents`, which continues at `ParentType`); the scope walk of `UndoManager` (`ParentType`) | `_collectedParent`, `_collectedId`, `_collectedParentSub`, `_collectedKeep`; deleted is always true |
   | `YDoc._item` (a subdocument) | the parent document (`Load`, `Destroy`) | `_collectedParentDoc` |
 
-  Whatever sets `_item` again (`YType.Integrate`, `YDoc.SetItem` from `ContentDoc.Integrate`) clears the facts: a
-  document inserted again belongs to the item integrated last. The rule: code that may meet a collected type asks
+  Whatever sets `_item` again (`YType.Integrate`, `YDoc.SetItem` from `ContentDoc.Integrate`) clears the facts; an
+  insert refuses a type or a document that has an item (or a collected one) before any item is made, so `_item` is set
+  once, until `YDoc.Destroy` clears it. The rule: code that may meet a collected type asks
   `IsRoot`, `ParentType`, `ItemId`, `ItemParentSub`, `ItemDeleted` or `ItemKeep`, never `_item`. A test switch
   (`YType.PoisonCollectedHandleForTests`, `YCS_POISON=1` for `Ycs.Tests`) replaces the handle after collection
   with an unrelated live item, as a reused slot would; the suite passes with it on.

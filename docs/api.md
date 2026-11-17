@@ -46,7 +46,9 @@ var doc = new YDoc(new YDocOptions { GarbageCollection = false });
 Other members of `YDoc`: `HasPending` (structs wait for others the document lacks), `CreateSnapshot()`,
 `CreateDocFromSnapshot(snapshot, newDoc?)`, the update and encoding methods ([Encoding and updates](#encoding-and-updates)),
 the events ([Events](#events)), and for subdocuments `GetSubdocGuids()`, `Load()` and `Destroy()` with the `Destroyed`
-event. A document is a value too: `YValue` converts from a `YDoc`, and inserting it makes a subdocument; `SubdocsChanged`
+event. A document is a value too: `YValue` converts from a `YDoc`, and inserting it makes a subdocument, once: a document that is a subdocument already (until `Destroy()`), the document
+it is inserted into and that document's ancestors are refused with an `ArgumentException` before anything is inserted
+(Yjs logs an error and moves the document to the new item; create a second `YDoc` with the same guid instead); `SubdocsChanged`
 raises a `SubdocsEventArgs(Loaded, Added, Removed)` of read-only sets.
 
 `PermanentUserData(doc)` maps client ids to users of that document: `SetUserMapping(clientId, user, filter?)`,

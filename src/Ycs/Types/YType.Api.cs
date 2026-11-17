@@ -86,6 +86,7 @@ public abstract partial class YType
             switch (value)
             {
                 case YDoc d:
+                    d.CheckCanInsertInto(transaction.Doc);
                     content = new ContentDoc(d);
                     break;
                 case YType at:
