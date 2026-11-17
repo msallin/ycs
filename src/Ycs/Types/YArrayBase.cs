@@ -378,16 +378,21 @@ public abstract partial class YArrayBase : YType
         {
             for (var i = 0; i < count; i++)
             {
-                if (list[i] is YType)
+                if (list[i] is YType nested)
                 {
-                    CheckCanNest();
-                    break;
+                    CheckCanInsert(nested);
                 }
             }
         }
-        else if (content.Any(static c => c is YType))
+        else
         {
-            CheckCanNest();
+            foreach (var c in content)
+            {
+                if (c is YType nested)
+                {
+                    CheckCanInsert(nested);
+                }
+            }
         }
 
         // The values between the other kinds of content, packed into one item each. The list goes to the item, or,

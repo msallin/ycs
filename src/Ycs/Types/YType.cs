@@ -221,6 +221,20 @@ public abstract partial class YType
         }
     }
 
+    /// <summary>
+    /// <see cref="CheckCanNest"/> for <paramref name="child"/>, which must also belong to no document yet: an integrated
+    /// or collected type is already named by a slot.
+    /// </summary>
+    internal void CheckCanInsert(YType child)
+    {
+        if (!child._item.IsNull || child._collected)
+        {
+            throw new ArgumentException("The type is already part of a document (integrated or collected) and cannot be inserted again. Nothing was inserted.", nameof(child));
+        }
+
+        CheckCanNest();
+    }
+
     internal virtual YType InternalCopy() { throw new NotImplementedException(); }
     internal virtual YType InternalClone() { throw new NotImplementedException(); }
 

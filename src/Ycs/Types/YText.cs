@@ -697,9 +697,9 @@ public partial class YText : YArrayBase
     /// <param name="attributes">The attributes of the text; null for none. Attributes at the position that are not in them are set to null in them, as in Yjs.</param>
     private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, object? text, IDictionary<string, object?>? attributes)
     {
-        if (text is YType)
+        if (text is YType nested)
         {
-            CheckCanNest();
+            CheckCanInsert(nested);
         }
 
         if (currPos.CurrentAttributes?.Count > 0)

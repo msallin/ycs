@@ -37,5 +37,6 @@ internal readonly struct StoredContent
 
     internal StoredContent(AbstractType type) => _type = type;
 
+    // A type has length 1: the index is ignored.
     internal object ValueAt(int index) => _type ?? ItemRef.StoredValueAt(_content, index);
 }

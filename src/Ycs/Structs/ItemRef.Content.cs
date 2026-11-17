@@ -31,9 +31,13 @@ internal readonly partial struct ItemRef
         get
         {
             ref readonly var slot = ref Read();
-            return slot.Kind == (int)SlotKind.Type
-                ? _slab.Types[(int)slot.Payload]
-                : throw new InvalidOperationException($"The struct holds {(SlotKind)slot.Kind}, not {SlotKind.Type} content.");
+            if (slot.Kind != (int)SlotKind.Type)
+            {
+                throw new InvalidOperationException($"The struct holds {(SlotKind)slot.Kind}, not {SlotKind.Type} content.");
+            }
+
+            return _slab.Types[(int)slot.Payload]
+                ?? throw new InvalidOperationException($"The type of the struct {Id.Client}:{Id.Clock} was collected; its table entry is cleared.");
         }
     }
 
@@ -41,20 +45,7 @@ internal readonly partial struct ItemRef
     internal IContentEx Cold => Kind.IsCold() ? (IContentEx)_slab.ReadRef(HandleChecked()) : null;
 
     /// <summary>Appends the elements of the content (Yjs' <c>getContent</c>) to <paramref name="destination"/>.</summary>
-    internal void AppendContentTo(List<object> destination)
-    {
-        switch (Kind)
-        {
-            case SlotKind.Deleted:
-                break;
-            case SlotKind.Type:
-                destination.Add(TypeOf);
-                break;
-            default:
-                destination.AddRange(Content.GetContent());
-                break;
-        }
-    }
+    internal void AppendContentTo(List<object> destination) => destination.AddRange(Elements);
 
     /// <summary>A copy of the content that belongs to no item (what a redone item holds).</summary>
     internal IContentEx CopyContent() => Kind switch
@@ -97,7 +88,7 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>Integrates the content of an item that is in the store's list; collected content is deleted.</summary>
-    private void IntegrateContent(Transaction transaction)
+    internal void IntegrateContent(Transaction transaction)
     {
         switch (Kind)
         {
@@ -114,6 +105,7 @@ internal readonly partial struct ItemRef
                 break;
         }
     }
+
     /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
     internal void AppendChars(string text) => Typed<ContentString>(SlotKind.String).Append(text);
 

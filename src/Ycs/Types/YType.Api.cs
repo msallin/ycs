@@ -71,7 +71,7 @@ public abstract partial class YType
                     content = new ContentDoc(d);
                     break;
                 case YType at:
-                    CheckCanNest();
+                    CheckCanInsert(at);
                     content = new ContentType(at);
                     break;
                 case byte[] ba:

@@ -114,4 +114,50 @@ public class TypeSlotTests
 
         Assert.AreEqual((false, true), (ReferenceEquals(redone, nested), redone.TableIndexForTests != nested.TableIndexForTests));
     }
+
+    [TestMethod]
+    public void Insert_TypeAlreadyIntegrated_ThrowsAndLeavesTheDocumentUnchanged()
+    {
+        var doc = NewDoc();
+        var array = doc.GetArray("a");
+        var nested = new YMap();
+        doc.GetMap("m")["k"] = nested;
+        var before = doc.Store.GetState(1);
+
+        Assert.ThrowsExactly<ArgumentException>(() => array.Add(nested));
+
+        doc.Store.CheckForTests();
+        Assert.AreEqual((before, 0), (doc.Store.GetState(1), array.Count));
+    }
+
+    [TestMethod]
+    public void Insert_CollectedType_ThrowsAndLeavesTheDocumentUnchanged()
+    {
+        var doc = NewDoc();
+        var array = doc.GetArray("a");
+        var nested = new YMap();
+        array.Add(nested);
+        array.RemoveRange(0, 1);
+        var before = doc.Store.GetState(1);
+
+        Assert.ThrowsExactly<ArgumentException>(() => array.Add(nested));
+        Assert.ThrowsExactly<ArgumentException>(() => doc.GetMap("m")["k"] = nested);
+
+        doc.Store.CheckForTests();
+        Assert.AreEqual((before, 0), (doc.Store.GetState(1), array.Count));
+    }
+
+    [TestMethod]
+    public void TypeOf_CollectedType_ThrowsNamingTheStruct()
+    {
+        var doc = NewDoc();
+        var nested = new YMap();
+        doc.GetMap("m")["k"] = nested;
+        var item = doc.Store.Find(new ItemId(1, 0));
+        doc.Store.Types.Collect(nested.TableIndexForTests);
+
+        var thrown = Assert.ThrowsExactly<InvalidOperationException>(() => item.TypeOf);
+
+        StringAssert.Contains(thrown.Message, "1:0");
+    }
 }

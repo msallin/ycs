@@ -5,7 +5,7 @@ namespace Ycs;
 /// <summary>
 /// What the store does with the content of a <see cref="SlotKind.Type"/> item. The slot's payload is the index in
 /// the type table of the item's type, given when the item is made and never changed; the type's entry is cleared when
-/// the type is collected, and the slot is not a Type slot by then.
+/// the type is collected; the slot is still a Type slot when the entry is cleared and is rewritten right after.
 /// </summary>
 internal static class TypeContent
 {
