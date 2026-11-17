@@ -11,8 +11,8 @@ measurement of the built layout's small documents and many clients; the model's 
 are the measurements the layout was decided on. Results in [`results/`](results/): the model in
 [`2026-11-15.md`](results/2026-11-15.md), [`2026-11-15-small.md`](results/2026-11-15-small.md) and
 [`2026-11-16-edit.md`](results/2026-11-16-edit.md); the built layout in
-[`2026-11-17-8-14-small.md`](results/2026-11-17-8-14-small.md) and
-[`2026-11-17-8-14-footprint.md`](results/2026-11-17-8-14-footprint.md).
+[`2026-11-17-8-14-small.md`](results/2026-11-17-8-14-small.md),
+[`2026-11-17-final-small.md`](results/2026-11-17-final-small.md) and [`2026-11-17-8-14-footprint.md`](results/2026-11-17-8-14-footprint.md).
 
 ```bash
 bench/Ycs.Layout/run.sh                  # about 6 minutes; fetches the automerge-paper trace (see below)
@@ -134,25 +134,28 @@ client today, 351 (fixed) and 348 (geometric) designed.
 
 `small` rerun on the built layout (slab, arenas, staging; `results/2026-11-17-8-12-small.md`, a30363f), for the comparison on the
 object layout (044bb73's tree built the same way, `results/2026-11-17-8-12-small-044bb73.md`) and after work package 8.14, which cut
-the fixed cost of a document (`results/2026-11-17-8-14-small.md`, load average 0.9). The designed columns are the model's, which
+the fixed cost of a document (`results/2026-11-17-8-14-small.md`, load average 0.9), and at the end of the modernisation
+(`results/2026-11-17-final-small.md`). The designed columns are the model's, which
 did not change. Bytes per document:
 
-| document | object layout | built layout, 8.12 | built layout, 8.14 | 8.14 / object | model, geometric pages |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| empty, a root text | 1,296 | 2,068 | 1,304 | 1.01 | 1,304 |
-| text "hello" (one insert) | 3,113 | 6,025 | 3,329 | 1.07 | 3,256 |
-| 20 characters typed at random positions, 2 deleted | 8,576 | 8,696 | 7,256 | 0.85 | 4,440 |
-| 200 typed, 20 deleted (198 structs) | 49,888 | 28,592 | 27,656 | 0.55 | 19,672 |
-| 1,000 typed, 100 deleted | 227,216 | 97,128 | 94,696 | 0.42 | 75,016 |
-| 5,000 typed, 500 deleted | 1,086,745 | 431,169 | 430,969 | 0.40 | 390,489 |
-| 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,986 | 1,686,786 | 0.39 | 1,557,901 |
-| empty, a root map | 1,184 | 1,944 | 1,176 | 0.99 | 1,176 |
-| map, 20 keys | 10,179 | 9,523 | 8,235 | 0.81 | 5,728 |
-| map, 1,000 keys | 355,906 | 195,242 | 186,290 | 0.52 | 150,272 |
+| document | object layout | built layout, 8.12 | built layout, 8.14 | final | final / object | model, geometric pages |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| empty, a root text | 1,296 | 2,068 | 1,304 | 1,344 | 1.04 | 1,304 |
+| text "hello" (one insert) | 3,113 | 6,025 | 3,329 | 3,305 | 1.06 | 3,256 |
+| 20 characters typed at random positions, 2 deleted | 8,576 | 8,696 | 7,256 | 7,096 | 0.83 | 4,440 |
+| 200 typed, 20 deleted (198 structs) | 49,888 | 28,592 | 27,656 | 27,496 | 0.55 | 19,672 |
+| 1,000 typed, 100 deleted | 227,216 | 97,128 | 94,696 | 94,536 | 0.42 | 75,016 |
+| 5,000 typed, 500 deleted | 1,086,745 | 431,169 | 430,969 | 430,809 | 0.40 | 390,489 |
+| 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,986 | 1,686,786 | 1,686,626 | 0.39 | 1,557,901 |
+| empty, a root map | 1,184 | 1,944 | 1,176 | 1,208 | 1.02 | 1,176 |
+| map, 20 keys | 10,179 | 9,523 | 8,235 | 8,067 | 0.79 | 5,728 |
+| map, 1,000 keys | 355,906 | 195,242 | 186,290 | 186,122 | 0.52 | 150,272 |
 
-Many clients (20,000, one map entry each): 665 bytes per client on the object layout, 611 built (8.12), 590 built (8.14), 348 in the
-model. The built layout is at the model's figure from about 5,000 structs and pays from about 20 structs; a document of one struct holds
-216 bytes more than on the object layout (3,329 against 3,113, see below), an empty document 8 bytes more (a root map 8 less).
+Many clients (20,000, one map entry each): 665 bytes per client on the object layout, 611 built (8.12), 590 built (8.14), 605 at
+the end (`results/2026-11-17-final-small.md`: the change log of the transactions adds 15 bytes per client and 40 per empty
+document; its array is allocated on the first change), 348 in the model. The built layout is at the model's figure from about 5,000 structs and pays from about 20 structs; at the end a
+document of one struct holds 192 bytes more than on the object layout (3,305 against 3,113; 216 at 8.14, see below), an empty
+document 48 bytes more and a root map 24 more.
 
 ### Where the bytes of a small document went (8.14)
 
