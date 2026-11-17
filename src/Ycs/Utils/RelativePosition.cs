@@ -49,18 +49,19 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
         var t = type._start;
         while (!t.IsNull)
         {
-            if (!t.Deleted && t.Countable)
+            ref readonly var slot = ref t.Peek();
+            if ((slot.Info & (Slot.DeletedFlag | Slot.CountableFlag)) == Slot.CountableFlag)
             {
-                if (t.Length > index)
+                if (slot.Length > index)
                 {
                     // Case 1: found position somewhere in the linked list.
-                    return In(type, new ItemId(t.Id.Client, t.Id.Clock + index), assoc);
+                    return In(type, new ItemId(t.Id.Client, slot.Clock + index), assoc);
                 }
 
-                index -= t.Length;
+                index -= slot.Length;
             }
 
-            if (t.Right.IsNull && assoc < 0)
+            if (slot.Right < 0 && assoc < 0)
             {
                 // Left-associated position, return last available id.
                 return In(type, t.LastId, assoc);

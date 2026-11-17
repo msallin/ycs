@@ -52,9 +52,10 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, int
                 var n = right.Left.AsItem;
                 while (!n.IsNull)
                 {
-                    if (!n.Deleted && n.Countable)
+                    ref readonly var slot = ref n.Peek();
+                    if ((slot.Info & (Slot.DeletedFlag | Slot.CountableFlag)) == Slot.CountableFlag)
                     {
-                        index += n.Length;
+                        index += slot.Length;
                     }
 
                     n = n.Left.AsItem;

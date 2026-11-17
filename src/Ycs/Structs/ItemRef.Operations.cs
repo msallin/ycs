@@ -368,21 +368,25 @@ internal readonly partial struct ItemRef
         // Not in a transaction started while another one is cleaned up (from its observers): Yjs integrates the new
         // item before the other one's merge, which merges it on its own terms, and the other one's events, read
         // then, see it as an item of its own.
-        return transaction.Local
+        if (!(transaction.Local
             && transaction.Doc._transactionCleanups.Count == 1
             && !transaction.Doc.RunExtensionsDisabledForTests
             && !parent.IsObserved(transaction)
             && !transaction.Doc.HasBeforeObserverCallsListeners
-            && Content.GetType() == kind
-            && Id.Client == client
-            && Id.Clock + Length == transaction.Doc.Store.GetState(client)
+            && Content.GetType() == kind))
+        {
+            return false;
+        }
+
+        // No allocation here: the slot stays valid. The right origin compares by client index and clock.
+        ref readonly var slot = ref Read();
+        return _slab.Clients[slot.Client] == client
+            && slot.Clock + slot.Length == transaction.Doc.Store.GetState(client)
             && Parent == parent
             && ParentSub == null
-            && Right == right
-            && RightOrigin == (right.IsNull ? null : right.Id)
-            && !Deleted
-            && !Keep
-            && Redone == null
+            && slot.Right == right.Handle
+            && (right.IsNull ? slot.ROriginClient < 0 : slot.ROriginClient == right.ClientIndex && slot.ROriginClock == right.Clock)
+            && (slot.Info & (Slot.DeletedFlag | Slot.KeepFlag | Slot.HasRedoneFlag)) == 0
             && !parent.ItemDeleted
             && !(Content is ContentString str && str.EndsWithHighSurrogate);
     }

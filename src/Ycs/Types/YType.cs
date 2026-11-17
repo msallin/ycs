@@ -342,6 +342,7 @@ public abstract partial class YType
         {
             n = n.Right.AsItem;
         }
+
         return n;
     }
 
