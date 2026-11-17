@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -73,7 +72,7 @@ internal sealed partial class StructStore
         }
     }
 
-    internal PendingStructs Pending { get; set; }
+    internal PendingStructs? Pending { get; set; }
 
     /// <summary>Deletions of structs this store does not have yet (Yjs' <c>store.pendingDs</c>).</summary>
     internal PendingDeletes PendingDs { get; } = new();
@@ -94,7 +93,7 @@ internal sealed partial class StructStore
     /// duplicates) is accepted whatever that is. Returns true when
     /// <paramref name="rest"/> had to be merged into <see cref="Pending"/> to fit (a duplicate).
     /// </summary>
-    private bool CheckPendingLimits(UpdateLimits limits, bool retry, byte[] rest, long restStructs, IntegrationPlan plan, long deleteGrowth)
+    private bool CheckPendingLimits(UpdateLimits limits, bool retry, byte[]? rest, long restStructs, IntegrationPlan plan, long deleteGrowth)
     {
         var restBytes = rest?.Length ?? 0;
         if (restStructs == 0 && restBytes + deleteGrowth <= 0)
@@ -337,7 +336,7 @@ internal sealed partial class StructStore
         }
 
         /// <summary>Removes and returns the ranges of the clients whose state reached one of them, or null.</summary>
-        public DeleteSet TakeApplicable(StructStore store)
+        public DeleteSet? TakeApplicable(StructStore store)
         {
             var applicable = ApplicableClients(null, store);
             if (applicable == null)
@@ -361,12 +360,12 @@ internal sealed partial class StructStore
         /// deletions back (writeDeleteSet writes the clients from the highest id down): it decides the order of the
         /// transaction's delete set, and so of the garbage collection filter's calls. Null when there are none.
         /// </summary>
-        private List<long> ApplicableClients(IntegrationPlan plan, StructStore store)
+        private List<long>? ApplicableClients(IntegrationPlan? plan, StructStore? store)
         {
-            List<long> applicable = null;
+            List<long>? applicable = null;
             foreach (var (client, entry) in _clients)
             {
-                if (entry.MinClock < (plan?.GetState(client) ?? store.GetState(client)))
+                if (entry.MinClock < (plan?.GetState(client) ?? store!.GetState(client)))
                 {
                     (applicable ??= new List<long>()).Add(client);
                 }

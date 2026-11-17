@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Diagnostics;
 
@@ -23,7 +22,7 @@ internal sealed partial class StructStore
     }
 
     // The plan of the last update, kept for the next one (null while one is in use).
-    private IntegrationPlan _spare;
+    private IntegrationPlan? _spare;
 
     /// <summary>
     /// How the structs of one update integrate (Yjs' <c>integrateStructs</c>), worked out against the
@@ -52,7 +51,10 @@ internal sealed partial class StructStore
 
         // Planning state, kept between updates. _table is null while no update is planned: what holds an index of a
         // table is cleared before the table is reset or reused (Clear).
-        private StagingTable _table;
+        private StagingTable? _table;
+
+        // The table while an update is planned (between Plan and Clear); everything that reads it runs inside that span.
+        private StagingTable Planned => _table!;
         private ClientStructRefs[] _clientsStructRefs = [];
         private readonly List<int> _clientsStructRefsIds = new();
         private readonly List<int> _stack = new();
@@ -63,27 +65,27 @@ internal sealed partial class StructStore
 
         // Nesting depth of the types this update creates (by the id of their item), and of the type
         // each item lands in (when it was needed), for the nesting limit.
-        private Dictionary<ItemId, int> _typeDepths;
+        private Dictionary<ItemId, int>? _typeDepths;
         private int _maxDepth;
-        private Dictionary<PlanItem, int> _parentDepths;
+        private Dictionary<PlanItem, int>? _parentDepths;
 
         public IntegrationPlan(StructStore store)
         {
             _store = store;
-            _byClientId = (a, b) => _table.ClientAt(a).CompareTo(_table.ClientAt(b));
+            _byClientId = (a, b) => Planned.ClientAt(a).CompareTo(Planned.ClientAt(b));
         }
 
         /// <summary>The staging table the plan was made from; null while the plan is clear.</summary>
-        public StagingTable Table => _table;
+        public StagingTable? Table => _table;
 
         /// <summary>
         /// The structs set aside, by client index of the table: each is a range of the table (start, count), contiguous
         /// and ascending by clock, or null when nothing waits.
         /// </summary>
-        public Dictionary<int, (int Start, int Count)> Rest { get; private set; }
+        public Dictionary<int, (int Start, int Count)>? Rest { get; private set; }
 
         /// <summary>Per client, the lowest clock the structs set aside wait for (set with <see cref="Rest"/>).</summary>
-        public Dictionary<long, long> Missing { get; private set; }
+        public Dictionary<long, long>? Missing { get; private set; }
 
         /// <summary>A client's clock once the plan is carried out.</summary>
         public long GetState(long client) => _state.TryGetValue(client, out var clock) ? clock : _store.GetState(client);
@@ -92,7 +94,7 @@ internal sealed partial class StructStore
         {
             foreach (var (index, offset, integrate) in _steps)
             {
-                ItemRef.Adopt(_table, index, transaction, offset, integrate);
+                ItemRef.Adopt(Planned, index, transaction, offset, integrate);
             }
         }
 
@@ -100,7 +102,7 @@ internal sealed partial class StructStore
         /// The structs set aside as a v2 update (with an empty delete set), or null, and how many they are. Written from
         /// the table, so the lease that holds it must be open.
         /// </summary>
-        public (byte[] Update, long Structs) EncodeRest()
+        public (byte[]? Update, long Structs) EncodeRest()
         {
             if (Rest == null)
             {
@@ -117,7 +119,7 @@ internal sealed partial class StructStore
                     var (start, count) = Rest[client];
                     for (var i = start; i < start + count; i++)
                     {
-                        LazyStructWriter.WriteStruct(writer, _table, i, 0);
+                        LazyStructWriter.WriteStruct(writer, Planned, i, 0);
                     }
                 }
 
@@ -136,7 +138,7 @@ internal sealed partial class StructStore
         /// <summary>The client indexes of <see cref="Rest"/>, highest client id first (Yjs' <c>writeClientsStructs</c>).</summary>
         private int[] SortedRestClients()
         {
-            var clients = new int[Rest.Count];
+            var clients = new int[Rest!.Count];
             Rest.Keys.CopyTo(clients, 0);
             Array.Sort(clients, _byClientId);
             Array.Reverse(clients);
@@ -146,12 +148,12 @@ internal sealed partial class StructStore
         /// <summary>Whether a struct set aside (not a Skip) covers a clock that <paramref name="clocks"/> holds.</summary>
         public bool RestOverlaps(ClockRanges clocks)
         {
-            foreach (var (client, (start, count)) in Rest)
+            foreach (var (client, (start, count)) in Rest!)
             {
-                var id = _table.ClientAt(client);
+                var id = Planned.ClientAt(client);
                 for (var i = start; i < start + count; i++)
                 {
-                    ref readonly var s = ref _table.At(i);
+                    ref readonly var s = ref Planned.At(i);
                     if (s.Kind != StagedKind.Skip && clocks.Overlaps(id, s.Clock, s.Clock + s.Length))
                     {
                         return true;
@@ -165,12 +167,12 @@ internal sealed partial class StructStore
         /// <summary>Adds the clocks of the structs set aside (not the Skips) to <paramref name="clocks"/>.</summary>
         public void RecordRest(ClockRanges clocks)
         {
-            foreach (var (client, (start, count)) in Rest)
+            foreach (var (client, (start, count)) in Rest!)
             {
-                var id = _table.ClientAt(client);
+                var id = Planned.ClientAt(client);
                 for (var i = start; i < start + count; i++)
                 {
-                    ref readonly var s = ref _table.At(i);
+                    ref readonly var s = ref Planned.At(i);
                     if (s.Kind != StagedKind.Skip)
                     {
                         clocks.Add(id, s.Clock, s.Clock + s.Length);
@@ -369,23 +371,23 @@ internal sealed partial class StructStore
         /// </summary>
         private int FindMissing(int i)
         {
-            ref readonly var s = ref _table.At(i);
+            ref readonly var s = ref Planned.At(i);
             if (s.Kind is StagedKind.GC or StagedKind.Skip)
             {
                 return -1;
             }
 
-            if (s.OriginClient >= 0 && s.OriginClient != s.Client && s.OriginClock >= GetState(_table.ClientAt(s.OriginClient)))
+            if (s.OriginClient >= 0 && s.OriginClient != s.Client && s.OriginClock >= GetState(Planned.ClientAt(s.OriginClient)))
             {
                 return s.OriginClient;
             }
 
-            if (s.ROriginClient >= 0 && s.ROriginClient != s.Client && s.ROriginClock >= GetState(_table.ClientAt(s.ROriginClient)))
+            if (s.ROriginClient >= 0 && s.ROriginClient != s.Client && s.ROriginClock >= GetState(Planned.ClientAt(s.ROriginClient)))
             {
                 return s.ROriginClient;
             }
 
-            if (s.ParentKind == StagedParent.Id && s.ParentClient != s.Client && s.ParentClock >= GetState(_table.ClientAt(s.ParentClient)))
+            if (s.ParentKind == StagedParent.Id && s.ParentClient != s.Client && s.ParentClock >= GetState(Planned.ClientAt(s.ParentClient)))
             {
                 return s.ParentClient;
             }
@@ -407,7 +409,7 @@ internal sealed partial class StructStore
             Rest ??= new Dictionary<int, (int Start, int Count)>();
             foreach (var index in _stack)
             {
-                var client = _table.At(index).Client;
+                var client = Planned.At(index).Client;
                 ref var inapplicableItems = ref _clientsStructRefs[client];
                 if (!inapplicableItems.SetAside)
                 {
@@ -477,7 +479,7 @@ internal sealed partial class StructStore
                     break;
                 }
 
-                var origin = (item.LeftOrigin ?? item.RightOrigin).Value;
+                var origin = (item.LeftOrigin ?? item.RightOrigin)!.Value;
                 if (origin.Clock < _store.GetState(origin.Client))
                 {
                     var found = _store.Find(origin);
@@ -486,13 +488,13 @@ internal sealed partial class StructStore
                 }
 
                 var next = FindPlanned(origin);
-                if (next < 0 || _table.At(next).Kind is StagedKind.GC or StagedKind.Skip)
+                if (next < 0 || Planned.At(next).Kind is StagedKind.GC or StagedKind.Skip)
                 {
                     depth = -1;
                     break;
                 }
 
-                item = PlanItem.Staged(_table, next);
+                item = PlanItem.Staged(Planned, next);
             }
 
             foreach (var c in chain)
@@ -518,8 +520,8 @@ internal sealed partial class StructStore
         /// <summary>The index in the table of the planned struct that holds <paramref name="id"/>, -1 for none.</summary>
         private int FindPlanned(ItemId id)
         {
-            var client = _table.FindClient(id.Client);
-            return client < 0 ? -1 : _table.FindByClock(client, id.Clock, ref _plannedHint);
+            var client = Planned.FindClient(id.Client);
+            return client < 0 ? -1 : Planned.FindByClock(client, id.Clock, ref _plannedHint);
         }
     }
 }

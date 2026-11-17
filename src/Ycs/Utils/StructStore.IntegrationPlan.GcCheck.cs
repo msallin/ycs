@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -7,7 +6,7 @@ internal sealed partial class StructStore
     internal sealed partial class IntegrationPlan
     {
         // The parent and key of the planned items without a parent (by their references), for the garbage collection check.
-        private Dictionary<PlanItem, (object Parent, string Key)> _keys;
+        private Dictionary<PlanItem, (object? Parent, string? Key)>? _keys;
         private readonly List<(long Client, long Clock, long End)> _ranges = new();
         private readonly List<PlanItem> _keyChain = new();
 
@@ -96,19 +95,19 @@ internal sealed partial class StructStore
         /// The boundaries (with their time) at which the update's references and ranges cut an item with a key that
         /// is not deleted, by item, or null when there is none (the common case: a key's value is one item).
         /// </summary>
-        private Dictionary<PlanItem, List<(long Boundary, int Time)>> MapValueSplits(List<(long Client, long Clock, long End)> ranges)
+        private Dictionary<PlanItem, List<(long Boundary, int Time)>>? MapValueSplits(List<(long Client, long Clock, long End)> ranges)
         {
-            Dictionary<PlanItem, List<(long Boundary, int Time)>> splits = null;
+            Dictionary<PlanItem, List<(long Boundary, int Time)>>? splits = null;
             foreach (var (index, _, _) in _steps)
             {
-                if (_table.At(index).Kind != StagedKind.GC)
+                if (Planned.At(index).Kind != StagedKind.GC)
                 {
-                    if (_table.LeftOrigin(index) is ItemId left)
+                    if (Planned.LeftOrigin(index) is ItemId left)
                     {
                         Split(ref splits, left, left.Clock + 1, ReferenceSplit);
                     }
 
-                    if (_table.RightOrigin(index) is ItemId right)
+                    if (Planned.RightOrigin(index) is ItemId right)
                     {
                         Split(ref splits, right, right.Clock, ReferenceSplit);
                     }
@@ -129,7 +128,7 @@ internal sealed partial class StructStore
         }
 
         /// <summary>Records <paramref name="boundary"/> if it falls inside the item that holds <paramref name="id"/> and that item may be a key's undeleted value.</summary>
-        private void Split(ref Dictionary<PlanItem, List<(long Boundary, int Time)>> splits, ItemId id, long boundary, int time)
+        private void Split(ref Dictionary<PlanItem, List<(long Boundary, int Time)>>? splits, ItemId id, long boundary, int time)
         {
             var (target, start) = Target(id);
             if (!target.IsNull && start < boundary && boundary < target.Id.Clock + target.Length
@@ -149,9 +148,9 @@ internal sealed partial class StructStore
         /// The type items this update deletes by its ranges and the values of keys it replaces (when the new item is
         /// estimated to land last, see <see cref="LandsLast"/>), with the time they are deleted, or null.
         /// </summary>
-        private Dictionary<PlanItem, int> DeletedTypes(YDoc doc, List<(long Client, long Clock, long End)> ranges)
+        private Dictionary<PlanItem, int>? DeletedTypes(YDoc doc, List<(long Client, long Clock, long End)> ranges)
         {
-            Dictionary<PlanItem, int> deleted = null;
+            Dictionary<PlanItem, int>? deleted = null;
 
             void Add(PlanItem type, int time)
             {
@@ -165,7 +164,7 @@ internal sealed partial class StructStore
             var chains = new KeyChains();
             foreach (var (index, offset, integrate) in _steps)
             {
-                if (integrate && _table.At(index).Kind != StagedKind.GC && LandsLast(doc, PlanItem.Staged(_table, index), offset, chains) is { IsNull: false, Deleted: false } replaced)
+                if (integrate && Planned.At(index).Kind != StagedKind.GC && LandsLast(doc, PlanItem.Staged(Planned, index), offset, chains) is { IsNull: false, Deleted: false } replaced)
                 {
                     Add(replaced, ValueReplaced);
                 }
@@ -194,8 +193,8 @@ internal sealed partial class StructStore
                             break;
                         }
 
-                        ref readonly var plannedStruct = ref _table.At(planned);
-                        type = plannedStruct.Kind is StagedKind.GC or StagedKind.Skip ? default : PlanItem.Staged(_table, planned);
+                        ref readonly var plannedStruct = ref Planned.At(planned);
+                        type = plannedStruct.Kind is StagedKind.GC or StagedKind.Skip ? default : PlanItem.Staged(Planned, planned);
                         structEnd = plannedStruct.Clock + plannedStruct.Length;
                     }
 
@@ -295,7 +294,7 @@ internal sealed partial class StructStore
         /// <summary>The state of <see cref="LandsLast"/>: per key its first item and value, and the planned items estimated deleted on integration.</summary>
         private sealed class KeyChains
         {
-            public Dictionary<(object, string), (PlanItem Head, PlanItem Value)> Keys { get; } = new();
+            public Dictionary<(object?, string?), (PlanItem Head, PlanItem Value)> Keys { get; } = new();
 
             public HashSet<PlanItem> Deleted { get; } = new();
         }
@@ -305,7 +304,7 @@ internal sealed partial class StructStore
         /// <see cref="LandsLast"/>) and keep a part other than the last undeleted: a boundary cuts a part only while
         /// that part is not deleted yet (by an earlier range, or as the key's value with a type above it).
         /// </summary>
-        private List<PlanItem> LiveNonValues(YDoc doc, Dictionary<PlanItem, List<(long Boundary, int Time)>> splits, List<(long Client, long Clock, long End)> ranges, Dictionary<PlanItem, int> deleted)
+        private List<PlanItem> LiveNonValues(YDoc doc, Dictionary<PlanItem, List<(long Boundary, int Time)>>? splits, List<(long Client, long Clock, long End)> ranges, Dictionary<PlanItem, int> deleted)
         {
             var parts = new List<PlanItem>();
             if (splits == null)
@@ -313,7 +312,7 @@ internal sealed partial class StructStore
                 return parts;
             }
 
-            HashSet<PlanItem> values = null;
+            HashSet<PlanItem>? values = null;
             foreach (var (target, events) in splits)
             {
                 if (KeyOf(target).Key == null)
@@ -330,9 +329,9 @@ internal sealed partial class StructStore
                         var chains = new KeyChains();
                         foreach (var (index, offset, integrate) in _steps)
                         {
-                            if (integrate && _table.At(index).Kind != StagedKind.GC)
+                            if (integrate && Planned.At(index).Kind != StagedKind.GC)
                             {
-                                var item = PlanItem.Staged(_table, index);
+                                var item = PlanItem.Staged(Planned, index);
                                 LandsLast(doc, item, offset, chains);
                                 if (!chains.Deleted.Contains(item) && !item.HasDeletedContent && KeyOf(item).Key != null)
                                 {
@@ -477,9 +476,9 @@ internal sealed partial class StructStore
                 return found.IsItem ? (PlanItem.Store(found), found.Id.Clock) : (default, 0);
             }
 
-            if (id.Clock < GetState(id.Client) && FindPlanned(id) is var planned and >= 0 && _table.At(planned).Kind is not (StagedKind.GC or StagedKind.Skip))
+            if (id.Clock < GetState(id.Client) && FindPlanned(id) is var planned and >= 0 && Planned.At(planned).Kind is not (StagedKind.GC or StagedKind.Skip))
             {
-                return (PlanItem.Staged(_table, planned), Math.Max(_table.At(planned).Clock, known));
+                return (PlanItem.Staged(Planned, planned), Math.Max(Planned.At(planned).Clock, known));
             }
 
             return (default, 0);
@@ -492,13 +491,13 @@ internal sealed partial class StructStore
         /// item, or a collected type (its item is gone, <see cref="YType.ItemDeleted"/> and
         /// <see cref="YType.ParentType"/> tell what its item did).
         /// </summary>
-        private (object Parent, string Key) KeyOf(PlanItem item)
+        private (object? Parent, string? Key) KeyOf(PlanItem item)
         {
             // Only a planned item has no parent yet; its references are integrated before it. The walk is memoized
             // (a large update's items each refer to the one before).
             var chain = _keyChain;
             chain.Clear();
-            (object Parent, string Key) result;
+            (object? Parent, string? Key) result;
             while (true)
             {
                 if (_keys != null && _keys.TryGetValue(item, out result))
@@ -524,7 +523,7 @@ internal sealed partial class StructStore
 
             if (chain.Count > 0)
             {
-                _keys ??= new Dictionary<PlanItem, (object, string)>();
+                _keys ??= new Dictionary<PlanItem, (object?, string?)>();
                 foreach (var c in chain)
                 {
                     _keys[c] = result;
@@ -535,6 +534,6 @@ internal sealed partial class StructStore
         }
 
         // A type as the parent of an item: its item (a collected type has none), else the type (a root, or collected).
-        private static object ParentOf(YType type) => type.IsCollected || type._item.IsNull ? type : PlanItem.Store(type._item).Boxed;
+        private static object? ParentOf(YType type) => type.IsCollected || type._item.IsNull ? type : PlanItem.Store(type._item).Boxed;
     }
 }

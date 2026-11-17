@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -11,11 +10,11 @@ namespace Ycs;
 /// </summary>
 internal readonly partial struct PlanItem : IEquatable<PlanItem>
 {
-    private readonly StagingTable _table;
+    private readonly StagingTable? _table;
     private readonly int _index;
     private readonly ItemRef _stored;
 
-    private PlanItem(StagingTable table, int index, ItemRef stored)
+    private PlanItem(StagingTable? table, int index, ItemRef stored)
     {
         _table = table;
         _index = index;
@@ -38,7 +37,7 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
     public int Index => _index;
 
     /// <summary>This item as an object (a parent in the plan's keys), null for none.</summary>
-    public object Boxed => IsNull ? null : this;
+    public object? Boxed => IsNull ? null : this;
 
     public ItemId Id => _table is null ? _stored.Id : _table.IdOf(_index);
 
@@ -51,10 +50,10 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
     public bool Keep => _table is null && _stored.Keep;
 
     /// <summary>The type a stored item belongs to (what <see cref="ItemRef.Parent"/> holds); null for a staged item.</summary>
-    public object StoredParent => _table is null ? _stored.Parent : null;
+    public object? StoredParent => _table is null ? _stored.Parent : null;
 
     /// <summary>The root type's name a staged item names as its parent; null for any other.</summary>
-    public string ParentName => _table is not null && _table.At(_index).ParentKind == StagedParent.Root ? _table.ParentName(_index) : null;
+    public string? ParentName => _table is not null && _table.At(_index).ParentKind == StagedParent.Root ? _table.ParentName(_index) : null;
 
     /// <summary>The id of the item that holds the parent type of a staged item; null for any other.</summary>
     public ItemId? ParentId => _table is not null && _table.At(_index).ParentKind == StagedParent.Id ? _table.ParentId(_index) : null;
@@ -62,7 +61,7 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
     /// <summary>Whether the item names a parent (a staged item with no origins) or belongs to a type (a stored one).</summary>
     public bool HasParent => _table is null ? _stored.Parent != null : _table.At(_index).ParentKind != StagedParent.None;
 
-    public string ParentSub => _table is null ? _stored.ParentSub : _table.ParentSub(_index);
+    public string? ParentSub => _table is null ? _stored.ParentSub : _table.ParentSub(_index);
 
     /// <summary>Whether the content is collected or deleted-only (no values).</summary>
     public bool HasDeletedContent => _table is null ? _stored.Kind == SlotKind.Deleted : _table.At(_index).Kind == StagedKind.Deleted;
@@ -71,7 +70,7 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
     public bool IsType => _table is null ? _stored.Kind == SlotKind.Type : _table.At(_index).Kind == StagedKind.Type;
 
     /// <summary>The type a stored item holds, null for any other content or a staged item (which has no type yet).</summary>
-    public YType NestedType => _table is null && _stored.Kind == SlotKind.Type ? _stored.TypeOf : null;
+    public YType? NestedType => _table is null && _stored.Kind == SlotKind.Type ? _stored.TypeOf : null;
 
     public ItemId? LeftOrigin => _table is null ? _stored.LeftOrigin : _table.LeftOrigin(_index);
 
@@ -86,7 +85,7 @@ internal readonly partial struct PlanItem : IEquatable<PlanItem>
 
     public bool Equals(PlanItem other) => ReferenceEquals(_table, other._table) && _index == other._index && _stored == other._stored;
 
-    public override bool Equals(object obj) => obj is PlanItem other && Equals(other);
+    public override bool Equals(object? obj) => obj is PlanItem other && Equals(other);
 
     // A store item hashes by its id, which stays while a plan lives; the identity hash of an ItemRef will not once a reference is a slot.
     public override int GetHashCode() => _table is null ? HashCode.Combine(_stored.Id.Client, _stored.Id.Clock) : _index;

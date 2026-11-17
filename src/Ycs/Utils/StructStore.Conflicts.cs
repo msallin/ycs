@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -8,8 +7,8 @@ internal sealed partial class StructStore
     private const int KeepConflictSetCapacity = 1024;
 
     // Yjs' itemsBeforeOrigin and conflictingItems, reused from item to item; only Integrate uses them.
-    private HashSet<ItemRef> _itemsBeforeOrigin;
-    private HashSet<ItemRef> _conflictingItems;
+    private HashSet<ItemRef>? _itemsBeforeOrigin;
+    private HashSet<ItemRef>? _conflictingItems;
 
     /// <summary>
     /// The steps the conflict resolution may still take for the update being applied
@@ -34,8 +33,8 @@ internal sealed partial class StructStore
         var first = o;
         ItemRef prev = default;
         var leftMoved = false;
-        HashSet<ItemRef> itemsBeforeOrigin = null;
-        HashSet<ItemRef> conflictingItems = null;
+        HashSet<ItemRef>? itemsBeforeOrigin = null;
+        HashSet<ItemRef>? conflictingItems = null;
 
         // ResolveConflict allocates no slot, so a ref Slot taken here stays valid through the walk; item's own fields
         // (origins, right) do not change in it.
@@ -106,7 +105,7 @@ internal sealed partial class StructStore
                         // Find, not GetItemCleanEnd: nothing needs to be split.
                         var origin = Find(leftOrigin);
                         beforeOrigin = itemsBeforeOrigin.Contains(origin);
-                        conflicting = conflictingItems.Contains(origin);
+                        conflicting = conflictingItems!.Contains(origin); // made together with itemsBeforeOrigin
                     }
 
                     if (!beforeOrigin)
@@ -155,9 +154,10 @@ internal sealed partial class StructStore
             }
         }
 
-        static void Release(ref HashSet<ItemRef> set)
+        // Called only once both sets exist (they are made together).
+        static void Release(ref HashSet<ItemRef>? set)
         {
-            if (set.Count > KeepConflictSetCapacity)
+            if (set!.Count > KeepConflictSetCapacity)
             {
                 set = null;
             }
