@@ -14,6 +14,8 @@ namespace Ycs;
 [TestClass]
 public class FormattingCleanupTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     // What Yjs 13.6.32 leaves after the same steps with the same client ids: no format deleted,
     // [ab bold][cd bold][ef].
     private const string ConcurrentBoldAfterSync =
@@ -100,29 +102,31 @@ public class FormattingCleanupTests
     public void ApplyUpdate_FormatsInManyTexts_CleansUpInLinearTime()
     {
         // Every formatted text is cleaned up once; finding it among those already found took O(n).
-        var source = new YDoc(new YDocOptions { ClientId = 2 });
-        var target = new YDoc(new YDocOptions { ClientId = 3 });
-        var map = source.GetMap("m");
-        var texts = new List<YText>();
-        source.Transact(_ =>
-        {
-            for (var i = 0; i < 40_000; i++)
+        ScalingProbe.AssertNotQuadratic(
+            n =>
             {
-                var text = new YText();
-                map["t" + i] = text;
-                text.Insert(0, "ab", Bold());
-                texts.Add(text);
-            }
-        });
-        target.ApplyUpdate(source.EncodeStateAsUpdate(), null, limits: UpdateLimits.Unlimited);
-        byte[] update = null;
-        source.Updated += (_, e) => update = e.Update.ToArray();
-        source.Transact(_ => texts.ForEach(text => text.Format(0, 2, new Dictionary<string, YValue> { ["italic"] = true })));
-
-        var stopwatch = Stopwatch.StartNew();
-        target.ApplyUpdate(update, null, limits: UpdateLimits.Unlimited);
-
-        Assert.IsLessThan(1_500, stopwatch.ElapsedMilliseconds);
+                var source = new YDoc(new YDocOptions { ClientId = 2 });
+                var target = new YDoc(new YDocOptions { ClientId = 3 });
+                var map = source.GetMap("m");
+                var texts = new List<YText>();
+                source.Transact(_ =>
+                {
+                    for (var i = 0; i < n; i++)
+                    {
+                        var text = new YText();
+                        map["t" + i] = text;
+                        text.Insert(0, "ab", Bold());
+                        texts.Add(text);
+                    }
+                });
+                target.ApplyUpdate(source.EncodeStateAsUpdate(), null, limits: UpdateLimits.Unlimited);
+                byte[] update = null;
+                source.Updated += (_, e) => update = e.Update.ToArray();
+                source.Transact(_ => texts.ForEach(text => text.Format(0, 2, new Dictionary<string, YValue> { ["italic"] = true })));
+                return () => target.ApplyUpdate(update, null, limits: UpdateLimits.Unlimited);
+            },
+            40_000,
+            TestContext);
     }
 
     private static Dictionary<string, YValue> Bold() => new() { ["bold"] = true };

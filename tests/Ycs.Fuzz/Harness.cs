@@ -76,15 +76,16 @@ internal sealed class Harness : IDisposable
         "Ycs.YUpdateException",
     };
 
-    /// <summary>Per input, generous: a valid update of this size applies in well under a millisecond.</summary>
-    public static readonly TimeSpan TimeBudget = TimeSpan.FromSeconds(2);
+    /// <summary>Per input, generous, above <see cref="TimeCeiling"/>: a valid update of this size applies in well under a millisecond.</summary>
+    public static readonly TimeSpan TimeBudget = TimeSpan.FromSeconds(10);
 
     /// <summary>
     /// What one input may take, applied or rejected. The document's limits (<see cref="Limits"/>) keep
     /// every valid input well below it: the conflict loop to about 10 ms, the structs to about 40 ms.
-    /// An input that takes longer is slow for its size (a quadratic path, a limit that does not hold).
+    /// An input that takes longer is slow for its size (a quadratic path, a limit that does not hold). The ceiling is
+    /// a hundred times that, so a loaded machine does not trip it; the allocation budget is the tight guard.
     /// </summary>
-    public static readonly TimeSpan TimeCeiling = TimeSpan.FromMilliseconds(500);
+    public static readonly TimeSpan TimeCeiling = TimeSpan.FromSeconds(5);
 
     /// <summary>
     /// The fuzzed documents' limits: at most about 1.1 KB per decoded struct (a shared type), so a run

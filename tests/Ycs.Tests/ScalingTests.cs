@@ -13,6 +13,8 @@ namespace Ycs;
 [TestClass]
 public class ScalingTests
 {
+    public TestContext TestContext { get; set; } = null!;
+
     [TestMethod]
     public void AddSortedAndMerged_RandomRanges_EqualsMergingTheSets()
     {
@@ -50,61 +52,76 @@ public class ScalingTests
 #if DEBUG
         Assert.Inconclusive("Timed with -c Release (a Debug build checks every marker lookup against Yjs' literal walk).");
 #endif
-        var doc = new YDoc(new YDocOptions { ClientId = 1 });
-        var text = doc.GetText("t");
-        text.Insert(0, new string('a', 20_000));
-        _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.MaxValue });
-        var random = new Random(1);
-
-        var stopwatch = Stopwatch.StartNew();
-        for (var i = 0; i < 20_000; i++)
-        {
-            text.Insert(random.Next(text.Length + 1), "bb");
-            text.Remove(random.Next(text.Length), 1);
-        }
-
-        Assert.IsLessThan(3_000, stopwatch.ElapsedMilliseconds);
+        ScalingProbe.AssertNotQuadratic(
+            n =>
+            {
+                var doc = new YDoc(new YDocOptions { ClientId = 1 });
+                var text = doc.GetText("t");
+                text.Insert(0, new string('a', n));
+                _ = new UndoManager(text, new UndoManagerOptions { CaptureTimeout = TimeSpan.MaxValue });
+                var random = new Random(1);
+                return () =>
+                {
+                    for (var i = 0; i < n; i++)
+                    {
+                        text.Insert(random.Next(text.Length + 1), "bb");
+                        text.Remove(random.Next(text.Length), 1);
+                    }
+                };
+            },
+            20_000,
+            TestContext);
     }
 
     [TestMethod]
     public void DeepObserver_ManyChangedMaps_SortsWithoutWalkingTheSiblings()
     {
-        var doc = new YDoc(new YDocOptions { ClientId = 1 });
-        var array = doc.GetArray("a");
-        var maps = Enumerable.Range(0, 16_000).Select(_ => new YMap()).ToList();
-        array.Insert(0, maps.Cast<object>().ToList().Select(YValue.FromObject).ToArray());
-        var events = 0;
-        array.ObserveDeep((deepEvents, _) => events += deepEvents.Count);
-
-        var stopwatch = Stopwatch.StartNew();
-        doc.Transact(_ => maps.ForEach(map => map["k"] = 1));
-
-        Assert.IsLessThan(500, stopwatch.ElapsedMilliseconds);
+        ScalingProbe.AssertNotQuadratic(
+            n =>
+            {
+                var doc = new YDoc(new YDocOptions { ClientId = 1 });
+                var array = doc.GetArray("a");
+                var maps = Enumerable.Range(0, n).Select(_ => new YMap()).ToList();
+                array.Insert(0, maps.Cast<object>().ToList().Select(YValue.FromObject).ToArray());
+                var events = 0;
+                array.ObserveDeep((deepEvents, _) => events += deepEvents.Count);
+                return () => doc.Transact(_ => maps.ForEach(map => map["k"] = 1));
+            },
+            16_000,
+            TestContext);
     }
 
     [TestMethod]
     public void Get_EveryIndexOfALegacyJsonItem_IsConstantPerIndex()
     {
-        // One ContentJSON item (content 2) of 40,000 values "1" in the root array "a".
-        var update = new List<byte> { 1, 1, 9, 0, 2, 1, 1, (byte)'a', 0xC0, 0xB8, 0x02 };
-        for (var i = 0; i < 40_000; i++)
-        {
-            update.Add(1);
-            update.Add((byte)'1');
-        }
+        ScalingProbe.AssertNotQuadratic(
+            n =>
+            {
+                // One ContentJSON item (content 2) of n values "1" in the root array "a".
+                var update = new List<byte> { 1, 1, 9, 0, 2, 1, 1, (byte)'a' };
+                var length = new Lib0Writer();
+                length.WriteVarUint((ulong)n);
+                update.AddRange(length.ToArray());
+                for (var i = 0; i < n; i++)
+                {
+                    update.Add(1);
+                    update.Add((byte)'1');
+                }
 
-        update.Add(0);
-        var doc = new YDoc();
-        doc.ApplyUpdate(update.ToArray());
-        var array = doc.GetArray("a");
-
-        var stopwatch = Stopwatch.StartNew();
-        for (var i = 0; i < array.Length; i++)
-        {
-            _ = array[i].ToObject();
-        }
-
-        Assert.IsLessThan(500, stopwatch.ElapsedMilliseconds);
+                update.Add(0);
+                var doc = new YDoc();
+                doc.ApplyUpdate(update.ToArray());
+                var array = doc.GetArray("a");
+                return () =>
+                {
+                    for (var i = 0; i < array.Length; i++)
+                    {
+                        _ = array[i].ToObject();
+                    }
+                };
+            },
+            40_000,
+            TestContext);
     }
 
     [TestMethod]
