@@ -48,7 +48,7 @@ idiomatic .NET 11 API with the latest C# features where they fit. This plan repl
 
 ## The shape (core)
 
-* `YType` (was `AbstractType`): `Doc`, `Parent`, `ObserveDeep`, abstract `ToJson`; no type events, no `Unobserve`,
+* `YType` (was `AbstractType`): `Doc`, `Parent`, `ObserveDeep`, `WriteTo`, `ToJsonString`; no type events, no `Unobserve`,
   no `Length`.
 * `YArray : IReadOnlyList<YValue>` (sealed): `Count`, indexer (throws out of range), `TryGetValue`, `Add`, `Insert`
   (`params ReadOnlySpan<YValue>`), `RemoveAt`, `RemoveRange`, `Slice(start, length)`, `ToArray`, `ToArray(Snapshot)`,

@@ -13,8 +13,26 @@ public abstract partial class YType
 
     internal virtual int Length { get; set; }
 
-    /// <summary>Transforms this shared type into a JSON-compatible representation (mirrors Yjs' <c>toJSON()</c>).</summary>
-    public abstract object ToJson();
+    /// <summary>
+    /// The JSON tree of this type as the document holds it (Yjs' <c>toJSON()</c>): a string for text and XML, a
+    /// <see cref="List{T}"/> for an array, a <see cref="Dictionary{TKey, TValue}"/> for a map, nested types already replaced;
+    /// the values are stored values (see <see cref="ValueJson"/>).
+    /// </summary>
+    internal abstract object ToJsonTree();
+
+    /// <summary>
+    /// Writes this type as JSON, the form of Yjs' <c>toJSON()</c>: text and XML as a string (<see cref="object.ToString"/>), an array
+    /// as an array, a map as an object, nested types the same way. See <see cref="YValue.WriteTo"/> for the other values.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The type is a root the document has not been asked for by its kind yet.</exception>
+    public void WriteTo(System.Text.Json.Utf8JsonWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+        ValueJson.Write(writer, ToJsonTree());
+    }
+
+    /// <summary>The JSON text of this type, as <see cref="WriteTo"/> writes it; see <see cref="YValue.ToJsonString"/> for the defaults of <paramref name="options"/>.</summary>
+    public string ToJsonString(System.Text.Json.JsonWriterOptions options = default) => ValueJson.ToString(ToJsonTree(), options);
 
     /// <summary>
     /// Observe all events that are created by this type and its children (Yjs' <c>observeDeep(f)</c>): the

@@ -210,11 +210,7 @@ public sealed partial class YArray : IReadOnlyList<YValue>
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
-    /// <summary>
-    /// Transforms this Shared Type to a JSON-compatible list. Mirrors Yjs' <c>toJSON()</c>
-    /// (<c>this.map(c =&gt; c instanceof YType ? c.toJSON() : c)</c>).
-    /// </summary>
-    public override object ToJson() => JsonTree(this);
+    internal override object ToJsonTree() => JsonTree(this);
 
     internal void InsertRaw(int index, ICollection<object?> content)
     {

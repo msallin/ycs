@@ -89,7 +89,7 @@ public class TypeParityTests
         nested["list"] = innerArray;
         innerArray.Add(1, 2, 3);
 
-        var json = map.ToJson() as IDictionary<string, object>;
+        var json = map.ToJsonObject() as IDictionary<string, object>;
         Assert.IsNotNull(json);
         Assert.AreEqual("hello", json["str"]);
         Assert.AreEqual(42, json["int"]);
@@ -188,7 +188,7 @@ public class TypeParityTests
         nestedMap["k"] = "v";
         arr.Add(nestedMap);
 
-        var json = arr.ToJson() as IList<object>;
+        var json = arr.ToJsonObject() as IList<object>;
         Assert.IsNotNull(json);
         Assert.AreEqual(3, json.Count);
         Assert.AreEqual("a", json[0]);
@@ -206,8 +206,8 @@ public class TypeParityTests
         var text = doc.GetText("text");
         text.Insert(0, "hello world");
 
-        Assert.AreEqual(text.ToString(), text.ToJson());
-        Assert.AreEqual("hello world", text.ToJson());
+        Assert.AreEqual(text.ToString(), text.ToJsonObject());
+        Assert.AreEqual("\"hello world\"", text.ToJsonString());
     }
 
     [TestMethod]

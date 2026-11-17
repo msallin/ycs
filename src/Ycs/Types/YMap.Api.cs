@@ -163,10 +163,7 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
 
     public IEnumerable<YValue> Values => EnumerateEntries().Select(static kvp => YValue.FromStored(kvp.Value));
 
-    /// <summary>
-    /// Transforms this Shared Type to a JSON-compatible <see cref="IDictionary{TKey,TValue}"/>. Mirrors Yjs' <c>toJSON()</c>.
-    /// </summary>
-    public override object ToJson() => JsonTree(this);
+    internal override object ToJsonTree() => JsonTree(this);
 
     public YMap Clone() => (YMap)InternalClone();
 

@@ -110,7 +110,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
         return sb.ToString();
     }
 
-    public override object ToJson() => ToString();
+    internal override object ToJsonTree() => ToString();
 
     /// <summary>
     /// Inserts <paramref name="children"/> at <paramref name="index"/>, which is 0 to <see cref="Count"/>.

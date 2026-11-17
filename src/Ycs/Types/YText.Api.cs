@@ -491,7 +491,7 @@ public partial class YText
     /// Returns the unformatted string representation of this YText type. Mirrors Yjs' <c>toJSON()</c>
     /// (<c>toJSON() { return this.toString() }</c>).
     /// </summary>
-    public override object ToJson() => ToString();
+    internal override object ToJsonTree() => ToString();
 
     public void RemoveAttribute(string name)
     {

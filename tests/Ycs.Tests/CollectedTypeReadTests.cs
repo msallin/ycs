@@ -50,7 +50,7 @@ public class CollectedTypeReadTests
     [TestMethod]
     public void ToJson_CollectedArray_IsAnEmptyListAsInYjs()
     {
-        Assert.AreEqual("[]", System.Text.Json.JsonSerializer.Serialize(Array().ToJson()));
+        Assert.AreEqual("[]", Array().ToJsonString());
     }
 
     [TestMethod]

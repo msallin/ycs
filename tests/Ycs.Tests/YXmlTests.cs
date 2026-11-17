@@ -75,7 +75,7 @@ public class YXmlTests
         Assert.AreEqual(
             "<paragraph align=\"center\" class=\"intro\"><bold>Hello </bold>world<em title=\"shout\">!!!</em></paragraph>",
             frag.ToString());
-        Assert.AreEqual(frag.ToString(), frag.ToJson());
+        Assert.AreEqual(frag.ToString(), YValue.Parse(frag.ToJsonString()).GetString());
     }
 
     [TestMethod]
