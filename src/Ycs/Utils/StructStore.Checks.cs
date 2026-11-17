@@ -8,7 +8,7 @@ internal sealed partial class StructStore
 {
     /// <summary>
     /// What is wrong with the links and holders around the structs of one client, or null: left and right mirror each
-    /// other; the type of a type item names the item and the subdocument of a document item names an attached item (a document inserted twice belongs to the item integrated last); and, for every type an
+    /// other; the type of a type item names the item and the subdocument of a document item names an attached item (a document is inserted once, so it names one item, which may be in another document); and, for every type an
     /// item names as its parent or holds, no holder points at a freed struct (one that is no longer in its client's
     /// list: merged into its left neighbour or replaced by a GC struct). The holders are the type's start, its map
     /// values, its push hint and its search markers. A collected type's item is excluded: it names the GC struct that
@@ -392,7 +392,7 @@ internal sealed partial class StructStore
         return Slab.LiveCount <= 4096 || _checks % (Slab.LiveCount / 32) == 0 ? Slab.Violations().FirstOrDefault() : null;
     }
 
-    // A document inserted twice belongs to the item integrated last, possibly in another document.
+    // A document's item may be in another document's store than the one checked: its parent's document is its owner.
     private static bool IsAttachedInOwner(ItemRef item) =>
         !item.IsNull && item.Parent is { Doc: { } owner } && owner.Store.IsAttached(item);
 
