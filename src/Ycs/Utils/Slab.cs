@@ -60,7 +60,7 @@ internal sealed partial class Slab
 {
     internal const int PageBits = 10;
     internal const int PageSlots = 1 << PageBits;
-    private const int DefaultFirstSlots = 4;
+    private const int DefaultFirstSlots = 1;
 
     /// <summary>The first size of page 0 for slabs made without one: 1 makes every allocation of page 0 copy.</summary>
     internal static int FirstPageSlotsForTests;
