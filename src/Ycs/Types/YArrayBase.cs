@@ -535,7 +535,10 @@ public abstract partial class YArrayBase : YType
         var indexed = !Doc.RunHeadIndexDisabledForTests;
         var (start, startIndex) = (p, pIndex);
         (p, pIndex) = Walk(p, pIndex, index, indexed ? Doc.Store : null, Doc.LiteralWalkStepsForTests);
-        Debug.Assert(!indexed || Walk(start, startIndex, index, null, 0) == (p, pIndex), "The run-head index ends the marker walk where Yjs' loops end.");
+
+        // The reference walk costs as many steps as the distance, so only a short one is checked: a long one would make
+        // every lookup linear in Debug.
+        Debug.Assert(!indexed || Math.Abs(index - startIndex) > 256 || Walk(start, startIndex, index, null, 0) == (p, pIndex), "The run-head index ends the marker walk where Yjs' loops end.");
         Doc.MarkerLookupsForTests?.Add((p.Id, pIndex));
 
         if (marker != null && Math.Abs(marker.Index - pIndex) < ((YType)p.Parent).Length / (double)MaxSearchMarkers)

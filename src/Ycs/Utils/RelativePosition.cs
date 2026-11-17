@@ -32,7 +32,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
     {
         ArgumentNullException.ThrowIfNull(type);
 
-        if (assoc == Assoc.Before)
+        if ((int)assoc < 0)
         {
             // Associated with the left character or the beginning of a type, decrement index if possible.
             if (index == 0)
@@ -58,7 +58,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
                 index -= slot.Length;
             }
 
-            if (slot.Right < 0 && assoc == Assoc.Before)
+            if (slot.Right < 0 && (int)assoc < 0)
             {
                 // Left-associated position, return last available id.
                 return In(type, t.LastId, assoc);
@@ -165,8 +165,8 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
 
     /// <summary>
     /// Reads the object of Yjs' <c>relativePositionToJSON</c>. The JSON may come from another peer: <c>null</c>
-    /// members count as absent, a negative <c>assoc</c> reads as <see cref="Assoc.Before"/>, any other as
-    /// <see cref="Assoc.After"/>.
+    /// members count as absent; <c>assoc</c> keeps its value, as Yjs does (a negative one means
+    /// <see cref="Assoc.Before"/>, any other <see cref="Assoc.After"/>).
     /// </summary>
     /// <exception cref="YUpdateException">
     /// Not an object; an id that is not an object of two integers from 0 to 2^53 - 1; an <c>assoc</c> that is
@@ -184,7 +184,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
             ? tname.ValueKind == JsonValueKind.String ? tname.GetString() : throw new YUpdateException("The tname of a relative position is not a string.")
             : null;
         ItemId? item = Member(json, "item", out var itemJson) ? JsonToId(itemJson, "item") : null;
-        var assoc = Member(json, "assoc", out var assocJson) && JsonInteger(assocJson, "assoc") < 0 ? Assoc.Before : Assoc.After;
+        var assoc = Member(json, "assoc", out var assocJson) ? AssocOf(JsonInteger(assocJson, "assoc")) : Assoc.After;
 
         if (item == null && rootName == null && typeId == null)
         {
@@ -309,7 +309,11 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
                 throw new YUpdateException("Unknown kind of relative position.");
         }
 
-        var assoc = reader.HasContent && reader.ReadVarInt().Value < 0 ? Assoc.Before : Assoc.After;
+        var assoc = reader.HasContent ? AssocOf(reader.ReadVarInt().Value) : Assoc.After;
         return new RelativePosition(typeId, rootName, itemId, assoc);
     }
+
+    // Yjs keeps a peer's assoc as it is and writes it back unchanged, so the value is kept (its sign is its meaning); one
+    // beyond an int keeps its sign.
+    private static Assoc AssocOf(long value) => (Assoc)(int)Math.Clamp(value, int.MinValue, int.MaxValue);
 }

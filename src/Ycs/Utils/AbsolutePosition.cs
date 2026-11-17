@@ -42,7 +42,7 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, Ass
             if (!type.ItemDeleted)
             {
                 // Adjust position based on the left assotiation, if necessary.
-                index = (right.Deleted || !right.Countable) ? 0 : (res.diff + (assoc == Assoc.After ? 0 : 1));
+                index = (right.Deleted || !right.Countable) ? 0 : (res.diff + ((int)assoc >= 0 ? 0 : 1));
                 var n = right.Left.AsItem;
                 while (!n.IsNull)
                 {
@@ -91,7 +91,7 @@ public readonly record struct AbsolutePosition(AbstractType Type, int Index, Ass
                 }
             }
 
-            index = assoc == Assoc.After ? type.Length : 0;
+            index = (int)assoc >= 0 ? type.Length : 0;
         }
 
         position = new AbsolutePosition(type, index, assoc);
