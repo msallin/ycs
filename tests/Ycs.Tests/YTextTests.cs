@@ -377,7 +377,7 @@ public class YTextTests : YTestBase
     {
         const int N = 10_000;
 
-        var rand = new Random();
+        var rand = SeededRandom(380);
 
         Init(users: 1);
         var text0 = Texts[Users[0]];
@@ -386,7 +386,7 @@ public class YTextTests : YTestBase
         var expectedResult = new StringBuilder();
         for (int i = 0; i < 100; i++)
         {
-            var str = Guid.NewGuid().ToString();
+            var str = new Guid(rand.Next(), 0, 0, new byte[8]).ToString();
             expectedResult.Insert(0, str);
             text0.Insert(0, str);
         }
@@ -562,13 +562,6 @@ public class YTextTests : YTestBase
     [DataRow(5, 400)]
     [DataRow(5, 500)]
     [DataRow(5, 600)]
-    /*
-    [DataRow(5, 1_000)]
-    [DataRow(5, 1_800)]
-    [DataRow(5, 3_000)]
-    [DataRow(5, 5_000)]
-    [DataRow(5, 15_000)]
-    */
     public void TestRandomYTextFeatures(int users, int iterations)
     {
         var attributes = new Dictionary<string, YValue>[]
