@@ -398,7 +398,7 @@ internal class DeleteSet
         return merged;
     }
 
-    // Read before the merge: a merged struct is detached and reads nothing.
+    // Read before the merge: a merged struct is freed and reads nothing.
     private static (AbstractType Parent, string Key) MapEntryOf(ItemRef right) =>
         right.IsItem && right.ParentSub != null ? ((AbstractType)right.Parent, right.ParentSub) : default;
 

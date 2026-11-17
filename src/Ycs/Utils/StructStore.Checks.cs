@@ -7,7 +7,7 @@ internal sealed partial class StructStore
     /// <summary>
     /// What is wrong with the links and holders around the structs of one client, or null: left and right mirror each
     /// other; the type of a type item names the item and the subdocument of a document item names an attached item (a document inserted twice belongs to the item integrated last); and, for every type an
-    /// item names as its parent or holds, no holder points at a detached struct (one that is no longer in its client's
+    /// item names as its parent or holds, no holder points at a freed struct (one that is no longer in its client's
     /// list: merged into its left neighbour or replaced by a GC struct). The holders are the type's start, its map
     /// values, its push hint and its search markers. A collected type's item is excluded: it names the GC struct that
     /// replaced it. Only types that an item of the store reaches are visited.
@@ -36,7 +36,7 @@ internal sealed partial class StructStore
 
             if (s.Content is ContentDoc doc && doc.Doc._item != s && !IsAttachedInOwner(doc.Doc._item))
             {
-                return $"the subdocument of {s.Id.Client}:{s.Id.Clock} names a detached item";
+                return $"the subdocument of {s.Id.Client}:{s.Id.Clock} names a freed item";
             }
 
             visited ??= [];
@@ -71,12 +71,12 @@ internal sealed partial class StructStore
 
         if (slot.Left >= 0 && (!IsAttached(slot.Left) || Slab.Read(slot.Left).Kind == 0 || Slab.Read(slot.Left).Right != s.Handle))
         {
-            return $"the left of {s.Id.Client}:{s.Id.Clock} is detached or does not point back";
+            return $"the left of {s.Id.Client}:{s.Id.Clock} is freed or does not point back";
         }
 
         if (slot.Right >= 0 && (!IsAttached(slot.Right) || Slab.Read(slot.Right).Kind == 0 || Slab.Read(slot.Right).Left != s.Handle))
         {
-            return $"the right of {s.Id.Client}:{s.Id.Clock} is detached or does not point back";
+            return $"the right of {s.Id.Client}:{s.Id.Clock} is freed or does not point back";
         }
 
         return null;
@@ -115,13 +115,13 @@ internal sealed partial class StructStore
     {
         if (!type.IsCollected && !type._item.IsNull && !IsAttached(type._item))
         {
-            return "the item of a live type is detached";
+            return "the item of a live type is freed";
         }
 
         var start = type._start;
         if (!start.IsNull && (!IsAttached(start) || !start.Left.IsNull))
         {
-            return "the start of a type is detached or has a left";
+            return "the start of a type is freed or has a left";
         }
 
         if (type._map.Count <= 1024 || _checks % (type._map.Count / 256) == 0)
@@ -130,7 +130,7 @@ internal sealed partial class StructStore
             {
                 if (!IsAttached(value) || !value.Right.IsNull || value.ParentSub != key)
                 {
-                    return $"the map value of key {key.Length} chars long is detached, has a right or names another key";
+                    return $"the map value of key {key.Length} chars long is freed, has a right or names another key";
                 }
             }
         }
@@ -139,14 +139,14 @@ internal sealed partial class StructStore
         {
             if (!list.PushHintForTests.IsNull && !IsAttached(list.PushHintForTests))
             {
-                return "the push hint is detached";
+                return "the push hint is freed";
             }
 
             foreach (var marker in list.MarkerItemsForTests)
             {
                 if (!IsAttached(marker))
                 {
-                    return "a search marker is detached";
+                    return "a search marker is freed";
                 }
             }
         }

@@ -366,7 +366,9 @@ are nulled in the value arena at GC, so it does not keep the caller's objects al
   sabotage that reuses right after each transaction's merge pass, not at the batch end, found no reader that fails
   (the full Debug suite ran clean, but for the unit test that pins the policy). A page whose slots are all free is
   released (M4: 1,000,000 merged items would otherwise leave 64 MB of free slots).
-* **No generation counters.** A generation per slot (4 bytes, 6% of a slot) tells that a slot changed; what a holder
+* **No generation counters in Release.** A generation per slot (4 bytes, 6% of a slot) tells that a slot changed; in
+  Debug only, a slot has one and an `ItemRef` keeps it (zero cost in Release: a test asserts that `ItemRef` has two
+  fields there). What a holder
   outside the store needs to know is whether the slot still holds *its* struct, and "the slot is live and its id is
   the held id" answers that exactly, because an id names one struct start. So every holder that can outlive a free
   point holds an id (and at most a handle as a hint, validated by that check): delete sets, stack items, snapshots,

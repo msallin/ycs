@@ -6,7 +6,7 @@ namespace Ycs;
 // primitives and public types: no struct or content class leaves.
 public abstract partial class YType
 {
-    /// <summary>The id of the item that holds this type, or null for a root or a detached type.</summary>
+    /// <summary>The id of the item that holds this type, or null for a root or a type not yet integrated.</summary>
     internal ID? OwnerIdForTests => IsRoot ? null : ItemId;
 
     /// <summary>The key and the item id of every entry of the type's map.</summary>

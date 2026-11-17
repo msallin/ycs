@@ -58,6 +58,12 @@ public class ItemRefSlotReadTests
         Assert.AreEqual((true, false), (merged.IsFreed, doc.Store.Find(new ItemId(1, 0)).IsFreed));
     }
 
+    [TestMethod]
+    public void IsFreed_DefaultReference_IsTrue()
+    {
+        Assert.IsTrue(default(ItemRef).IsFreed);
+    }
+
 #if DEBUG
     [TestMethod]
     public void Read_StructMergedAway_Throws()

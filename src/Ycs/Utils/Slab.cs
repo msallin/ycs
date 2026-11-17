@@ -50,8 +50,8 @@ internal struct Slot
 /// that finds another one throws.
 /// </summary>
 /// <remarks>
-/// A freed slot keeps its fields but <see cref="Slot.Payload"/>, which holds the free-list link (readers in the same
-/// cleanup may still look at the others), and its object entries and redone id are cleared. It is reused only after
+/// A freed slot keeps its fields but <see cref="Slot.Payload"/>, which holds the free-list link, and its object entries
+/// and redone id are cleared. It is reused only after
 /// <see cref="AllowReuse"/>, which the owner calls when nothing that could read a freed slot is pending (the outermost
 /// batch's end). A page, but page 0, whose slots are all free is released then. A <c>ref Slot</c> is valid until the
 /// next <see cref="Allocate"/>, which may move page 0.
@@ -252,9 +252,14 @@ internal sealed class Slab
     {
         var page = PageAt(handle);
         CheckLive(page, handle);
-        if (value != null || page.Refs != null)
+        if (page.Refs != null)
         {
-            (page.Refs ??= new object?[page.Slots.Length])[IndexOf(handle)] = value;
+            page.Refs[IndexOf(handle)] = value;
+        }
+        else if (value != null)
+        {
+            page.Refs = new object?[page.Slots.Length];
+            page.Refs[IndexOf(handle)] = value;
             Publish(PageOf(handle), page);
         }
     }
@@ -265,9 +270,14 @@ internal sealed class Slab
     {
         var page = PageAt(handle);
         CheckLive(page, handle);
-        if (value != null || page.Keys != null)
+        if (page.Keys != null)
         {
-            (page.Keys ??= new object?[page.Slots.Length])[IndexOf(handle)] = value;
+            page.Keys[IndexOf(handle)] = value;
+        }
+        else if (value != null)
+        {
+            page.Keys = new object?[page.Slots.Length];
+            page.Keys[IndexOf(handle)] = value;
             Publish(PageOf(handle), page);
         }
     }

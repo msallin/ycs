@@ -57,6 +57,12 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get => _slab is null ? -1 : _handle;
     }
 
+    /// <summary>
+    /// Whether the slot was freed (the struct merged into its left neighbour) and not yet reused, or names none, read
+    /// without the Debug generation check: for the code that looks for a stale reference.
+    /// </summary>
+    internal bool IsFreed => _slab is null || !_slab.TryRead(_handle, out var slot) || slot.IsFree;
+
     public bool IsNull
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
