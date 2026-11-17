@@ -6,6 +6,7 @@
     <IsAotCompatible>true</IsAotCompatible>
     <IsTrimmable>true</IsTrimmable>
     <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <!-- An ItemRef compared with null binds to the lifted operator and is always false: compare with IsNull. -->
     <WarningsAsErrors>$(WarningsAsErrors);CS8073</WarningsAsErrors>
     <!-- Native AOT and trimming are requirements: any trim, AOT or single-file analyzer warning fails the build. -->

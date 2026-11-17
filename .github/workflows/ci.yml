@@ -22,6 +22,9 @@ jobs:
       - name: Build
         run: dotnet build Ycs.sln -c Release
 
+      - name: Format (whitespace)
+        run: dotnet format whitespace Ycs.sln --verify-no-changes
+
       - name: Unit tests
         run: dotnet test tests/Ycs.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m
 
