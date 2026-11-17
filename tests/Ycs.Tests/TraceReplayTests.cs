@@ -135,14 +135,14 @@ public class TraceReplayTests
         protected static string StateHash(YDoc doc) => CanonicalJson.Hash(doc.EncodeStateAsUpdate());
 
         /// <summary>The attributes at <paramref name="i"/> of <paramref name="op"/>; null when absent or null.</summary>
-        internal static IReadOnlyDictionary<string, YValue> AttrsOf(JsonElement op, int i) =>
+        internal static YAttributes AttrsOf(JsonElement op, int i) =>
             i >= op.GetArrayLength() || op[i].ValueKind == JsonValueKind.Null
                 ? null
                 : ((IDictionary<string, object>)CanonicalJson.FromJson(op[i])).ToDictionary(kv => kv.Key, kv => YValue.FromObject(kv.Value));
 
         protected static List<object> KeysOf(YEvent e) =>
             e.Keys.OrderBy(kv => kv.Key, StringComparer.Ordinal)
-                .Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue })
+                .Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue.ToObject() })
                 .ToList();
 
         protected static Dictionary<string, object> Describe(YEvent e)

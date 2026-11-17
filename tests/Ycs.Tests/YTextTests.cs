@@ -492,7 +492,7 @@ public class YTextTests : YTestBase
         {
             Assert.IsTrue(args?.Changes?.Keys?.ContainsKey("test") ?? false);
             Assert.AreEqual(KeyChangeAction.Add, args.Changes.Keys["test"].Action);
-            Assert.IsNull(args.Changes.Keys["test"].OldValue);
+            Assert.IsTrue(args.Changes.Keys["test"].OldValue.IsNull);
         });
 
         text0.SetAttribute("test", 42);

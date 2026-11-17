@@ -49,7 +49,7 @@ readonly struct Ycs.DeletedRange : System.IEquatable<DeletedRange>
     static bool op_Inequality(DeletedRange left, DeletedRange right)
     void Deconstruct(out long Clock, out long Length)
 abstract class Ycs.Delta : System.IEquatable<Delta>
-    System.Collections.Generic.IReadOnlyDictionary<string, YValue>? Attributes { get; init; }
+    YAttributes? Attributes { get; init; }
     abstract Delta <Clone>$()
     override bool Equals(object? obj)
     override int GetHashCode()
@@ -164,16 +164,16 @@ readonly struct Ycs.ItemView : System.IEquatable<ItemView>
     static bool op_Inequality(ItemView left, ItemView right)
     string? ParentSub { get; }
 readonly struct Ycs.KeyChange : System.IEquatable<KeyChange>
-    KeyChange(KeyChangeAction Action, object? OldValue)
+    KeyChange(KeyChangeAction Action, YValue OldValue)
     KeyChangeAction Action { get; init; }
+    YValue OldValue { get; init; }
     bool Equals(KeyChange other)
-    object? OldValue { get; init; }
     override bool Equals(object obj)
     override int GetHashCode()
     override string ToString()
     static bool op_Equality(KeyChange left, KeyChange right)
     static bool op_Inequality(KeyChange left, KeyChange right)
-    void Deconstruct(out KeyChangeAction Action, out object? OldValue)
+    void Deconstruct(out KeyChangeAction Action, out YValue OldValue)
 enum Ycs.KeyChangeAction : int
     Add = 0
     Delete = 2
@@ -403,6 +403,20 @@ sealed class Ycs.YArray : YArrayBase, System.Collections.Generic.IEnumerable<YVa
     void RemoveRange(int index, int count)
 abstract class Ycs.YArrayBase : YType
 sealed class Ycs.YArrayEvent : YEvent
+    YArray Target { get; }
+sealed class Ycs.YAttributes : System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>>, System.Collections.Generic.IReadOnlyCollection<System.Collections.Generic.KeyValuePair<string, YValue>>, System.Collections.Generic.IReadOnlyDictionary<string, YValue>, System.Collections.IEnumerable
+    System.Collections.Generic.IEnumerable<YValue> Values { get; }
+    System.Collections.Generic.IEnumerable<string> Keys { get; }
+    System.Collections.Generic.IEnumerator<System.Collections.Generic.KeyValuePair<string, YValue>> GetEnumerator()
+    YValue this[string key] { get; }
+    bool ContainsKey(string key)
+    bool TryGetValue(string key, out YValue value)
+    int Count { get; }
+    static YAttributes Create(System.ReadOnlySpan<System.Collections.Generic.KeyValuePair<string, YValue>> entries)
+    static YAttributes Empty { get; }
+    static YAttributes From(System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>> entries)
+    static YAttributes op_Implicit(System.ValueTuple<string, YValue> pair)
+    static YAttributes? op_Implicit(System.Collections.Generic.Dictionary<string, YValue>? entries)
 readonly struct Ycs.YChange : System.IEquatable<YChange>
     YChange(YChangeKind Kind, long? User)
     YChangeKind Kind { get; init; }
@@ -489,6 +503,7 @@ abstract class Ycs.YEvent
     System.Collections.Generic.IReadOnlyDictionary<string, KeyChange> Keys { get; }
     System.Collections.Generic.IReadOnlyList<PathSegment> Path { get; }
     Transaction Transaction { get; }
+    YDoc Doc { get; }
     YType CurrentTarget { get; }
     YType Target { get; }
     bool Adds(ItemView view)
@@ -515,6 +530,7 @@ class Ycs.YMap : YType, System.Collections.Generic.IEnumerable<System.Collection
     void Clear()
 sealed class Ycs.YMapEvent : YEvent
     System.Collections.Generic.IReadOnlySet<string> KeysChanged { get; }
+    YMap Target { get; }
 class Ycs.YText : YArrayBase
     System.Collections.Generic.IEnumerable<System.Collections.Generic.KeyValuePair<string, YValue>> GetAttributes()
     System.Collections.Generic.IReadOnlyList<Delta> ToDelta()
@@ -522,23 +538,26 @@ class Ycs.YText : YArrayBase
     System.IDisposable Observe(System.Action<YTextEvent> handler)
     YText Clone()
     YText(string? text = null)
-    YValue? GetAttribute(string name)
+    YValue GetAttribute(string name)
     bool RemoveNonText()
-    int CleanupFormatting()
+    bool TryGetAttribute(string name, out YValue value)
     int CopyTo(System.Span<char> destination)
     int Length { get; }
     override object ToJson()
     override string ToString()
+    string Substring(int start, int length)
+    void Append(string text, YAttributes? attributes = null)
     void ApplyDelta(System.Collections.Generic.IEnumerable<Delta> delta, bool sanitize = true)
-    void Format(int index, int length, System.Collections.Generic.IReadOnlyDictionary<string, YValue> attributes)
-    void Insert(int index, string text, System.Collections.Generic.IReadOnlyDictionary<string, YValue>? attributes = null)
-    void InsertEmbed(int index, YValue embed, System.Collections.Generic.IReadOnlyDictionary<string, YValue>? attributes = null)
+    void Format(int index, int length, YAttributes attributes)
+    void Insert(int index, string text, YAttributes? attributes = null)
+    void InsertEmbed(int index, YValue embed, YAttributes? attributes = null)
     void Remove(int index, int length)
     void RemoveAttribute(string name)
     void SetAttribute(string name, YValue value)
     void WriteTo(System.Buffers.IBufferWriter<char> writer)
 sealed class Ycs.YTextEvent : YEvent
     System.Collections.Generic.IReadOnlySet<string> KeysChanged { get; }
+    YText Target { get; }
     bool ChildListChanged { get; }
     override System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
     override YChanges Changes { get; }
@@ -636,12 +655,14 @@ sealed class Ycs.YXmlElement : YXmlFragment
     YXmlElement()
     YXmlElement(string nodeName)
     bool HasAttribute(string attributeName)
+    bool TryGetAttribute(string attributeName, out YValue value)
     override string ToString()
     string NodeName { get; }
     void RemoveAttribute(string attributeName)
     void SetAttribute(string attributeName, YValue attributeValue)
 sealed class Ycs.YXmlEvent : YEvent
     System.Collections.Generic.IReadOnlySet<string> AttributesChanged { get; }
+    YXmlFragment Target { get; }
     bool ChildListChanged { get; }
 class Ycs.YXmlFragment : YArrayBase, System.Collections.Generic.IEnumerable<YType>, System.Collections.Generic.IReadOnlyCollection<YType>, System.Collections.Generic.IReadOnlyList<YType>, System.Collections.IEnumerable
     System.Collections.Generic.IEnumerable<YType> CreateTreeWalker(System.Func<YType, bool>? filter = null)

@@ -35,6 +35,9 @@ public sealed class YTextEvent : YEvent
         _subs = subs;
     }
 
+    /// <summary>The text that changed.</summary>
+    public new YText Target => (YText)base.Target;
+
     /// <summary>
     /// Gets the changed attribute names.
     /// </summary>
@@ -515,7 +518,7 @@ public partial class YText : YArrayBase
     }
 
     /// <summary>A change made before the text is in a document, replayed when it is integrated.</summary>
-    private readonly record struct PendingOperation(PendingKind Kind, int Index, int Length, string? Name, object? Value, IReadOnlyDictionary<string, YValue>? Attributes);
+    private readonly record struct PendingOperation(PendingKind Kind, int Index, int Length, string? Name, object? Value, YAttributes? Attributes);
 
     private List<PendingOperation>? _pending;
 
@@ -530,10 +533,45 @@ public partial class YText : YArrayBase
     /// </summary>
     internal bool HasFormatting { get; set; }
 
+    // What the text holds while it is not in a document: the pending operations replayed into a text of a scratch
+    // document, so that Length, ToString and ToDelta read them. A shared type among the content stands in as null (it
+    // can only be integrated into one document, and that is the real one). Dropped by every further operation.
+    private YText? _preview;
+
     private void AddPending(PendingOperation operation)
     {
         (_pending ??= new List<PendingOperation>()).Add(operation);
+        _preview = null;
     }
+
+    private YText? Preview()
+    {
+        Debug.Assert(Doc == null);
+        if (_pending == null)
+        {
+            return null;
+        }
+
+        if (_preview == null)
+        {
+            var preview = new YDoc().GetText();
+            try
+            {
+                ReplayPending(preview, _pending, standIn: true);
+            }
+            catch (Exception)
+            {
+                // As Integrate: an operation that throws ends the replay.
+            }
+
+            _preview = preview;
+        }
+
+        return _preview;
+    }
+
+    private static YValue StandIn(YValue value, bool standIn) =>
+        standIn && value.Kind is YValueKind.SharedType or YValueKind.Document ? YValue.Null : value;
 
     private void InsertInTransaction(Transaction transaction, int index, string text, IDictionary<string, object?>? attributes)
     {
@@ -569,7 +607,7 @@ public partial class YText : YArrayBase
         // As Yjs: an operation that throws ends the replay, and the operations after it are dropped.
         try
         {
-            ReplayPending(pending);
+            ReplayPending(this, pending, standIn: false);
         }
         catch (Exception)
         {
@@ -577,7 +615,7 @@ public partial class YText : YArrayBase
         }
     }
 
-    private void ReplayPending(List<PendingOperation> pending)
+    private static void ReplayPending(YText text, List<PendingOperation> pending, bool standIn)
     {
         foreach (var op in pending)
         {
@@ -585,34 +623,37 @@ public partial class YText : YArrayBase
             {
                 case PendingKind.Insert:
                     Debug.Assert(op.Value != null);
-                    Insert(op.Index, (string)op.Value, op.Attributes);
+                    text.Insert(op.Index, (string)op.Value, op.Attributes);
                     break;
                 case PendingKind.InsertEmbed:
                     Debug.Assert(op.Value != null);
-                    InsertEmbed(op.Index, (YValue)op.Value, op.Attributes);
+                    text.InsertEmbed(op.Index, StandIn((YValue)op.Value, standIn), op.Attributes);
                     break;
                 case PendingKind.Delete:
-                    Remove(op.Index, op.Length);
+                    text.Remove(op.Index, op.Length);
                     break;
                 case PendingKind.Format:
                     Debug.Assert(op.Attributes != null);
-                    Format(op.Index, op.Length, op.Attributes);
+                    text.Format(op.Index, op.Length, op.Attributes);
                     break;
                 case PendingKind.ApplyDelta:
                     Debug.Assert(op.Value != null);
-                    ApplyDelta((Delta[])op.Value, sanitize: op.Length != 0);
+                    text.ApplyDelta(standIn ? Array.ConvertAll((Delta[])op.Value, StandIn) : (Delta[])op.Value, sanitize: op.Length != 0);
                     break;
                 case PendingKind.SetAttribute:
                     Debug.Assert(op.Name != null && op.Value != null);
-                    SetAttribute(op.Name, (YValue)op.Value);
+                    text.SetAttribute(op.Name, StandIn((YValue)op.Value, standIn));
                     break;
                 case PendingKind.RemoveAttribute:
                     Debug.Assert(op.Name != null);
-                    RemoveAttribute(op.Name);
+                    text.RemoveAttribute(op.Name);
                     break;
             }
         }
     }
+
+    private static Delta StandIn(Delta op) =>
+        op is Delta.Insert insert && StandIn(insert.Value, true).IsNull && !insert.Value.IsNull ? new Delta.Insert(YValue.Null) { Attributes = insert.Attributes } : op;
 
     internal override YType InternalCopy() => new YText();
 
@@ -1038,9 +1079,9 @@ public partial class YText : YArrayBase
     }
 
     /// <summary>The attributes as a delta carries them; a change (<see cref="ChangeKey"/>) as the object it is in Yjs.</summary>
-    internal static IReadOnlyDictionary<string, YValue> AttributeValues(Dictionary<string, object?> attributes, bool skipNull)
+    internal static YAttributes AttributeValues(Dictionary<string, object?> attributes, bool skipNull)
     {
-        var values = new AttributeSet(attributes.Count);
+        var values = new YAttributes(attributes.Count);
         foreach (var kvp in attributes)
         {
             if (kvp.Value == null && skipNull)
@@ -1068,7 +1109,7 @@ public partial class YText : YArrayBase
 
     /// <summary>The attributes of an operation of the caller's as the document stores them, in a dictionary the text may change; null for none.</summary>
     [return: NotNullIfNotNull(nameof(attributes))]
-    private Dictionary<string, object?>? StoredAttributes(IReadOnlyDictionary<string, YValue>? attributes)
+    private Dictionary<string, object?>? StoredAttributes(YAttributes? attributes)
     {
         if (attributes == null)
         {
@@ -1077,27 +1118,14 @@ public partial class YText : YArrayBase
 
         var stored = _storedAttributes ??= new Dictionary<string, object?>();
         stored.Clear();
-        if (attributes is Dictionary<string, YValue> dictionary)
+        for (var i = 0; i < attributes.Count; i++)
         {
-            // The struct enumerator: the interface's allocates one.
-            foreach (var kvp in dictionary)
-            {
-                stored[kvp.Key] = kvp.Value.Stored();
-            }
-        }
-        else
-        {
-            foreach (var kvp in attributes)
-            {
-                stored[kvp.Key] = kvp.Value.Stored();
-            }
+            var kvp = attributes.EntryAt(i);
+            stored[kvp.Key] = kvp.Value.Stored();
         }
 
         return stored;
     }
-
-    private static Dictionary<string, YValue>? Copy(IReadOnlyDictionary<string, YValue>? attributes) =>
-        attributes == null ? null : new Dictionary<string, YValue>(attributes);
 
     private static OrderedDictionary<string, object?>? Copy(OrderedDictionary<string, object?>? attributes) =>
         attributes?.Count > 0 ? new OrderedDictionary<string, object?>(attributes) : null;

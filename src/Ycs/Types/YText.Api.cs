@@ -15,7 +15,7 @@ namespace Ycs;
 public partial class YText
 {
     /// <summary>The number of UTF-16 code units of text, and one for each embed.</summary>
-    public new int Length => base.Length;
+    public new int Length => Doc == null ? Preview()?.Length ?? 0 : base.Length;
 
     /// <summary>
     /// Observes the events of this text (Yjs' <c>observe(f)</c>). Disposing the result unsubscribes.
@@ -96,7 +96,7 @@ public partial class YText
     }
 
     /// <summary>The text as a delta: runs of inserted text and embeds, with the attributes in effect (Yjs' <c>toDelta()</c>).</summary>
-    public IReadOnlyList<Delta> ToDelta() => ComputeDelta(null, null, null);
+    public IReadOnlyList<Delta> ToDelta() => Doc == null ? Preview()?.ToDelta() ?? [] : ComputeDelta(null, null, null);
 
     /// <summary>
     /// The text as of <paramref name="snapshot"/> (the current text when null, with <paramref name="previous"/> given); with
@@ -230,7 +230,7 @@ public partial class YText
         return ops;
     }
 
-    public void Insert(int index, string text, IReadOnlyDictionary<string, YValue>? attributes = null)
+    public void Insert(int index, string text, YAttributes? attributes = null)
     {
         // As in Yjs, the search marker is only used for inserts without explicit attributes.
         if (string.IsNullOrEmpty(text))
@@ -245,7 +245,7 @@ public partial class YText
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.Insert, index, 0, null, text, Copy(attributes)));
+            AddPending(new PendingOperation(PendingKind.Insert, index, 0, null, text, attributes));
         }
     }
 
@@ -253,7 +253,7 @@ public partial class YText
     /// Inserts an embed: a shared type (which becomes part of this text, as in an array), or any
     /// other value as JSON. It counts one towards <see cref="Length"/>.
     /// </summary>
-    public void InsertEmbed(int index, YValue embed, IReadOnlyDictionary<string, YValue>? attributes = null)
+    public void InsertEmbed(int index, YValue embed, YAttributes? attributes = null)
     {
         if (Doc != null)
         {
@@ -265,9 +265,12 @@ public partial class YText
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, Copy(attributes) ?? new Dictionary<string, YValue>()));
+            AddPending(new PendingOperation(PendingKind.InsertEmbed, index, 0, null, embed, attributes ?? YAttributes.Empty));
         }
     }
+
+    /// <summary>Inserts <paramref name="text"/> at the end.</summary>
+    public void Append(string text, YAttributes? attributes = null) => Insert(Length, text, attributes);
 
     public void Remove(int index, int length)
     {
@@ -286,7 +289,7 @@ public partial class YText
         }
     }
 
-    public void Format(int index, int length, IReadOnlyDictionary<string, YValue> attributes)
+    public void Format(int index, int length, YAttributes attributes)
     {
         ArgumentNullException.ThrowIfNull(attributes);
 
@@ -310,7 +313,7 @@ public partial class YText
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.Format, index, length, null, null, Copy(attributes)));
+            AddPending(new PendingOperation(PendingKind.Format, index, length, null, null, attributes));
         }
     }
 
@@ -365,6 +368,11 @@ public partial class YText
     /// </summary>
     public override string ToString()
     {
+        if (Doc == null)
+        {
+            return Preview()?.ToString() ?? string.Empty;
+        }
+
         var store = Doc?.Store;
         if (_string != null && store != null && _stringVersion == store.Version && _stringLength == Length)
         {
@@ -394,6 +402,27 @@ public partial class YText
         return result;
     }
 
+    /// <summary>The characters of <see cref="ToString"/> from <paramref name="start"/>, <paramref name="length"/> of them. It walks the text (a pooled copy, no string of the whole), so reading a character at a time is quadratic: use <see cref="CopyTo"/>.</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The range is not within the text.</exception>
+    public string Substring(int start, int length)
+    {
+        var buffer = ArrayPool<char>.Shared.Rent(Length);
+        try
+        {
+            var written = CopyTo(buffer);
+            if (start < 0 || length < 0 || start > written - length)
+            {
+                throw new ArgumentOutOfRangeException(nameof(start), $"The range {start}..{(long)start + length} is not within the text of {written} characters.");
+            }
+
+            return new string(buffer, start, length);
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
+    }
+
     /// <summary>
     /// Copies the text, as <see cref="ToString"/> returns it, into <paramref name="destination"/>
     /// without allocating. <see cref="Length"/> is always enough room (it also counts
@@ -403,6 +432,11 @@ public partial class YText
     /// <exception cref="ArgumentException"><paramref name="destination"/> is too short; it may have been written to.</exception>
     public int CopyTo(Span<char> destination)
     {
+        if (Doc == null)
+        {
+            return Preview() is { } preview ? preview.CopyTo(destination) : 0;
+        }
+
         var written = 0;
         for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
@@ -429,6 +463,12 @@ public partial class YText
     public void WriteTo(IBufferWriter<char> writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
+
+        if (Doc == null)
+        {
+            Preview()?.WriteTo(writer);
+            return;
+        }
 
         var n = _start;
         while (!n.IsNull)
@@ -479,10 +519,45 @@ public partial class YText
         }
     }
 
-    /// <summary>The text attribute <paramref name="name"/> (Yjs' <c>getAttribute</c>); null when it is not set.</summary>
-    public YValue? GetAttribute(string name) => TryTypeMapGet(name, out var value) ? YValue.FromStored(value) : default(YValue?);
+    /// <summary>The text attribute <paramref name="name"/> (Yjs' <c>getAttribute</c>); <see cref="YValue.Null"/> when it is not set (<see cref="TryGetAttribute"/> tells it from one set to null).</summary>
+    public YValue GetAttribute(string name) => TryGetAttribute(name, out var value) ? value : YValue.Null;
+
+    /// <summary>Reads the text attribute <paramref name="name"/>; false when it is not set.</summary>
+    public bool TryGetAttribute(string name, out YValue value)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (Doc == null)
+        {
+            if (Preview() is { } preview)
+            {
+                return preview.TryGetAttribute(name, out value);
+            }
+
+            value = default;
+            return false;
+        }
+
+        if (TryTypeMapGet(name, out var stored))
+        {
+            value = YValue.FromStored(stored);
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
 
     public IEnumerable<KeyValuePair<string, YValue>> GetAttributes()
+    {
+        if (Doc == null)
+        {
+            return Preview()?.GetAttributes() ?? [];
+        }
+
+        return EnumerateAttributes();
+    }
+
+    private IEnumerable<KeyValuePair<string, YValue>> EnumerateAttributes()
     {
         foreach (var kvp in TypeMapEnumerateValues())
         {
@@ -491,16 +566,11 @@ public partial class YText
     }
 
     /// <summary>
-    /// This function is experimental and subject to change / be removed.
-    /// <br/>
-    /// Ideally, we don't need this function at all. Formatting attributes should be cleaned up
-    /// automatically after each change. This function iterates twice over the complete YText type
-    /// and removes unnecessary formatting attributes. This is also helpful for testing.
-    /// <br/>
-    /// This function won't be exported anymore as soon as there is confidence that the YText type works as intended.
+    /// Removes the formatting attributes that no longer format anything (Yjs' <c>cleanupYTextFormatting</c>): in one
+    /// transaction, over the whole text. The text is in a document.
     /// </summary>
-    /// <returns>How many formatting attributes have been cleaned up.</returns>
-    public int CleanupFormatting()
+    /// <returns>How many formatting attributes were removed.</returns>
+    internal int CleanupFormatting()
     {
         var res = 0;
 

@@ -22,6 +22,9 @@ public sealed class YMapEvent : YEvent
     {
         KeysChanged = (IReadOnlySet<string>)subs;
     }
+
+    /// <summary>The map that changed.</summary>
+    public new YMap Target => (YMap)base.Target;
 }
 
 /// <summary>
