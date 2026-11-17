@@ -70,9 +70,8 @@ internal sealed partial class Slab
 
     // The pages' arrays by page number, for the reads: two indexes reach a slot. Published whenever a page is made, grown,
     // gets its object pages or is released.
-    private Slot[]?[] _slotPages = [];
-    private object?[]?[] _refPages = [];
-    private object?[]?[] _keyPages = [];
+    private PageArrays[] _arrays = [];
+
     private Stack<int>? _released;
 
     // Pages that may have room, most recently opened last; an entry for a released or full page is dropped when met.
@@ -167,22 +166,22 @@ internal sealed partial class Slab
     /// struct (a negative or released one throws all the same, from the array).
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ref readonly Slot Read(int handle) => ref _slotPages[handle >> PageBits]![handle & (PageSlots - 1)];
+    public ref readonly Slot Read(int handle) => ref _arrays[handle >> PageBits].Slots![handle & (PageSlots - 1)];
 
     /// <summary><see cref="GetRef"/> of a live handle, unchecked as <see cref="Read"/>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public object? ReadRef(int handle) => _refPages[handle >> PageBits]?[handle & (PageSlots - 1)];
+    public object? ReadRef(int handle) => _arrays[handle >> PageBits].Refs?[handle & (PageSlots - 1)];
 
     /// <summary><see cref="GetKey"/> of a live handle, unchecked as <see cref="Read"/>.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public object? ReadKey(int handle) => _keyPages[handle >> PageBits]?[handle & (PageSlots - 1)];
+    public object? ReadKey(int handle) => _arrays[handle >> PageBits].Keys?[handle & (PageSlots - 1)];
 
     /// <summary>
     /// The slot of a live handle for writing, without <see cref="At"/>'s checks, valid until the next
     /// <see cref="Allocate"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public ref Slot Write(int handle) => ref _slotPages[handle >> PageBits]![handle & (PageSlots - 1)];
+    public ref Slot Write(int handle) => ref _arrays[handle >> PageBits].Slots![handle & (PageSlots - 1)];
 
     /// <summary>
     /// Reads the slot of <paramref name="handle"/> if it is a slot of this slab, live or freed and not yet reused;
@@ -550,17 +549,12 @@ internal sealed partial class Slab
 
     private void Publish(int number, Page? page)
     {
-        if (number >= _slotPages.Length)
+        if (number >= _arrays.Length)
         {
-            var size = Math.Max(number + 1, _slotPages.Length * 2);
-            Array.Resize(ref _slotPages, size);
-            Array.Resize(ref _refPages, size);
-            Array.Resize(ref _keyPages, size);
+            Array.Resize(ref _arrays, Math.Max(number + 1, _arrays.Length * 2));
         }
 
-        _slotPages[number] = page?.Slots;
-        _refPages[number] = page?.Refs;
-        _keyPages[number] = page?.Keys;
+        _arrays[number] = new PageArrays(page?.Slots, page?.Refs, page?.Keys);
     }
 
     private void Grow(Page page, int number)
@@ -657,6 +651,8 @@ internal sealed partial class Slab
             Payload = -0x5A5A5A5A,
         });
     }
+
+    private readonly record struct PageArrays(Slot[]? Slots, object?[]? Refs, object?[]? Keys);
 
     private sealed class Page(int capacity)
     {
