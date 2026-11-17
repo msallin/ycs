@@ -8,15 +8,15 @@ namespace Ycs;
 /// <summary>
 /// The range of a String slot in the slab's character arena, as each write path of the text keeps it (the store's checks,
 /// which every transaction of every suite runs, find a range that differs from the text; these tests state what the
-/// counters and offsets are). They run with the default page sizes and merge rule whatever the run mode.
+/// counters and offsets are). They run with the default page sizes and merge rule and without forced compaction whatever the run mode.
 /// </summary>
 [TestClass]
 public class CharArenaShadowTests
 {
-    private static (int First, int Max, bool Copy) _mode;
+    private static (int First, int Max, bool Copy, StructStore.CompactionMode Compaction) _mode;
 
     [ClassInitialize]
-    public static void SaveMode(TestContext context) => _mode = (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests);
+    public static void SaveMode(TestContext context) => _mode = (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests);
 
     [TestInitialize]
     public void NoMode()
@@ -24,10 +24,11 @@ public class CharArenaShadowTests
         Arena<char>.FirstPageForTests = 0;
         Arena<char>.MaxPageForTests = 0;
         ItemRef.CopyOnMergeForTests = false;
+        StructStore.CompactionForTests = StructStore.CompactionMode.None;
     }
 
     [TestCleanup]
-    public void RestoreMode() => (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests) = _mode;
+    public void RestoreMode() => (Arena<char>.FirstPageForTests, Arena<char>.MaxPageForTests, ItemRef.CopyOnMergeForTests, StructStore.CompactionForTests) = _mode;
 
     private static YDoc NewDoc(long client = 1) => new(new YDocOptions { ClientId = client }) { RunExtensionsDisabledForTests = true };
 

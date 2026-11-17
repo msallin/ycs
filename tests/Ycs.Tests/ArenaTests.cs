@@ -31,6 +31,9 @@ public class ArenaTests
     private static void AssertSound(Arena<char> arena, params (long Offset, int Length)[] live) =>
         Assert.AreEqual(0, arena.Violations(live).Count, string.Join("; ", arena.Violations(live)));
 
+    private static void CompactRuns(Arena<char> arena, IReadOnlyList<(long Offset, int Length)> live, Action<long, long, int> relocate) =>
+        arena.Compact(live.Select((r, i) => (r.Offset, r.Length, i)), (i, moved) => relocate(live[i].Offset, moved, live[i].Length));
+
     [TestMethod]
     public void Append_SmallRuns_PagesDoubleFromTheFirstSizeToTheMaximum()
     {
@@ -102,7 +105,7 @@ public class ArenaTests
         var big = arena.Append(Text(10));
         var after = arena.Append(Text(1));
 
-        Assert.AreEqual((20, 1), (arena.PageCapacity(Arena<char>.PageOf(big)), arena.TailCount));
+        Assert.AreEqual((20, 0), (arena.PageCapacity(Arena<char>.PageOf(big)), arena.TailCount));
         Assert.AreEqual(0, Arena<char>.PageOf(after) - Arena<char>.PageOf(small)); // the write page is the small one still
         Assert.IsTrue(arena.Slice(big, 10).SequenceEqual(Text(10)));
         AssertSound(arena, (small, 1), (big, 10), (after, 1));
@@ -119,7 +122,7 @@ public class ArenaTests
 
         Assert.AreEqual(big, inPlace);
         Assert.AreEqual(42, arena.PageCapacity(Arena<char>.PageOf(moved)));
-        Assert.AreEqual((20L, 1L, 1), (arena.Dead, arena.Live - 20, arena.TailCount));
+        Assert.AreEqual((20L, 1L, 0), (arena.Dead, arena.Live - 20, arena.TailCount));
         Assert.IsTrue(arena.Slice(moved, 21).SequenceEqual(Text(10).Concat(Text(10, 'k')).Append('z').ToArray()));
         AssertSound(arena, (moved, 21));
     }
@@ -274,7 +277,7 @@ public class ArenaTests
         var live = runs.Where((_, i) => i is not (1 or 2 or 3 or 7)).ToList();
         var moves = new List<(long, long, int)>();
 
-        arena.Compact(live.ToArray(), (o, n, l) => moves.Add((o, n, l)));
+        CompactRuns(arena, live.ToArray(), (o, n, l) => moves.Add((o, n, l)));
 
         Assert.AreEqual((1, runs[0].Offset, 0, 3), (moves.Count, moves[0].Item1, arena.PageCapacity(0), arena.PageCount));
         Assert.AreEqual((8L, 1L), (arena.Live, arena.Dead));
@@ -295,7 +298,7 @@ public class ArenaTests
         var live = new[] { (a, 1), (b, 4), (c, 2) };
         var map = new Dictionary<long, long>();
 
-        arena.Compact(live, (o, n, l) => map[o] = n);
+        CompactRuns(arena, live, (o, n, l) => map[o] = n);
 
         Assert.AreEqual((1, true), (map.Count, map.ContainsKey(a)));
         Assert.AreEqual("a", new string(arena.Slice(map[a], 1)));
@@ -310,7 +313,7 @@ public class ArenaTests
         arena.Append(Text(2, 'x'));
         var moved = arena.Extend(a, 2, Text(1));
 
-        arena.Compact([(moved, 3)], (_, _, _) => { });
+        CompactRuns(arena, [(moved, 3)], (_, _, _) => { });
 
         Assert.AreEqual(0, arena.TailCount);
     }
@@ -327,7 +330,7 @@ public class ArenaTests
         var kept = grown + 2;
         var live = new List<(long Offset, int Length)> { (b, 3), (kept, 2), (other, 1) };
 
-        arena.Compact(live.ToArray(), (o, n, l) => live[live.FindIndex(r => r.Offset == o)] = (n, l)); // pages 0 and 1 are freed
+        CompactRuns(arena, live.ToArray(), (o, n, l) => live[live.FindIndex(r => r.Offset == o)] = (n, l)); // pages 0 and 1 are freed
         var y = arena.Append(Fill(4, 'y')); // takes the number of a freed page
         var z = arena.Append(Fill(2, 'z'));
         var yGrown = arena.Extend(y, 4, Fill(2, '!'));
@@ -358,7 +361,7 @@ public class ArenaTests
         var a = arena.Append(Text(2));
         arena.Append(Text(2));
         arena.MarkDead(a, 2);
-        arena.Compact([], (_, _, _) => { });
+        CompactRuns(arena, [], (_, _, _) => { });
 
         Assert.ThrowsExactly<ArgumentException>(() => arena.Slice(a, 1).ToArray());
     }
@@ -417,7 +420,7 @@ public class ArenaTests
         var gone = arena.Append(Text(2));
         arena.Append(Text(2));
         arena.MarkDead(gone, 2);
-        arena.Compact([], (_, _, _) => { });
+        CompactRuns(arena, [], (_, _, _) => { });
 
         Assert.IsTrue(arena.Violations([(gone, 2)]).Count > 0);
     }
@@ -432,7 +435,7 @@ public class ArenaTests
         var kept = arena.Slice(a, 2);
 
         arena.MarkDead(a, 2);
-        arena.Compact([], (_, _, _) => { });
+        CompactRuns(arena, [], (_, _, _) => { });
 
         Assert.AreEqual('婚', kept[0]);
     }
@@ -461,13 +464,11 @@ public class ArenaTests
         var random = new Random(seed);
         var arena = new Arena<char>(first, max);
         var runs = new List<Run>();
-        Run current = null;
 
         IEnumerable<(long, int)> Live()
         {
             foreach (var run in runs.ToArray())
             {
-                current = run;
                 yield return (run.Offset, run.Length);
             }
         }
@@ -532,12 +533,8 @@ public class ArenaTests
 
         void Compact()
         {
-            arena.Compact(Live(), (o, n, l) =>
-            {
-                Assert.AreEqual(current.Offset, o);
-                Assert.AreEqual(current.Length, l);
-                current.Offset = n;
-            });
+            var snapshot = runs.ToArray();
+            arena.Compact(snapshot.Select((r, i) => (r.Offset, r.Length, i)), (i, moved) => snapshot[i].Offset = moved);
         }
     }
 

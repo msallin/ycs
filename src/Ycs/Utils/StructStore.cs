@@ -159,6 +159,7 @@ internal sealed partial class StructStore
 
         structs.Add(str);
         Version++;
+        CompactForTests(Slab, true);
     }
 
     /// <summary>

@@ -56,7 +56,7 @@ internal struct Slot
 /// batch's end). A page, but page 0, whose slots are all free is released then. A <c>ref Slot</c> is valid until the
 /// next <see cref="Allocate"/>, which may move page 0.
 /// </remarks>
-internal sealed class Slab
+internal sealed partial class Slab
 {
     internal const int PageBits = 10;
     internal const int PageSlots = 1 << PageBits;
