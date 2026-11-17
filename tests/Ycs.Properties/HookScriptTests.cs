@@ -43,10 +43,10 @@ public sealed class HookScriptTests
     }
 
     /// <summary>
-    /// The same scripts with page 0 of the slab at one slot, so that a slot freed by a merge is taken again by the next
-    /// split or insert as soon as the outermost batch ends: a nested transaction that reads a slot freed in the batch
-    /// it runs in (H4) merges at another place than Yjs and the update bytes differ. YCS_PROP_HOOKS and YCS_PROP_SEED
-    /// as above, from seed 190,001.
+    /// The same scripts with page 0 of the slab at one slot, so that page 0 grows by copy at every allocation: a
+    /// <c>ref Slot</c> held across an <c>Allocate</c> would then point into the old page and the update bytes differ
+    /// from Yjs. (Freed slots are reused last-in first-out in every run, this setting or not.) YCS_PROP_HOOKS and
+    /// YCS_PROP_SEED as above, from seed 190,001.
     /// </summary>
     [TestMethod]
     [Timeout(int.MaxValue)]
