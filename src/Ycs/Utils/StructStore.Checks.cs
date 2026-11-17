@@ -209,6 +209,18 @@ internal sealed partial class StructStore
             return $"the slot of {id} holds the kind {slot.Kind} and length {slot.Length}, its content another";
         }
 
+        var kind = (SlotKind)slot.Kind;
+        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || content.GetType() != ContentClassOf(kind))
+        {
+            return $"the slot of {id} holds the kind {kind}, its content is a {content.GetType().Name}";
+        }
+
+        // A collected item keeps the Countable flag of what it was; its right part after a split is not countable.
+        if (kind != SlotKind.Deleted && ((slot.Info & Slot.CountableFlag) != 0) != kind.IsCountable())
+        {
+            return $"the slot of {id} of kind {kind} has the countable flag {(slot.Info & Slot.CountableFlag) != 0}";
+        }
+
         if (slot.Parent < 0 || slot.Parent >= Types.Count)
         {
             return $"the slot of {id} names parent {slot.Parent} of {Types.Count} types";
@@ -216,6 +228,19 @@ internal sealed partial class StructStore
 
         return null;
     }
+
+    private static Type ContentClassOf(SlotKind kind) => kind switch
+    {
+        SlotKind.String => typeof(ContentString),
+        SlotKind.Any => typeof(ContentAny),
+        SlotKind.Deleted => typeof(ContentDeleted),
+        SlotKind.Type => typeof(ContentType),
+        SlotKind.Format => typeof(ContentFormat),
+        SlotKind.Embed => typeof(ContentEmbed),
+        SlotKind.Binary => typeof(ContentBinary),
+        SlotKind.Json => typeof(ContentJson),
+        _ => typeof(ContentDoc),
+    };
 
     /// <summary>
     /// What is wrong with the slots and links of the structs <paramref name="transaction"/> touched, which every transaction
