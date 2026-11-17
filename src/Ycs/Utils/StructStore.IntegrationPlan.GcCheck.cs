@@ -50,7 +50,7 @@ internal sealed partial class StructStore
             {
                 foreach (var type in deleted.Keys)
                 {
-                    if (type is { Parent: AbstractType, NestedType: { } nested } && HasLiveNonValue(nested, doc, !type.Keep && doc.GcFilter(type.GcView(doc)), ranges))
+                    if (type is { StoredParent: AbstractType, NestedType: { } nested } && HasLiveNonValue(nested, doc, !type.Keep && doc.GcFilter(GcViewOf(doc, type)), ranges))
                     {
                         throw MapValueSplit();
                     }
@@ -64,7 +64,7 @@ internal sealed partial class StructStore
                 // The walk stops at a collected type: the collection of a type above it does not enter it.
                 for (var ancestor = KeyOf(part).Parent; ancestor is PlanItem type; ancestor = KeyOf(type).Parent)
                 {
-                    collected |= !type.Keep && doc.GcFilter(type.GcView(doc));
+                    collected |= !type.Keep && doc.GcFilter(GcViewOf(doc, type));
                     if (collected && deleted.ContainsKey(type))
                     {
                         throw MapValueSplit();
@@ -96,16 +96,16 @@ internal sealed partial class StructStore
         private Dictionary<PlanItem, List<(long Boundary, int Time)>> MapValueSplits(List<(long Client, long Clock, long End)> ranges)
         {
             Dictionary<PlanItem, List<(long Boundary, int Time)>> splits = null;
-            foreach (var (str, _, _) in _steps)
+            foreach (var (index, _, _) in _steps)
             {
-                if (str is Item item)
+                if (_table.At(index).Kind != StagedKind.GC)
                 {
-                    if (item.LeftOrigin is ID left)
+                    if (_table.LeftOrigin(index) is ID left)
                     {
                         Split(ref splits, left, left.Clock + 1, ReferenceSplit);
                     }
 
-                    if (item.RightOrigin is ID right)
+                    if (_table.RightOrigin(index) is ID right)
                     {
                         Split(ref splits, right, right.Clock, ReferenceSplit);
                     }
@@ -130,7 +130,7 @@ internal sealed partial class StructStore
         {
             var (target, start) = Target(id);
             if (!target.IsNull && start < boundary && boundary < target.Id.Clock + target.Length
-                && !target.Deleted && !target.HasDeletedContent && (target.ParentSub != null || target.Parent == null))
+                && !target.Deleted && !target.HasDeletedContent && (target.ParentSub != null || !target.HasParent))
             {
                 splits ??= new Dictionary<PlanItem, List<(long, int)>>();
                 if (!splits.TryGetValue(target, out var list))
@@ -160,9 +160,9 @@ internal sealed partial class StructStore
             }
 
             var chains = new KeyChains();
-            foreach (var (str, offset, integrate) in _steps)
+            foreach (var (index, offset, integrate) in _steps)
             {
-                if (integrate && str is Item item && LandsLast(doc, PlanItem.Decoded(item), offset, chains) is { IsNull: false, Deleted: false } replaced)
+                if (integrate && _table.At(index).Kind != StagedKind.GC && LandsLast(doc, PlanItem.Staged(_table, index), offset, chains) is { IsNull: false, Deleted: false } replaced)
                 {
                     Add(replaced, ValueReplaced);
                 }
@@ -186,16 +186,17 @@ internal sealed partial class StructStore
                     else
                     {
                         var planned = FindPlanned(new ID(client, clock));
-                        if (planned == null)
+                        if (planned < 0)
                         {
                             break;
                         }
 
-                        type = planned is Item plannedItem ? PlanItem.Decoded(plannedItem) : default;
-                        structEnd = planned.Id.Clock + planned.Length;
+                        ref readonly var plannedStruct = ref _table.At(planned);
+                        type = plannedStruct.Kind is StagedKind.GC or StagedKind.Skip ? default : PlanItem.Staged(_table, planned);
+                        structEnd = plannedStruct.Clock + plannedStruct.Length;
                     }
 
-                    if (!type.IsNull && !type.Deleted && type.NestedType != null)
+                    if (!type.IsNull && !type.Deleted && type.IsType)
                     {
                         Add(type, RangeDeletes(k + 1));
                     }
@@ -242,7 +243,7 @@ internal sealed partial class StructStore
             {
                 var type = parent switch
                 {
-                    PlanItem { Parent: AbstractType } typeItem => typeItem.NestedType,
+                    PlanItem { StoredParent: AbstractType } typeItem => typeItem.NestedType,
                     AbstractType root => root,
                     _ => null,
                 };
@@ -317,18 +318,18 @@ internal sealed partial class StructStore
                     continue;
                 }
 
-                if (target.Parent is not AbstractType)
+                if (target.StoredParent is not AbstractType)
                 {
                     if (values == null)
                     {
                         // The planned items that become a key's value when they integrate, a later planned item replacing them or not.
                         values = new HashSet<PlanItem>();
                         var chains = new KeyChains();
-                        foreach (var (str, offset, integrate) in _steps)
+                        foreach (var (index, offset, integrate) in _steps)
                         {
-                            if (integrate && str is Item decoded)
+                            if (integrate && _table.At(index).Kind != StagedKind.GC)
                             {
-                                var item = PlanItem.Decoded(decoded);
+                                var item = PlanItem.Staged(_table, index);
                                 LandsLast(doc, item, offset, chains);
                                 if (!chains.Deleted.Contains(item) && !item.HasDeletedContent && KeyOf(item).Key != null)
                                 {
@@ -473,7 +474,12 @@ internal sealed partial class StructStore
                 return found.IsItem ? (PlanItem.Store(found), found.Id.Clock) : (default, 0);
             }
 
-            return id.Clock < GetState(id.Client) && FindPlanned(id) is Item planned ? (PlanItem.Decoded(planned), Math.Max(planned.Id.Clock, known)) : (default, 0);
+            if (id.Clock < GetState(id.Client) && FindPlanned(id) is var planned and >= 0 && _table.At(planned).Kind is not (StagedKind.GC or StagedKind.Skip))
+            {
+                return (PlanItem.Staged(_table, planned), Math.Max(_table.At(planned).Clock, known));
+            }
+
+            return (default, 0);
         }
 
         /// <summary>
@@ -497,14 +503,9 @@ internal sealed partial class StructStore
                     break;
                 }
 
-                if (item.Parent != null)
+                if (item.HasParent)
                 {
-                    result = (item.Parent switch
-                    {
-                        AbstractType type => ParentOf(type),
-                        ID id => Target(id).Item.Boxed,
-                        var root => root,
-                    }, item.ParentSub);
+                    result = (item.ParentName ?? (item.ParentId is ID id ? Target(id).Item.Boxed : item.StoredParent is AbstractType type ? ParentOf(type) : item.StoredParent), item.ParentSub);
                     break;
                 }
 

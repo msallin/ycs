@@ -310,6 +310,54 @@ internal sealed class StagingTable
     public (int Start, int Count) RangeOf(int clientIndex) => (_rangeStart[clientIndex], _rangeCount[clientIndex]);
 
     /// <summary>
+    /// 9.4: the index of the struct that holds <paramref name="clock"/> in the range of a client, -1 when the range is
+    /// empty or does not cover the clock. <paramref name="hint"/> is the index the last lookup found (any value is
+    /// valid): lookups that stay near it cost one comparison, any other the logarithm of the client's range.
+    /// </summary>
+    public int FindByClock(int clientIndex, long clock, ref int hint)
+    {
+        var (start, count) = (_rangeStart[clientIndex], _rangeCount[clientIndex]);
+        if (count == 0 || clock < _structs[start].Clock || clock >= _structs[start + count - 1].Clock + _structs[start + count - 1].Length)
+        {
+            return -1;
+        }
+
+        var end = start + count;
+        var near = hint;
+        if (near >= start && near < end)
+        {
+            if (Holds(near, clock))
+            {
+                return near;
+            }
+
+            if (near + 1 < end && Holds(near + 1, clock))
+            {
+                return hint = near + 1;
+            }
+        }
+
+        // The last struct that starts at or before the clock holds it: the range has no gaps and the clock is inside it.
+        int low = start, high = end - 1;
+        while (low < high)
+        {
+            var mid = low + ((high - low + 1) >> 1);
+            if (_structs[mid].Clock <= clock)
+            {
+                low = mid;
+            }
+            else
+            {
+                high = mid - 1;
+            }
+        }
+
+        return hint = low;
+
+        bool Holds(int i, long c) => _structs[i].Clock <= c && c < _structs[i].Clock + _structs[i].Length;
+    }
+
+    /// <summary>
     /// Empties the table for the next use, keeping buffers as far as <see cref="RetainedBytesCap"/> allows (each buffer
     /// in the order structs, characters, values, objects, clients), and bumps <see cref="Version"/>. Drops the references
     /// held.

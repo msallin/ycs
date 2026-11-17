@@ -88,7 +88,7 @@ public class CodecPathTests
             doc.Transact(tr =>
             {
                 tr.Local = false;
-                doc.Store.ApplyUpdate(tr, lease.Structs, lease.DeleteSet, UpdateLimits.Unlimited);
+                doc.Store.ApplyUpdate(tr, lease.Staging, lease.Structs, lease.DeleteSet, UpdateLimits.Unlimited);
             }, origin: null, local: false);
         }
 

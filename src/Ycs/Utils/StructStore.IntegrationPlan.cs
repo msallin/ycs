@@ -1,24 +1,35 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Diagnostics;
+
 namespace Ycs;
 
 internal sealed partial class StructStore
 {
-    /// <summary>The structs read from an update for one client, and how many were consumed.</summary>
+    /// <summary>
+    /// One client's range of the update's staging table (<see cref="StagingTable.RangeOf"/>) and how far the plan has
+    /// read it. The plan keeps one per client index.
+    /// </summary>
     internal sealed class ClientStructRefs
     {
-        public int NextReadOperation { get; set; }
-        public List<AbstractStruct> Refs { get; set; }
-    }
+        /// <summary>The client's index in the table.</summary>
+        public int Client { get; set; }
 
-    private static readonly List<AbstractStruct> NoRefs = new();
+        /// <summary>The table index of the next struct to read.</summary>
+        public int Next { get; set; }
+
+        /// <summary>The table index after the client's last struct; the range is empty when <see cref="Next"/> reaches it.</summary>
+        public int End { get; set; }
+    }
 
     // The plan of the last update, kept for the next one (null while one is in use).
     private IntegrationPlan _spare;
 
     /// <summary>
     /// How the structs of one update integrate (Yjs' <c>integrateStructs</c>), worked out against the
-    /// store's state without changing the store, then carried out by <see cref="Execute"/>.
+    /// store's state without changing the store, then carried out by <see cref="Execute"/>. It reads the update's
+    /// <see cref="StagingTable"/>: a struct is its index there, and a client is its index in the table, where each
+    /// client's structs are one range in clock order.
     /// <br/>
     /// While there is something to do, structs are taken in this order:
     /// 1. Top element on stack, if stack is not empty.
@@ -36,16 +47,24 @@ internal sealed partial class StructStore
     {
         private readonly StructStore _store;
         private readonly Dictionary<long, long> _state = new();
-        private readonly List<(AbstractStruct Struct, int Offset, bool Integrate)> _steps = new();
-        private readonly Func<long, long> _getState;
+        private readonly List<(int Index, int Offset, bool Integrate)> _steps = new();
+        private readonly Comparison<int> _byClientId;
 
-        // Planning state, kept between updates.
-        private readonly Dictionary<long, ClientStructRefs> _clientsStructRefs = new();
-        private readonly List<long> _clientsStructRefsIds = new();
-        private readonly List<AbstractStruct> _stack = new();
+        // Planning state, kept between updates. _table is null while no update is planned: what holds an index of a
+        // table is cleared before the table is reset or reused (Clear).
+        private StagingTable _table;
+        private readonly List<ClientStructRefs> _clientsStructRefs = new();
+        private readonly List<int> _clientsStructRefsIds = new();
+        private readonly List<int> _stack = new();
         private readonly List<ClientStructRefs> _freeRefs = new();
         private readonly List<PlanItem> _chain = new();
-        private Dictionary<long, List<AbstractStruct>> _refs;
+
+        // The decoded objects of the update by client index, at the positions of the table: Execute and the pre-check still
+        // adopt and read them (StructAt).
+        private readonly List<List<AbstractStruct>> _objects = new();
+
+        // The last client and struct a planned id was looked up in: planned structs refer mostly to the one before them.
+        private int _plannedHint;
 
         // Nesting depth of the types this update creates (by the id of their item), and of the type
         // each item lands in (when it was needed), for the nesting limit.
@@ -56,11 +75,17 @@ internal sealed partial class StructStore
         public IntegrationPlan(StructStore store)
         {
             _store = store;
-            _getState = GetState;
+            _byClientId = (a, b) => _table.ClientAt(a).CompareTo(_table.ClientAt(b));
         }
 
-        /// <summary>The decoded structs set aside, by client, each list contiguous and ascending by clock, or null.</summary>
-        public Dictionary<long, List<AbstractStruct>> Rest { get; private set; }
+        /// <summary>The staging table the plan was made from; null while the plan is clear.</summary>
+        public StagingTable Table => _table;
+
+        /// <summary>
+        /// The structs set aside, by client index of the table: each is a range of the table (start, count), contiguous
+        /// and ascending by clock, or null when nothing waits.
+        /// </summary>
+        public Dictionary<int, (int Start, int Count)> Rest { get; private set; }
 
         /// <summary>Per client, the lowest clock the structs set aside wait for (set with <see cref="Rest"/>).</summary>
         public Dictionary<long, long> Missing { get; private set; }
@@ -70,13 +95,26 @@ internal sealed partial class StructStore
 
         public void Execute(Transaction transaction)
         {
-            foreach (var (str, offset, integrate) in _steps)
+            foreach (var (index, offset, integrate) in _steps)
             {
-                ItemRef.Adopt(str, transaction, offset, integrate);
+                ItemRef.Adopt(StructAt(index), transaction, offset, integrate);
             }
         }
 
-        /// <summary>The structs set aside as a v2 update (with an empty delete set), or null, and how many they are.</summary>
+        /// <summary>
+        /// The decoded object of the staged struct <paramref name="index"/>: the one at the same position of the same
+        /// client's list. The one place that pairs the table with the objects.
+        /// </summary>
+        private AbstractStruct StructAt(int index)
+        {
+            var client = _table.At(index).Client;
+            return _objects[client][index - _table.RangeOf(client).Start];
+        }
+
+        /// <summary>
+        /// The structs set aside as a v2 update (with an empty delete set), or null, and how many they are. Written from
+        /// the table, so the lease that holds it must be open.
+        /// </summary>
         public (byte[] Update, long Structs) EncodeRest()
         {
             if (Rest == null)
@@ -84,20 +122,31 @@ internal sealed partial class StructStore
                 return (null, 0);
             }
 
-            long structs = 0;
-            foreach (var list in Rest.Values)
-            {
-                structs += list.Count;
-            }
-
             var encoder = UpdateEncoderV2.Rent();
             try
             {
-                WriteRest(encoder, Rest);
+                var writer = new LazyStructWriter(encoder);
+                var order = SortedRestClients();
+                foreach (var client in order)
+                {
+                    var (start, count) = Rest[client];
+                    for (var i = start; i < start + count; i++)
+                    {
+                        LazyStructWriter.WriteStruct(writer, _table, i, 0);
+                    }
+                }
+
+                LazyStructWriter.Finish(writer);
 
                 // Write an empty delete set: there is no need for an extra function call, just write 0 deletes.
                 encoder.RestWriter.WriteVarUint(0);
-                return (encoder.ToArray(), structs);
+                var update = encoder.ToArray();
+                if (CompareRestForTests && !update.AsSpan().SequenceEqual(EncodeRestFromObjects()))
+                {
+                    throw new InvalidOperationException("The structs set aside, written from the staging table, differ from the same written from the decoded objects.");
+                }
+
+                return (update, writer.TotalWritten);
             }
             finally
             {
@@ -105,21 +154,99 @@ internal sealed partial class StructStore
             }
         }
 
+        /// <summary>Whether <see cref="EncodeRest"/> checks its bytes against <see cref="EncodeRestFromObjects"/>; the tests switch it on.</summary>
+        internal static bool CompareRestForTests;
+
+        /// <summary>
+        /// The structs set aside as <see cref="EncodeRest"/> writes them, from the decoded objects (what Yjs does, which
+        /// the table's encoding must equal byte for byte). Kept for the test of that equality until the objects go.
+        /// </summary>
+        internal byte[] EncodeRestFromObjects()
+        {
+            var rest = new Dictionary<long, List<AbstractStruct>>();
+            foreach (var (client, (start, count)) in Rest)
+            {
+                rest[_table.ClientAt(client)] = _objects[client].GetRange(start - _table.RangeOf(client).Start, count);
+            }
+
+            var encoder = UpdateEncoderV2.Rent();
+            try
+            {
+                WriteRest(encoder, rest);
+                encoder.RestWriter.WriteVarUint(0);
+                return encoder.ToArray();
+            }
+            finally
+            {
+                encoder.Return();
+            }
+        }
+
+        /// <summary>The client indexes of <see cref="Rest"/>, highest client id first (Yjs' <c>writeClientsStructs</c>).</summary>
+        private int[] SortedRestClients()
+        {
+            var clients = new int[Rest.Count];
+            Rest.Keys.CopyTo(clients, 0);
+            Array.Sort(clients, _byClientId);
+            Array.Reverse(clients);
+            return clients;
+        }
+
+        /// <summary>Whether a struct set aside (not a Skip) covers a clock that <paramref name="clocks"/> holds.</summary>
+        public bool RestOverlaps(ClockRanges clocks)
+        {
+            foreach (var (client, (start, count)) in Rest)
+            {
+                var id = _table.ClientAt(client);
+                for (var i = start; i < start + count; i++)
+                {
+                    ref readonly var s = ref _table.At(i);
+                    if (s.Kind != StagedKind.Skip && clocks.Overlaps(id, s.Clock, s.Clock + s.Length))
+                    {
+                        return true;
+                    }
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>Adds the clocks of the structs set aside (not the Skips) to <paramref name="clocks"/>.</summary>
+        public void RecordRest(ClockRanges clocks)
+        {
+            foreach (var (client, (start, count)) in Rest)
+            {
+                var id = _table.ClientAt(client);
+                for (var i = start; i < start + count; i++)
+                {
+                    ref readonly var s = ref _table.At(i);
+                    if (s.Kind != StagedKind.Skip)
+                    {
+                        clocks.Add(id, s.Clock, s.Clock + s.Length);
+                    }
+                }
+            }
+        }
+
         /// <summary>Forgets the update, so that the plan can be used for the next one.</summary>
         public void Clear()
         {
-            _refs = null;
+            _table = null;
             _state.Clear();
             _steps.Clear();
             _stack.Clear();
             _clientsStructRefsIds.Clear();
-            foreach (var refs in _clientsStructRefs.Values)
+            foreach (var refs in _clientsStructRefs)
             {
-                refs.Refs = null;
-                _freeRefs.Add(refs);
+                if (refs != null)
+                {
+                    _freeRefs.Add(refs);
+                }
             }
 
             _clientsStructRefs.Clear();
+            _objects.Clear();
+            _plannedHint = 0;
             _typeDepths?.Clear();
             _parentDepths?.Clear();
             _keys?.Clear();
@@ -128,48 +255,65 @@ internal sealed partial class StructStore
         }
 
         /// <summary>
-        /// Works out how <paramref name="refs"/> integrate, with types nested at most <paramref name="maxDepth"/>
-        /// levels. A plan that threw (or was used before) is cleared first, so nothing of an earlier update is left in it.
+        /// Works out how the structs of <paramref name="table"/> integrate, with types nested at most
+        /// <paramref name="maxDepth"/> levels. <paramref name="objects"/> are the same structs decoded, by client id, each
+        /// list as long as the client's range. A plan that threw (or was used before) is cleared first, so nothing of an
+        /// earlier update is left in it. The table stays as it is until <see cref="Clear"/> and is not reset by the plan.
         /// </summary>
-        public void Plan(Dictionary<long, List<AbstractStruct>> refs, int maxDepth)
+        public void Plan(StagingTable table, Dictionary<long, List<AbstractStruct>> objects, int maxDepth)
         {
             Clear();
-            _refs = refs;
+            _table = table;
             _maxDepth = maxDepth;
             var clientsStructRefs = _clientsStructRefs;
+            for (var c = 0; c < table.ClientCount; c++)
+            {
+                clientsStructRefs.Add(null);
+                _objects.Add(null);
+            }
+
+            foreach (var (client, list) in objects)
+            {
+                _objects[table.FindClient(client)] = list;
+            }
+
             var planned = 0;
             _store.ForgetReservations();
-            foreach (var (client, list) in refs)
+            for (var i = 0; i < table.Count;)
             {
-                if (list.Count > 0)
+                var client = table.At(i).Client;
+                var (start, count) = table.RangeOf(client);
+                Debug.Assert(start == i && count > 0 && _objects[client].Count == count);
+
+                // Room for what the update adds (the update's own size bounds it), so a large update does not
+                // grow the client's list and the plan step by step.
+                planned += count;
+                _store.ReserveStructs(table.ClientAt(client), count);
+
+                ClientStructRefs clientRefs;
+                if (_freeRefs.Count > 0)
                 {
-                    // Room for what the update adds (the update's own size bounds it), so a large update does not
-                    // grow the client's list and the plan step by step.
-                    planned += list.Count;
-                    _store.ReserveStructs(client, list.Count);
-
-                    ClientStructRefs clientRefs;
-                    if (_freeRefs.Count > 0)
-                    {
-                        clientRefs = _freeRefs[^1];
-                        _freeRefs.RemoveAt(_freeRefs.Count - 1);
-                        clientRefs.NextReadOperation = 0;
-                    }
-                    else
-                    {
-                        clientRefs = new ClientStructRefs();
-                    }
-
-                    clientRefs.Refs = list;
-                    clientsStructRefs[client] = clientRefs;
-                    _clientsStructRefsIds.Add(client);
+                    clientRefs = _freeRefs[^1];
+                    _freeRefs.RemoveAt(_freeRefs.Count - 1);
                 }
+                else
+                {
+                    clientRefs = new ClientStructRefs();
+                }
+
+                clientRefs.Client = client;
+                clientRefs.Next = start;
+                clientRefs.End = start + count;
+                clientsStructRefs[client] = clientRefs;
+                _clientsStructRefsIds.Add(client);
+                i = start + count;
             }
 
             _steps.EnsureCapacity(planned);
 
             // Sort them so that we take the higher id first, in case of conflicts the lower id will probably not conflict with the id from the higher user.
-            _clientsStructRefsIds.Sort();
+            // By the client's id: its index in the table is the order the update names the clients in.
+            _clientsStructRefsIds.Sort(_byClientId);
 
             var curStructsTarget = GetNextStructTarget();
             if (curStructsTarget == null)
@@ -178,27 +322,29 @@ internal sealed partial class StructStore
             }
 
             var stack = _stack;
-            var stackHead = curStructsTarget.Refs[curStructsTarget.NextReadOperation++];
+            var stackHead = curStructsTarget.Next++;
 
             // Iterate over all struct readers until we are done.
             while (true)
             {
-                if (stackHead is not Skip)
+                ref readonly var head = ref table.At(stackHead);
+                if (head.Kind != StagedKind.Skip)
                 {
-                    var offset = GetState(stackHead.Id.Client) - stackHead.Id.Clock;
+                    var headClient = table.ClientAt(head.Client);
+                    var offset = GetState(headClient) - head.Clock;
                     if (offset < 0)
                     {
                         // Update from the same client is missing.
                         stack.Add(stackHead);
-                        UpdateMissingSv(stackHead.Id.Client, stackHead.Id.Clock - 1);
+                        UpdateMissingSv(headClient, head.Clock - 1);
 
                         // Hit a dead wall, add all items from stack to restSS.
                         AddStackToRestSS();
                     }
                     else
                     {
-                        var missing = (stackHead as Item)?.FindMissing(_getState);
-                        if (missing != null)
+                        var missing = FindMissing(stackHead);
+                        if (missing >= 0)
                         {
                             if (offset > 0)
                             {
@@ -207,40 +353,42 @@ internal sealed partial class StructStore
                                 // a client is listed once, so one was waiting). Waiting, it would hold up what follows it
                                 // in its client for good, which the document, having the id, no longer lacks.
                                 throw new YUpdateException(
-                                    $"The struct {stackHead.Id.Client}:{stackHead.Id.Clock} refers to structs this document does not have, " +
+                                    $"The struct {headClient}:{head.Clock} refers to structs this document does not have, " +
                                     "but the document has a struct under its id already. The document is unchanged.");
                             }
 
                             stack.Add(stackHead);
 
                             // Get the struct reader that has the missing struct.
-                            if (!clientsStructRefs.TryGetValue(missing.Value, out var structRefs) || structRefs.Refs.Count == structRefs.NextReadOperation)
+                            var missingClient = table.ClientAt(missing);
+                            var structRefs = clientsStructRefs[missing];
+                            if (structRefs == null || structRefs.End == structRefs.Next)
                             {
                                 // This update message causally depends on another update message that doesn't exist yet.
-                                UpdateMissingSv(missing.Value, GetState(missing.Value));
+                                UpdateMissingSv(missingClient, GetState(missingClient));
                                 AddStackToRestSS();
                             }
                             else
                             {
                                 // Recorded now, as the walk may stop further on and then only records what its last struct
                                 // waits for: the retry check would not fire when this client's structs arrive (yjs/yjs#824).
-                                UpdateMissingSv(missing.Value, GetState(missing.Value));
-                                stackHead = structRefs.Refs[structRefs.NextReadOperation++];
+                                UpdateMissingSv(missingClient, GetState(missingClient));
+                                stackHead = structRefs.Next++;
                                 continue;
                             }
                         }
-                        else if (offset < stackHead.Length)
+                        else if (offset < head.Length)
                         {
                             // All fine, apply the stackhead.
-                            if (stackHead is Item { Content: ContentType } typeItem)
+                            if (head.Kind == StagedKind.Type)
                             {
-                                CheckNesting(PlanItem.Decoded(typeItem));
+                                CheckNesting(PlanItem.Staged(table, stackHead));
                             }
 
                             _steps.Add((stackHead, (int)offset, true));
-                            _state[stackHead.Id.Client] = stackHead.Id.Clock + stackHead.Length;
+                            _state[headClient] = head.Clock + head.Length;
                         }
-                        else if (stackHead is Item)
+                        else if (head.Kind != StagedKind.GC)
                         {
                             // Known already. Yjs still looks up its references (splitting items there).
                             _steps.Add((stackHead, 0, false));
@@ -254,9 +402,9 @@ internal sealed partial class StructStore
                     stackHead = stack[^1];
                     stack.RemoveAt(stack.Count - 1);
                 }
-                else if (curStructsTarget != null && curStructsTarget.NextReadOperation < curStructsTarget.Refs.Count)
+                else if (curStructsTarget != null && curStructsTarget.Next < curStructsTarget.End)
                 {
-                    stackHead = curStructsTarget.Refs[curStructsTarget.NextReadOperation++];
+                    stackHead = curStructsTarget.Next++;
                 }
                 else
                 {
@@ -267,7 +415,7 @@ internal sealed partial class StructStore
                         break;
                     }
 
-                    stackHead = curStructsTarget.Refs[curStructsTarget.NextReadOperation++];
+                    stackHead = curStructsTarget.Next++;
                 }
             }
         }
@@ -278,7 +426,7 @@ internal sealed partial class StructStore
             while (ids.Count > 0)
             {
                 var target = _clientsStructRefs[ids[^1]];
-                if (target.NextReadOperation < target.Refs.Count)
+                if (target.Next < target.End)
                 {
                     return target;
                 }
@@ -287,6 +435,37 @@ internal sealed partial class StructStore
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// The index in the table of the first client struct <paramref name="i"/> refers to that the plan's state does not
+        /// have yet (the check half of Yjs' <c>Item.getMissing</c>: left origin, right origin, then parent), or -1. A
+        /// reference to the item's own client is an earlier clock (checked when it was read), so it is always there.
+        /// </summary>
+        private int FindMissing(int i)
+        {
+            ref readonly var s = ref _table.At(i);
+            if (s.Kind is StagedKind.GC or StagedKind.Skip)
+            {
+                return -1;
+            }
+
+            if (s.OriginClient >= 0 && s.OriginClient != s.Client && s.OriginClock >= GetState(_table.ClientAt(s.OriginClient)))
+            {
+                return s.OriginClient;
+            }
+
+            if (s.ROriginClient >= 0 && s.ROriginClient != s.Client && s.ROriginClock >= GetState(_table.ClientAt(s.ROriginClient)))
+            {
+                return s.ROriginClient;
+            }
+
+            if (s.ParentKind == StagedParent.Id && s.ParentClient != s.Client && s.ParentClock >= GetState(_table.ClientAt(s.ParentClient)))
+            {
+                return s.ParentClient;
+            }
+
+            return -1;
         }
 
         private void UpdateMissingSv(long client, long clock)
@@ -300,26 +479,26 @@ internal sealed partial class StructStore
 
         private void AddStackToRestSS()
         {
-            Rest ??= new Dictionary<long, List<AbstractStruct>>();
-            foreach (var item in _stack)
+            Rest ??= new Dictionary<int, (int Start, int Count)>();
+            foreach (var index in _stack)
             {
-                var client = item.Id.Client;
-                if (_clientsStructRefs.TryGetValue(client, out var inapplicableItems))
+                var client = _table.At(index).Client;
+                var inapplicableItems = _clientsStructRefs[client];
+                if (inapplicableItems != null)
                 {
                     // Decrement because we weren't able to apply previous operation.
-                    inapplicableItems.NextReadOperation--;
-                    Rest[client] = inapplicableItems.Refs.GetRange(inapplicableItems.NextReadOperation, inapplicableItems.Refs.Count - inapplicableItems.NextReadOperation);
-                    _clientsStructRefs.Remove(client);
+                    inapplicableItems.Next--;
+                    Rest[client] = (inapplicableItems.Next, inapplicableItems.End - inapplicableItems.Next);
+                    _clientsStructRefs[client] = null;
 
                     // The plan may still read it as its current target: it is empty now.
-                    inapplicableItems.NextReadOperation = 0;
-                    inapplicableItems.Refs = NoRefs;
+                    inapplicableItems.Next = inapplicableItems.End;
                     _freeRefs.Add(inapplicableItems);
                 }
                 else
                 {
-                    // Item was the last item on clientsStructRefs and the field was already cleared. Add item to restStructs and continue.
-                    Rest[client] = new List<AbstractStruct>(1) { item };
+                    // The client's structs went to the rest already (an earlier struct of the stack): as Yjs, the struct alone replaces them.
+                    Rest[client] = (index, 1);
                 }
 
                 // Remove client from clientsStructRefsIds to prevent users from applying the same update again.
@@ -365,13 +544,13 @@ internal sealed partial class StructStore
                 }
 
                 chain.Add(item);
-                if (item.Parent is string)
+                if (item.ParentName != null)
                 {
                     depth = 0;
                     break;
                 }
 
-                if (item.Parent is ID parentId)
+                if (item.ParentId is ID parentId)
                 {
                     depth = TypeDepth(parentId);
                     break;
@@ -385,13 +564,14 @@ internal sealed partial class StructStore
                     break;
                 }
 
-                if (FindPlanned(origin) is not Item next)
+                var next = FindPlanned(origin);
+                if (next < 0 || _table.At(next).Kind is StagedKind.GC or StagedKind.Skip)
                 {
                     depth = -1;
                     break;
                 }
 
-                item = PlanItem.Decoded(next);
+                item = PlanItem.Staged(_table, next);
             }
 
             foreach (var c in chain)
@@ -414,30 +594,14 @@ internal sealed partial class StructStore
             return _typeDepths != null && _typeDepths.TryGetValue(id, out var depth) ? depth : -1;
         }
 
-        private List<AbstractStruct> _plannedHintList;
-        private int _plannedHint;
-
-        private AbstractStruct FindPlanned(ID id)
+        /// <summary>The index in the table of the planned struct that holds <paramref name="id"/>, -1 for none.</summary>
+        private int FindPlanned(ID id)
         {
-            if (!_refs.TryGetValue(id.Client, out var list) || list.Count == 0 || id.Clock < list[0].Id.Clock)
-            {
-                return null;
-            }
-
-            var last = list[^1];
-            if (id.Clock >= last.Id.Clock + last.Length)
-            {
-                return null;
-            }
-
-            // The planned structs refer mostly to the one before them: the last lookup's neighbourhood comes first.
-            if (!ReferenceEquals(list, _plannedHintList))
-            {
-                _plannedHintList = list;
-                _plannedHint = 0;
-            }
-
-            return list[ClientStructs.FindIndex(new ClientStructs.Decoded(list), id.Clock, ref _plannedHint)];
+            var client = _table.FindClient(id.Client);
+            return client < 0 ? -1 : _table.FindByClock(client, id.Clock, ref _plannedHint);
         }
+
+        /// <summary>The view the garbage collection filter is asked about for <paramref name="item"/>, a planned item or a stored one.</summary>
+        private ItemView GcViewOf(YDoc doc, PlanItem item) => item.IsStaged ? ItemView.Detached(doc, StructAt(item.Index)) : item.GcView(doc);
     }
 }
