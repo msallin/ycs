@@ -35,6 +35,14 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
     /// <summary>The clock after the last struct (the client's state).</summary>
     public long End => _end;
 
+    // The store's change log (StructStore.ChangeLog.cs): the generation this list last logged a change in, and its
+    // latest entry (-1 for none).
+    internal long LoggedGeneration;
+
+    // Where the store's Clients added this list: the order Yjs visits the clients in.
+    internal int Ordinal;
+    internal int LastChange = -1;
+
     public ItemRef this[int index]
     {
         get

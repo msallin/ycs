@@ -66,7 +66,9 @@ internal sealed partial class StructStore
     /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="ItemRef.ExtendRun"/>).</summary>
     internal void NoteRunExtended(ItemRef item, int length)
     {
-        StructsOf(item)!.LastExtended(length);
+        var structs = StructsOf(item)!;
+        LogChange(structs, item.Id.Client);
+        structs.LastExtended(length);
         Version++;
         RunsExtended++;
     }
@@ -144,6 +146,7 @@ internal sealed partial class StructStore
         {
             var client = str.Id.Client;
             structs = _capacityHints != null && _capacityHints.Remove(client, out var capacity) ? new ClientStructs(Slab, capacity) : new ClientStructs(Slab);
+            structs.Ordinal = Clients.Count;
             Clients[client] = structs;
             var index = str.ClientIndex;
             if (index >= _structsByIndex.Length)
@@ -154,6 +157,7 @@ internal sealed partial class StructStore
             _structsByIndex[index] = structs;
         }
 
+        LogChange(structs, str.Id.Client);
         structs.Add(str);
         Version++;
         CompactForTests(Slab, true);

@@ -15,6 +15,7 @@ internal static class Budgets
     {
         // name                                           bytes/op   µs/op ceiling   (today: bytes, µs)
         ["text.insert-char-at-caret-100k"] = new(0, 50),               // 0 B, 1 µs (was 204 B: an item and its content per keystroke, merged at the end of the transaction; the run takes the text in the arena)
+        ["text.insert-char-in-document-of-5000-clients"] = new(0, 30),  // 0 B, 3 µs (a transaction's work is that of the clients it changes; it was 903 KB and 245 µs: both state vectors copied, their dictionaries made again)
         ["doc.apply-remote-char-update-100k"] = new(0, 50),            // 0 B, 1 µs (was 172 B: the update is read into the reused staging table and adopted into a 64-byte slot, the slot of a merged-away item reused; no struct object)
         ["doc.encode-small-document-v1"] = new(104, 50),               // 88 B, 0.4 µs
         ["doc.encode-diff-of-one-edit-100k"] = new(7656, 2000),        // 6 656 B, 220 µs (the delete set written from the store)

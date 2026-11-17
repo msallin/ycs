@@ -1060,16 +1060,10 @@ public partial class YText : YArrayBase
         HashSet<YText>? needFullCleanup = null;
 
         // Check if another formatting item was inserted.
-        foreach (var (client, afterClock) in transaction.AfterState)
+        foreach (var (_, structs, clock, afterClock) in transaction.ChangedClients)
         {
-            var clock = transaction.BeforeState.TryGetValue(client, out var before) ? before : 0;
-            if (afterClock == clock)
-            {
-                continue;
-            }
-
             // As Yjs, with the end clock as the length: to the end of the client's structs.
-            store.IterateStructs(transaction, store.Clients[client], clock, afterClock, str =>
+            store.IterateStructs(transaction, structs, clock, afterClock, str =>
             {
                 if (str.IsItem && !str.Deleted && str.Kind == SlotKind.Format && str.Parent is YText text)
                 {

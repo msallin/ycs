@@ -16,6 +16,33 @@ public class UndoManagerYjsTests
     private static void Sync(YDoc from, YDoc to) => to.ApplyUpdate(from.EncodeStateAsUpdate(to.EncodeStateVector()), "remote");
 
     [TestMethod]
+    public void Redo_TrackedUpdateOfTwoClients_NumbersTheRedoneItemsInTheOrderOfTheStoresClients()
+    {
+        var first = Doc(101);
+        var second = Doc(102);
+        var target = Doc(7);
+        var text = target.GetText("o");
+        var array = target.GetArray("a");
+        var updates = new List<string>();
+        target.Updated += (_, e) => updates.Add(Convert.ToHexString(e.Update.Span));
+        var um = new UndoManager(new YType[] { text, array }, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero, TrackedOrigins = new object?[] { "remote" } });
+        first.GetText("o").Insert(0, "aa");
+        target.ApplyUpdate(first.EncodeStateAsUpdate());
+        second.GetArray("a").Insert(0, 1);
+        target.ApplyUpdate(second.EncodeStateAsUpdate());
+        first.GetText("o").Insert(2, "bb");
+        second.ApplyUpdate(first.EncodeStateAsUpdate(second.EncodeStateVector()));
+        second.GetArray("a").Insert(1, 2);
+        target.ApplyUpdate(second.EncodeStateAsUpdate(target.EncodeStateVector()), "remote");
+        um.Undo();
+
+        um.Redo();
+
+        // Written by Yjs 13.6.32 for the same steps (interop/js/check-types.mjs).
+        Assert.AreEqual("01020700C866006601017D02C46501650202626200", updates[^1]);
+    }
+
+    [TestMethod]
     public void Undo_MergedCaptureAroundAnUntrackedChange_KeepsTheUntrackedChange()
     {
         var doc = Doc(1);

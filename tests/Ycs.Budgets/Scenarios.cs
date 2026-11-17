@@ -23,6 +23,23 @@ internal static class Scenarios
             return _ => text.Insert(caret++, "x");
         }),
 
+        new("text.insert-char-in-document-of-5000-clients", 500, () =>
+        {
+            var doc = new YDoc(new YDocOptions { ClientId = 1 });
+            var text = doc.GetText("text");
+            text.Insert(0, "base");
+            var state = doc.EncodeStateAsUpdate();
+            for (var c = 0; c < 5000; c++)
+            {
+                var peer = new YDoc(new YDocOptions { ClientId = 1000 + c });
+                peer.ApplyUpdate(state);
+                peer.GetText("text").Insert(0, "x");
+                doc.ApplyUpdate(peer.EncodeStateAsUpdate(doc.EncodeStateVector()));
+            }
+
+            return i => text.Insert(text.Length, "x");
+        }),
+
         new("doc.apply-remote-char-update-100k", 500, () =>
         {
             var (doc, _) = LargeText();

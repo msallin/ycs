@@ -47,13 +47,14 @@ public sealed partial class Transaction
 
     // Made by the first delete: an insert-only document never holds one.
     private DeleteSet? _deleteSet;
-    private Dictionary<long, long> _beforeState = new();
-    private Dictionary<long, long> _afterState = new();
+
+    // The document's state when the transaction began and when its cleanup began (empty before that): both read from
+    // the store's change log, from the positions BeforeState and AfterState hold.
+    private readonly TransactionState _beforeState;
+    private readonly TransactionState _afterState;
 
     // What the undo manager keeps beyond the transaction; replaced, not cleared, when it ends.
     private bool _deleteSetTaken;
-    private bool _beforeStateTaken;
-    private bool _afterStateTaken;
 
     internal readonly ChangedTypes _changed = new();
 
@@ -128,6 +129,8 @@ public sealed partial class Transaction
     internal Transaction(YDoc doc)
     {
         _doc = doc;
+        _beforeState = new TransactionState();
+        _afterState = new TransactionState();
         _ended = true;
     }
 
@@ -143,20 +146,6 @@ public sealed partial class Transaction
         return _deleteSet ??= new DeleteSet();
     }
 
-    /// <summary>The state before the transaction, which the caller keeps beyond it.</summary>
-    internal Dictionary<long, long> TakeBeforeState()
-    {
-        _beforeStateTaken = true;
-        return _beforeState;
-    }
-
-    /// <summary>The state after the transaction, which the caller keeps beyond it.</summary>
-    internal Dictionary<long, long> TakeAfterState()
-    {
-        _afterStateTaken = true;
-        return _afterState;
-    }
-
     private static InvalidOperationException EndedException() => new(
         "This transaction has ended and its object is reused by the document. Read what you need from a " +
         "transaction, or the changes of an event (Changes, Keys, Delta, Adds, Deletes), in the callback or " +
@@ -169,8 +158,12 @@ public sealed partial class Transaction
         _ended = false;
         _origin = origin;
         _local = local;
-        _doc.Store.GetStateVector(_beforeState);
+        var store = _doc.Store;
+        _beforeState.Set(store, store.BeginChanges());
     }
+
+    /// <summary>The clients whose lists grew in the transaction, from its start to the start of its cleanup.</summary>
+    internal ChangedClients ChangedClients => new(_doc.Store, _beforeState.Position, _afterState.Position);
 
     /// <summary>
     /// Ends the transaction after its batch: the events created in it let go of it, and what it
@@ -227,9 +220,9 @@ public sealed partial class Transaction
             }
         }
 
-        _beforeState = _beforeStateTaken || _beforeState.Count > KeepCapacity ? new Dictionary<long, long>() : Cleared(_beforeState);
-        _afterState = _afterStateTaken || _afterState.Count > KeepCapacity ? new Dictionary<long, long>() : Cleared(_afterState);
-        _deleteSetTaken = _beforeStateTaken = _afterStateTaken = false;
+        _beforeState.Reset();
+        _afterState.Reset();
+        _deleteSetTaken = false;
 
         static void Clear<TKey, TValue>(Dictionary<TKey, TValue> dictionary)
             where TKey : notnull
@@ -240,12 +233,6 @@ public sealed partial class Transaction
             {
                 dictionary.TrimExcess();
             }
-        }
-
-        static Dictionary<long, long> Cleared(Dictionary<long, long> dictionary)
-        {
-            dictionary.Clear();
-            return dictionary;
         }
     }
 
@@ -397,6 +384,22 @@ public sealed partial class Transaction
     /// </summary>
     internal static void CleanupTransactions(YDoc doc)
     {
+        // The change log, which the states of the transactions of this batch read, is kept until the outermost batch
+        // has finished: an 'AfterAllTransactions' handler may start another and still reads these transactions.
+        var store = doc.Store;
+        store.EnterBatch();
+        try
+        {
+            CleanupBatch(doc);
+        }
+        finally
+        {
+            store.ExitBatch();
+        }
+    }
+
+    private static void CleanupBatch(YDoc doc)
+    {
         var transactionCleanups = doc._transactionCleanups;
         ExceptionDispatchInfo? error = null;
         for (var i = 0; i < transactionCleanups.Count; i++)
@@ -478,7 +481,7 @@ public sealed partial class Transaction
         try
         {
             ds?.SortAndMergeDeleteSet();
-            store.GetStateVector(transaction._afterState);
+            transaction._afterState.Set(store, store.ChangeCount);
 
             // An exception here skips every observer call, as in Yjs.
             doc.InvokeOnBeforeObserverCalls(transaction);
@@ -626,24 +629,12 @@ public sealed partial class Transaction
 
         // On all affected store.clients props, try to merge.
         var beforeState = transaction._beforeState;
-        foreach (var kvp in transaction._afterState)
+        foreach (var (_, structs, beforeClock, _) in transaction.ChangedClients)
         {
-            var client = kvp.Key;
-            var clock = kvp.Value;
-
-            if (!beforeState.TryGetValue(client, out var beforeClock))
+            var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
+            for (int j = structs.Count - 1; j >= firstChangePos;)
             {
-                beforeClock = 0;
-            }
-
-            if (beforeClock != clock)
-            {
-                var structs = store.Clients[client];
-                var firstChangePos = Math.Max(StructStore.FindIndexSS(structs, beforeClock), 1);
-                for (int j = structs.Count - 1; j >= firstChangePos;)
-                {
-                    j -= 1 + DeleteSet.TryToMergeWithLefts(store, structs, j);
-                }
+                j -= 1 + DeleteSet.TryToMergeWithLefts(store, structs, j);
             }
         }
 
@@ -780,22 +771,12 @@ public sealed partial class Transaction
 
         var deleteSet = DeleteSet;
         deleteSet.SortAndMergeDeleteSet();
-        EncodingUtils.WriteClientsStructs(encoder, _doc.Store, _beforeState);
+        EncodingUtils.WriteClientsStructs(encoder, _doc.Store, _beforeState.Position);
         deleteSet.Write(encoder);
 
         return true;
     }
 
-    private bool StateChanged()
-    {
-        foreach (var kvp in _afterState)
-        {
-            if (!_beforeState.TryGetValue(kvp.Key, out var clockB) || kvp.Value != clockB)
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
+    // The entries from the start to the start of the cleanup are all the clients that grew.
+    private bool StateChanged() => _afterState.Position > _beforeState.Position;
 }

@@ -97,8 +97,31 @@ var afterUndo1 = text2.ToString();
 um2.Undo();
 var afterUndo2 = text2.ToString();
 
+// --- A tracked update that carries structs of two clients, undone and redone: the redone items take their clocks
+// in the order of the store's clients, so the updates and the final state are compared as bytes. ---
+var peer1 = new YDoc(new YDocOptions { ClientId = 101 });
+var peer2 = new YDoc(new YDocOptions { ClientId = 102 });
+var target = new YDoc(new YDocOptions { ClientId = 7 });
+var targetText = target.GetText("o");
+var targetArray = target.GetArray("a");
+var targetUpdates = new List<string>();
+target.Updated += (_, e) => targetUpdates.Add(Convert.ToHexString(e.Update.Span));
+var targetUndo = new UndoManager(new YType[] { targetText, targetArray }, new UndoManagerOptions { CaptureTimeout = TimeSpan.Zero, TrackedOrigins = new object[] { "remote" } });
+peer1.GetText("o").Insert(0, "aa");
+target.ApplyUpdate(peer1.EncodeStateAsUpdate());
+peer2.GetArray("a").Insert(0, 1);
+target.ApplyUpdate(peer2.EncodeStateAsUpdate());
+peer1.GetText("o").Insert(2, "bb");
+peer2.ApplyUpdate(peer1.EncodeStateAsUpdate(peer2.EncodeStateVector()));
+peer2.GetArray("a").Insert(1, 2);
+target.ApplyUpdate(peer2.EncodeStateAsUpdate(target.EncodeStateVector()), "remote");
+targetUndo.Undo();
+targetUndo.Redo();
+var multiClientUndo = new { updates = targetUpdates, state = Convert.ToHexString(target.EncodeStateAsUpdate()) };
+
 var result = new
 {
+    multiClientUndo,
     mapEvents,
     arrEvents,
     textEventCount,

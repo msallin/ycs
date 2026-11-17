@@ -94,13 +94,9 @@ public sealed partial class UndoManager
         }
 
         var insertions = new DeleteSet();
-        foreach (var (client, endClock) in transaction.AfterState)
+        foreach (var (client, _, startClock, endClock) in transaction.ChangedClients)
         {
-            var startClock = transaction.BeforeState.TryGetValue(client, out var clock) ? clock : 0;
-            if (endClock > startClock)
-            {
-                insertions.Add(client, startClock, endClock - startClock);
-            }
+            insertions.Add(client, startClock, endClock - startClock);
         }
 
         var now = _timeProvider.GetTimestamp();

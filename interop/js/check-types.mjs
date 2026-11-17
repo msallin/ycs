@@ -85,7 +85,30 @@ const afterUndo1 = text2.toString()
 um2.undo()
 const afterUndo2 = text2.toString()
 
+// --- A tracked update that carries structs of two clients, undone and redone (see the C# side). ---
+const hex = u8 => Array.from(u8, b => b.toString(16).padStart(2, '0').toUpperCase()).join('')
+const peer1 = new Y.Doc(); peer1.clientID = 101
+const peer2 = new Y.Doc(); peer2.clientID = 102
+const target = new Y.Doc(); target.clientID = 7
+const targetText = target.getText('o')
+const targetArray = target.getArray('a')
+const targetUpdates = []
+target.on('update', u => targetUpdates.push(hex(u)))
+const targetUndo = new Y.UndoManager([targetText, targetArray], { captureTimeout: 0, trackedOrigins: new Set(['remote']) })
+peer1.getText('o').insert(0, 'aa')
+Y.applyUpdate(target, Y.encodeStateAsUpdate(peer1))
+peer2.getArray('a').insert(0, [1])
+Y.applyUpdate(target, Y.encodeStateAsUpdate(peer2))
+peer1.getText('o').insert(2, 'bb')
+Y.applyUpdate(peer2, Y.encodeStateAsUpdate(peer1, Y.encodeStateVector(peer2)))
+peer2.getArray('a').insert(1, [2])
+Y.applyUpdate(target, Y.encodeStateAsUpdate(peer2, Y.encodeStateVector(target)), 'remote')
+targetUndo.undo()
+targetUndo.redo()
+const multiClientUndo = { updates: targetUpdates, state: hex(Y.encodeStateAsUpdate(target)) }
+
 const jsResult = {
+  multiClientUndo,
   mapEvents,
   arrEvents,
   textEventCount,
@@ -122,6 +145,7 @@ assert.deepEqual(norm(csResult.finalState), norm(jsResult.finalState), 'final ma
 assert.deepEqual(norm(csResult.mapEvents), norm(jsResult.mapEvents), 'YMapEvent.path/keys differ')
 assert.deepEqual(norm(csResult.arrEvents), norm(jsResult.arrEvents), 'YArrayEvent.path/delta differ')
 assert.equal(csResult.textEventCount, jsResult.textEventCount, 'text event firing count differs')
+assert.deepEqual(norm(csResult.multiClientUndo), norm(jsResult.multiClientUndo), 'undo and redo of a tracked update of two clients differ')
 assert.deepEqual(norm(csResult.undo), norm(jsResult.undo), 'UndoManager undo/redo behaviour differs')
 
 console.log(`OK check-types: ${jsResult.mapEvents.length} map events, ${jsResult.arrEvents.length} array events, ${jsResult.textEventCount} text events, toJSON + delta + undo/redo all match between yjs13 and Ycs`)

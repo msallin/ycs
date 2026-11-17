@@ -92,24 +92,69 @@ internal static class EncodingUtils
                 }
             }
 
-            // Write # states that were updated.
-            encoder.RestWriter.WriteVarUint((uint)count);
-
-            // Write items with higher client ids first.
-            // This heavily improves the conflict resolution algorithm.
-            clients[..count].Sort(clocks[..count]);
-            for (var i = count - 1; i >= 0; i--)
-            {
-                WriteStructs(encoder, clientStructs[clients[i]], clients[i], clocks[i]);
-            }
+            WriteSorted(encoder, store, clients[..count], clocks[..count]);
         }
         finally
         {
-            if (rentedClients != null)
+            ReturnClients(rentedClients, rentedClocks);
+        }
+    }
+
+    /// <summary>
+    /// Writes what the store has of the clients the change log records from entry <paramref name="from"/> on, from the
+    /// end each had then: <see cref="WriteClientsStructs(IUpdateEncoder, StructStore, IDictionary{long, long})"/> for
+    /// the state when the log had <paramref name="from"/> entries, without a walk over the clients that did not change.
+    /// </summary>
+    public static void WriteClientsStructs(IUpdateEncoder encoder, StructStore store, int from)
+    {
+        var capacity = store.ChangeCount - from;
+        long[]? rentedClients = null;
+        long[]? rentedClocks = null;
+        Span<long> clients = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClients = BufferPool<long>.Rent(capacity));
+        Span<long> clocks = capacity <= StackClients ? stackalloc long[StackClients] : (rentedClocks = BufferPool<long>.Rent(capacity));
+        try
+        {
+            var count = 0;
+            for (var i = from; i < store.ChangeCount; i++)
             {
-                BufferPool<long>.Return(rentedClients);
-                BufferPool<long>.Return(rentedClocks!); // Rented with rentedClients.
+                if (store.IsFirstFrom(i, from))
+                {
+                    // A client that is in the log grew after the entry.
+                    var change = store.ChangeAt(i);
+                    clients[count] = change.Client;
+                    clocks[count] = change.EndBefore;
+                    count++;
+                }
             }
+
+            WriteSorted(encoder, store, clients[..count], clocks[..count]);
+        }
+        finally
+        {
+            ReturnClients(rentedClients, rentedClocks);
+        }
+    }
+
+    private static void WriteSorted(IUpdateEncoder encoder, StructStore store, Span<long> clients, Span<long> clocks)
+    {
+        // Write # states that were updated.
+        encoder.RestWriter.WriteVarUint((uint)clients.Length);
+
+        // Write items with higher client ids first.
+        // This heavily improves the conflict resolution algorithm.
+        clients.Sort(clocks);
+        for (var i = clients.Length - 1; i >= 0; i--)
+        {
+            WriteStructs(encoder, store.Clients[clients[i]], clients[i], clocks[i]);
+        }
+    }
+
+    private static void ReturnClients(long[]? clients, long[]? clocks)
+    {
+        if (clients != null)
+        {
+            BufferPool<long>.Return(clients);
+            BufferPool<long>.Return(clocks!); // Rented with clients.
         }
     }
 
