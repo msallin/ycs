@@ -22,8 +22,9 @@ internal readonly partial struct ItemRef
     {
         var chars = _slab.Chars;
         var start = Read().Payload;
+        var cutPair = char.IsHighSurrogate(chars.Slice(start, offset)[^1]);
         chars.MarkDead(start, offset);
-        if (char.IsHighSurrogate(chars.Slice(start, offset)[^1]))
+        if (cutPair)
         {
             chars.Overwrite(start + offset, [Replacement]);
         }

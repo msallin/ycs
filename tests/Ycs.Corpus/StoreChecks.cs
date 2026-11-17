@@ -29,5 +29,11 @@ public static class StoreChecks
         }
 
         ItemRef.CopyOnMergeForTests = Environment.GetEnvironmentVariable("YCS_ARENA_COPY") == "1";
+        StructStore.CompactionForTests = Environment.GetEnvironmentVariable("YCS_COMPACT") switch
+        {
+            "always" => StructStore.CompactionMode.Always,
+            "midbatch" => StructStore.CompactionMode.MidBatch,
+            _ => StructStore.CompactionMode.None,
+        };
     }
 }

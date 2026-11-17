@@ -18,7 +18,7 @@ internal static class Arena
 /// </summary>
 /// <remarks>
 /// A run lies in one page. Page k, counted among the pages held, holds <c>min(first * 2^k, max)</c> elements (more when
-/// a run needs it). A run longer than <c>max</c> gets a page of its own, twice its length. A run that outgrows its room
+/// a run needs it). A run longer than <c>max</c> gets a page of its own, twice its length, with no reservation: it grows in place while it ends at the page's used part. A run that outgrows its room
 /// is copied to the write end with as much slack again, kept in a tail table: run end offset to the end of its
 /// reservation, so two runs growing alternately copy O(log n) times. A table entry is the only owner of the space
 /// between a run's end and its reservation end; a run split in two leaves the entry with the right part, which holds
@@ -41,7 +41,7 @@ internal sealed class Arena<T>
     private readonly int _first;
     private readonly int _max;
 
-    // The page that appends go to; -1 before the first. It is never freed by Compact.
+    // The page that appends go to; -1 before the first and after a compaction freed it.
     private int _write = -1;
     private long _live;
     private long _dead;
@@ -61,12 +61,22 @@ internal sealed class Arena<T>
     /// <summary>The pages held.</summary>
     public int PageCount => _pages.Count - _released.Count;
 
+    /// <summary>Garbage outweighs the live elements and amounts to a largest page: a compaction frees whole pages.</summary>
+    public bool WorthCompacting => _dead > _live && _dead >= _max;
+
     /// <summary>The runs that have room reserved after them.</summary>
     public int TailCount => _tails.Count;
 
     public static int PageOf(long offset) => (int)(offset >> 32);
 
     public static int IndexOf(long offset) => (int)(offset & 0xFFFFFFFF);
+
+    /// <summary>The range lies in the used part of a held page.</summary>
+    public bool Holds(long offset, int length)
+    {
+        var number = PageOf(offset);
+        return offset >= 0 && length >= 0 && number < _pages.Count && _pages[number] is { } page && IndexOf(offset) + (long)length <= page.Used;
+    }
 
     /// <summary>The elements a page holds room for; 0 for a page that is not held.</summary>
     public int PageCapacity(int page) => page < _pages.Count ? _pages[page]?.Data.Length ?? 0 : 0;
@@ -89,7 +99,7 @@ internal sealed class Arena<T>
 
     /// <summary>
     /// Adds <paramref name="values"/> after the run (<paramref name="offset"/>, <paramref name="length"/>) and returns
-    /// the run's offset: the same when the run ends at the write end or inside its reservation, else the run is
+    /// the run's offset: the same when the run ends at its page's used part or inside its reservation, else the run is
     /// copied with slack, the old range counts dead and its old elements stay where they were (the caller clears them
     /// if they are references).
     /// </summary>
@@ -113,25 +123,25 @@ internal sealed class Arena<T>
             throw new ArgumentOutOfRangeException(nameof(length), "The run reaches past what the page holds.");
         }
 
-        if (_tails.TryGetValue(end, out var reservedEnd))
+        if (endIndex == page.Used)
         {
-            if (values.Length <= reservedEnd - end)
+            if (values.Length <= page.Data.Length - endIndex)
             {
                 values.CopyTo(page.Data.AsSpan(endIndex));
-                _tails.Remove(end);
-                if (end + values.Length < reservedEnd)
-                {
-                    _tails[end + values.Length] = reservedEnd;
-                }
-
+                page.Used += values.Length;
                 _live += values.Length;
                 return offset;
             }
         }
-        else if (PageOf(offset) == _write && endIndex == page.Used && values.Length <= page.Data.Length - endIndex)
+        else if (_tails.TryGetValue(end, out var reservedEnd) && values.Length <= reservedEnd - end)
         {
             values.CopyTo(page.Data.AsSpan(endIndex));
-            page.Used += values.Length;
+            _tails.Remove(end);
+            if (end + values.Length < reservedEnd)
+            {
+                _tails[end + values.Length] = reservedEnd;
+            }
+
             _live += values.Length;
             return offset;
         }
@@ -174,17 +184,17 @@ internal sealed class Arena<T>
     public void Clear(long offset, int length) => PageAt(offset).Data.AsSpan(IndexOf(offset), length).Clear();
 
     /// <summary>
-    /// Moves the runs on pages less than half live to the write end and frees those pages (the write page stays).
+    /// Moves the runs on pages less than half live to the write end and frees those pages (the write page too: the next append opens a new one).
     /// <paramref name="live"/> is every live range, deleted-but-kept ones included, and is enumerated twice with the
-    /// arena unchanged between; <paramref name="relocate"/> is called per moved run (old offset, new offset, length)
+    /// arena unchanged between; <paramref name="relocate"/> is called per moved run (the run's tag, its new offset)
     /// and the caller stores the new offset before the enumeration goes on. Reservations are dropped: their entries
     /// may name freed pages. After it, <see cref="Live"/> is the sum of the lengths given.
     /// </summary>
-    public void Compact(IEnumerable<(long Offset, int Length)> live, Action<long, long, int> relocate)
+    public void Compact(IEnumerable<(long Offset, int Length, int Tag)> live, Action<int, long> relocate)
     {
         var liveIn = new long[_pages.Count];
         long total = 0;
-        foreach (var (offset, length) in live)
+        foreach (var (offset, length, _) in live)
         {
             _ = PageAt(offset);
             liveIn[PageOf(offset)] += length;
@@ -195,11 +205,16 @@ internal sealed class Arena<T>
         for (var number = 0; number < free.Length; number++)
         {
             var page = _pages[number];
-            free[number] = page != null && number != _write && liveIn[number] * 2 < page.Data.Length;
+            free[number] = page != null && liveIn[number] * 2 < page.Data.Length;
         }
 
         _tails.Clear();
-        foreach (var (offset, length) in live)
+        if (_write >= 0 && free[_write])
+        {
+            _write = -1;
+        }
+
+        foreach (var (offset, length, tag) in live)
         {
             if (!free[PageOf(offset)])
             {
@@ -208,7 +223,7 @@ internal sealed class Arena<T>
 
             var moved = Place(length, false);
             PageAt(offset).Data.AsSpan(IndexOf(offset), length).CopyTo(PageAt(moved).Data.AsSpan(IndexOf(moved)));
-            relocate(offset, moved, length);
+            relocate(tag, moved);
         }
 
         for (var number = 0; number < free.Length; number++)
@@ -355,9 +370,7 @@ internal sealed class Arena<T>
             }
 
             var number = Open(length * 2);
-            var own = _pages[number]!;
-            own.Used = own.Data.Length;
-            _tails[((long)number << 32) + length] = ((long)number << 32) + own.Data.Length;
+            _pages[number]!.Used = length;
             return (long)number << 32;
         }
 

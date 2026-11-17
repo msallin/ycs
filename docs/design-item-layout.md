@@ -416,12 +416,30 @@ documents.
 
 ### 2.3 The arenas
 
-A split gives the right part `offset + diff` (no copy). Typing at a run's end appends in place when the run ends at
-the arena's end; otherwise the merged run is copied to the end with geometric slack (twice its length, capped at a
-page), so two runs growing alternately copy each other O(log n) times, not once per keystroke (M3). Garbage:
-deleted characters, and copied-away runs. Compaction is document-wide: when the dead elements exceed the live ones, one
-walk of the slab copies the live runs of every page below half full and frees those pages. A collected item's values
-are nulled in the value arena at GC, so it does not keep the caller's objects alive until a compaction.
+The character arena lives on `Slab` (`Slab.Chars`), the value arena beside it; a String slot's `Payload` is the offset
+of its range, `Length` the range's length. A split gives the right part `offset + diff` (no copy). Typing at a run's end
+appends in place when the run ends at its page's used part or inside its reservation; otherwise the merged run is
+copied to the write end with as much slack again, kept in a tail table (run end to reservation end), so two runs growing
+alternately copy each other O(log n) times, not once per keystroke (M3). A run longer than a page has a page of its own,
+twice its length, and no table entry.
+
+Garbage is collected content and copied-away runs. A deleted item that is not collected keeps its kind and its range:
+its encoding reads them (gc off, kept items, snapshots).
+
+Compaction is document-wide (`Slab.CompactChars`, started by `StructStore.CompactIfWorthwhile`). It runs at the end of
+the outermost batch, beside `Slab.AllowReuse`, when the dead characters exceed the live ones and amount to a largest
+page; never in the middle of a batch outside the test modes. One walk of the slab's pages lists the ranges of every slot
+of kind String (a free slot, pending reuse included, holds none; a deleted but uncollected one is listed). The arena
+copies the runs of every page less than half live (the write page included) to a new write end, tells the slab each
+run's new offset, frees those pages (Debug fills them with a marker character) and drops the tail table. Only the slots
+and the tail table hold an offset: the readers of a text (enumerators, `YText` positions, `ItemTextListPosition`,
+events, `WriteCharsTo`) hold handles and read the content object, and the offsets the item operations hold in
+locals do not live across a call that can compact. A collected item's values are nulled in the value arena at GC, so it
+does not keep the caller's objects alive until a compaction.
+
+The test modes (`YCS_COMPACT=always|midbatch`) compact after every transaction's cleanup, and mid-batch at each struct
+added, each item made, each append to a run and between gc and merge; a store of more than 2,048 slots compacts every
+count/64th time, so that a test stays linear in its edits.
 
 ### 2.4 Handles: lifetime and slot reuse
 

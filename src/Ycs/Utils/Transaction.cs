@@ -431,6 +431,7 @@ public sealed partial class Transaction
 
             // Nothing that reads a struct freed in this batch is pending now.
             doc.Store.Slab.AllowReuse();
+            doc.Store.CompactIfWorthwhile();
         }
 
         error?.Throw();
@@ -626,6 +627,7 @@ public sealed partial class Transaction
             ds.TryGcDeleteSet(store, doc);
         }
 
+        StructStore.CompactMidBatchForTests(store.Slab);
         ds.TryMergeDeleteSet(store);
 
         // On all affected store.clients props, try to merge.
@@ -669,6 +671,11 @@ public sealed partial class Transaction
             {
                 DeleteSet.TryToMergeWithLefts(store, structs, replacedStructPos);
             }
+        }
+
+        if (StructStore.CompactionForTests != StructStore.CompactionMode.None)
+        {
+            store.Slab.CompactCharsForTests();
         }
 
         if (StructStore.CheckAfterTransactionsForTests)

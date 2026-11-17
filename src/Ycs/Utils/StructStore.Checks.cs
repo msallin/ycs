@@ -1,5 +1,7 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
+using System.Buffers;
+
 namespace Ycs;
 
 internal sealed partial class StructStore
@@ -252,7 +254,29 @@ internal sealed partial class StructStore
             return $"the slot of {id} names parent {slot.Parent} of {Types.Count} types";
         }
 
-        return null;
+        return kind == SlotKind.String ? RangeViolation(id, slot, (ContentString)content) : null;
+    }
+
+    // The range of a String slot holds the text of its object. The text is copied out, so that a builder-backed run stays one
+    // and a sliced string keeps its reference (ContentString.MergeWith compares references).
+    private string RangeViolation(string id, in Slot slot, ContentString text)
+    {
+        var chars = Slab.CharsOrNull;
+        if (chars == null || !chars.Holds(slot.Payload, slot.Length))
+        {
+            return $"the range of {id} lies outside the used part of a held page";
+        }
+
+        var buffer = ArrayPool<char>.Shared.Rent(slot.Length);
+        try
+        {
+            text.CopyTo(buffer);
+            return chars.Slice(slot.Payload, slot.Length).SequenceEqual(buffer.AsSpan(0, slot.Length)) ? null : $"the range of {id} differs from its text";
+        }
+        finally
+        {
+            ArrayPool<char>.Shared.Return(buffer);
+        }
     }
 
     private static Type ContentClassOf(SlotKind kind) => kind switch
@@ -309,10 +333,11 @@ internal sealed partial class StructStore
     }
 
     /// <summary>
-    /// What is wrong with the character arena, or null: every String slot's range lies in the used part of a held page
-    /// and equals its object's text, the ranges are disjoint (from each other and from the reservations), the dead count
+    /// What is wrong with the character arena, or null: every String slot's range lies in the used part of a held page,
+    /// the ranges are disjoint (from each other and from the reservations), the dead count
     /// equals a recount and the tail table names only the ends of live ranges (<see cref="Arena{T}.Violations"/>). A
-    /// store of more than 4,096 slots is checked every count/32nd time.
+    /// store of more than 4,096 slots is checked every count/32nd time; that a range equals its text is checked by
+    /// <see cref="SlotViolation(ItemRef)"/>, for the structs a transaction touched every time.
     /// </summary>
     private string CharsViolation()
     {
@@ -342,17 +367,6 @@ internal sealed partial class StructStore
         if (chars.Violations(ranges).FirstOrDefault() is { } violation)
         {
             return violation;
-        }
-
-        foreach (var list in Clients.Values)
-        {
-            foreach (var s in list)
-            {
-                if (s.IsItem && s.Kind == SlotKind.String && !chars.Slice(Slab.Read(s.Handle).Payload, s.Length).SequenceEqual(((ContentString)s.Content).GetString()))
-                {
-                    return $"the range of {s.Id.Client}:{s.Id.Clock} differs from its text";
-                }
-            }
         }
 
         return null;

@@ -165,6 +165,7 @@ internal sealed partial class StructStore
 
         structs.Add(str);
         Version++;
+        CompactMidBatchForTests(Slab);
     }
 
     /// <summary>

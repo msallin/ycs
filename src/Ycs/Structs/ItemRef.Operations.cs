@@ -88,6 +88,8 @@ internal readonly partial struct ItemRef
     /// <summary>A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet).</summary>
     private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, IContentEx content)
     {
+        StructStore.CompactMidBatchForTests(slab);
+
         // Everything that can grow a table is done before the slot is taken: Allocate may move page 0 (see Slab.At).
         var clients = slab.Clients;
         var client = clients.GetOrAdd(id.Client);
