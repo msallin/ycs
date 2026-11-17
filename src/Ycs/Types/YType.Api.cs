@@ -69,13 +69,10 @@ public abstract partial class YType
 
         var doc = transaction.Doc;
         var ownClientId = doc.ClientId;
-        IContent content;
+        IContent? content = null;
+        object? single = null;
 
-        if (value == null)
-        {
-            content = ContentAny.Single(null);
-        }
-        else
+        if (value != null)
         {
             switch (value)
             {
@@ -91,12 +88,16 @@ public abstract partial class YType
                     content = new ContentBinary((byte[])ba.Clone());
                     break;
                 default:
-                    content = ContentAny.Single(ValueFreezer.Freeze(value, transaction.Doc.Limits.MaxDepth));
+                    single = ValueFreezer.Freeze(value, transaction.Doc.Limits.MaxDepth);
                     break;
             }
         }
 
-        var newItem = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), left, default, this, key, content);
+        var id = new ID(ownClientId, doc.Store.GetState(ownClientId));
+        ReadOnlySpan<object?> one = [single];
+        var newItem = content == null
+            ? ItemRef.New(doc.Store.Slab, id, left, default, this, key, one)
+            : ItemRef.New(doc.Store.Slab, id, left, default, this, key, content);
         newItem.Integrate(transaction, 0);
     }
 

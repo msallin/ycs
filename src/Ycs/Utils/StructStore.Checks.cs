@@ -220,7 +220,7 @@ internal sealed partial class StructStore
             return $"the slot of {id} of kind {(SlotKind)slot.Kind} holds the payload {slot.Payload}";
         }
 
-        if (slot.Kind is (int)SlotKind.Deleted or (int)SlotKind.Type or (int)SlotKind.String)
+        if (slot.Kind is (int)SlotKind.Deleted or (int)SlotKind.Type or (int)SlotKind.String or (int)SlotKind.Any)
         {
             if (content != null)
             {
@@ -238,7 +238,7 @@ internal sealed partial class StructStore
         }
 
         var kind = (SlotKind)slot.Kind;
-        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || (kind is not (SlotKind.Deleted or SlotKind.Type or SlotKind.String) && content.GetType() != ContentClassOf(kind)))
+        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || (kind is not (SlotKind.Deleted or SlotKind.Type or SlotKind.String or SlotKind.Any) && content.GetType() != ContentClassOf(kind)))
         {
             return $"the slot of {id} holds the kind {kind}, its content is a {content.GetType().Name}";
         }
@@ -256,22 +256,18 @@ internal sealed partial class StructStore
 
         return kind switch
         {
-            SlotKind.String => RangeViolation(id, slot),
-            SlotKind.Any => ValueRangeViolation(id, slot, content),
+            SlotKind.String => RangeViolation(id, slot, Slab.CharsOrNull),
+            SlotKind.Any => RangeViolation(id, slot, Slab.ValuesOrNull),
             _ => null,
         };
     }
 
-    // The range of a String slot lies inside a used part of a held page.
-    private string RangeViolation(string id, in Slot slot)
-    {
-        var chars = Slab.CharsOrNull;
-        return chars != null && chars.Holds(slot.Payload, slot.Length) ? null : $"the range of {id} lies outside the used part of a held page";
-    }
+    // The range of a String or Any slot lies inside a used part of a held page.
+    private static string RangeViolation<T>(string id, in Slot slot, Arena<T> arena) =>
+        arena != null && arena.Holds(slot.Payload, slot.Length) ? null : $"the range of {id} lies outside the used part of a held page";
 
     private static Type ContentClassOf(SlotKind kind) => kind switch
     {
-        SlotKind.Any => typeof(ContentAny),
         SlotKind.Format => typeof(ContentFormat),
         SlotKind.Embed => typeof(ContentEmbed),
         SlotKind.Binary => typeof(ContentBinary),

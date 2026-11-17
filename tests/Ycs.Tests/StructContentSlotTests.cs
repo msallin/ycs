@@ -40,7 +40,7 @@ public class StructContentSlotTests
     }
 
     [TestMethod]
-    public void Insert_MapValue_HoldsTheContentAndTheKeyInTheSlot()
+    public void Insert_MapValue_HoldsTheValuesInTheArenaAndTheKeyInTheSlot()
     {
         var doc = NewDoc();
         var map = doc.GetMap("m");
@@ -48,7 +48,7 @@ public class StructContentSlotTests
         map["k"] = 1;
 
         var item = doc.Store.Find(new ItemId(1, 0));
-        Assert.AreEqual((true, "k", "k"), (doc.Store.Slab.GetRef(item.Handle) is ContentAny, doc.Store.Slab.GetKey(item.Handle), item.ParentSub));
+        Assert.AreEqual((null, "k", "k", 1), (doc.Store.Slab.GetRef(item.Handle), doc.Store.Slab.GetKey(item.Handle), item.ParentSub, item.ValueAt(0)));
     }
 
     [TestMethod]

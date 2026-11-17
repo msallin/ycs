@@ -35,15 +35,27 @@ internal readonly partial struct ItemRef
     /// <summary>The content object of a format, embed, binary, JSON or document item; null for any other kind.</summary>
     internal IContentEx Cold => Kind.IsCold() ? (IContentEx)_slab.ReadRef(HandleChecked()) : null;
 
-    /// <summary>Appends the elements of the content (Yjs' <c>getContent</c>) to <paramref name="destination"/>.</summary>
-    internal void AppendContentTo(List<object> destination) => destination.AddRange(Elements);
+    /// <summary>Appends the elements of the content (Yjs' <c>getContent</c>) to <paramref name="destination"/>; an Any's without a copy.</summary>
+    internal void AppendContentTo(List<object> destination)
+    {
+        if (Kind != SlotKind.Any)
+        {
+            destination.AddRange(Elements);
+            return;
+        }
+
+        foreach (var value in ValueSpan)
+        {
+            destination.Add(ValueFreezer.OnRead(value));
+        }
+    }
 
     /// <summary>A copy of the content that belongs to no item (what a redone item holds).</summary>
     internal IContentEx CopyContent() => Kind switch
     {
         SlotKind.Deleted => new ContentDeleted(Length),
         SlotKind.Type => TypeContent.Copy(this),
-        SlotKind.String => throw new InvalidOperationException("A String's text is copied by NewCopyOf, not as an object."),
+        SlotKind.String or SlotKind.Any => throw new InvalidOperationException($"The {Kind} content of an item is copied by NewCopyOf, not as an object."),
         _ => (IContentEx)Content.Copy(),
     };
 
@@ -52,7 +64,7 @@ internal readonly partial struct ItemRef
     {
         switch (Kind)
         {
-            case SlotKind.Deleted or SlotKind.String:
+            case SlotKind.Deleted or SlotKind.String or SlotKind.Any:
                 break;
             case SlotKind.Type:
                 TypeContent.Delete(transaction, this);
@@ -68,7 +80,7 @@ internal readonly partial struct ItemRef
     {
         switch (Kind)
         {
-            case SlotKind.Deleted or SlotKind.String:
+            case SlotKind.Deleted or SlotKind.String or SlotKind.Any:
                 break;
             case SlotKind.Type:
                 TypeContent.Gc(store, this);
@@ -89,7 +101,7 @@ internal readonly partial struct ItemRef
                 MarkDeleted();
                 transaction.Doc.Store.Refresh(this);
                 break;
-            case SlotKind.String:
+            case SlotKind.String or SlotKind.Any:
                 break;
             case SlotKind.Type:
                 TypeContent.Integrate(transaction, this);
@@ -100,8 +112,8 @@ internal readonly partial struct ItemRef
         }
     }
 
-    // Fills the content storage of the new slot at handle from the content object (not a String's: StoreChars); the slot
-    // holds the kind and the length.
+    // Fills the content storage of the new slot at handle from the content object (not a String's or an Any's: StoreChars,
+    // StoreValues); the slot holds the kind and the length.
     private static void StoreContent(Slab slab, int handle, SlotKind kind, IContentEx content)
     {
         if (kind == SlotKind.Type)
@@ -112,11 +124,6 @@ internal readonly partial struct ItemRef
         else if (kind.HasObject())
         {
             slab.SetRef(handle, content);
-            if (kind == SlotKind.Any)
-            {
-                var payload = CopyValues(slab, (ContentAny)content);
-                slab.Write(handle).Payload = payload;
-            }
         }
     }
 
@@ -133,7 +140,6 @@ internal readonly partial struct ItemRef
                 CutCharsHead(offset);
                 break;
             case SlotKind.Any:
-                Content = (IContentEx)Content.Splice(offset);
                 CutValuesHead(offset);
                 break;
             default:
@@ -157,8 +163,8 @@ internal readonly partial struct ItemRef
                 content = null;
                 return (SplitChars(diff), Length - diff);
             case SlotKind.Any:
-                content = (IContentEx)Content.Splice(diff);
-                return (SplitValues(diff), content.Length);
+                content = null;
+                return (SplitValues(diff), Length - diff);
             default:
                 content = (IContentEx)Content.Splice(diff);
                 return (0, content.Length);
@@ -176,7 +182,6 @@ internal readonly partial struct ItemRef
                 MergeChars(right);
                 break;
             case SlotKind.Any:
-                MergeObjects(right);
                 MergeValues(right);
                 break;
             default:

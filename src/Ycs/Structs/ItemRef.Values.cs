@@ -1,11 +1,9 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
-using System.Buffers;
-
 namespace Ycs;
 
-// The shadow of an Any item's values in the slab's value arena: the slot's Payload is the offset of a range, its Length
-// the range's length, and the range holds the objects of the content object's list at every write (an Any is never empty).
+// The values of an Any item live in the slab's value arena and nowhere else: the slot's Payload is the offset of a range,
+// its Length the range's length (an Any is never empty).
 // The range's elements are the only references the arena keeps: every exit of a range clears them (Arena.Clear), so a
 // value is collectible as soon as nothing else holds it, before any compaction.
 // Each write path keeps it: NewItem (copy in), AppendValues (extend; a copy clears the old range), SplitItem (payload + diff),
@@ -15,20 +13,19 @@ namespace Ycs;
 // The windows where a slot's Length lags its range are those of ItemRef.Chars.cs: no compaction hook may sit in them.
 internal readonly partial struct ItemRef
 {
-    private static long CopyValues(Slab slab, ContentAny any)
+    // Copies the values into the arena and makes the range the slot's.
+    private static void StoreValues(Slab slab, int handle, ReadOnlySpan<object> values)
     {
-        var count = any.Length;
-        var buffer = ArrayPool<object>.Shared.Rent(count);
-        try
-        {
-            any.CopyTo(buffer);
-            return slab.Values.Append(buffer.AsSpan(0, count));
-        }
-        finally
-        {
-            ArrayPool<object>.Shared.Return(buffer, clearArray: true);
-        }
+        var payload = slab.Values.Append(values);
+        slab.Write(handle).Payload = payload;
     }
+
+    /// <summary>
+    /// A new Any item (not integrated) between <paramref name="left"/> and <paramref name="right"/> whose values are a copy
+    /// of <paramref name="values"/>, which must not be empty.
+    /// </summary>
+    public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ReadOnlySpan<object> values) =>
+        NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.Any, values.Length, null, default, values, default);
 
     // The part before offset leaves the item (an item integrated from an offset): its range is the rest.
     private void CutValuesHead(int offset)
@@ -78,50 +75,55 @@ internal readonly partial struct ItemRef
         values.MarkDead(slot.Payload, slot.Length);
     }
 
-    private ReadOnlySpan<object> ValueRange()
+    /// <summary>
+    /// The raw values of a <see cref="SlotKind.Any"/> item, read from the arena. The span is valid only until user code runs
+    /// or a batch ends (a compaction moves and frees ranges): consume it before.
+    /// </summary>
+    internal ReadOnlySpan<object> ValueSpan
     {
-        ref readonly var slot = ref Read();
-        return slot.Kind == (int)SlotKind.Any
-            ? _slab.Values.Slice(slot.Payload, slot.Length)
-            : throw new InvalidOperationException($"The struct holds {Kind}, not {SlotKind.Any} content.");
+        get
+        {
+            ref readonly var slot = ref Read();
+            return slot.Kind == (int)SlotKind.Any
+                ? _slab.Values.Slice(slot.Payload, slot.Length)
+                : throw new InvalidOperationException($"The struct holds {Kind}, not {SlotKind.Any} content.");
+        }
     }
 
     /// <summary>The <paramref name="index"/>th value of a <see cref="SlotKind.Any"/> item, read from the arena.</summary>
-    internal object ValueAt(int index) => ValueFreezer.OnRead(ValueRange()[index]);
+    internal object ValueAt(int index) => ValueFreezer.OnRead(ValueSpan[index]);
 
-    /// <summary>A read-only snapshot of the values of a <see cref="SlotKind.Any"/> item, as <see cref="FrozenList"/> hands them out.</summary>
-    internal IReadOnlyList<object> Values => new ContentView(ValueRange().ToArray());
+    /// <summary>
+    /// A read-only copy of the values of a <see cref="SlotKind.Any"/> item, as <see cref="FrozenList"/> hands them out. It is a
+    /// copy, not a view of the range: its reader (an <see cref="ItemView"/>, an event handler) may run after the batch
+    /// has moved or freed the range.
+    /// </summary>
+    internal IReadOnlyList<object> Values => new ContentView(ValueSpan.ToArray());
 
     /// <summary>Appends <paramref name="values"/> to a <see cref="SlotKind.Any"/> item; the caller adjusts <see cref="Length"/>.</summary>
-    internal void AppendValues(List<object> values)
+    internal void AppendValues(ReadOnlySpan<object> values)
     {
         StructStore.CompactForTests(_slab, true);
-        Typed<ContentAny>(SlotKind.Any).Append(values);
-        var count = values.Count;
-        var buffer = ArrayPool<object>.Shared.Rent(count);
-        try
+        if (Kind != SlotKind.Any)
         {
-            values.CopyTo(buffer);
-            var arena = _slab.Values;
-            ref var slot = ref Write();
-            var moved = arena.Extend(slot.Payload, slot.Length, buffer.AsSpan(0, count));
-            if (moved != slot.Payload)
-            {
-                arena.Clear(slot.Payload, slot.Length);
-            }
+            throw new InvalidOperationException($"The struct holds {Kind}, not {SlotKind.Any} content.");
+        }
 
-            slot.Payload = moved;
-        }
-        finally
+        var arena = _slab.Values;
+        ref var slot = ref Write();
+        var moved = arena.Extend(slot.Payload, slot.Length, values);
+        if (moved != slot.Payload)
         {
-            ArrayPool<object>.Shared.Return(buffer, clearArray: true);
+            arena.Clear(slot.Payload, slot.Length);
         }
+
+        slot.Payload = moved;
     }
 
     // The values from offset on, as ContentAny.Write encodes them.
     private void WriteValues(IUpdateEncoder encoder, int offset)
     {
-        var values = ValueRange();
+        var values = ValueSpan;
         encoder.WriteLength(values.Length - offset);
         for (var i = offset; i < values.Length; i++)
         {

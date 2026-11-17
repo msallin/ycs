@@ -187,7 +187,7 @@ public abstract partial class YArrayBase : YType
     }
 
     // An empty list for the values of the next insert (see InsertGenericsAfterReturningLast), or null.
-    private List<object?>? _spareValues;
+    private object?[]? _spareValues;
 
     internal void ClearSearchMarkers()
     {
@@ -401,26 +401,33 @@ public abstract partial class YArrayBase : YType
             }
         }
 
-        // The values between the other kinds of content, packed into one item each. The list goes to the item, or,
-        // when the run before takes the values (ItemRef.ExtendRun), back to _spareValues for the next insert.
-        var jsonContent = _spareValues ?? new List<object?>();
+        // The values between the other kinds of content, packed into one item each: the item copies them into the arena,
+        // and the buffer, cleared, serves the next run and the next insert (_spareValues).
+        var jsonContent = _spareValues ?? new object?[4];
+        var jsonCount = 0;
         _spareValues = null;
 
         void packJsonContent()
         {
-            if (jsonContent.Count > 0 && !left.IsNull && left.CanExtendAnyRun(transaction, this, right, ownClientId))
+            if (jsonCount == 0)
+            {
+                return;
+            }
+
+            if (!left.IsNull && left.CanExtendAnyRun(transaction, this, right, ownClientId))
             {
                 // Appending to this client's run: the run takes the values in place of a new item.
-                left.AppendValues(jsonContent);
-                left.ExtendRun(transaction, jsonContent.Count);
-                jsonContent.Clear();
+                left.AppendValues(jsonContent.AsSpan(0, jsonCount)!);
+                left.ExtendRun(transaction, jsonCount);
             }
-            else if (jsonContent.Count > 0)
+            else
             {
-                left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, ContentAny.Own(jsonContent));
+                left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, jsonContent.AsSpan(0, jsonCount)!);
                 left.Integrate(transaction, 0);
-                jsonContent = new List<object?>();
             }
+
+            Array.Clear(jsonContent, 0, jsonCount);
+            jsonCount = 0;
         }
 
         if (list != null)
@@ -439,7 +446,7 @@ public abstract partial class YArrayBase : YType
         }
 
         packJsonContent();
-        if (jsonContent.Capacity <= 16)
+        if (jsonContent.Length <= 16)
         {
             _spareValues = jsonContent;
         }
@@ -482,7 +489,12 @@ public abstract partial class YArrayBase : YType
                     left.Integrate(transaction, 0);
                     break;
                 default:
-                    jsonContent.Add(ValueFreezer.Freeze(c, transaction.Doc.Limits.MaxDepth));
+                    if (jsonCount == jsonContent.Length)
+                    {
+                        Array.Resize(ref jsonContent, jsonCount * 2);
+                    }
+
+                    jsonContent[jsonCount++] = ValueFreezer.Freeze(c, transaction.Doc.Limits.MaxDepth);
                     break;
             }
         }

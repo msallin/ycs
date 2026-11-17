@@ -15,15 +15,11 @@ namespace Ycs;
 [TestClass]
 public class ContentAccessArchitectureTests
 {
-    // Types by name prefix. The item layout and the decoded form stay for good.
-    private static readonly string[] Layout =
-    [
-        "ItemRef", "Content", "TypeContent", "Item", "GC", "Skip", "UpdateReader", "EncodingUtils", "StructStaging", "PlanItem",
-        "UpdateOperations", "LazyStructWriter",
-    ];
+    // Types by name prefix: the item layout (the content objects of the cold kinds, the decoded form it copies from) and the
+    // staging of a decoded struct, which type-tests the decoded form.
+    private static readonly string[] Layout = ["ItemRef", "Content", "StructStaging"];
 
-    // ItemView reads the decoded form, StructStore its decoded structs in the integration plan and the content object
-    // against its kind in the store checks; the IL does not tell StructStore's partial files apart.
+    // ItemView reads the decoded form of an item that is not in a store.
     private static readonly string[] DecodedReaders = ["ItemView"];
 
     [TestMethod]

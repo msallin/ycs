@@ -7,14 +7,14 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// The range of an Any slot in the slab's value arena, as each write path of the values keeps it (the store's checks, which
-/// every transaction of every suite runs, find a range that differs from the content, a range that overlaps another and a
-/// value that an exited range left behind; these tests state the counters and offsets, and that a value is collectible
+/// The range of an Any slot in the slab's value arena, the only holder of the values, as each write path keeps it (the store's
+/// checks, which every transaction of every suite runs, find a range outside a held page, a range that overlaps another and
+/// a value that an exited range left behind; these tests state the counters and offsets, and that a value is collectible
 /// before any compaction). They run with the default page sizes and merge rule and without forced compaction whatever the
 /// run mode.
 /// </summary>
 [TestClass]
-public class ValueArenaShadowTests
+public class ValueArenaTests
 {
     private static (int First, int Max, bool Copy, StructStore.CompactionMode Compaction) _mode;
 
@@ -276,6 +276,33 @@ public class ValueArenaShadowTests
         array.RemoveRange(0, 2);
 
         Assert.AreEqual((false, 2), (snapshot is IList<object>, snapshot.Count));
+    }
+
+    [TestMethod]
+    public void Stored_AfterTheItemMergedAway_StillReadsItsValues()
+    {
+        var doc = NewDoc();
+        var array = doc.GetArray("a");
+        array.Add(1, 2);
+        var stored = At(doc, 1, 0).Stored;
+
+        array.RemoveRange(0, 2);
+        array.Add(7, 8, 9);
+
+        Assert.AreEqual((1, 2), (stored.ValueAt(0), stored.ValueAt(1)));
+    }
+
+    [TestMethod]
+    public void Stored_ByteArrayValue_IsACopyOnEveryRead()
+    {
+        var doc = NewDoc();
+        doc.GetArray("a").Add(new byte[] { 1, 2 });
+        var stored = At(doc, 1, 0).Stored;
+
+        var first = (byte[])stored.ValueAt(0);
+        first[0] = 9;
+
+        Assert.AreEqual(1, ((byte[])stored.ValueAt(0))[0]);
     }
 
     [TestMethod]

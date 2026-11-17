@@ -1,48 +1,15 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
-using System.Buffers;
-
 namespace Ycs;
 
 internal sealed partial class StructStore
 {
-    // The range of an Any slot holds the objects of its content's list (the same references).
-    private string ValueRangeViolation(string id, in Slot slot, object held)
-    {
-        var content = ContentAny.Of(held);
-        var values = Slab.ValuesOrNull;
-        if (values == null || !values.Holds(slot.Payload, slot.Length))
-        {
-            return $"the value range of {id} lies outside the used part of a held page";
-        }
-
-        var buffer = ArrayPool<object>.Shared.Rent(slot.Length);
-        try
-        {
-            content.CopyTo(buffer);
-            var range = values.Slice(slot.Payload, slot.Length);
-            for (var i = 0; i < range.Length; i++)
-            {
-                if (!ReferenceEquals(range[i], buffer[i]))
-                {
-                    return $"the value range of {id} differs from its content at {i}";
-                }
-            }
-
-            return null;
-        }
-        finally
-        {
-            ArrayPool<object>.Shared.Return(buffer, clearArray: true);
-        }
-    }
-
     /// <summary>
     /// What is wrong with the value arena, or null: every Any slot's range lies in the used part of a held page, the ranges
     /// are disjoint (from each other and from the reservations), the dead count equals a recount, the tail table names
     /// only the ends of live ranges (<see cref="Arena{T}.Violations"/>), and no element outside a live range holds a
     /// value (every exit of a range clears it). A store of more than 4,096 slots is checked every count/32nd time; that a
-    /// range equals its content is checked by <see cref="SlotViolation(ItemRef)"/>.
+    /// range lies in a held page is checked by <see cref="SlotViolation(ItemRef)"/>.
     /// </summary>
     private string ValuesViolation()
     {

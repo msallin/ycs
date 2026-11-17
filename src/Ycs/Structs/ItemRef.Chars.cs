@@ -32,7 +32,7 @@ internal readonly partial struct ItemRef
     /// of <paramref name="text"/>, which must not be empty.
     /// </summary>
     public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ReadOnlySpan<char> text) =>
-        NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.String, text.Length, null, text, default);
+        NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.String, text.Length, null, text, default, default);
 
     // The part before offset leaves the item (an item integrated from an offset): its range is the rest.
     private void CutCharsHead(int offset)

@@ -4,7 +4,11 @@ namespace Ycs;
 
 internal readonly partial struct ItemRef
 {
-    /// <summary>The elements of the content (Yjs' <c>getContent</c>); a live view, valid until the item's content changes.</summary>
+    /// <summary>
+    /// The elements of the content (Yjs' <c>getContent</c>). A String's and an Any's are a copy, never a view of the arena:
+    /// the reader (an <see cref="ItemView"/>) may run after a batch has moved the range. The readers that consume at
+    /// once read <see cref="Chars"/> and <see cref="ValueSpan"/>.
+    /// </summary>
     internal IReadOnlyList<object> Elements => Kind switch
     {
         SlotKind.Deleted => Array.Empty<object>(),

@@ -210,14 +210,22 @@ public class ItemRefContentTests
     }
 
     [TestMethod]
-    public void NewCopyOf_AnyItem_CopiesTheContent()
+    public void NewCopyOf_AnyItem_CopiesTheValuesToARangeOfItsOwn()
     {
         var slab = new Slab();
         var item = NewItem(slab, new ContentAny(new object[] { 1L, 2L }));
 
         var copy = ItemRef.NewCopyOf(slab, new ItemId(1, 10), default, default, item.Parent, null, item);
 
-        Assert.AreEqual((true, false), (copy.Content is ContentAny, ReferenceEquals(copy.Content, item.Content)));
+        Assert.AreEqual(("1,2", true), (string.Join(",", copy.ValueSpan.ToArray()), copy.Slab.Read(copy.Handle).Payload != item.Slab.Read(item.Handle).Payload));
+    }
+
+    [TestMethod]
+    public void CopyContent_AnyItem_Throws()
+    {
+        var item = NewItem(new Slab(), new ContentAny(new object[] { 1L }));
+
+        Assert.ThrowsExactly<InvalidOperationException>(() => item.CopyContent());
     }
 
     [TestMethod]

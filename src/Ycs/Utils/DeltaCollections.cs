@@ -32,6 +32,20 @@ internal sealed class StoredItems : IReadOnlyList<YValue>
         }
     }
 
+    // The values as ContentView reads them (a byte array as a copy), taken at once from the arena.
+    public void AddRange(ReadOnlySpan<object> values)
+    {
+        if (_count + values.Length > _items.Length)
+        {
+            Array.Resize(ref _items, Math.Max(_count + values.Length, _items.Length * 2));
+        }
+
+        for (var i = 0; i < values.Length; i++)
+        {
+            _items[_count++] = ValueFreezer.OnRead(values[i]);
+        }
+    }
+
     public IEnumerator<YValue> GetEnumerator()
     {
         for (var i = 0; i < _count; i++)

@@ -311,7 +311,14 @@ public abstract partial class YEvent
                             inserted = new StoredItems();
                         }
 
-                        inserted.AddRange(item.Elements);
+                        if (item.Kind == SlotKind.Any)
+                        {
+                            inserted.AddRange(item.ValueSpan);
+                        }
+                        else
+                        {
+                            inserted.AddRange(item.Elements);
+                        }
 
                         added.Add(ItemView.Of(doc, item));
                     }

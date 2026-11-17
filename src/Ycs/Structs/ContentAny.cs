@@ -1,81 +1,34 @@
 #nullable disable // Not annotated for nullable reference types yet.
 
-using System.Collections;
-using System.Diagnostics;
-
 namespace Ycs;
 
-internal class ContentAny : IContentEx
+// The values of a decoded Any item; a store item keeps its values in the slab's value arena (ItemRef.Values.cs).
+internal sealed class ContentAny : IContentEx
 {
     internal const int _ref = 8;
 
-    private List<object> _content;
+    private readonly object[] _values;
 
-    internal ContentAny(IEnumerable content)
-    {
-        _content = new List<object>();
-        foreach (var v in content)
-        {
-            _content.Add(v);
-        }
-    }
-
-    internal ContentAny(IEnumerable<object> content)
-        : this(content.ToList())
-    {
-        // Do nothing.
-    }
-
-    private ContentAny(List<object> content)
-    {
-        _content = content;
-    }
-
-    /// <summary>The Any content a slot holds (the store's checks compare it with the arena).</summary>
-    internal static ContentAny Of(object content) => (ContentAny)content;
-
-    /// <summary>Content of one value.</summary>
-    internal static ContentAny Single(object value) => new ContentAny(new List<object>(1) { value });
-
-    /// <summary>Content that takes <paramref name="content"/> over, without a copy.</summary>
-    internal static ContentAny Own(List<object> content) => new ContentAny(content);
+    /// <summary>Content that takes <paramref name="values"/> over, without a copy.</summary>
+    internal ContentAny(object[] values) => _values = values;
 
     public bool Countable => true;
-    public int Length => _content.Count;
+    public int Length => _values.Length;
 
     int IContentEx.Ref => _ref;
 
-    public IReadOnlyList<object> GetContent() => new ContentView(_content);
+    internal ReadOnlySpan<object> AsSpan() => _values;
 
-    internal object ValueAt(int index) => ValueFreezer.OnRead(_content[index]);
+    public IReadOnlyList<object> GetContent() => new ContentView(_values);
 
-    /// <summary>Copies the values, as stored, to the start of <paramref name="destination"/>, which holds at least <see cref="Length"/>.</summary>
-    internal void CopyTo(Span<object> destination)
-    {
-        for (var i = 0; i < _content.Count; i++)
-        {
-            destination[i] = _content[i];
-        }
-    }
+    internal object ValueAt(int index) => ValueFreezer.OnRead(_values[index]);
 
-    public IContent Copy() => new ContentAny(_content.ToList());
+    public IContent Copy() => new ContentAny((object[])_values.Clone());
 
-    public IContent Splice(int offset)
-    {
-        var right = new ContentAny(_content.GetRange(offset, _content.Count - offset));
-        _content.RemoveRange(offset, _content.Count - offset);
-        return right;
-    }
+    // A decoded Any is read, never changed: a store item splits and merges its range in the arena.
+    public IContent Splice(int offset) => throw new NotSupportedException("A decoded Any is not split; the store item's range is.");
 
-    public bool MergeWith(IContent right)
-    {
-        Debug.Assert(right is ContentAny);
-        _content.AddRange((right as ContentAny)._content);
-        return true;
-    }
-
-    /// <summary>Appends <paramref name="values"/>, as <see cref="MergeWith"/> appends a content of them.</summary>
-    internal void Append(List<object> values) => _content.AddRange(values);
+    public bool MergeWith(IContent right) => throw new NotSupportedException("A decoded Any is not merged; the store item's range is.");
 
     void IContentEx.Integrate(Transaction transaction, ItemRef item)
     {
@@ -94,13 +47,11 @@ internal class ContentAny : IContentEx
 
     void IContentEx.Write(IUpdateEncoder encoder, int offset)
     {
-        int length = _content.Count;
-        encoder.WriteLength(length - offset);
+        encoder.WriteLength(_values.Length - offset);
 
-        for (int i = offset; i < length; i++)
+        for (var i = offset; i < _values.Length; i++)
         {
-            var c = _content[i];
-            encoder.WriteAny(c);
+            encoder.WriteAny(_values[i]);
         }
     }
 
@@ -108,15 +59,14 @@ internal class ContentAny : IContentEx
     {
         var length = decoder.ReadLength();
 
-        // Each value takes at least one byte.
-        var cs = new List<object>(Limits.Capacity(length, decoder.Reader.Remaining));
+        // Each value takes at least one byte: a length beyond what remains throws before the array is outgrown.
+        var values = new object[Limits.Capacity(length, decoder.Reader.Remaining)];
 
-        for (int i = 0; i < length; i++)
+        for (var i = 0; i < length; i++)
         {
-            var c = decoder.ReadAny();
-            cs.Add(c);
+            values[i] = decoder.ReadAny();
         }
 
-        return new ContentAny(cs);
+        return new ContentAny(values);
     }
 }
