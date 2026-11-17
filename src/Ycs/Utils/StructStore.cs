@@ -54,17 +54,16 @@ internal sealed partial class StructStore
     /// </summary>
     internal ItemRef NextAfter(ItemRef held, ID id, int departures)
     {
-        if (departures != Departures)
-        {
-            held = Find(id).AsItem;
-            if (held.IsNull)
-            {
-                return default;
-            }
-        }
-
-        return held.Right.AsItem;
+        held = Resolve(held, id, departures);
+        return held.IsNull ? default : held.Right.AsItem;
     }
+
+    /// <summary>
+    /// <paramref name="held"/>, a struct that began at <paramref name="id"/> when <paramref name="departures"/> was read,
+    /// as it is after caller's code ran: the struct that holds <paramref name="id"/> now when structs left since,
+    /// <c>default</c> when that is a GC struct. Until then <paramref name="held"/> is not read.
+    /// </summary>
+    internal ItemRef Resolve(ItemRef held, ID id, int departures) => departures == Departures ? held : Find(id).AsItem;
 
     /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="ItemRef.ExtendRun"/>).</summary>
     internal void NoteRunExtended(ItemRef item, int length)

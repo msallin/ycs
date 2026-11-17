@@ -40,7 +40,7 @@ internal readonly partial struct ItemRef
             && (right.IsNull ? slot.ROriginClient < 0 : slot.ROriginClient == right.ClientIndex && slot.ROriginClock == right.Clock)
             && (slot.Info & (Slot.DeletedFlag | Slot.KeepFlag | Slot.HasRedoneFlag)) == 0
             && !parent.ItemDeleted
-            && !(Content is ContentString str && str.EndsWithHighSurrogate);
+            && !(slot.Kind == (int)SlotKind.String && char.IsHighSurrogate(Chars[^1]));
     }
 
     /// <summary>

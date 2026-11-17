@@ -434,8 +434,11 @@ of kind String (a free slot, pending reuse included, holds none; a deleted but u
 copies the runs of every page less than half live (the write page included) to a new write end, tells the slab each
 run's new offset, frees those pages (Debug fills them with a marker character) and drops the tail table. Only the slots
 and the tail table hold an offset: the readers of a text (enumerators, `YText` positions, `ItemTextListPosition`,
-events, `WriteCharsTo`) hold handles and read the content object, and the offsets the item operations hold in
-locals do not live across a call that can compact. A collected item's values are nulled in the value arena at GC, so it
+events) hold handles and read the slot's range in the moment they use it (`ItemRef.Chars`, `CopyCharsTo`, `WriteCharsTo`,
+the elements of a String, the encoding of an item; the content object is the mirror the store's checks compare it with). A
+span of the arena is consumed before any call that runs user code or ends a batch; `WriteCharsTo` asks the writer for its
+span first and slices the arena after, from the item it re-reads (an item that is no longer a live String of its
+length writes nothing). The offsets the item operations hold in locals do not live across a call that can compact. A collected item's values are nulled in the value arena at GC, so it
 does not keep the caller's objects alive until a compaction.
 
 The test modes (`YCS_COMPACT=always|midbatch`) compact after every transaction's cleanup, and mid-batch at each struct

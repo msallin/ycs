@@ -79,8 +79,33 @@ internal readonly partial struct ItemRef
         _slab.Chars.MarkDead(slot.Payload, slot.Length);
     }
 
-    /// <summary>The text of a <see cref="SlotKind.String"/> item; valid until the item's content changes.</summary>
-    internal ReadOnlySpan<char> Chars => Typed<ContentString>(SlotKind.String).GetString().AsSpan();
+    /// <summary>
+    /// The text of a <see cref="SlotKind.String"/> item, read from the arena. The span is valid only until user code runs
+    /// or a batch ends (a compaction moves and frees ranges): consume it before.
+    /// </summary>
+    internal ReadOnlySpan<char> Chars
+    {
+        get
+        {
+            ref readonly var slot = ref Read();
+            return slot.Kind == (int)SlotKind.String
+                ? _slab.Chars.Slice(slot.Payload, slot.Length)
+                : throw new InvalidOperationException($"The struct holds {Kind}, not {SlotKind.String} content.");
+        }
+    }
+
+    /// <summary>The text of a <see cref="SlotKind.String"/> item, one string per UTF-16 code unit (Yjs' <c>getContent</c>).</summary>
+    private object[] CharElements()
+    {
+        var chars = Chars;
+        var result = new object[chars.Length];
+        for (var i = 0; i < result.Length; i++)
+        {
+            result[i] = chars[i].ToString();
+        }
+
+        return result;
+    }
 
     /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
     internal void AppendChars(string text)
@@ -91,18 +116,29 @@ internal readonly partial struct ItemRef
         slot.Payload = _slab.Chars.Extend(slot.Payload, slot.Length, text);
     }
 
-    /// <summary>Copies the text of a <see cref="SlotKind.String"/> item to <paramref name="destination"/>, which holds at least <see cref="Length"/> characters, without materializing a run kept in a builder.</summary>
-    internal void CopyCharsTo(Span<char> destination) => Typed<ContentString>(SlotKind.String).CopyTo(destination);
+    /// <summary>Copies the text of a <see cref="SlotKind.String"/> item to <paramref name="destination"/>, which holds at least <see cref="Length"/> characters.</summary>
+    internal void CopyCharsTo(Span<char> destination) => Chars.CopyTo(destination);
 
     /// <summary>
-    /// Writes the text of a <see cref="SlotKind.String"/> item to <paramref name="writer"/>. The content is read before the writer
-    /// is asked for its span: a writer that runs user code there may change the item.
+    /// Writes the text of a <see cref="SlotKind.String"/> item to <paramref name="writer"/>. The writer is asked for its
+    /// span first: user code in <c>GetSpan</c> may edit the document, the end of its batch may compact the arena and a
+    /// struct that left the list may have freed this item's slot. The item is looked up again by its id after it, and
+    /// must still be a live String of the length it had; otherwise nothing is written for it and the caller walks on
+    /// from its id (<see cref="StructStore.NextAfter"/>).
     /// </summary>
-    internal void WriteCharsTo(IBufferWriter<char> writer)
+    internal void WriteCharsTo(IBufferWriter<char> writer, StructStore store)
     {
-        var content = Typed<ContentString>(SlotKind.String);
-        var length = content.Length;
-        content.CopyTo(writer.GetSpan(length));
+        var id = Id;
+        var length = Length;
+        var departures = store.Departures;
+        var span = writer.GetSpan(length);
+        var held = store.Resolve(this, id, departures);
+        if (held.IsNull || held.Kind != SlotKind.String || held.Length != length || held.Deleted)
+        {
+            return;
+        }
+
+        held.Chars.CopyTo(span);
         writer.Advance(length);
     }
 }

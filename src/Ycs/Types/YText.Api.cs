@@ -452,7 +452,8 @@ public partial class YText
 
     /// <summary>
     /// Writes the text, as <see cref="ToString"/> returns it, to <paramref name="writer"/>, one run of
-    /// characters at a time, without allocating.
+    /// characters at a time, without allocating. A run that the writer's <c>GetSpan</c> deleted, split or merged by
+    /// editing the text is not written (the walk goes on after it), so a writer should not edit the text it is given.
     /// </summary>
     public void WriteTo(IBufferWriter<char> writer)
     {
@@ -472,7 +473,7 @@ public partial class YText
             var departures = Doc.Store.Departures;
             if (!n.Deleted && n.Countable && n.Kind == SlotKind.String)
             {
-                n.WriteCharsTo(writer);
+                n.WriteCharsTo(writer, Doc.Store);
             }
 
             n = Doc.Store.NextAfter(n, id, departures);

@@ -206,6 +206,7 @@ public class ItemRefContentTests
         var item = NewItem(new Slab(), new ContentString("ab"));
 
         item.AppendChars("cd");
+        item.Length += 2;
 
         Assert.AreEqual("abcd", item.Chars.ToString());
     }
