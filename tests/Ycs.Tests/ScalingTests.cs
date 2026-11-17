@@ -47,6 +47,7 @@ public class ScalingTests
         .Select(c => c.Key + ":" + string.Join(",", c.Value.Select(r => r.Clock + "+" + r.Length))));
 
     [TestMethod]
+    [TestCategory("Slow")]
     public void UndoManager_ManyEditsInOneCapture_IsNotQuadratic()
     {
 #if DEBUG

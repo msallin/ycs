@@ -20,6 +20,7 @@ public class ClientStructsTests
     [DataRow(2)]
     [DataRow(4)]
     [DataRow(128)]
+    [TestCategory("Slow")]
     public void FindIndex_RandomEditsSplitsAndMerges_EqualsLinearScan(int capacity) => WithLeafCapacity(capacity, () =>
     {
         RandomEdits();

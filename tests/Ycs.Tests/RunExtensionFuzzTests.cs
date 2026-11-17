@@ -22,6 +22,7 @@ namespace Ycs;
 public class RunExtensionFuzzTests
 {
     [TestMethod]
+    [TestCategory("Slow")]
     public void RandomScenarios_CandidateAndReference_LogTheSame()
     {
         var (first, count) = Seeds();

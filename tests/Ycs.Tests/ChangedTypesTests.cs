@@ -16,6 +16,7 @@ public class ChangedTypesTests
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
+    [TestCategory("Slow")]
     public void Transact_ManyChangedTypesDeleted_IsLinear()
     {
         // Each deleted map is removed from Transaction.Changed.

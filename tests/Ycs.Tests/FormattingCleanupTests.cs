@@ -99,6 +99,7 @@ public class FormattingCleanupTests
     }
 
     [TestMethod]
+    [TestCategory("Slow")]
     public void ApplyUpdate_FormatsInManyTexts_CleansUpInLinearTime()
     {
         // Every formatted text is cleaned up once; finding it among those already found took O(n).

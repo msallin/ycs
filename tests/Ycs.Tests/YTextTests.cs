@@ -519,6 +519,7 @@ public class YTextTests : YTestBase
     /*
     [DataRow(5, 15_000)]
     */
+    [TestCategory("Slow")]
     public void TestRepeatingGenerateTextChanges(int users, int iterations)
     {
         RandomTests(new List<Action<TestYInstance, Random>>

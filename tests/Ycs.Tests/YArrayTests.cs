@@ -493,6 +493,7 @@ public class YArrayTests : YTestBase
     [DataRow(5, 10_000)]
     [DataRow(5, 15_000)]
     */
+    [TestCategory("Slow")]
     public void TestRepeatGeneratingYArrayTests(int users, int iterations)
     {
         RandomTests(new List<Action<TestYInstance, Random>>
