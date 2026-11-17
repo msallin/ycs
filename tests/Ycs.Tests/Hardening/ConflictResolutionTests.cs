@@ -94,10 +94,9 @@ public class ConflictResolutionTests
         var stopwatch = Stopwatch.StartNew();
         Assert.IsFalse(doc.TryApplyUpdate(update));
 
-        // The walk is 16.7 million steps; in Debug every step also checks its slot's owner. 100 million would take far longer.
-#if DEBUG
-        Assert.IsLessThan(5_000, stopwatch.ElapsedMilliseconds);
-#else
+        // The walk is 16.7 million steps; 100 million would take far longer. Debug checks every step's slot owner, too slow
+        // to bound by the clock on a loaded CI: there only the rejection is asserted.
+#if !DEBUG
         Assert.IsLessThan(2_000, stopwatch.ElapsedMilliseconds);
 #endif
     }

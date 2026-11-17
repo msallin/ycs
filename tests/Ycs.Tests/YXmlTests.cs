@@ -141,6 +141,34 @@ public class YXmlTests
     }
 
     [TestMethod]
+    public void InsertAfter_OfAChildOfAnotherFragment_ThrowsAndInsertsNothing()
+    {
+        var doc = new YDoc();
+        var frag = doc.GetXmlFragment("f");
+        var other = new YXmlElement("other");
+        var foreign = new YXmlElement("foreign");
+        frag.Add(other, new YXmlElement("a"));
+        other.Add(foreign);
+
+        Assert.ThrowsExactly<ArgumentException>(() => frag.InsertAfter(foreign, new YXmlElement("x")));
+
+        Assert.AreEqual((2, 1), (frag.Length, other.Length));
+    }
+
+    [TestMethod]
+    public void InsertAfter_OfAChildOfAnotherDocument_ThrowsAndInsertsNothing()
+    {
+        var frag = new YDoc().GetXmlFragment("f");
+        var foreignFrag = new YDoc().GetXmlFragment("f");
+        var foreign = new YXmlElement("foreign");
+        foreignFrag.Add(foreign);
+
+        Assert.ThrowsExactly<ArgumentException>(() => frag.InsertAfter(foreign, new YXmlElement("x")));
+
+        Assert.AreEqual(0, frag.Length);
+    }
+
+    [TestMethod]
     public void ElementAttributesAndPrelimBeforeIntegration()
     {
         // Attributes and children set before the element is attached to a doc go through the
