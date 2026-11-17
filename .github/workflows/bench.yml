@@ -1,8 +1,11 @@
 name: Benchmarks
 
 # One benchmarking round (bench/run-round.sh) on a runner chosen by its labels: a quiet machine of our own, since the
-# numbers are only as good as the load. Run by hand; the results come back as an artifact to commit to the bench READMEs.
+# numbers are only as good as the load. Run by hand, or by pushing the branch bench-run (workflow_dispatch needs the
+# workflow on the default branch); the results come back as an artifact to commit to the bench READMEs.
 on:
+  push:
+    branches: [bench-run]
   workflow_dispatch:
     inputs:
       runner:
@@ -14,7 +17,7 @@ on:
 
 jobs:
   round:
-    runs-on: ${{ fromJSON(inputs.runner) }}
+    runs-on: ${{ fromJSON(inputs.runner || '["self-hosted"]') }}
     timeout-minutes: 360
     steps:
       - uses: actions/checkout@v7
@@ -30,7 +33,7 @@ jobs:
           node-version: 24
 
       - name: Round
-        run: bench/run-round.sh "$RUNNER_TEMP/round" "${{ inputs.baseline }}"
+        run: bench/run-round.sh "$RUNNER_TEMP/round" "${{ inputs.baseline || '044bb73' }}"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
