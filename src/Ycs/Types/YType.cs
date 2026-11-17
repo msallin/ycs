@@ -115,6 +115,7 @@ public abstract partial class YType
     /// <summary>Whether the type was collected: its facts are kept, its item may be gone.</summary>
     internal bool IsCollected => _collected;
 
+    // Never null for a collected type: Collect reads the parent while the parent is live (a deleted type's content is collected children first).
     internal YType? ParentType => _collected ? _collectedParent : _item.IsNull ? null : _item.Parent as YType;
 
     /// <summary>The id of the item the type is in; a root type has none.</summary>
