@@ -9,7 +9,7 @@ internal readonly partial struct ItemRef
     /// <see cref="SlotKind.Json"/> without the read-only wrapper, null for collected content (Yjs' <c>getContent()[index]</c>
     /// of <c>[]</c> is <c>undefined</c>), else the element of <c>GetContent()</c>. Allocates nothing for Any and Json.
     /// </summary>
-    internal object StoredValueAt(int index) => StoredValueAt(Content, index);
+    internal object StoredValueAt(int index) => Kind == SlotKind.Type ? TypeOf : StoredValueAt(Content, index);
 
     internal static object StoredValueAt(IContent content, int index) => content switch
     {
@@ -20,7 +20,7 @@ internal readonly partial struct ItemRef
     };
 
     /// <summary>The content as it is now, readable after the struct merged into another or left the store.</summary>
-    internal StoredContent Stored => new(Content);
+    internal StoredContent Stored => Kind == SlotKind.Type ? new(TypeOf) : new(Content);
 
     /// <summary><see cref="CanExtendRun"/> for <see cref="SlotKind.Any"/> values.</summary>
     internal bool CanExtendAnyRun(Transaction transaction, AbstractType parent, ItemRef right, long client) =>
@@ -28,7 +28,14 @@ internal readonly partial struct ItemRef
 }
 
 /// <summary>The content object of an item at one moment; it stays readable when the item's slot is reused.</summary>
-internal readonly struct StoredContent(IContent content)
+internal readonly struct StoredContent
 {
-    internal object ValueAt(int index) => ItemRef.StoredValueAt(content, index);
+    private readonly IContent _content;
+    private readonly AbstractType _type;
+
+    internal StoredContent(IContent content) => _content = content;
+
+    internal StoredContent(AbstractType type) => _type = type;
+
+    internal object ValueAt(int index) => _type ?? ItemRef.StoredValueAt(_content, index);
 }

@@ -45,8 +45,8 @@ internal sealed partial class StructStore
                 if (s.IsItem)
                 {
                     var content = s.Content;
-                    var contentName = ContentKindNameForTests(content);
-                    IReadOnlyList<object> values = content == null ? [] : content is ContentString str ? [str.GetString()] : content.GetContent();
+                    var contentName = s.Kind == SlotKind.Type ? "ContentType" : ContentKindNameForTests(content);
+                    IReadOnlyList<object> values = s.Kind == SlotKind.Type ? s.Elements : content == null ? [] : content is ContentString str ? [str.GetString()] : content.GetContent();
                     sb.Append(" content ").Append(contentName).Append(' ').Append(contentText(contentName, values));
                     sb.Append(" left ").Append(IdText(s.Left)).Append(" right ").Append(IdText(s.Right));
                     sb.Append(" origin ").Append(IdText(s.LeftOrigin)).Append(" rightOrigin ").Append(IdText(s.RightOrigin));

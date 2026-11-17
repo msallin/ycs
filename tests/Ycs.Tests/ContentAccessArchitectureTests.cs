@@ -18,7 +18,7 @@ public class ContentAccessArchitectureTests
     // Types by name prefix. The item layout and the decoded form stay for good.
     private static readonly string[] Layout =
     [
-        "ItemRef", "Content", "Item", "GC", "Skip", "UpdateReader", "EncodingUtils", "StructStaging", "PlanItem",
+        "ItemRef", "Content", "TypeContent", "Item", "GC", "Skip", "UpdateReader", "EncodingUtils", "StructStaging", "PlanItem",
         "UpdateOperations", "LazyStructWriter",
     ];
 

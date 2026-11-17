@@ -94,6 +94,7 @@ internal readonly partial struct ItemRef
         var originClient = leftOrigin is { } lo ? clients.GetOrAdd(lo.Client) : -1;
         var rightOriginClient = rightOrigin is { } ro ? clients.GetOrAdd(ro.Client) : -1;
         var parentIndex = parent?.TableIndex(slab.Types) ?? -1;
+        var typeIndex = content is ContentType { Type: var type } ? type.TableIndex(slab.Types) : -1;
         var item = new ItemRef(slab, slab.Allocate());
         ref var slot = ref slab.Write(item._handle);
         slot.Clock = id.Clock;
@@ -108,7 +109,11 @@ internal readonly partial struct ItemRef
         slot.Right = right.Handle;
         slot.Parent = parentIndex;
         slab.SetKey(item._handle, parentSub);
-        if (content is not ContentDeleted)
+        if (typeIndex >= 0)
+        {
+            slot.Payload = typeIndex;
+        }
+        else if (content is not ContentDeleted)
         {
             slab.SetRef(item._handle, content);
         }
@@ -213,7 +218,7 @@ internal readonly partial struct ItemRef
         else if (parent is ID pid)
         {
             var parentItem = store.Find(pid);
-            parent = parentItem.IsGC ? null : ((parentItem.IsItem ? parentItem.Content : null) as ContentType)?.Type;
+            parent = parentItem.IsItem && parentItem.Kind == SlotKind.Type ? parentItem.TypeOf : null;
         }
 
         return (left, leftOrigin, right, rightOrigin, parent as AbstractType, parentSub);
@@ -282,6 +287,7 @@ internal readonly partial struct ItemRef
             l.Clock + l.Length == r.Clock &&
             ((l.Info ^ r.Info) & Slot.DeletedFlag) == 0 &&
             ((l.Info | r.Info) & Slot.HasRedoneFlag) == 0 &&
+            l.Kind != (int)SlotKind.Type &&
             (l.Kind == (int)SlotKind.Deleted || Content.Mergeable);
     }
 
@@ -328,6 +334,12 @@ internal readonly partial struct ItemRef
     public void FreeSlot()
     {
         Check();
+        if (Kind == SlotKind.Type)
+        {
+            // An item that never integrated: its type was never part of the document.
+            _slab.Types.Collect((int)Read().Payload);
+        }
+
         _slab.Free(_handle);
     }
 
@@ -338,6 +350,12 @@ internal readonly partial struct ItemRef
     internal void BecomeGC()
     {
         ref var slot = ref Write();
+        if (slot.Kind == (int)SlotKind.Type)
+        {
+            // A collected type's entry is cleared already; an item that never integrated names a type that never lived.
+            _slab.Types.Collect((int)slot.Payload);
+        }
+
         slot = new Slot
         {
             Clock = slot.Clock,
@@ -416,9 +434,9 @@ internal readonly partial struct ItemRef
     /// </summary>
     private void DeleteItem(Transaction transaction)
     {
-        if (MarkDeleted(transaction) && Kind != SlotKind.Deleted)
+        if (MarkDeleted(transaction))
         {
-            Content.Delete(transaction);
+            DeleteContent(transaction);
         }
     }
 
@@ -471,9 +489,15 @@ internal readonly partial struct ItemRef
             }
 
             LeftOrigin = Left.IsItem ? Left.LastId : null;
-            if (Kind != SlotKind.Deleted)
+            switch (Kind)
             {
-                Content = (IContentEx)Content.Splice(offset);
+                case SlotKind.Deleted:
+                    break;
+                case SlotKind.Type:
+                    throw TypeContent.Unsplittable();
+                default:
+                    Content = (IContentEx)Content.Splice(offset);
+                    break;
             }
 
             Length -= offset;
@@ -630,16 +654,7 @@ internal readonly partial struct ItemRef
             }
 
             transaction.Doc.Store.AddStruct(this);
-            if (Kind == SlotKind.Deleted)
-            {
-                transaction.DeleteSet.Add(Id.Client, Id.Clock, Length);
-                MarkDeleted();
-                transaction.Doc.Store.Refresh(this);
-            }
-            else
-            {
-                Content.Integrate(transaction, this);
-            }
+            IntegrateContent(transaction);
 
             // Counted once its content is integrated: deleted content marks the item deleted.
             if (mapParent != null)
@@ -673,10 +688,7 @@ internal readonly partial struct ItemRef
             throw new InvalidOperationException();
         }
 
-        if (Kind != SlotKind.Deleted)
-        {
-            Content.Gc(store);
-        }
+        GcContent(store);
 
         if (parentGCd)
         {
@@ -693,6 +705,7 @@ internal readonly partial struct ItemRef
     {
         ref var slot = ref Write();
         slot.Info = (slot.Info & ~(0xFF << 8)) | (ContentDeleted._ref << 8);
+        slot.Payload = 0;
         _slab.SetRef(_handle, null);
     }
 
@@ -741,6 +754,13 @@ internal readonly partial struct ItemRef
             return;
         }
 
+        if (Kind == SlotKind.Type)
+        {
+            Item.WriteItemHeader(encoder, ContentType._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
+            TypeOf.Write(encoder);
+            return;
+        }
+
         Item.WriteItem(encoder, offset, Id, LeftOrigin, RightOrigin, ParentSub, Content, root, parentId);
     }
 
@@ -750,6 +770,11 @@ internal readonly partial struct ItemRef
     public ItemRef SplitItem(Transaction transaction, int diff)
     {
         var kind = Kind;
+        if (kind == SlotKind.Type)
+        {
+            throw TypeContent.Unsplittable();
+        }
+
         var content = kind == SlotKind.Deleted ? null : (IContentEx)Content.Splice(diff);
         var rightLength = kind == SlotKind.Deleted ? Length - diff : content.Length;
         var parent = Parent;

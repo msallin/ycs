@@ -29,9 +29,18 @@ internal sealed partial class StructStore
                 return link;
             }
 
-            if (s.Kind == SlotKind.Type && s.TypeOf._item != s)
+            if (s.Kind == SlotKind.Type)
             {
-                return $"the type of {s.Id.Client}:{s.Id.Clock} names another item";
+                var index = (int)Slab.Read(s.Handle).Payload;
+                if (index < 0 || index >= Types.Count || Types[index] == null)
+                {
+                    return $"the Type slot of {s.Id.Client}:{s.Id.Clock} names the entry {index} of {Types.Count}, which is cleared or missing";
+                }
+
+                if (s.TypeOf._item != s)
+                {
+                    return $"the type of {s.Id.Client}:{s.Id.Clock} names another item";
+                }
             }
 
             if (s.Kind == SlotKind.Doc && s.Subdoc._item != s && !IsAttachedInOwner(s.Subdoc._item))
@@ -204,11 +213,21 @@ internal sealed partial class StructStore
                 : $"the slot of the GC struct {id} holds more than a range";
         }
 
-        if (slot.Kind == (int)SlotKind.Deleted)
+        if (slot.Kind != (int)SlotKind.Type && slot.Payload != 0)
+        {
+            return $"the slot of {id} of kind {(SlotKind)slot.Kind} holds the payload {slot.Payload}";
+        }
+
+        if (slot.Kind is (int)SlotKind.Deleted or (int)SlotKind.Type)
         {
             if (content != null)
             {
-                return $"the slot of {id} holds the kind Deleted and a {content.GetType().Name}";
+                return $"the slot of {id} holds the kind {(SlotKind)slot.Kind} and a {content.GetType().Name}";
+            }
+
+            if (slot.Kind == (int)SlotKind.Type && slot.Length != 1)
+            {
+                return $"the Type slot of {id} has length {slot.Length}";
             }
         }
         else if (content is not IContentEx held || held.Ref != slot.Kind || held.Length != slot.Length)
@@ -217,7 +236,7 @@ internal sealed partial class StructStore
         }
 
         var kind = (SlotKind)slot.Kind;
-        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || (kind != SlotKind.Deleted && content.GetType() != ContentClassOf(kind)))
+        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || (kind is not (SlotKind.Deleted or SlotKind.Type) && content.GetType() != ContentClassOf(kind)))
         {
             return $"the slot of {id} holds the kind {kind}, its content is a {content.GetType().Name}";
         }
@@ -240,7 +259,6 @@ internal sealed partial class StructStore
     {
         SlotKind.String => typeof(ContentString),
         SlotKind.Any => typeof(ContentAny),
-        SlotKind.Type => typeof(ContentType),
         SlotKind.Format => typeof(ContentFormat),
         SlotKind.Embed => typeof(ContentEmbed),
         SlotKind.Binary => typeof(ContentBinary),

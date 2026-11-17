@@ -50,7 +50,10 @@ internal readonly struct PlanItem : IEquatable<PlanItem>
     /// <summary>Whether the content is collected or deleted-only (no values); a stored item holds no object for it.</summary>
     public bool HasDeletedContent => _decoded is null ? _stored.Kind == SlotKind.Deleted : _decoded.Content is ContentDeleted;
 
-    /// <summary>The content object; null for a stored item of kind <see cref="SlotKind.Deleted"/>.</summary>
+    /// <summary>The type the item holds, null for any other content.</summary>
+    public AbstractType NestedType => _decoded is null ? (_stored.Kind == SlotKind.Type ? _stored.TypeOf : null) : (_decoded.Content as ContentType)?.Type;
+
+    /// <summary>The content object; null for a stored item of kind <see cref="SlotKind.Deleted"/> or <see cref="SlotKind.Type"/>.</summary>
     public IContentEx Content => _decoded is null ? _stored.Content : _decoded.Content;
 
     public ID? LeftOrigin => _decoded is null ? _stored.LeftOrigin : _decoded.LeftOrigin;

@@ -73,9 +73,11 @@ public abstract partial class YType
     private string _collectedParentSub;
     private bool _collectedKeep;
 
-    // The index in the type table of the store the type's items are in: assigned when a slot first names the type, kept
-    // after the collection (the table's entry is cleared, the index is not reused). A slot that names a collected type
-    // (an item inserted into it, which reads its parent from the table) puts the entry back.
+    // The index in the type table of the store the type's items are in: given when the type's item is made (ItemRef.New
+    // and Adopt; a root type has no item and gets it when a slot first names it as parent), kept after the collection (the
+    // table's entry is cleared, the index is not reused). The item's own slot holds the index and is not a Type slot
+    // once the type is collected. An item inserted into a collected type names it as its parent and reads it from the
+    // table, so that insert puts the entry back; no Type slot names it.
     private int _tableIndex = -1;
 
     internal int TableIndex(TypeTable table)

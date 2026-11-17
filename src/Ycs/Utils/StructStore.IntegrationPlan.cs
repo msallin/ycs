@@ -458,7 +458,7 @@ internal sealed partial class StructStore
             {
                 foreach (var type in deleted.Keys)
                 {
-                    if (type is { Parent: AbstractType, Content: ContentType content } && HasLiveNonValue(content.Type, doc, !type.Keep && doc.GcFilter(type.GcView(doc)), ranges))
+                    if (type is { Parent: AbstractType, NestedType: { } nested } && HasLiveNonValue(nested, doc, !type.Keep && doc.GcFilter(type.GcView(doc)), ranges))
                     {
                         throw MapValueSplit();
                     }
@@ -603,7 +603,7 @@ internal sealed partial class StructStore
                         structEnd = planned.Id.Clock + planned.Length;
                     }
 
-                    if (!type.IsNull && !type.Deleted && type.Content is ContentType)
+                    if (!type.IsNull && !type.Deleted && type.NestedType != null)
                     {
                         Add(type, RangeDeletes(k + 1));
                     }
@@ -650,7 +650,7 @@ internal sealed partial class StructStore
             {
                 var type = parent switch
                 {
-                    PlanItem { Parent: AbstractType } typeItem => (typeItem.Content as ContentType)?.Type,
+                    PlanItem { Parent: AbstractType } typeItem => typeItem.NestedType,
                     AbstractType root => root,
                     _ => null,
                 };
