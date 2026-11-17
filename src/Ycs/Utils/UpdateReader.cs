@@ -17,7 +17,8 @@ namespace Ycs;
 /// <see cref="Read"/> hands out a <see cref="Lease"/>; disposing it clears the lists and the staging table (dropping the
 /// references to the structs and the input) and makes the reader available again. Thread-local
 /// rather than per document: a server holding many documents keeps one per thread. A read while
-/// another lease is open on the thread (re-entrancy) simply gets a new reader.
+/// another lease is open on the thread (re-entrancy) gets the second free reader, or a new one: two readers are kept,
+/// for the pending update's retry that reads inside the lease of the update that set it aside.
 /// </summary>
 internal sealed class UpdateReader
 {
@@ -27,8 +28,15 @@ internal sealed class UpdateReader
     /// <summary>At most this many spare lists of each kind are kept.</summary>
     private const int MaxSpareLists = 64;
 
+    // Two free readers: the reader of a nested read is released before the one it nests in.
     [ThreadStatic]
     private static UpdateReader t_free;
+
+    [ThreadStatic]
+    private static UpdateReader t_spare;
+
+    [ThreadStatic]
+    private static int t_constructed;
 
     private readonly Lib0Reader _input = new();
     private readonly Dictionary<long, List<AbstractStruct>> _structs = new();
@@ -50,8 +58,15 @@ internal sealed class UpdateReader
     /// <param name="maxDepth">How deeply values may be nested (<see cref="UpdateLimits.MaxDepth"/>).</param>
     public static Lease Read(byte[] buffer, int offset, int count, bool v2, long maxStructs, int maxDepth = UpdateLimits.DefaultMaxDepth)
     {
-        var reader = t_free ?? new UpdateReader();
-        t_free = null;
+        var reader = t_free;
+        t_free = t_spare;
+        t_spare = null;
+        if (reader == null)
+        {
+            reader = new UpdateReader();
+            t_constructed++;
+        }
+
         var version = reader._version;
         try
         {
@@ -68,6 +83,9 @@ internal sealed class UpdateReader
 
     /// <summary>Whether this thread's reader is free, that is no lease of it is open (for tests).</summary>
     internal static bool IsFreeOnCurrentThread => t_free != null;
+
+    /// <summary>How many readers this thread constructed (for tests).</summary>
+    internal static int ConstructedOnCurrentThread => t_constructed;
 
     private void ReadCore(byte[] buffer, int offset, int count, bool v2, long maxStructs, int maxDepth)
     {
@@ -125,7 +143,14 @@ internal sealed class UpdateReader
         _staging.Reset();
         _input.Clear();
         _v2?.Clear();
-        t_free = this;
+        if (t_free == null)
+        {
+            t_free = this;
+        }
+        else
+        {
+            t_spare = this;
+        }
 
         static void Recycle<T>(List<T> list, Stack<List<T>> spare)
         {
