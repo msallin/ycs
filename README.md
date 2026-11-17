@@ -55,7 +55,7 @@ Ycs needs the .NET 11 SDK. Clone the repository (or add it as a git submodule) a
 For contributors:
 
 - [Testing](docs/testing.md): what each test project guards, how to run it, and the `YCS_*` switches.
-- [Item layout](docs/design-item-layout.md): how the store holds items (slots in a slab, linked by handles).
+- [Item layout](docs/design-item-layout.md): how the store holds items (slots in a slab linked by handles, characters and values in arenas, updates decoded into staging tables).
 - Walkthroughs of the code against the Yjs source: [core](docs/walkthrough-core.md),
   [shared types and events](docs/walkthrough-types.md),
   [undo, snapshots, positions and protocols](docs/walkthrough-undo-snapshots-protocols.md).

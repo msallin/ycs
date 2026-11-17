@@ -9,7 +9,8 @@ idiomatic .NET 11 API with the latest C# features where they fit. This plan repl
   `GetHashCode` (wrong in `HashSet`/`Dictionary`); map and array values are stored and returned by reference, so a
   caller who mutates a `Dictionary`, `List` or `byte[]` after inserting or reading it changes what the document
   encodes later (replicas can diverge).
-* **Names**: `ID` (an abbreviation), `AbstractType` (not abstract); one concept spelled several ways (`Count`/`Size`/
+* **Names**: `ID` (an abbreviation), `AbstractType` (not abstract) (done: `ItemId` and `YType`, and the global aliases `ID` and
+  `AbstractType` are removed from the code, 12e5ea7); one concept spelled several ways (`Count`/`Size`/
   `Length`, `Has`/`ContainsKey`, `Push`/`Add`, `Get`/indexer, V1/V2 aliases of the same method); JavaScript names
   (`Map`, `ForEach`, `Unshift`, `Entries()`, `Slice(start, end)`, `ToArray()` returning `IList`).
 * **Nullability**: every public type file has `#nullable disable`; members that return null are not annotated.
@@ -83,7 +84,7 @@ idiomatic .NET 11 API with the latest C# features where they fit. This plan repl
 
 Every package: suites green, update bytes unchanged, `PublicApi.txt` regenerated (`YCS_ACCEPT_API=1`), the Native AOT
 sample publishes without warnings, its public files annotated, and a rewrite script for the call sites it changes (so a
-rebase re-runs the script). Internal signatures stay `object`- and `ID`/`AbstractType`-based: the conversion is in the
+rebase re-runs the script). Internal signatures stayed `object`-based and named `ID`/`AbstractType` through a global alias until 12e5ea7: the conversion is in the
 API layer, so layout files need no edits. At most three API packages in flight.
 
 | pkg | concern | depends on |
@@ -102,7 +103,7 @@ API layer, so layout files need no edits. At most three API packages in flight.
 | A10 | `SyncProtocol` on spans; the samples, their tests, `networking.md` | — |
 | A11 | `ItemView`/`DecodedStruct`: annotations, `long Length`, non-positional `DecodedStruct` | A2; after 9.3 |
 | A12 | docs: `api.md`, `getting-started.md`, `untrusted-input.md` | all |
-| A13 | remove the remaining `#nullable disable` from public files; the aliases after layout step 9 | A1-A11 |
+| A13 | remove the remaining `#nullable disable` from public files (running elsewhere); the aliases after layout step 9 (done, 12e5ea7) | A1-A11 |
 
 Order with the layout work: wave 0 A0 (beside 7.0c, 9.3); wave 1 A1, A2, A3, A10 (beside 7.0c, 7.0d); wave 2 A5, A7,
 A9, A11 (beside 7.3a; 7.3b waits for A5); wave 3 A4a, A4b, A6, A8 (beside 7.3b, 7.3c); wave 4 A13, A12, then 7.4, 7.6

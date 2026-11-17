@@ -37,7 +37,7 @@ Verdicts: **identical**, **equivalent** (different code, the same observable beh
 | `followRedone` | `StructStore.FollowRedone` | identical |
 | `keepItem` | `ItemRef.KeepItemAndParents` | identical |
 | `isParentOf` | `UndoManager.IsParentOf` | identical |
-| `ContentType.copy`, `YType._copy` | `ContentType.Copy`, `YType.InternalCopy` (every shared type overrides it) | identical |
+| `ContentType.copy`, `YType._copy` | `TypeContent.Copy`, `YType.InternalCopy` (every shared type overrides it) | identical |
 | **utils/Snapshot.js** | | |
 | `Snapshot`, `createSnapshot`, `emptySnapshot` | `Snapshot`, `Snapshot.Empty` | identical |
 | `snapshot(doc)` | `YDoc.CreateSnapshot` | identical |
@@ -80,7 +80,7 @@ Verdicts: **identical**, **equivalent** (different code, the same observable beh
 | `DSDecoderV1`, `DSDecoderV2`, `UpdateDecoderV1`, `UpdateDecoderV2` | `UpdateDecoderV1`, `UpdateDecoderV2` (`ReadColumns`) | equivalent (bounds on every length and count) |
 | `UpdateDecoderV1.readJSON` | `YJson.Parse` | equivalent (a lone surrogate escape is read as Yjs reads it) |
 | `readKey` | `ReadKey` | identical |
-| `ContentAny` read and write | `ContentAny`, `AnyEncoding` | identical |
+| `ContentAny` read and write | `AnyEncoding` (read into the value arena through a `StagingTable`; written by `ItemRef.WriteValues`) | identical |
 | `ContentJSON` read and write | `ContentJson` | equivalent (`undefined` is read as `null` and written as `null`) |
 | **lib0** | | |
 | `writeVarUint`, `writeVarInt` (negative zero) | `Lib0Writer` | identical |

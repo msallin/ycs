@@ -5,12 +5,13 @@ and their C# counterparts in `src/Ycs`. Use it to find where a Yjs function live
 
 Two things to know before the tables:
 
-- `ID` in the code is a global alias of the public struct `ItemId`, and `AbstractType` an alias of `YType`.
 - A struct of a document's store (an item or a GC struct) is a **slot** of the document's `Slab`, not an object. An
   `ItemRef` is a (slab, handle) pair that names a slot and reads and writes its fields. `ItemRef.Left` and `ItemRef.Right`
-  return the `ItemRef` of the slot that the slot's link fields name, and `default(ItemRef)` is Yjs' `null`. The classes
-  `Item`, `GC` and `Skip` are the *decoded* form of a struct, held by the update reader, the pending store, the integration
-  plan and `MergeUpdates`; `ItemRef.Adopt` is the one place where a decoded struct enters a store.
+  return the `ItemRef` of the slot that the slot's link fields name, and `default(ItemRef)` is Yjs' `null`. No class
+  `Item`, `GC` or `Skip` exists: the *decoded* form of a struct is a row of a `StagingTable`, held by the update reader, the
+  integration plan and `UpdateOperations` (the pending store keeps its rest as an encoded v2 update);
+  `ItemRef.Adopt` is the one place where a staged struct enters a store. A String's characters and an Any's values are
+  ranges of the slab's arenas, not objects.
   [design-item-layout.md](design-item-layout.md) describes slots, handles, pages and the free lists.
 
 Verdicts: **identical** (the same control flow), **equivalent** (different code, the same observable behavior on valid
@@ -28,14 +29,14 @@ input), **differs** (see [Differences from Yjs](#differences-from-yjs)), **not p
 | `isDeletedByUndoStack` | `UndoManager.IsDeletedByStack` | identical |
 | `redoItem` | `UndoManager.RedoItem` | identical |
 | `Item` constructor, `info` bits (keep, countable, deleted, marker) | `ItemRef.New`, the flag bits of `Slot.Info` | equivalent |
-| `Item.getMissing` | `Item.FindMissing` (decoded items), `ItemRef.ResolveReferences` | equivalent |
+| `Item.getMissing` | `ItemRef.ResolveReferences` (from the staged fields; the missing clients are found by `StructStore.IntegrationPlan`) | equivalent |
 | `Item.integrate` (conflict loop, relinking, map value, length, delete if the parent is deleted) | `ItemRef.Integrate` | equivalent (also keeps `_mapCount`) |
 | `next`, `prev` | `ItemRef.Right`, `ItemRef.Left` | identical |
 | `Item.mergeWith` | `ItemRef.MergeWith` (`CanMergeWith` first), `YArrayBase.OnMerge` | equivalent |
 | `Item.delete` | `ItemRef.Delete` | equivalent (also keeps `_mapCount`) |
 | `Item.gc` | `ItemRef.Gc` | identical |
 | `Item.write` | `ItemRef.Write` | equivalent |
-| `readItemContent`, `contentRefs` | `EncodingUtils.ReadItemContent` | equivalent (an unknown content reference is a `YUpdateException`) |
+| `readItemContent`, `contentRefs` | `EncodingUtils.StructCursor.NextStaged` (into a `StagingTable`) | equivalent (an unknown content reference is a `YUpdateException`) |
 
 A garbage-collected item is the same slot rewritten as a GC struct (`StructStore.ReplaceWithGC`, `ItemRef.BecomeGC`), so
 every reference to it stays valid and reads a GC struct.
@@ -44,20 +45,21 @@ every reference to it stays valid and reads a GC struct.
 
 | JS | C# | Verdict |
 | --- | --- | --- |
-| `AbstractStruct` | `AbstractStruct` | identical |
-| `GC.integrate`, `GC.write`, `GC.getMissing`, `GC.delete` | the same names, on a decoded `GC` and on the `ItemRef` of a GC slot | identical |
-| `GC.mergeWith` | `GC.MergeWith` | identical (merges only a GC) |
-| `Skip.*` | `Skip.*` | equivalent (a Skip exists only while updates are merged or diffed; it has no `integrate`) |
+| `AbstractStruct` | `ItemRef` (a slot of the slab; `default` is `null`) | equivalent |
+| `GC.integrate`, `GC.write`, `GC.getMissing`, `GC.delete` | `ItemRef.Adopt` (a staged GC struct), `ItemRef.Write` and the members of the `ItemRef` of a GC slot | equivalent |
+| `GC.mergeWith` | `ItemRef.MergeWith` (merges only a GC into a GC) | identical |
+| `Skip.*` | `StagedKind.Skip` of a staged struct | equivalent (a Skip exists only in a staging table, while updates are merged, diffed or decoded; it is never adopted) |
 
 ### structs/Content*.js
 
 | JS | C# | Verdict |
 | --- | --- | --- |
-| `ContentAny`, `ContentBinary`, `ContentEmbed`, `ContentFormat` | the same names | identical or equivalent |
-| `ContentDeleted` | `ContentDeleted` | equivalent (a deleted slot holds no content object) |
+| `ContentBinary`, `ContentEmbed`, `ContentFormat` | the same names (objects in the slab's `Refs`) | identical or equivalent |
+| `ContentAny` | `SlotKind.Any`: the values are a range of the value arena (`Slab.Values`; `ItemRef.ValueSpan`) | equivalent |
+| `ContentDeleted` | `SlotKind.Deleted` | equivalent (a deleted slot holds no content) |
 | `ContentDoc` (constructor, copy, integrate, delete, write, read, `createDocFromOpts`) | `ContentDoc`, `YDocOptions` | equivalent |
 | `ContentJSON` | `ContentJson` | equivalent (`undefined` is read as `null`) |
-| `ContentString` (splice with the surrogate repair, mergeWith) | `ContentString` | equivalent (the same code units) |
+| `ContentString` (splice with the surrogate repair, mergeWith) | `SlotKind.String`: the text is a range of the character arena (`Slab.Chars`; `ItemRef.Chars`, `SplitChars`, `MergeChars`) | equivalent (the same code units) |
 | `ContentType` (delete, gc, read) | `ContentType`; a Type slot holds its type's index in the `TypeTable` | equivalent (`delete` adds every already deleted child to `_mergeStructs`, Yjs only those older than the transaction; the extra entries merge nothing) |
 
 ### utils/StructStore.js
@@ -136,7 +138,7 @@ every reference to it stays valid and reads a GC struct.
 
 | JS | C# | Verdict |
 | --- | --- | --- |
-| `ID`, `createID`, `compareIDs` | `ItemId` (a struct; `ID` in the code) | equivalent |
+| `ID`, `createID`, `compareIDs` | `ItemId` (a struct) | equivalent |
 | `writeID`, `readID` | the encoders and decoders | equivalent (client up to 2^53 - 1, clock up to 2^31 - 1) |
 | `findRootTypeKey` | `YDoc.FindRootTypeKey`, cached in `YType.FindRootTypeKey` | equivalent |
 | `isParentOf` | `UndoManager.IsParentOf` | equivalent |

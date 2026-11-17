@@ -5,7 +5,7 @@ How the shared types and their events map to Yjs 13.6.32: `types/YType.js`, `YAr
 `Utils/YEvent*.cs` and the observer part of `Utils/Transaction.cs`. The core is in
 [walkthrough-core.md](walkthrough-core.md). For the public shape of the types see [api.md](api.md).
 
-`AbstractType` in the code is a global alias of the public class `YType`. A type holds its items as `ItemHandle`s into its
+A type holds its items as `ItemHandle`s into its
 document's slab (`YType._startHeld`, `_itemHeld`, the `_map` values), not as references to item objects; `ItemRef` is what
 code reads and writes them through ([design-item-layout.md](design-item-layout.md)).
 
