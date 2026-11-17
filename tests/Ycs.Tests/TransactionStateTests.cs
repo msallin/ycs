@@ -187,6 +187,16 @@ public class TransactionStateTests
 
         doc.ApplyUpdate(source.EncodeStateAsUpdate());
 
-        Assert.AreEqual((0, 4), (doc.Store.ChangeCount, doc.Store.ChangeCapacity));
+        Assert.AreEqual((0, 0), (doc.Store.ChangeCount, doc.Store.ChangeCapacity));
+    }
+
+    [TestMethod]
+    public void Log_NewDocument_HoldsNoArray()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 5 });
+
+        doc.GetText("text");
+
+        Assert.AreEqual(0, doc.Store.ChangeCapacity);
     }
 }

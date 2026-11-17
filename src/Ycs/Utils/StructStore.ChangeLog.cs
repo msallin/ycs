@@ -10,8 +10,8 @@ internal sealed partial class StructStore
     // that the state before it, the state at the start of its cleanup, and the clients it changed are read from the
     // entries at and after those positions, whatever other transactions changed since. The entries of a client
     // chain through Previous, newest first (ClientStructs.LastChange). The log is emptied when the last batch of
-    // cleanups has finished.
-    private Change[] _changes = new Change[4];
+    // cleanups has finished. It holds no array until the first change: most documents are small and many never change.
+    private Change[] _changes = [];
     private int _changeCount;
     private long _generation = 1;
     private int _batches;
@@ -48,7 +48,7 @@ internal sealed partial class StructStore
         _changeCount = 0;
         if (_changes.Length > 1024)
         {
-            _changes = new Change[4];
+            _changes = [];
         }
     }
 
@@ -61,7 +61,7 @@ internal sealed partial class StructStore
 
         if (_changeCount == _changes.Length)
         {
-            Array.Resize(ref _changes, _changeCount * 2);
+            Array.Resize(ref _changes, Math.Max(4, _changeCount * 2));
         }
 
         structs.LoggedGeneration = _generation;
