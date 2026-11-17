@@ -24,7 +24,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
     // The slab the handles of the leaves name; the structs of one client list are in one store.
     private readonly Slab _slab;
 
-    public ClientStructs(Slab slab, int capacity = 4)
+    public ClientStructs(Slab slab, int capacity = 1)
     {
         _slab = slab;
         _single = new Leaf(Math.Clamp(capacity, 1, _leafCapacity));
