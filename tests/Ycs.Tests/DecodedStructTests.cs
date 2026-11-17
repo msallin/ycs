@@ -199,7 +199,7 @@ public class DecodedStructTests
 
         Assert.AreEqual(d.Kind == ItemKind.String ? ((ContentString)content).GetString() : null, d.Text);
         Assert.AreEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Key : null, d.FormatKey);
-        Assert.AreEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Value : null, d.FormatValue);
+        Assert.IsTrue(StagingDifferential.DeepEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Value : null, d.FormatValue), $"format value of {s.Id}");
         var type = d.Kind == ItemKind.Type ? ((ContentType)content).Type : null;
         Assert.AreEqual(type == null ? -1 : type.GetType().Name switch
         {
@@ -226,7 +226,8 @@ public class DecodedStructTests
 
         Assert.IsNotNull(dir, "interop/corpus/cases");
         var result = new List<byte[]>();
-        foreach (var file in Directory.GetFiles(Path.Combine(dir.FullName, "interop", "corpus", "cases"), "*.json"))
+        // Sorted: Directory.GetFiles' order depends on the file system, and the damaged inputs are drawn by index.
+        foreach (var file in Directory.GetFiles(Path.Combine(dir.FullName, "interop", "corpus", "cases"), "*.json").Order(StringComparer.Ordinal))
         {
             using var json = JsonDocument.Parse(File.ReadAllBytes(file));
             foreach (var update in json.RootElement.GetProperty("updates").EnumerateArray())
