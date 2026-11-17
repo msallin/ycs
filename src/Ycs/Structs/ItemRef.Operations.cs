@@ -90,13 +90,13 @@ internal readonly partial struct ItemRef
         var originClient = leftOrigin is { } lo ? clients.GetOrAdd(lo.Client) : -1;
         var rightOriginClient = rightOrigin is { } ro ? clients.GetOrAdd(ro.Client) : -1;
         var parentIndex = parent?.TableIndex(slab.Types) ?? -1;
-        var typeIndex = content is ContentType { Type: var type } ? type.TableIndex(slab.Types) : -1;
         var item = new ItemRef(slab, slab.Allocate());
         ref var slot = ref slab.Write(item._handle);
         slot.Clock = id.Clock;
         slot.Client = client;
+        var kind = (SlotKind)content.Ref;
         slot.Length = content.Length;
-        slot.Info = (((SlotKind)content.Ref).IsCountable() ? Slot.CountableFlag : 0) | (content.Ref << 8);
+        slot.Info = (kind.IsCountable() ? Slot.CountableFlag : 0) | (content.Ref << 8);
         slot.OriginClient = originClient;
         slot.OriginClock = leftOrigin?.Clock ?? 0;
         slot.ROriginClient = rightOriginClient;
@@ -105,19 +105,7 @@ internal readonly partial struct ItemRef
         slot.Right = right.Handle;
         slot.Parent = parentIndex;
         slab.SetKey(item._handle, parentSub);
-        if (typeIndex >= 0)
-        {
-            slot.Payload = typeIndex;
-        }
-        else if (content is not ContentDeleted)
-        {
-            slab.SetRef(item._handle, content);
-            if (content is ContentString text)
-            {
-                slot.Payload = CopyChars(slab, text);
-            }
-        }
-
+        StoreContent(slab, item._handle, kind, content);
         return item;
     }
 
@@ -171,8 +159,7 @@ internal readonly partial struct ItemRef
             l.Clock + l.Length == r.Clock &&
             ((l.Info ^ r.Info) & Slot.DeletedFlag) == 0 &&
             ((l.Info | r.Info) & Slot.HasRedoneFlag) == 0 &&
-            l.Kind != (int)SlotKind.Type &&
-            (l.Kind == (int)SlotKind.Deleted || Content.Mergeable);
+            ((SlotKind)l.Kind).IsMergeable();
     }
 
     /// <summary>Try to merge two items.</summary>
@@ -183,17 +170,7 @@ internal readonly partial struct ItemRef
             return false;
         }
 
-        if (Kind != SlotKind.Deleted && !Content.MergeWith(right.Content))
-        {
-            throw new InvalidOperationException(
-                $"The content of {right.Id.Client}:{right.Id.Clock} did not merge into its left neighbour's although its kind merges (a bug of " +
-                "Ycs). Nothing was changed.");
-        }
-
-        if (Kind == SlotKind.String)
-        {
-            MergeChars(right);
-        }
+        MergeContent(right);
 
         var parent = Parent;
         parent?.Doc?.Store.NoteDeparture();
@@ -222,7 +199,7 @@ internal readonly partial struct ItemRef
     /// </summary>
     public void FreeSlot()
     {
-        ReleaseChars();
+        ReleaseContent();
         FreeSlotKeepingChars();
     }
 
@@ -245,7 +222,7 @@ internal readonly partial struct ItemRef
     /// </summary>
     internal void BecomeGC()
     {
-        ReleaseChars();
+        ReleaseContent();
         ref var slot = ref Write();
         if (slot.Kind == (int)SlotKind.Type)
         {
@@ -330,22 +307,7 @@ internal readonly partial struct ItemRef
             }
 
             LeftOrigin = Left.IsItem ? Left.LastId : null;
-            switch (Kind)
-            {
-                case SlotKind.Deleted:
-                    break;
-                case SlotKind.Type:
-                    throw TypeContent.Unsplittable();
-                default:
-                    Content = (IContentEx)Content.Splice(offset);
-                    if (Kind == SlotKind.String)
-                    {
-                        CutCharsHead(offset);
-                    }
-
-                    break;
-            }
-
+            CutContentHead(offset);
             Length -= offset;
         }
 
@@ -549,9 +511,9 @@ internal readonly partial struct ItemRef
     // Countable stays what the content was (Yjs' item.countable is not touched by gc); no object is held.
     private void BecomeDeletedContent()
     {
-        ReleaseChars();
+        ReleaseContent();
         ref var slot = ref Write();
-        slot.Info = (slot.Info & ~(0xFF << 8)) | (ContentDeleted._ref << 8);
+        slot.Info = (slot.Info & ~(0xFF << 8)) | ((int)SlotKind.Deleted << 8);
         slot.Payload = 0;
         _slab.SetRef(_handle, null);
     }
@@ -583,14 +545,7 @@ internal readonly partial struct ItemRef
     public ItemRef SplitItem(Transaction transaction, int diff)
     {
         var kind = Kind;
-        if (kind == SlotKind.Type)
-        {
-            throw TypeContent.Unsplittable();
-        }
-
-        var content = kind == SlotKind.Deleted ? null : (IContentEx)Content.Splice(diff);
-        var rightChars = kind == SlotKind.String ? SplitChars(diff) : 0;
-        var rightLength = kind == SlotKind.Deleted ? Length - diff : content.Length;
+        var (rightPayload, rightLength) = SplitContent(diff, out var content);
         var parent = Parent;
         var parentSub = ParentSub;
         var parentIndex = parent?.TableIndex(_slab.Types) ?? -1;
@@ -618,7 +573,7 @@ internal readonly partial struct ItemRef
         right.Left = _handle;
         right.Right = left.Right;
         right.Parent = parentIndex;
-        right.Payload = rightChars;
+        right.Payload = rightPayload;
 
         if ((left.Info & Slot.HasRedoneFlag) != 0)
         {

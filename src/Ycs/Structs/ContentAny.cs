@@ -42,8 +42,6 @@ internal class ContentAny : IContentEx
 
     int IContentEx.Ref => _ref;
 
-    bool IContentEx.Mergeable => true;
-
     public IReadOnlyList<object> GetContent() => new ContentView(_content);
 
     internal object ValueAt(int index) => ValueFreezer.OnRead(_content[index]);

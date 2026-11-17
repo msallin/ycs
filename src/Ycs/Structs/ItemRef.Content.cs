@@ -97,6 +97,100 @@ internal readonly partial struct ItemRef
         }
     }
 
+    // Fills the content storage of the new slot at handle from the content object; the slot holds the kind and the length.
+    private static void StoreContent(Slab slab, int handle, SlotKind kind, IContentEx content)
+    {
+        if (kind == SlotKind.Type)
+        {
+            var typeIndex = ((ContentType)content).Type.TableIndex(slab.Types);
+            slab.Write(handle).Payload = typeIndex;
+        }
+        else if (kind.HasObject())
+        {
+            slab.SetRef(handle, content);
+            if (kind == SlotKind.String)
+            {
+                var payload = CopyChars(slab, (ContentString)content);
+                slab.Write(handle).Payload = payload;
+            }
+        }
+    }
+
+    // The part before offset leaves the item (integrated from an offset); a Type cannot be cut.
+    private void CutContentHead(int offset)
+    {
+        switch (Kind)
+        {
+            case SlotKind.Deleted:
+                break;
+            case SlotKind.Type:
+                throw TypeContent.Unsplittable();
+            case SlotKind.String:
+                Content = (IContentEx)Content.Splice(offset);
+                CutCharsHead(offset);
+                break;
+            default:
+                Content = (IContentEx)Content.Splice(offset);
+                break;
+        }
+    }
+
+    // Splits the content at diff, which this item keeps the part before: the right part's object (null for Deleted), its
+    // length and its payload; a Type cannot be split.
+    private (long Payload, int Length) SplitContent(int diff, out IContentEx content)
+    {
+        switch (Kind)
+        {
+            case SlotKind.Deleted:
+                content = null;
+                return (0, Length - diff);
+            case SlotKind.Type:
+                throw TypeContent.Unsplittable();
+            case SlotKind.String:
+                content = (IContentEx)Content.Splice(diff);
+                return (SplitChars(diff), content.Length);
+            default:
+                content = (IContentEx)Content.Splice(diff);
+                return (0, content.Length);
+        }
+    }
+
+    // Takes the right neighbour's content into this item's; Length is not yet the sum (see ItemRef.Chars.cs).
+    private void MergeContent(ItemRef right)
+    {
+        switch (Kind)
+        {
+            case SlotKind.Deleted:
+                break;
+            case SlotKind.String:
+                MergeObjects(right);
+                MergeChars(right);
+                break;
+            default:
+                MergeObjects(right);
+                break;
+        }
+    }
+
+    private void MergeObjects(ItemRef right)
+    {
+        if (!Content.MergeWith(right.Content))
+        {
+            throw new InvalidOperationException(
+                $"The content of {right.Id.Client}:{right.Id.Clock} did not merge into its left neighbour's although its kind merges (a bug of " +
+                "Ycs). Nothing was changed.");
+        }
+    }
+
+    // What the slot holds in the arenas ends: the item is collected, or its slot is freed.
+    private void ReleaseContent()
+    {
+        if (Kind == SlotKind.String)
+        {
+            ReleaseChars();
+        }
+    }
+
     private int HandleChecked()
     {
         Check();

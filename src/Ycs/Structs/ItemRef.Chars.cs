@@ -8,7 +8,8 @@ namespace Ycs;
 // Length the range's length, and the range equals the text of the content object at every write (a String is never empty:
 // the decoder and the inserts refuse an empty one).
 // Each write path of the text keeps it: NewItem (copy in), AppendChars (extend), SplitItem (payload + diff), MergeItemWith
-// (extend or copy), CutCharsHead (an item integrated from an offset), ReleaseChars (collected, freed).
+// (extend or copy), CutCharsHead (an item integrated from an offset), ReleaseChars (collected, freed): the String cases of
+// the dispatchers in ItemRef.Content.cs.
 //
 // Two windows have a slot whose Length lags its range: ExtendRun's AppendChars (the range is longer by the appended text until
 // the caller adds to Length) and MergeItemWith (the left range is extended before Length += right.Length). No compaction
@@ -75,10 +76,7 @@ internal readonly partial struct ItemRef
     private void ReleaseChars()
     {
         ref readonly var slot = ref Read();
-        if (slot.Kind == (int)SlotKind.String)
-        {
-            _slab.Chars.MarkDead(slot.Payload, slot.Length);
-        }
+        _slab.Chars.MarkDead(slot.Payload, slot.Length);
     }
 
     /// <summary>The text of a <see cref="SlotKind.String"/> item; valid until the item's content changes.</summary>

@@ -37,8 +37,6 @@ internal class ContentString : IContentEx
 
     int IContentEx.Ref => _ref;
 
-    bool IContentEx.Mergeable => true;
-
     public bool Countable => true;
 
     /// <summary>Length in UTF-16 code units, as in JavaScript.</summary>

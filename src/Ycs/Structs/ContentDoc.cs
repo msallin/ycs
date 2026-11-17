@@ -26,8 +26,6 @@ internal class ContentDoc : IContentEx
 
     int IContentEx.Ref => _ref;
 
-    bool IContentEx.Mergeable => false;
-
     public bool Countable => true;
     public int Length => 1;
 

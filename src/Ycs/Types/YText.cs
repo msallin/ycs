@@ -773,7 +773,7 @@ public partial class YText : YArrayBase
         }
 
         if (str != null && length > 0 && negatedAttributes == null && !currPos.Left.IsNull
-            && currPos.Left.CanExtendRun(transaction, this, currPos.Right, typeof(ContentString), ownClientId))
+            && currPos.Left.CanExtendRun(transaction, this, currPos.Right, SlotKind.String, ownClientId))
         {
             // Typing on at the end of this client's run: the run takes the text in place of a new item.
             var left = currPos.Left;

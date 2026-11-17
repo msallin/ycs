@@ -15,5 +15,5 @@ internal readonly partial struct ItemRef
 
     /// <summary><see cref="CanExtendRun"/> for <see cref="SlotKind.Any"/> values.</summary>
     internal bool CanExtendAnyRun(Transaction transaction, AbstractType parent, ItemRef right, long client) =>
-        CanExtendRun(transaction, parent, right, typeof(ContentAny), client);
+        CanExtendRun(transaction, parent, right, SlotKind.Any, client);
 }

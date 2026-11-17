@@ -13,7 +13,7 @@ internal readonly partial struct ItemRef
     /// is not deleted (the new item would be deleted at once), nobody observes the parent, and the transaction is
     /// the only one of its batch.
     /// </summary>
-    public bool CanExtendRun(Transaction transaction, AbstractType parent, ItemRef right, Type kind, long client)
+    public bool CanExtendRun(Transaction transaction, AbstractType parent, ItemRef right, SlotKind kind, long client)
     {
         // Not when the run would be split again at the end of the transaction (someone observes it), which costs
         // more than the item: a split copies a long run's text out of its builder.
@@ -25,7 +25,7 @@ internal readonly partial struct ItemRef
             && !transaction.Doc.RunExtensionsDisabledForTests
             && !parent.IsObserved(transaction)
             && !transaction.Doc.HasBeforeObserverCallsListeners
-            && Content?.GetType() == kind))
+            && Kind == kind))
         {
             return false;
         }
