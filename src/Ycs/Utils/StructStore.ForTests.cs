@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -43,10 +42,10 @@ internal sealed partial class StructStore
     /// and the slab; the structs a transaction touched always, a list of more than 1,024 structs only every count/256th time, so that a test stays linear in its
     /// edits.
     /// </summary>
-    internal void CheckForTests(Transaction transaction = null)
+    internal void CheckForTests(Transaction? transaction = null)
     {
         _checks++;
-        HashSet<YType> visited = null;
+        HashSet<YType>? visited = null;
         HashSet<int> handles = [];
         foreach (var (client, structs) in Clients)
         {

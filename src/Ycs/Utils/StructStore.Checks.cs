@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Buffers;
 
@@ -14,10 +13,10 @@ internal sealed partial class StructStore
     /// values, its push hint and its search markers. A collected type's item is excluded: it names the GC struct that
     /// replaced it. Only types that an item of the store reaches are visited.
     /// </summary>
-    private HashSet<YType> _typesSeen;
-    private List<YType> _typeList;
+    private HashSet<YType>? _typesSeen;
+    private List<YType>? _typeList;
 
-    private string ConsistencyViolation(ClientStructs structs, ref HashSet<YType> visited)
+    private string? ConsistencyViolation(ClientStructs structs, ref HashSet<YType>? visited)
     {
         foreach (var s in structs)
         {
@@ -72,7 +71,7 @@ internal sealed partial class StructStore
 
     // The links of an item as its slot holds them, read without a reference to a slot that is free: left and right name
     // attached items that name it back.
-    private string LinkViolation(ItemRef s)
+    private string? LinkViolation(ItemRef s)
     {
         var slot = Slab.Read(s.Handle);
         if (slot.Kind == 0)
@@ -99,7 +98,7 @@ internal sealed partial class StructStore
     /// after the collection links deleted items into its list, as in Yjs). A type is seen when an item reaches it; the
     /// check runs every count/256th time over more than 1,024 types.
     /// </summary>
-    private string CollectedTypeViolation()
+    private string? CollectedTypeViolation()
     {
         if (_typeList == null || (_typeList.Count > 1024 && _checks % (_typeList.Count / 256) != 0))
         {
@@ -122,7 +121,7 @@ internal sealed partial class StructStore
         return null;
     }
 
-    private string TypeViolation(YType type)
+    private string? TypeViolation(YType type)
     {
         if (!type.IsCollected && !type._itemHeld.IsNone && !IsHeld(type._itemHeld))
         {
@@ -139,7 +138,7 @@ internal sealed partial class StructStore
         {
             foreach (var (key, value) in type._map)
             {
-                if (!IsHeld(value) || Slab.Read(value.Value).Right >= 0 || (string)Slab.GetKey(value.Value) != key)
+                if (!IsHeld(value) || Slab.Read(value.Value).Right >= 0 || (string?)Slab.GetKey(value.Value) != key)
                 {
                     return $"the map value of key {key.Length} chars long is freed, has a right or names another key";
                 }
@@ -170,7 +169,7 @@ internal sealed partial class StructStore
     /// this store's slab or that shares it with another (<paramref name="handles"/> holds the ones seen), or whose slot
     /// contradicts itself (<see cref="SlotViolation(ItemRef)"/>).
     /// </summary>
-    private string SlotViolation(ClientStructs structs, HashSet<int> handles)
+    private string? SlotViolation(ClientStructs structs, HashSet<int> handles)
     {
         foreach (var s in structs)
         {
@@ -193,7 +192,7 @@ internal sealed partial class StructStore
     /// content, key, redone id and parent do not fit each other. A GC struct holds no links, origins, parent, content
     /// or key; an item holds a content object of its kind, and the index of a parent type that exists in the type table.
     /// </summary>
-    private string SlotViolation(ItemRef s)
+    private string? SlotViolation(ItemRef s)
     {
         if (!ReferenceEquals(s.Slab, Slab) || !Slab.TryRead(s.Handle, out var slot) || slot.IsFree)
         {
@@ -238,9 +237,9 @@ internal sealed partial class StructStore
         }
 
         var kind = (SlotKind)slot.Kind;
-        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || (kind is not (SlotKind.Deleted or SlotKind.Type or SlotKind.String or SlotKind.Any) && content.GetType() != ContentClassOf(kind)))
+        if (kind is SlotKind.Skip or SlotKind.Free || !Enum.IsDefined(kind) || (kind is not (SlotKind.Deleted or SlotKind.Type or SlotKind.String or SlotKind.Any) && content?.GetType() != ContentClassOf(kind)))
         {
-            return $"the slot of {id} holds the kind {kind}, its content is a {content.GetType().Name}";
+            return $"the slot of {id} holds the kind {kind}, its content is a {content?.GetType().Name}";
         }
 
         // A collected item keeps the Countable flag of what it was; its right part after a split is not countable.
@@ -263,7 +262,7 @@ internal sealed partial class StructStore
     }
 
     // The range of a String or Any slot lies inside a used part of a held page.
-    private static string RangeViolation<T>(string id, in Slot slot, Arena<T> arena) =>
+    private static string? RangeViolation<T>(string id, in Slot slot, Arena<T>? arena) =>
         arena != null && arena.Holds(slot.Payload, slot.Length) ? null : $"the range of {id} lies outside the used part of a held page";
 
     private static Type ContentClassOf(SlotKind kind) => kind switch
@@ -280,7 +279,7 @@ internal sealed partial class StructStore
     /// checks whatever the length of their lists: the structs added, those of its merge list, and their neighbours in
     /// the list (a merge changes the left one's links).
     /// </summary>
-    private string TouchedSlotViolation(Transaction transaction)
+    private string? TouchedSlotViolation(Transaction transaction)
     {
         foreach (var (client, structs) in Clients)
         {
@@ -324,7 +323,7 @@ internal sealed partial class StructStore
     /// store of more than 4,096 slots is checked every count/32nd time; that a range equals its text is checked by
     /// <see cref="SlotViolation(ItemRef)"/>, for the structs a transaction touched every time.
     /// </summary>
-    private string CharsViolation()
+    private string? CharsViolation()
     {
         if (Slab.LiveCount > 4096 && _checks % (Slab.LiveCount / 32) != 0)
         {
@@ -361,7 +360,7 @@ internal sealed partial class StructStore
     /// What is wrong with the slab as a whole, or null: its pages and free lists recount (<see cref="Slab.Violations"/>),
     /// and it holds as many live slots as the store holds structs, so that no slot lives without one.
     /// </summary>
-    private string SlabViolation()
+    private string? SlabViolation()
     {
         var structs = 0L;
         foreach (var list in Clients.Values)

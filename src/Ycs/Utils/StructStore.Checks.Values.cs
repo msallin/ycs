@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -11,7 +10,7 @@ internal sealed partial class StructStore
     /// value (every exit of a range clears it). A store of more than 4,096 slots is checked every count/32nd time; that a
     /// range lies in a held page is checked by <see cref="SlotViolation(ItemRef)"/>.
     /// </summary>
-    private string ValuesViolation()
+    private string? ValuesViolation()
     {
         if (Slab.LiveCount > 4096 && _checks % (Slab.LiveCount / 32) != 0)
         {

@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -11,9 +10,9 @@ public readonly partial struct ItemView
     /// target's lists when it is made (<paramref name="changes"/> null), the added and deleted ones of its changes when
     /// they are collected. A test of a long list stays linear in its edits.
     /// </summary>
-    internal static void CheckEvent(YEvent e, YChanges changes)
+    internal static void CheckEvent(YEvent e, YChanges? changes)
     {
-        var doc = e.Target.Doc;
+        var doc = e.Target.Doc!;
         if (changes != null)
         {
             foreach (var view in changes.Added.Concat(changes.Deleted))
