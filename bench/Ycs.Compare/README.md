@@ -794,6 +794,18 @@ on the new build shows no `ContentAny` and no `List<object>` (`alloc-types.txt`)
 `read-array` is the one cost: `StoredContent` of an Any item is a copy of its range (the enumeration survives the
 structs merging or leaving, and a compaction moves the range), 8 B per value, transient.
 
+### The decoded objects (layout 9.6, 2026-11-17, ycs only)
+
+Base `modernize` 0b68786 (an update is read into a staging table and, beside it, into `Item`, `GC`, `Skip` and content
+objects) against `layout-9-6` (the table only). One child process per workload and build, 3 timed runs, trace
+`automerge-paper` (`results/2026-11-17-layout-9-6/alloc-types.txt`, `COMPARE_ALLOC_TYPES=1`: no `Item`, `GC`, `Skip`,
+`ContentString`, `ContentAny` or `ContentDeleted` on the new build; load average about 2, a shared machine).
+
+| workload | base ms | 9.6 ms | alloc MiB base / 9.6 | held MiB base / 9.6 |
+| --- | ---: | ---: | ---: | ---: |
+| `apply-state-v1/ycs` (10 loads of the final state) | 67.2 | 57.3 | 57.6 / 38.2 | 2.7 / 2.7 |
+| `apply-updates/ycs` (259,778 updates, one transaction each) | 243.4 | 228.3 | 38.6 / 12.0 | 17.4 / 17.4 |
+
 ## Pinned versions
 
 `YDotNet` 0.7.0 and `YDotNet.Native` 0.7.0 (which pulls `YDotNet.Native.Linux`, `.MacOS`, `.Win32` 0.7.0), source

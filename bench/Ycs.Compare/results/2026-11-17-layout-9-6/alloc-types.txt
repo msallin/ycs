@@ -1,0 +1,71 @@
+== apply-state-v1/ycs (new)
+allocation ticks of apply-state-v1/ycs (timed runs: 3), 38.3 MiB per run sampled:
+   52.0%     150 ticks  Ycs.StagedStruct[]
+   25.1%     209 ticks  Ycs.Slot[]
+   10.1%      71 ticks  DeleteItem[]
+    4.4%      30 ticks  System.ValueTuple`3[System.Int32,System.Int32,System.Boolean][]
+    3.6%      37 ticks  System.Char[]
+    2.6%      25 ticks  System.ValueTuple`3[System.Int64,System.Int64,System.Int64][]
+    0.6%       7 ticks  Ycs.ItemHandle[]
+    0.4%       4 ticks  System.Collections.Generic.List`1[Ycs.DeleteSet+DeleteItem]
+    0.4%       4 ticks  System.Int64[]
+    0.2%       2 ticks  System.Object[]
+    0.2%       2 ticks  Ycs.YTypePlaceholder
+    0.1%       1 ticks  System.Diagnostics.Tracing.EventWrittenEventArgs
+    0.1%       1 ticks  MoreEventInfo
+    0.1%       1 ticks  System.Byte[]
+    0.1%       1 ticks  System.Collections.ObjectModel.ReadOnlyCollection`1[System.Object]
+    0.1%       1 ticks  System.IntPtr
+    0.1%       1 ticks  System.Int32[]
+== apply-updates/ycs (new)
+allocation ticks of apply-updates/ycs (timed runs: 3), 12.1 MiB per run sampled:
+   66.2%     191 ticks  Ycs.Slot[]
+   20.4%      73 ticks  System.Int64[]
+    6.2%      22 ticks  Ycs.ItemHandle[]
+    3.0%       9 ticks  System.Char[]
+    1.7%       6 ticks  System.Byte[]
+    1.7%       6 ticks  Leaf
+    0.3%       1 ticks  System.Diagnostics.Stopwatch
+    0.3%       1 ticks  System.UInt64
+    0.3%       1 ticks  System.Diagnostics.Tracing.EventWrittenEventArgs
+== apply-state-v1/ycs (base)
+allocation ticks of apply-state-v1/ycs (timed runs: 3), 57.7 MiB per run sampled:
+   34.8%     158 ticks  Ycs.StagedStruct[]
+   19.1%     325 ticks  Ycs.Item
+   16.2%     203 ticks  Ycs.Slot[]
+    6.9%      76 ticks  DeleteItem[]
+    5.4%      92 ticks  System.String
+    4.2%      59 ticks  Ycs.AbstractStruct[]
+    3.0%      45 ticks  System.Char[]
+    2.9%      30 ticks  System.ValueTuple`3[System.Int32,System.Int32,System.Boolean][]
+    2.6%      45 ticks  Ycs.ContentDeleted
+    1.9%      32 ticks  Ycs.ContentString
+    1.3%      22 ticks  System.ValueTuple`3[System.Int64,System.Int64,System.Int64][]
+    0.3%       5 ticks  Entry[System.Int64,System.Int32][]
+    0.2%       4 ticks  System.IntPtr
+    0.2%       4 ticks  System.Int64[]
+    0.2%       3 ticks  MoreEventInfo
+    0.2%       3 ticks  Node[System.String,System.ValueTuple`2[System.Int64,System.Int32]]
+    0.1%       2 ticks  System.Collections.Generic.Dictionary`2[System.Int64,System.Int32]
+    0.1%       2 ticks  System.Object[]
+    0.1%       1 ticks  System.Int32[]
+    0.1%       1 ticks  System.GCMemoryInfoData
+    0.1%       1 ticks  System.Byte[]
+    0.1%       1 ticks  System.Diagnostics.Tracing.EventWrittenEventArgs
+    0.1%       1 ticks  Ycs.YTypePlaceholder
+== apply-updates/ycs (base)
+allocation ticks of apply-updates/ycs (timed runs: 3), 38.7 MiB per run sampled:
+   46.8%     534 ticks  Ycs.Item
+   20.4%     188 ticks  Ycs.Slot[]
+   12.2%     139 ticks  System.String
+    9.2%     105 ticks  Ycs.ContentString
+    5.3%      61 ticks  System.Int64[]
+    3.0%      34 ticks  Ycs.ItemHandle[]
+    1.2%      14 ticks  System.Byte[]
+    0.6%       5 ticks  System.Char[]
+    0.4%       4 ticks  Leaf
+    0.4%       4 ticks  System.Object[]
+    0.3%       3 ticks  System.UInt32
+    0.1%       1 ticks  System.UInt64
+    0.1%       1 ticks  System.Diagnostics.Tracing.EventWrittenEventArgs
+    0.1%       1 ticks  System.IntPtr
