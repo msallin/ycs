@@ -7,6 +7,10 @@ namespace Ycs;
 // the decoder and the inserts refuse an empty one).
 // Each write path of the text keeps it: NewItem (copy in), AppendChars (extend), SplitItem (payload + diff), MergeItemWith
 // (extend or copy), CutCharsHead (an item integrated from an offset), ReleaseChars (collected, freed).
+//
+// Two windows have a slot whose Length lags its range: ExtendRun's AppendChars (the range is longer by the appended text until
+// the caller adds to Length) and MergeItemWith (the left range is extended before Length += right.Length). No compaction
+// hook may sit in them: compaction reads each slot's Length as its range's.
 internal readonly partial struct ItemRef
 {
     private const char Replacement = '\uFFFD';

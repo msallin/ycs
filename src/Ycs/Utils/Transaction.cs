@@ -621,7 +621,7 @@ public sealed partial class Transaction
             ds.TryGcDeleteSet(store, doc);
         }
 
-        StructStore.CompactMidBatchForTests(store.Slab);
+        StructStore.CompactForTests(store.Slab, true);
         ds.TryMergeDeleteSet(store);
 
         // On all affected store.clients props, try to merge.
@@ -667,10 +667,7 @@ public sealed partial class Transaction
             }
         }
 
-        if (StructStore.CompactionForTests != StructStore.CompactionMode.None)
-        {
-            store.Slab.CompactCharsForTests();
-        }
+        StructStore.CompactForTests(store.Slab, false);
 
         if (StructStore.CheckAfterTransactionsForTests)
         {

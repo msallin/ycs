@@ -8,7 +8,7 @@ internal sealed partial class StructStore
         /// <summary>Only when <see cref="CompactIfWorthwhile"/> says so, at the end of a batch.</summary>
         None,
 
-        /// <summary>After every transaction's cleanup and at the end of every batch.</summary>
+        /// <summary>After every transaction's cleanup and at the end of every batch; it replaces the production trigger.</summary>
         Always,
 
         /// <summary><see cref="Always"/>, and in the middle of a batch: at each struct added, each item made and each append to a run, and between the garbage collection and the merging of a transaction.</summary>
@@ -18,7 +18,8 @@ internal sealed partial class StructStore
     internal static CompactionMode CompactionForTests;
 
     /// <summary>
-    /// Compacts the character arena when its garbage outweighs the live characters and amounts to a largest page
+    /// Compacts the character arena when its garbage outweighs the live characters and the garbage made since the last
+    /// compaction amounts to a largest page and to the number of slots, which a compaction walks
     /// (<see cref="Arena{T}.WorthCompacting"/>). Called where no batch is in progress: nothing then holds an offset.
     /// </summary>
     internal void CompactIfWorthwhile()
@@ -27,16 +28,20 @@ internal sealed partial class StructStore
         {
             Slab.CompactCharsForTests();
         }
-        else if (Slab.CharsOrNull is { WorthCompacting: true })
+        else if (Slab.CharsOrNull is { } chars && chars.WorthCompacting(Slab.LiveCount))
         {
             Slab.CompactChars();
         }
     }
 
-    /// <summary>Compacts in the middle of a batch when the tests ask for it; the caller holds no offset.</summary>
-    internal static void CompactMidBatchForTests(Slab slab)
+    /// <summary>
+    /// Compacts where the test mode asks for it: in the middle of a batch (<paramref name="midBatch"/>, the caller holds
+    /// no offset and its slots' lengths equal their ranges') for <see cref="CompactionMode.MidBatch"/>, after a
+    /// transaction's cleanup for every mode but <see cref="CompactionMode.None"/>.
+    /// </summary>
+    internal static void CompactForTests(Slab slab, bool midBatch)
     {
-        if (CompactionForTests == CompactionMode.MidBatch)
+        if (midBatch ? CompactionForTests == CompactionMode.MidBatch : CompactionForTests != CompactionMode.None)
         {
             slab.CompactCharsForTests();
         }

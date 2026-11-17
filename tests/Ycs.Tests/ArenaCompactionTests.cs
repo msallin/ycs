@@ -34,6 +34,8 @@ public class ArenaCompactionTests
 
     private static Arena<char> Chars(YDoc doc) => doc.Store.Slab.Chars;
 
+    private static long Held(YDoc doc) => Enumerable.Range(0, 64).Sum(page => (long)Chars(doc).PageCapacity(page));
+
     // Many short runs on many pages, then most of them deleted: the arena holds more garbage than text.
     private static string TypeAndDeleteMost(YDoc doc)
     {
@@ -75,14 +77,14 @@ public class ArenaCompactionTests
         var doc = NewDoc();
         var expected = TypeAndDeleteMost(doc);
         var before = (doc.EncodeStateAsUpdate(format: UpdateFormat.V1), doc.EncodeStateAsUpdate(format: UpdateFormat.V2));
-        var pages = Chars(doc).PageCount;
+        var held = Held(doc);
 
         doc.Store.Slab.CompactChars();
 
         var after = (doc.EncodeStateAsUpdate(format: UpdateFormat.V1), doc.EncodeStateAsUpdate(format: UpdateFormat.V2));
         Assert.IsTrue(before.Item1.SequenceEqual(after.Item1) && before.Item2.SequenceEqual(after.Item2));
         Assert.AreEqual(expected, doc.GetText("t").ToString());
-        Assert.IsTrue(Chars(doc).PageCount <= pages);
+        Assert.IsLessThanOrEqualTo(held, Held(doc));
         doc.Store.CheckForTests();
     }
 
@@ -131,7 +133,7 @@ public class ArenaCompactionTests
 
         doc.Store.Slab.CompactChars();
 
-        Assert.AreEqual((0L, 0), (Chars(doc).Live, Chars(doc).PageCount - Chars(doc).PageCount));
+        Assert.AreEqual((0L, 0), (Chars(doc).Live, Chars(doc).PageCount));
         doc.Store.CheckForTests();
     }
 
@@ -171,9 +173,9 @@ public class ArenaCompactionTests
         var a = arena.Append(['a', 'b', 'c', 'd']);
         arena.MarkDead(a, 4);
 
-        Assert.IsFalse(arena.WorthCompacting);
+        Assert.IsFalse(arena.WorthCompacting(0));
         arena.MarkDead(arena.Append(['e', 'f', 'g', 'h']), 4);
-        Assert.IsTrue(arena.WorthCompacting);
+        Assert.IsTrue(arena.WorthCompacting(0));
     }
 
     [TestMethod]
@@ -196,5 +198,97 @@ public class ArenaCompactionTests
 
         TestContext.WriteLine($"100,000 characters typed in one transaction: {typed} held, {Held()} after compaction, live {chars.Live}, dead {chars.Dead}");
         Assert.IsTrue(Held() <= 150_000, $"{Held()} characters held");
+    }
+
+    // Two pages of 32 Ki characters, each thinned to every other character (exactly half live): a compaction frees
+    // nothing it could not free before, and the state stays as it is. With extraSlots map entries the walk is dear.
+    private static (YDoc Doc, YText Text) KnifeEdge(int extraSlots)
+    {
+        const int page = 32 * 1024;
+        var doc = NewDoc();
+        var text = doc.GetText("t");
+        text.Insert(0, new string('a', page));
+        var other = new YDoc(new YDocOptions { ClientId = 2 });
+        other.ApplyUpdate(doc.EncodeStateAsUpdate());
+        other.GetText("t").Insert(page, new string('b', page));
+        doc.ApplyUpdate(other.EncodeStateAsUpdate(doc.EncodeStateVector()));
+        if (extraSlots > 0)
+        {
+            var map = doc.GetMap("m");
+            doc.Transact(_ =>
+            {
+                for (var i = 0; i < extraSlots; i++)
+                {
+                    map["k" + i.ToString(System.Globalization.CultureInfo.InvariantCulture)] = i;
+                }
+            });
+        }
+
+        for (var half = 0; half < 2; half++)
+        {
+            doc.Transact(_ =>
+            {
+                for (var i = page / 2 - 1; i >= 0; i--)
+                {
+                    text.Remove(half * page / 2 + 2 * i, 1);
+                }
+            });
+        }
+
+        return (doc, text);
+    }
+
+    private static int CompactionsOfInsertDeletePairs(int extraSlots, int pairs)
+    {
+        var (doc, text) = KnifeEdge(extraSlots);
+        var before = Chars(doc).CompactionCount;
+
+        for (var i = 0; i < pairs; i++)
+        {
+            text.Insert(0, "x");
+            text.Remove(0, 1);
+        }
+
+        doc.Store.CheckForTests();
+        return Chars(doc).CompactionCount - before;
+    }
+
+    [TestMethod]
+    public void EndOfBatch_StateThatACompactionDoesNotChange_CompactsOncePer32KiOfNewGarbage()
+    {
+        Assert.IsLessThanOrEqualTo(1, CompactionsOfInsertDeletePairs(0, 400));
+    }
+
+    [TestMethod]
+    [TestCategory("Slow")]
+    public void EndOfBatch_ADocumentOfAMillionSlots_CompactsOncePerMillionCharactersOfNewGarbage()
+    {
+        Assert.IsLessThanOrEqualTo(1, CompactionsOfInsertDeletePairs(1_000_000, 200));
+    }
+
+    [TestMethod]
+    public void MidBatchCompaction_EveryTimeInALargeDocument_KeepsTheRangesOfTheTextEdited()
+    {
+        using var _ = StaticScope.Set(ref Slab.CompactEveryTimeForTests, true);
+        using var __ = StaticScope.Set(ref StructStore.CompactionForTests, StructStore.CompactionMode.MidBatch);
+        var doc = NewDoc();
+        var text = doc.GetText("t");
+        var expected = new System.Text.StringBuilder();
+        for (var i = 0; i < 2_300; i++)
+        {
+            var piece = (char)('a' + i % 26);
+            text.Insert(0, piece.ToString());
+            expected.Insert(0, piece);
+        }
+
+        for (var i = 0; i < 100; i++)
+        {
+            text.Insert(i * 3, "YZ");
+            expected.Insert(i * 3, "YZ");
+            text.Remove(i, 2);
+            expected.Remove(i, 2);
+        }
+
+        Assert.AreEqual((expected.ToString(), true), (text.ToString(), doc.Store.Slab.LiveCount > 2048));
     }
 }

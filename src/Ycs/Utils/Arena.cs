@@ -18,8 +18,8 @@ internal static class Arena
 /// </summary>
 /// <remarks>
 /// A run lies in one page. Page k, counted among the pages held, holds <c>min(first * 2^k, max)</c> elements (more when
-/// a run needs it). A run longer than <c>max</c> gets a page of its own, twice its length, with no reservation: it grows in place while it ends at the page's used part. A run that outgrows its room
-/// is copied to the write end with as much slack again, kept in a tail table: run end offset to the end of its
+/// a run needs it). A run longer than <c>max</c> gets a page of its own, twice its length, with no reservation: it grows in place while it ends at the page's used part.
+/// A run that outgrows its room is copied to the write end with as much slack again, kept in a tail table: run end offset to the end of its
 /// reservation, so two runs growing alternately copy O(log n) times. A table entry is the only owner of the space
 /// between a run's end and its reservation end; a run split in two leaves the entry with the right part, which holds
 /// the end. Per page, <c>Used = live + dead + reserved</c>; the page's elements past <c>Used</c> are unwritten.
@@ -45,6 +45,9 @@ internal sealed class Arena<T>
     private int _write = -1;
     private long _live;
     private long _dead;
+    private long _deadAfterCompaction;
+    private int _compactions;
+    private int _freeing;
 
     public Arena(int firstPage, int maxPage)
     {
@@ -61,8 +64,15 @@ internal sealed class Arena<T>
     /// <summary>The pages held.</summary>
     public int PageCount => _pages.Count - _released.Count;
 
-    /// <summary>Garbage outweighs the live elements and amounts to a largest page: a compaction frees whole pages.</summary>
-    public bool WorthCompacting => _dead > _live && _dead >= _max;
+    /// <summary>Compactions done.</summary>
+    public int CompactionCount => _compactions;
+
+    /// <summary>
+    /// Garbage outweighs the live elements and the garbage made since the last compaction amounts to a largest page and
+    /// to <paramref name="floor"/> (the caller's cost of a compaction, in elements): each compaction is paid for by that
+    /// much new garbage, whatever it freed.
+    /// </summary>
+    public bool WorthCompacting(long floor) => _dead > _live && _dead - _deadAfterCompaction >= Math.Max(_max, floor);
 
     /// <summary>The runs that have room reserved after them.</summary>
     public int TailCount => _tails.Count;
@@ -168,7 +178,10 @@ internal sealed class Arena<T>
         Forget(offset, length);
     }
 
-    /// <summary>Replaces the elements from <paramref name="offset"/> on by <paramref name="values"/>, which lie within the used part of the page; no run is added or ended.</summary>
+    /// <summary>
+    /// Replaces the elements from <paramref name="offset"/> on by <paramref name="values"/>, which lie within the used
+    /// part of the page; no run is added or ended.
+    /// </summary>
     public void Overwrite(long offset, ReadOnlySpan<T> values)
     {
         var page = PageAt(offset);
@@ -209,6 +222,7 @@ internal sealed class Arena<T>
         }
 
         _tails.Clear();
+        _freeing = free.Count(f => f);
         if (_write >= 0 && free[_write])
         {
             _write = -1;
@@ -226,6 +240,7 @@ internal sealed class Arena<T>
             relocate(tag, moved);
         }
 
+        _freeing = 0;
         for (var number = 0; number < free.Length; number++)
         {
             if (free[number])
@@ -242,6 +257,8 @@ internal sealed class Arena<T>
 
         _live = total;
         _dead = used - total - Reserved();
+        _deadAfterCompaction = _dead;
+        _compactions++;
     }
 
     /// <summary>
@@ -397,7 +414,8 @@ internal sealed class Arena<T>
         return start;
     }
 
-    private long NextSize() => Math.Min(_max, (long)_first << Math.Min(PageCount, 30));
+    // Pages a compaction is about to free do not count: it sizes the pages it opens by the ones that remain.
+    private long NextSize() => Math.Min(_max, (long)_first << Math.Min(PageCount - _freeing, 30));
 
     private int Open(int size)
     {

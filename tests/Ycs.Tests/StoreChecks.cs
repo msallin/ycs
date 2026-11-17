@@ -8,7 +8,7 @@ namespace Ycs;
 /// Every transaction of this suite ends with a recount of the struct lists (starts, leaves and run-head index) and a
 /// comparison of every struct with its slot. YCS_LEAF_CAPACITY sets the leaf capacity of the lists (default: the
 /// library's); YCS_SLAB_FIRST the first size of the slab's page 0 (1: every allocation of it copies); YCS_ARENA_PAGE=n
-/// pages of n characters at most; YCS_ARENA_COPY=1 a merge always copies; YCS_COMPACT=always compacts the character arena after every transaction, =midbatch also in the middle of a batch (each struct added, item made and run appended to, and between gc and merge); YCS_POISON=1 replaces a collected type's handle by an unrelated live item's (a reused slot), so that any read of the struct shows.
+/// pages of n characters at most; YCS_ARENA_COPY=1 a merge always copies; YCS_COMPACT=always compacts the character arena after every transaction, =midbatch also in the middle of a batch (each struct added, item made and run appended to, and between gc and merge), YCS_COMPACT_EVERY=1 lifts the sampling of a slab of more than 2,048 slots; YCS_POISON=1 replaces a collected type's handle by an unrelated live item's (a reused slot), so that any read of the struct shows.
 /// </summary>
 [TestClass]
 public static class StoreChecks
@@ -38,6 +38,7 @@ public static class StoreChecks
         }
 
         ItemRef.CopyOnMergeForTests = Environment.GetEnvironmentVariable("YCS_ARENA_COPY") == "1";
+        Slab.CompactEveryTimeForTests = Environment.GetEnvironmentVariable("YCS_COMPACT_EVERY") == "1";
         StructStore.CompactionForTests = Environment.GetEnvironmentVariable("YCS_COMPACT") switch
         {
             "always" => StructStore.CompactionMode.Always,

@@ -427,8 +427,9 @@ Garbage is collected content and copied-away runs. A deleted item that is not co
 its encoding reads them (gc off, kept items, snapshots).
 
 Compaction is document-wide (`Slab.CompactChars`, started by `StructStore.CompactIfWorthwhile`). It runs at the end of
-the outermost batch, beside `Slab.AllowReuse`, when the dead characters exceed the live ones and amount to a largest
-page; never in the middle of a batch outside the test modes. One walk of the slab's pages lists the ranges of every slot
+the outermost batch, beside `Slab.AllowReuse`, when the dead characters exceed the live ones and the garbage made since
+the last compaction amounts to a largest page and to the number of slots (the walk costs O(slots), so each compaction is
+paid for by that much new garbage, whatever it freed); never in the middle of a batch outside the test modes. One walk of the slab's pages lists the ranges of every slot
 of kind String (a free slot, pending reuse included, holds none; a deleted but uncollected one is listed). The arena
 copies the runs of every page less than half live (the write page included) to a new write end, tells the slab each
 run's new offset, frees those pages (Debug fills them with a marker character) and drops the tail table. Only the slots
@@ -439,7 +440,8 @@ does not keep the caller's objects alive until a compaction.
 
 The test modes (`YCS_COMPACT=always|midbatch`) compact after every transaction's cleanup, and mid-batch at each struct
 added, each item made, each append to a run and between gc and merge; a store of more than 2,048 slots compacts every
-count/64th time, so that a test stays linear in its edits.
+count/64th time (`YCS_COMPACT_EVERY=1` lifts that), so that a test stays linear in its edits. Two windows have a slot whose
+`Length` lags its range, the append of `ExtendRun` and `MergeItemWith` before `Length += right.Length`; no hook sits in them.
 
 ### 2.4 Handles: lifetime and slot reuse
 

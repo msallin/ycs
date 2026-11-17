@@ -29,6 +29,7 @@ public static class StoreChecks
         }
 
         ItemRef.CopyOnMergeForTests = Environment.GetEnvironmentVariable("YCS_ARENA_COPY") == "1";
+        Slab.CompactEveryTimeForTests = Environment.GetEnvironmentVariable("YCS_COMPACT_EVERY") == "1";
         StructStore.CompactionForTests = Environment.GetEnvironmentVariable("YCS_COMPACT") switch
         {
             "always" => StructStore.CompactionMode.Always,

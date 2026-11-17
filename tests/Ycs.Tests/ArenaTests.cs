@@ -464,13 +464,11 @@ public class ArenaTests
         var random = new Random(seed);
         var arena = new Arena<char>(first, max);
         var runs = new List<Run>();
-        Run current = null;
 
         IEnumerable<(long, int)> Live()
         {
             foreach (var run in runs.ToArray())
             {
-                current = run;
                 yield return (run.Offset, run.Length);
             }
         }
