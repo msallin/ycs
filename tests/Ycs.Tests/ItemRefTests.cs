@@ -113,4 +113,35 @@ public class ItemRefTests
 
         Assert.IsTrue((item.IsSameKind(NewItem(slab, 2, 1, "b")), item.IsSameKind(gc), gc.IsSameKind(other)) == (true, false, true));
     }
+
+    [TestMethod]
+    public void SplitItem_ItemWithRedone_RightPartRedoneMovesByTheOffset()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        doc.GetText("t").Insert(0, "abcd");
+        ItemId? leftRedone = null;
+        ItemId? rightRedone = null;
+
+        doc.Transact(transaction =>
+        {
+            doc.Store.Find(new ItemId(1, 0)).Redone = new ItemId(7, 100);
+            var right = doc.Store.GetItemCleanStart(transaction, new ItemId(1, 1));
+            leftRedone = doc.Store.Find(new ItemId(1, 0)).Redone;
+            rightRedone = right.Redone;
+        });
+
+        Assert.AreEqual((new ItemId(7, 100), new ItemId(7, 101)), (leftRedone, rightRedone));
+    }
+
+    [TestMethod]
+    public void MergeWith_RightPartKept_MergedItemIsKept()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 1 });
+        doc.GetText("t").Insert(0, "abcd");
+        doc.Transact(transaction => doc.Store.GetItemCleanStart(transaction, new ItemId(1, 2)).Keep = true);
+
+        var merged = doc.Store.Find(new ItemId(1, 0));
+
+        Assert.AreEqual((4, true), (merged.Length, merged.Keep));
+    }
 }

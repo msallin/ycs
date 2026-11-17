@@ -162,4 +162,27 @@ public class RelativePositionTests : YTestBase
 
         Assert.AreEqual("The type is not part of a document. (Parameter 'type')", e.Message);
     }
+
+    [TestMethod]
+    public void TryResolve_AfterUndoAndARemoteSplitOfTheUndoneItem_ResolvesToTheSameCharacter()
+    {
+        var a = new YDoc();
+        var b = new YDoc();
+        var ta = a.GetText("t");
+        var tb = b.GetText("t");
+        var undoManager = new UndoManager(ta);
+        ta.Insert(0, "abc");
+        b.ApplyUpdate(a.EncodeStateAsUpdate());
+        var relative = RelativePosition.FromIndex(ta, 2);
+
+        undoManager.StopCapturing();
+        ta.Remove(0, 3);
+        undoManager.Undo();
+        tb.Insert(1, "x");
+        a.ApplyUpdate(b.EncodeStateAsUpdate(a.EncodeStateVector()));
+
+        Assert.IsTrue(relative.TryResolve(a, out var absolute));
+        var text = ta.ToString();
+        Assert.AreEqual('c', text[absolute.Index], $"text '{text}', index {absolute.Index}");
+    }
 }
