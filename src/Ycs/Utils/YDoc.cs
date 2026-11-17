@@ -146,7 +146,7 @@ public partial class YDoc
                 s.store.IntegrationSteps = s.limits.MaxIntegrationSteps;
                 try
                 {
-                    s.store.ApplyUpdate(tr, s.update.Structs, s.update.DeleteSet, s.limits);
+                    s.store.ApplyUpdate(tr, s.update.Staging, s.update.Structs, s.update.DeleteSet, s.limits);
                 }
                 finally
                 {

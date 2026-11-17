@@ -390,8 +390,9 @@ internal sealed partial class StructStore
     }
 
     /// <summary>
-    /// Applies the decoded structs and delete set of one update in <paramref name="transaction"/>
-    /// (Yjs' <c>readUpdateV2</c> after <c>readClientsStructRefs</c>).
+    /// Applies the structs and delete set of one update in <paramref name="transaction"/>
+    /// (Yjs' <c>readUpdateV2</c> after <c>readClientsStructRefs</c>): the lease's staging table, with the decoded
+    /// objects <paramref name="structs"/> that are adopted at the table's positions. The lease stays open until this returns.
     /// <br/>
     /// First the integration is planned without changing anything: which structs integrate in which
     /// order, which wait for missing structs, and whether nesting or the pending limits of
@@ -405,14 +406,14 @@ internal sealed partial class StructStore
     /// See docs/api.md, "Atomicity".
     /// </summary>
     /// <param name="retrying">For the pending structs themselves, which were admitted to pending when they arrived.</param>
-    internal void ApplyUpdate(Transaction transaction, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, UpdateLimits limits, bool retrying = false)
+    internal void ApplyUpdate(Transaction transaction, StagingTable table, Dictionary<long, List<AbstractStruct>> structs, DeleteSet ds, UpdateLimits limits, bool retrying = false)
     {
         // The conflict resolution walks items: it must find the ones Yjs has.
         transaction.MaterializeRunExtensions();
 
         var plan = _spare ?? new IntegrationPlan(this);
         _spare = null;
-        plan.Plan(structs, limits.MaxDepth);
+        plan.Plan(table, structs, limits.MaxDepth);
         if (transaction.Doc.GarbageCollection)
         {
             plan.CheckGarbageCollection(transaction.Doc, ds, PendingDs);
@@ -432,7 +433,7 @@ internal sealed partial class StructStore
             }
         }
 
-        var restMerged = !retrying && CheckPendingLimits(limits, retry, restUpdate, restStructs, plan.Rest, PendingDs.Growth(ds, plan));
+        var restMerged = !retrying && CheckPendingLimits(limits, retry, restUpdate, restStructs, plan, PendingDs.Growth(ds, plan));
 
         plan.Execute(transaction);
 
@@ -452,7 +453,7 @@ internal sealed partial class StructStore
 
             if (!restMerged)
             {
-                Pending.Add(restUpdate, restStructs, plan.Rest);
+                Pending.Add(restUpdate, restStructs, plan);
             }
         }
 
@@ -490,7 +491,7 @@ internal sealed partial class StructStore
             using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, count, maxDepth: int.MaxValue);
             try
             {
-                ApplyUpdate(transaction, lease.Structs, lease.DeleteSet, limits, retrying: true);
+                ApplyUpdate(transaction, lease.Staging, lease.Structs, lease.DeleteSet, limits, retrying: true);
             }
             catch (YUpdateException e) when (!e.PartlyApplied)
             {

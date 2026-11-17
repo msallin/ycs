@@ -137,6 +137,73 @@ public class IntegrationPlanReuseTests
         Assert.AreEqual(Convert.ToBase64String(doc.EncodeStateAsUpdate()), Convert.ToBase64String(copy.EncodeStateAsUpdate()));
     }
 
+    [TestMethod]
+    public void ApplyUpdate_TypeAtTheIndexOfAnEarlierUpdatesRootType_IsCheckedAgainstItsOwnParent()
+    {
+        // The reader's table is reused: index 0 of this update's table is index 0 of the last one's, whose first type sat in
+        // a root (depth 1) and must not stand for this update's type, nested at the limit.
+        var doc = new YDoc(new YDocOptions { Limits = new UpdateLimits { MaxDepth = 3 } });
+        doc.ApplyUpdate(NestedArrays(3));
+
+        Assert.ThrowsExactly<YUpdateException>(() => doc.ApplyUpdate(ArrayIn(parentClient: 5, parentClock: 2)));
+    }
+
+    [TestMethod]
+    public void CheckGarbageCollection_ItemAtTheIndexOfAnEarlierUpdatesItem_ReadsItsOwnParentAndKey()
+    {
+        // The plan is reused with the reader's table: the first update's origin-only item at index 0 (a value of the
+        // key "s" of root r9) must leave nothing that the next update's item at index 0 (a value of key "k" of N) reads.
+        var doc = new YDoc(new YDocOptions { ClientId = 1, GarbageCollection = true });
+        doc.ApplyUpdate(Convert.FromBase64String("AQEJACQBAnI5AXMCYWIBCQEBAQ=="));
+        doc.ApplyUpdate(Convert.FromBase64String("AgEDACcBAXIBbgEBAgAkAAMAAWsCYWIA"));
+        var plan = new StructStore.IntegrationPlan(doc.Store);
+
+        using (var first = UpdateReader.Read(OriginOnlyItem(), 0, OriginOnlyItem().Length, v2: false, long.MaxValue))
+        {
+            plan.Plan(first.Staging, first.Structs, int.MaxValue);
+            plan.CheckGarbageCollection(doc, first.DeleteSet, doc.Store.PendingDs);
+            plan.Clear();
+        }
+
+        var resend = Convert.FromBase64String("AQECACQAAwABawRhYmNkAgIBAwEDAQAB");
+        using var second = UpdateReader.Read(resend, 0, resend.Length, v2: false, long.MaxValue);
+        plan.Plan(second.Staging, second.Structs, int.MaxValue);
+
+        Assert.ThrowsExactly<YUpdateException>(() => plan.CheckGarbageCollection(doc, second.DeleteSet, doc.Store.PendingDs));
+    }
+
+    private static byte[] OriginOnlyItem()
+    {
+        var writer = new Lib0Writer();
+        writer.WriteVarUint(1);
+        writer.WriteVarUint(1);
+        writer.WriteVarUint(4);
+        writer.WriteVarUint(0);
+        writer.WriteByte(4 | 0x80);
+        writer.WriteVarUint(9);
+        writer.WriteVarUint(0);
+        writer.WriteVarString("q");
+        writer.WriteVarUint(0);
+        return writer.ToArray();
+    }
+
+    /// <summary>A v1 update of client 6: one array nested in the item <paramref name="parentClient"/>:<paramref name="parentClock"/>.</summary>
+    private static byte[] ArrayIn(ulong parentClient, ulong parentClock)
+    {
+        var writer = new Lib0Writer();
+        writer.WriteVarUint(1);
+        writer.WriteVarUint(1);
+        writer.WriteVarUint(6);
+        writer.WriteVarUint(0);
+        writer.WriteByte(7);
+        writer.WriteVarUint(0);
+        writer.WriteVarUint(parentClient);
+        writer.WriteVarUint(parentClock);
+        writer.WriteVarUint(YArray.YArrayRefId);
+        writer.WriteVarUint(0);
+        return writer.ToArray();
+    }
+
     /// <summary>A v1 update of client 5: <paramref name="depth"/> arrays, each nested in the one before, the first in root 'a'.</summary>
     private static byte[] NestedArrays(int depth)
     {
