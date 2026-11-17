@@ -539,9 +539,16 @@ public abstract partial class YArrayBase : YType
         // Iterate to right if possible. Within a run the index jumps over what the loop passes (ClientStructs.SeekRight),
         // and the loop takes the last steps: when the visible length reaches index exactly at an item's end, it steps
         // on to that item's right neighbour, whichever it is.
+        // Walk allocates nothing, so a ref Slot taken at a step stays valid through it.
         var steps = 0;
-        while (!p.Right.IsNull && pIndex < index)
+        while (true)
         {
+            ref readonly var s = ref p.Peek();
+            if (s.Right < 0 || pIndex >= index)
+            {
+                break;
+            }
+
             if (store != null && ++steps == literalSteps)
             {
                 steps = 0;
@@ -555,14 +562,14 @@ public abstract partial class YArrayBase : YType
                 }
             }
 
-            if (!p.Deleted && p.Countable)
+            if ((s.Info & (Slot.DeletedFlag | Slot.CountableFlag)) == Slot.CountableFlag)
             {
-                if (index < pIndex + p.Length)
+                if (index < pIndex + s.Length)
                 {
                     break;
                 }
 
-                pIndex += p.Length;
+                pIndex += s.Length;
             }
 
             p = p.Right.AsItem;
@@ -570,7 +577,7 @@ public abstract partial class YArrayBase : YType
 
         // Iterate to left if necessary (might be that pIndex > index); within a run the index jumps (ClientStructs.SeekLeft).
         steps = 0;
-        while (!p.Left.IsNull && pIndex > index)
+        while (pIndex > index && p.Peek().Left >= 0)
         {
             if (store != null && ++steps == literalSteps && store.TryFindPosition(p, out var run, out var at))
             {
@@ -589,9 +596,11 @@ public abstract partial class YArrayBase : YType
             {
                 break;
             }
-            else if (!p.Deleted && p.Countable)
+
+            ref readonly var q = ref p.Peek();
+            if ((q.Info & (Slot.DeletedFlag | Slot.CountableFlag)) == Slot.CountableFlag)
             {
-                pIndex -= p.Length;
+                pIndex -= q.Length;
             }
         }
 
@@ -601,8 +610,21 @@ public abstract partial class YArrayBase : YType
         // walk ends at the same item whether a run extended in place (ItemRef.ExtendRun) is one item or Yjs' several:
         // their boundaries continue each other by clock.
         steps = 0;
-        while (!p.Left.IsNull && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
+        var slab = p.Slab;
+        while (true)
         {
+            ref readonly var s = ref p.Peek();
+            if (s.Left < 0)
+            {
+                break;
+            }
+
+            ref readonly var l = ref slab.Read(s.Left);
+            if (l.Client != s.Client || l.Clock + l.Length != s.Clock)
+            {
+                break;
+            }
+
             if (store != null && ++steps == literalSteps && store.TryFindPosition(p, out var structs, out var position))
             {
                 // The rest of the walk: to the run's head, subtracting what it steps onto.
@@ -616,9 +638,11 @@ public abstract partial class YArrayBase : YType
             {
                 break;
             }
-            else if (!p.Deleted && p.Countable)
+
+            ref readonly var q = ref p.Peek();
+            if ((q.Info & (Slot.DeletedFlag | Slot.CountableFlag)) == Slot.CountableFlag)
             {
-                pIndex -= p.Length;
+                pIndex -= q.Length;
             }
         }
 

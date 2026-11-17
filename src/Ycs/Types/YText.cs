@@ -369,20 +369,17 @@ public partial class YText : YArrayBase
                 throw new InvalidOperationException("Unexpected");
             }
 
-            switch (right.Content)
+            ref readonly var slot = ref right.Peek();
+            if ((slot.Info & Slot.DeletedFlag) == 0)
             {
-                default:
-                    if (!right.Deleted)
-                    {
-                        Index += right.Length;
-                    }
-                    break;
-                case ContentFormat cf:
-                    if (!right.Deleted)
-                    {
-                        UpdateCurrentAttributes(ref CurrentAttributes, cf);
-                    }
-                    break;
+                if (slot.Kind == ContentFormat._ref)
+                {
+                    UpdateCurrentAttributes(ref CurrentAttributes, (ContentFormat)right.Content);
+                }
+                else
+                {
+                    Index += slot.Length;
+                }
             }
 
             Left = right;
@@ -412,27 +409,26 @@ public partial class YText : YArrayBase
                 }
 
                 var right = Right;
-                switch (right.Content)
+                ref readonly var slot = ref right.Peek();
+                if ((slot.Info & Slot.DeletedFlag) == 0)
                 {
-                    default:
-                        if (!right.Deleted)
+                    if (slot.Kind == ContentFormat._ref)
+                    {
+                        UpdateCurrentAttributes(ref CurrentAttributes, (ContentFormat)right.Content);
+                    }
+                    else
+                    {
+                        if (count < slot.Length)
                         {
-                            if (count < right.Length)
-                            {
-                                // Split right.
-                                transaction.Doc.Store.GetItemCleanStart(transaction, new ID(right.Id.Client, right.Id.Clock + count));
-                            }
+                            // Split right: the split allocates, so the slot is read again after it.
+                            var id = right.Id;
+                            transaction.Doc.Store.GetItemCleanStart(transaction, new ID(id.Client, id.Clock + count));
+                        }
 
-                            Index += right.Length;
-                            count -= right.Length;
-                        }
-                        break;
-                    case ContentFormat cf:
-                        if (!right.Deleted)
-                        {
-                            UpdateCurrentAttributes(ref CurrentAttributes, cf);
-                        }
-                        break;
+                        var length = right.Length;
+                        Index += length;
+                        count -= length;
+                    }
                 }
 
                 Left = right;
@@ -1010,21 +1006,19 @@ public partial class YText : YArrayBase
 
         while (length > 0 && !curPos.Right.IsNull)
         {
-            if (!curPos.Right.Deleted)
+            var right = curPos.Right;
+            ref readonly var slot = ref right.Peek();
+            if ((slot.Info & Slot.DeletedFlag) == 0 && slot.Kind is ContentString._ref or ContentEmbed._ref or ContentType._ref)
             {
-                switch (curPos.Right.Content)
+                if (length < slot.Length)
                 {
-                    case ContentType _:
-                    case ContentEmbed _:
-                    case ContentString _:
-                        if (length < curPos.Right.Length)
-                        {
-                            transaction.Doc.Store.GetItemCleanStart(transaction, new ID(curPos.Right.Id.Client, curPos.Right.Id.Clock + length));
-                        }
-                        length -= curPos.Right.Length;
-                        curPos.Right.Delete(transaction);
-                        break;
+                    // The split allocates: the slot is not read after it.
+                    var id = right.Id;
+                    transaction.Doc.Store.GetItemCleanStart(transaction, new ID(id.Client, id.Clock + length));
                 }
+
+                length -= right.Length;
+                right.Delete(transaction);
             }
 
             curPos.Forward();

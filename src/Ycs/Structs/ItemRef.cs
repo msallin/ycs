@@ -151,6 +151,31 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         return ref _slab.Write(_handle);
     }
 
+    /// <summary>
+    /// The slot, for the code that reads several fields of it: valid until the next <see cref="Slab.Allocate"/> (a split,
+    /// <see cref="New"/>), so take it after the last allocation of the method and drop it before the next one.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ref readonly Slot Peek() => ref Read();
+
+    /// <summary><see cref="Peek"/> for writing; the same rule.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal ref Slot Poke() => ref Write();
+
+    /// <summary>The clock of the struct's first address, without the client lookup <see cref="Id"/> does.</summary>
+    internal long Clock
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Read().Clock;
+    }
+
+    /// <summary>The index of the struct's client in the slab's client table: equal for structs of one client.</summary>
+    internal int ClientIndex
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => Read().Client;
+    }
+
     public ID Id
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
