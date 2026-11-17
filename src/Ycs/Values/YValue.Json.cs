@@ -15,7 +15,7 @@ public readonly partial struct YValue
     /// (<c>JSON.stringify</c> writes a <c>Uint8Array</c> as an object of its indices). A string with a lone surrogate is written
     /// with the <c>\udXXX</c> escape, a property name with one with U+FFFD.
     /// </summary>
-    /// <exception cref="InvalidOperationException">A shared type in the value is a root the document has not been asked for by its kind yet, or a subdocument holds itself.</exception>
+    /// <exception cref="InvalidOperationException">A shared type in the value is a root the document has not been asked for by its kind yet.</exception>
     public void WriteTo(Utf8JsonWriter writer)
     {
         ArgumentNullException.ThrowIfNull(writer);
