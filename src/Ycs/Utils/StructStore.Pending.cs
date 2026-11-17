@@ -74,12 +74,17 @@ internal sealed partial class StructStore
     internal PendingStructs? Pending { get; set; }
 
     /// <summary>Deletions of structs this store does not have yet (Yjs' <c>store.pendingDs</c>).</summary>
-    internal PendingDeletes PendingDs { get; } = new();
+    internal PendingDeletes PendingDs => _pendingDs ??= new();
 
-    internal bool HasPending => Pending != null || PendingDs.Count != 0;
+    // Made by the first read of PendingDs: a document that never applies an update holds none.
+    private PendingDeletes? _pendingDs;
+
+    internal int PendingDsCount => _pendingDs?.Count ?? 0;
+
+    internal bool HasPending => Pending != null || PendingDsCount != 0;
 
     /// <summary>The encoded size of what is pending, as <see cref="UpdateLimits.MaxPendingBytes"/> counts it.</summary>
-    internal long PendingBytes => (Pending?.Bytes ?? 0) + PendingDs.Bytes;
+    internal long PendingBytes => (Pending?.Bytes ?? 0) + (_pendingDs?.Bytes ?? 0);
 
     /// <summary>The structs pending, as <see cref="UpdateLimits.MaxPendingStructs"/> counts them.</summary>
     internal long PendingStructCount => Pending?.Structs ?? 0;
@@ -110,7 +115,7 @@ internal sealed partial class StructStore
 
         // Duplicates (the same update received again) shrink when merged, also with the update's rest.
         Pending?.Merge();
-        PendingDs.Compact();
+        _pendingDs?.Compact();
         if (Fits(restStructs, restBytes))
         {
             return false;

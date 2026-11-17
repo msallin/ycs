@@ -371,7 +371,7 @@ internal static class UpdateOperations
     internal static byte[] MergeWithPending(byte[] state, StructStore store, IDictionary<long, long> targetStateVector, bool v2)
     {
         var updates = new List<ArraySegment<byte>>(3) { state };
-        if (store.PendingDs.Count != 0)
+        if (store.PendingDsCount != 0)
         {
             var encoder = v2 ? (IUpdateEncoder)UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
             try

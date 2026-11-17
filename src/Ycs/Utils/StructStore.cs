@@ -126,7 +126,7 @@ internal sealed partial class StructStore
             }
         }
 
-        if (PendingDs.Count != 0 || Pending != null)
+        if (PendingDsCount != 0 || Pending != null)
         {
             throw new InvalidOperationException($"{nameof(StructStore)} failed integrity check: still have pending items");
         }
