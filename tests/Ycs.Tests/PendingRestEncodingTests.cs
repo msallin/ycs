@@ -7,7 +7,7 @@ namespace Ycs;
 
 /// <summary>
 /// The structs an update cannot integrate yet are written from the staging table, as Yjs writes them from its decoded
-/// structs; both writers are kept until the objects go, and must give the same bytes.
+/// structs; both writers are kept until the objects go, and must give the same bytes: the plan's table writer and the objects'.
 /// </summary>
 [TestClass]
 public class PendingRestEncodingTests
@@ -90,8 +90,9 @@ public class PendingRestEncodingTests
     private static (bool Equal, bool HadRest, long Structs) Compare(YDoc doc, byte[] update)
     {
         using var lease = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
+        var table = lease.Staging;
         var plan = new StructStore.IntegrationPlan(doc.Store);
-        plan.Plan(lease.Staging, lease.Structs, int.MaxValue);
+        plan.Plan(table, int.MaxValue);
         doc.Store.ForgetReservations();
         if (plan.Rest == null)
         {
@@ -99,7 +100,23 @@ public class PendingRestEncodingTests
         }
 
         var (staged, structs) = plan.EncodeRest();
-        return (staged.AsSpan().SequenceEqual(plan.EncodeRestFromObjects()), true, structs);
+        var rest = new Dictionary<long, List<AbstractStruct>>();
+        foreach (var (client, (start, count)) in plan.Rest)
+        {
+            rest[table.ClientAt(client)] = lease.Structs[table.ClientAt(client)].GetRange(start - table.RangeOf(client).Start, count);
+        }
+
+        var encoder = UpdateEncoderV2.Rent();
+        try
+        {
+            StructStore.WriteRest(encoder, rest);
+            encoder.RestWriter.WriteVarUint(0);
+            return (staged.AsSpan().SequenceEqual(encoder.ToArray()), true, structs);
+        }
+        finally
+        {
+            encoder.Return();
+        }
     }
 
     private static List<byte[]> Capture(YDoc source)

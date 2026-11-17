@@ -17,7 +17,6 @@ public static class StoreChecks
     public static void RecountAfterEveryTransaction(TestContext context)
     {
         StructStore.CheckAfterTransactionsForTests = true;
-        StructStore.IntegrationPlan.CompareRestForTests = true;
         YEvent.CheckViewsForTests = true;
         YType.PoisonCollectedHandleForTests = Environment.GetEnvironmentVariable("YCS_POISON") == "1";
         if (Environment.GetEnvironmentVariable("YCS_LEAF_CAPACITY") is { Length: > 0 } capacity)

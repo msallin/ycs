@@ -225,7 +225,7 @@ public class CharArenaTests
     }
 
     [TestMethod]
-    public void Apply_ItemIntegratedFromAnOffset_TheCutPartAndTheCopiedAwayRangesAreDead()
+    public void Apply_ItemIntegratedFromAnOffset_CopiesOnlyTheRestAndLeavesNothingDead()
     {
         var a = new YDoc(new YDocOptions { ClientId = 1 });
         a.GetText("t").Insert(0, "ab");
@@ -236,7 +236,7 @@ public class CharArenaTests
         b.ApplyUpdate(a.EncodeStateAsUpdate());
 
         var chars = b.Store.Slab.Chars;
-        Assert.AreEqual(("abcd", 4L, 6L), (b.GetText("t").ToString(), chars.Live, chars.Dead));
+        Assert.AreEqual(("abcd", 4L, 0L), (b.GetText("t").ToString(), chars.Live, chars.Dead));
     }
 
     [TestMethod]

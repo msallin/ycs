@@ -111,9 +111,4 @@ public partial class YXmlFragment : YArrayBase
     {
         encoder.WriteTypeRef(YXmlFragmentRefId);
     }
-
-    internal static YXmlFragment Read(IUpdateDecoder decoder)
-    {
-        return new YXmlFragment();
-    }
 }

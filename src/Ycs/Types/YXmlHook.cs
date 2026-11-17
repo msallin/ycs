@@ -29,9 +29,4 @@ public sealed partial class YXmlHook : YMap
         encoder.WriteTypeRef(YXmlHookRefId);
         encoder.WriteKey(HookName);
     }
-
-    internal static new YXmlHook Read(IUpdateDecoder decoder)
-    {
-        return new YXmlHook(decoder.ReadKey());
-    }
 }

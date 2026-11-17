@@ -223,7 +223,7 @@ public class ValueArenaTests
     }
 
     [TestMethod]
-    public void Apply_ItemIntegratedFromAnOffset_TheCutPartAndTheCopiedAwayRangesAreDead()
+    public void Apply_ItemIntegratedFromAnOffset_CopiesOnlyTheRestAndLeavesNothingDead()
     {
         var a = new YDoc(new YDocOptions { ClientId = 1 });
         a.GetArray("a").Add(1, 2);
@@ -234,7 +234,7 @@ public class ValueArenaTests
         b.ApplyUpdate(a.EncodeStateAsUpdate());
 
         var values = b.Store.Slab.Values;
-        Assert.AreEqual((4, 4L, 6L, 0), (b.GetArray("a").Length, values.Live, values.Dead, values.UnclearedOutside(Ranges(b))));
+        Assert.AreEqual((4, 4L, 0L, 0), (b.GetArray("a").Length, values.Live, values.Dead, values.UnclearedOutside(Ranges(b))));
     }
 
     [TestMethod]
@@ -416,11 +416,17 @@ public class ValueArenaTests
     private static WeakReference[] FailedAdoption(YDoc doc)
     {
         doc.Store.AddGcForTests(new ItemId(1, 0), 1);
-        var content = new ContentAny(new object[] { Fresh(11), Fresh(12) });
-        var weak = new[] { new WeakReference(content.ValueAt(0)), new WeakReference(content.ValueAt(1)) };
-        var decoded = new Item(new ItemId(1, 0), null, null, doc.GetArray("a"), null, content);
+        doc.GetArray("a");
+        var table = new StagingTable();
+        table.BeginClient(1, 0);
+        var i = table.Add(StagedKind.Any, 2, null, null);
+        table.SetParentRoot(i, "a");
+        table.Values(i)[0] = Fresh(11);
+        table.Values(i)[1] = Fresh(12);
+        var weak = new[] { new WeakReference(table.Values(i)[0]), new WeakReference(table.Values(i)[1]) };
 
-        Assert.ThrowsExactly<YUpdateException>(() => doc.Transact(tr => ItemRef.Adopt(decoded, tr, 1, true)));
+        Assert.ThrowsExactly<YUpdateException>(() => doc.Transact(tr => ItemRef.Adopt(table, i, tr, 1, true)));
+        table.Reset();
         return weak;
     }
 
@@ -490,6 +496,6 @@ public class ValueArenaTests
         var doc = NewDoc();
         var weak = FailedAdoption(doc);
 
-        Assert.AreEqual((false, 0L, 2L, 0), (AnyAlive(weak), doc.Store.Slab.Values.Live, doc.Store.Slab.Values.Dead, doc.Store.Slab.Values.UnclearedOutside([])));
+        Assert.AreEqual((false, 0L, 1L, 0), (AnyAlive(weak), doc.Store.Slab.Values.Live, doc.Store.Slab.Values.Dead, doc.Store.Slab.Values.UnclearedOutside([])));
     }
 }

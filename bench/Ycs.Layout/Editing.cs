@@ -23,7 +23,7 @@ internal static class Editing
     /// <summary>Updates recorded on one document, applied to a receiver that starts from <see cref="Start"/>.</summary>
     private sealed record Recording(string Name, string Root, char RootKind, byte[] Start, byte[][] Updates, string Content);
 
-    private sealed record Decoded(List<AbstractStruct> Structs, List<(long Client, (long Clock, long Length)[] Ranges)> Deletes);
+    private sealed record Decoded(List<AbstractStruct> Structs, List<(StagingTable Table, int Index)> Staged, List<(long Client, (long Clock, long Length)[] Ranges)> Deletes);
 
     public static void Run(Fixtures f, Action<bool, string> check)
     {
@@ -157,13 +157,16 @@ internal static class Editing
     private static Decoded Decode(Recording r, YDoc receiver, Action<bool, string> check)
     {
         var structs = new List<AbstractStruct>();
+        var staged = new List<(StagingTable, int)>();
         var deletes = new List<(long, (long, long)[])>();
         var state = new Dictionary<long, long>();
         foreach (var u in r.Updates)
         {
             using var lease = UpdateReader.Read(u, 0, u.Length, v2: false, long.MaxValue, int.MaxValue);
+            var table = new StagingTable();
             foreach (var (client, list) in lease.Structs)
             {
+                table.BeginClient(client, list[0].Id.Clock);
                 foreach (var s in list)
                 {
                     // Every struct starts at its client's state: integrated in this order, each at offset 0.
@@ -175,6 +178,8 @@ internal static class Editing
 
                     state[client] = s.Id.Clock + s.Length;
                     structs.Add(s);
+                    StructStaging.Stage(table, s);
+                    staged.Add((table, table.Count - 1));
                 }
             }
 
@@ -184,7 +189,7 @@ internal static class Editing
             }
         }
 
-        return new(structs, deletes);
+        return new(structs, staged, deletes);
     }
 
     private static Staged[] Stage(List<AbstractStruct> structs) => [.. structs.Select(str =>
@@ -255,7 +260,7 @@ internal static class Editing
         for (var round = 0; round < Rounds; round++)
         {
             var doc = Receiver(r);
-            var structs = Decode(r, doc, check).Structs;
+            var structs = Decode(r, doc, check).Staged;
             var (leafStore, flatStore) = (Builder.Build(doc), Builder.Build(doc));
             var sw = new Stopwatch();
             long alloc = 0;
@@ -265,9 +270,9 @@ internal static class Editing
                 var s = doc.Store;
                 alloc = System.GC.GetAllocatedBytesForCurrentThread();
                 sw.Start();
-                foreach (var str in structs)
+                foreach (var (table, index) in structs)
                 {
-                    ItemRef.Adopt(str, tr, 0, true);
+                    ItemRef.Adopt(table, index, tr, 0, true);
                 }
 
                 sw.Stop();
@@ -308,12 +313,12 @@ internal static class Editing
         {
             // The start: the receiver with every struct integrated, in a transaction of its own (its cleanup merges).
             var doc = Receiver(r);
-            var (structs, deletes) = Decode(r, doc, check);
+            var (_, structs, deletes) = Decode(r, doc, check);
             doc.Transact(tr =>
             {
-                foreach (var str in structs)
+                foreach (var (table, index) in structs)
                 {
-                    ItemRef.Adopt(str, tr, 0, true);
+                    ItemRef.Adopt(table, index, tr, 0, true);
                 }
             }, local: false);
             ranges = deletes.Sum(d => d.Ranges.Length);

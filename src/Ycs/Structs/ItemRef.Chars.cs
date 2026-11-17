@@ -6,9 +6,9 @@ namespace Ycs;
 
 // The text of a String item lives in the slab's character arena and nowhere else: the slot's Payload is the offset of a
 // range, its Length the range's length (a String is never empty: the decoder and the inserts refuse an empty one).
-// Each write path of the text keeps it: NewItem (copy in), AppendChars (extend), SplitItem (payload + diff), MergeItemWith
-// (extend or copy), CutCharsHead (an item integrated from an offset), ReleaseChars (collected, freed): the String cases of
-// the dispatchers in ItemRef.Content.cs.
+// Each write path of the text keeps it: NewItem (copy in; an item adopted at an offset copies from there), AppendChars
+// (extend), SplitItem (payload + diff), MergeItemWith (extend or copy), ReleaseChars (collected, freed): the String cases
+// of the dispatchers in ItemRef.Content.cs.
 //
 // Two windows have a slot whose Length lags its range: ExtendRun's AppendChars (the range is longer by the appended text until
 // the caller adds to Length) and MergeItemWith (the left range is extended before Length += right.Length). No compaction
@@ -20,10 +20,17 @@ internal readonly partial struct ItemRef
     /// <summary>Test switch: a merge of two Strings copies even when the right range follows the left.</summary>
     internal static bool CopyOnMergeForTests;
 
-    // Copies the text into the arena and makes the range the slot's.
-    private static void StoreChars(Slab slab, int handle, ReadOnlySpan<char> text)
+    // Copies the text into the arena and makes the range the slot's. firstReplaced: the text starts after the first half of a
+    // surrogate pair that the store holds (an item adopted at an offset), so its first character becomes U+FFFD, as the right
+    // part of a split does (SplitChars).
+    private static void StoreChars(Slab slab, int handle, ReadOnlySpan<char> text, bool firstReplaced = false)
     {
         var payload = slab.Chars.Append(text);
+        if (firstReplaced)
+        {
+            slab.Chars.Overwrite(payload, [Replacement]);
+        }
+
         slab.Write(handle).Payload = payload;
     }
 
@@ -33,21 +40,6 @@ internal readonly partial struct ItemRef
     /// </summary>
     public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ReadOnlySpan<char> text) =>
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.String, text.Length, null, text, default, default);
-
-    // The part before offset leaves the item (an item integrated from an offset): its range is the rest.
-    private void CutCharsHead(int offset)
-    {
-        var chars = _slab.Chars;
-        var start = Read().Payload;
-        var cutPair = char.IsHighSurrogate(chars.Slice(start, offset)[^1]);
-        chars.MarkDead(start, offset);
-        if (cutPair)
-        {
-            chars.Overwrite(start + offset, [Replacement]);
-        }
-
-        Write().Payload = start + offset;
-    }
 
     // The range of the right part after a split of this String at diff; a pair cut in two becomes two replacement
     // characters in place, as ContentString.Splice does. The tail reservation of the range stays with its end, which

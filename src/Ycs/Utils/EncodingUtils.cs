@@ -516,22 +516,10 @@ internal static class EncodingUtils
                 Array.Clear(values, 0, count);
                 break;
             case 7:
-                var typeRef = decoder.ReadTypeRef();
-                string typeName = null;
-                switch (typeRef)
-                {
-                    case YXmlElement.YXmlElementRefId or YXmlHook.YXmlHookRefId:
-                        typeName = decoder.ReadKey();
-                        break;
-                    case YArray.YArrayRefId or YMap.YMapRefId or YText.YTextRefId or YXmlFragment.YXmlFragmentRefId or YXmlText.YXmlTextRefId:
-                        break;
-                    default:
-                        throw new YUpdateException($"Unknown shared type: {typeRef}.");
-                }
-
+                var typeRef = ContentType.ReadHeader(decoder, out var typeName);
                 Limits.CheckRange(clock, 1);
                 i = table.Add(StagedKind.Type, 1, leftOrigin, rightOrigin);
-                table.SetType(i, (int)typeRef, typeName);
+                table.SetType(i, typeRef, typeName);
                 break;
             case 2 or 3 or 5 or 6 or 9:
                 var cold = ReadItemContent(decoder, info);

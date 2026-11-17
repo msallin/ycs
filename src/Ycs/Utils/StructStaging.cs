@@ -10,8 +10,7 @@ namespace Ycs;
 internal static class StructStaging
 {
     /// <summary>
-    /// Appends <paramref name="str"/> to the open client's range. A Type stages its type reference and node name, never
-    /// the <see cref="AbstractType"/>. Cold content (Json, Binary, Embed, Format, Doc) is held by reference.
+    /// Appends <paramref name="str"/> to the open client's range. A Type stages its type reference and node name. Cold content (Json, Binary, Embed, Format, Doc) is held by reference.
     /// </summary>
     public static void Stage(StagingTable table, AbstractStruct str)
     {
@@ -53,8 +52,7 @@ internal static class StructStaging
 
                 break;
             case ContentType type:
-                var (typeRef, typeName) = TypeOf(type.Type);
-                table.SetType(i, typeRef, typeName);
+                table.SetType(i, type.TypeRef, type.TypeName);
                 break;
             case ContentJson or ContentBinary or ContentEmbed or ContentFormat or ContentDoc:
                 table.SetCold(i, content);
@@ -201,16 +199,5 @@ internal static class StructStaging
         ContentType => StagedKind.Type,
         ContentAny => StagedKind.Any,
         _ => StagedKind.Doc,
-    };
-
-    private static (int Ref, string? Name) TypeOf(AbstractType type) => type switch
-    {
-        YXmlElement element => (YXmlElement.YXmlElementRefId, element.NodeName),
-        YXmlHook hook => (YXmlHook.YXmlHookRefId, hook.HookName),
-        YXmlText => (YXmlText.YXmlTextRefId, null),
-        YXmlFragment => (YXmlFragment.YXmlFragmentRefId, null),
-        YText => (YText.YTextRefId, null),
-        YMap => (YMap.YMapRefId, null),
-        _ => (YArray.YArrayRefId, null),
     };
 }

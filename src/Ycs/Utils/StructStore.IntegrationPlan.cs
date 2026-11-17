@@ -58,9 +58,6 @@ internal sealed partial class StructStore
         private readonly List<int> _stack = new();
         private readonly List<PlanItem> _chain = new();
 
-        // The decoded objects of the update by client index, at the positions of the table, which Execute adopts (StructAt).
-        private readonly List<List<AbstractStruct>> _objects = new();
-
         // The last client and struct a planned id was looked up in: planned structs refer mostly to the one before them.
         private int _plannedHint;
 
@@ -95,18 +92,8 @@ internal sealed partial class StructStore
         {
             foreach (var (index, offset, integrate) in _steps)
             {
-                ItemRef.Adopt(StructAt(index), transaction, offset, integrate);
+                ItemRef.Adopt(_table, index, transaction, offset, integrate);
             }
-        }
-
-        /// <summary>
-        /// The decoded object of the staged struct <paramref name="index"/>: the one at the same position of the same
-        /// client's list. The one place that pairs the table with the objects.
-        /// </summary>
-        private AbstractStruct StructAt(int index)
-        {
-            var client = _table.At(index).Client;
-            return _objects[client][index - _table.RangeOf(client).Start];
         }
 
         /// <summary>
@@ -138,41 +125,7 @@ internal sealed partial class StructStore
 
                 // Write an empty delete set: there is no need for an extra function call, just write 0 deletes.
                 encoder.RestWriter.WriteVarUint(0);
-                var update = encoder.ToArray();
-                if (CompareRestForTests && !update.AsSpan().SequenceEqual(EncodeRestFromObjects()))
-                {
-                    throw new InvalidOperationException("The structs set aside, written from the staging table, differ from the same written from the decoded objects.");
-                }
-
-                return (update, writer.TotalWritten);
-            }
-            finally
-            {
-                encoder.Return();
-            }
-        }
-
-        /// <summary>Whether <see cref="EncodeRest"/> checks its bytes against <see cref="EncodeRestFromObjects"/>; the tests switch it on.</summary>
-        internal static bool CompareRestForTests;
-
-        /// <summary>
-        /// The structs set aside as <see cref="EncodeRest"/> writes them, from the decoded objects (what Yjs does, which
-        /// the table's encoding must equal byte for byte). The test of that equality compares them.
-        /// </summary>
-        internal byte[] EncodeRestFromObjects()
-        {
-            var rest = new Dictionary<long, List<AbstractStruct>>();
-            foreach (var (client, (start, count)) in Rest)
-            {
-                rest[_table.ClientAt(client)] = _objects[client].GetRange(start - _table.RangeOf(client).Start, count);
-            }
-
-            var encoder = UpdateEncoderV2.Rent();
-            try
-            {
-                WriteRest(encoder, rest);
-                encoder.RestWriter.WriteVarUint(0);
-                return encoder.ToArray();
+                return (encoder.ToArray(), writer.TotalWritten);
             }
             finally
             {
@@ -234,7 +187,6 @@ internal sealed partial class StructStore
             _steps.Clear();
             _stack.Clear();
             _clientsStructRefsIds.Clear();
-            _objects.Clear();
             _plannedHint = 0;
             _typeDepths?.Clear();
             _parentDepths?.Clear();
@@ -245,11 +197,10 @@ internal sealed partial class StructStore
 
         /// <summary>
         /// Works out how the structs of <paramref name="table"/> integrate, with types nested at most
-        /// <paramref name="maxDepth"/> levels. <paramref name="objects"/> are the same structs decoded, by client id, each
-        /// list as long as the client's range. A plan that threw (or was used before) is cleared first, so nothing of an
+        /// <paramref name="maxDepth"/> levels. A plan that threw (or was used before) is cleared first, so nothing of an
         /// earlier update is left in it. The table stays as it is until <see cref="Clear"/> and is not reset by the plan.
         /// </summary>
-        public void Plan(StagingTable table, Dictionary<long, List<AbstractStruct>> objects, int maxDepth)
+        public void Plan(StagingTable table, int maxDepth)
         {
             Clear();
             _table = table;
@@ -263,12 +214,6 @@ internal sealed partial class StructStore
             for (var c = 0; c < table.ClientCount; c++)
             {
                 clientsStructRefs[c] = default;
-                _objects.Add(null);
-            }
-
-            foreach (var (client, list) in objects)
-            {
-                _objects[table.FindClient(client)] = list;
             }
 
             var planned = 0;
@@ -277,7 +222,7 @@ internal sealed partial class StructStore
             {
                 var client = table.At(i).Client;
                 var (start, count) = table.RangeOf(client);
-                Debug.Assert(start == i && count > 0 && _objects[client].Count == count);
+                Debug.Assert(start == i && count > 0);
 
                 // Room for what the update adds (the update's own size bounds it), so a large update does not
                 // grow the client's list and the plan step by step.

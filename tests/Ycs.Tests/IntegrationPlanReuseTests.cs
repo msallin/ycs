@@ -160,14 +160,14 @@ public class IntegrationPlanReuseTests
 
         using (var first = UpdateReader.Read(OriginOnlyItem(), 0, OriginOnlyItem().Length, v2: false, long.MaxValue))
         {
-            plan.Plan(first.Staging, first.Structs, int.MaxValue);
+            plan.Plan(first.Staging, int.MaxValue);
             plan.CheckGarbageCollection(doc, first.DeleteSet, doc.Store.PendingDs);
             plan.Clear();
         }
 
         var resend = Convert.FromBase64String("AQECACQAAwABawRhYmNkAgIBAwEDAQAB");
         using var second = UpdateReader.Read(resend, 0, resend.Length, v2: false, long.MaxValue);
-        plan.Plan(second.Staging, second.Structs, int.MaxValue);
+        plan.Plan(second.Staging, int.MaxValue);
 
         Assert.ThrowsExactly<YUpdateException>(() => plan.CheckGarbageCollection(doc, second.DeleteSet, doc.Store.PendingDs));
     }

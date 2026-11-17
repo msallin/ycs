@@ -1136,10 +1136,6 @@ public partial class YText : YArrayBase
         encoder.WriteTypeRef(YTextRefId);
     }
 
-    internal static YText Read(IUpdateDecoder decoder)
-    {
-        return new YText();
-    }
 
     /// <summary>
     /// Yjs' <c>equalAttrs</c>: <c>a === b</c>, or two objects (a map, a list or a byte array) with the

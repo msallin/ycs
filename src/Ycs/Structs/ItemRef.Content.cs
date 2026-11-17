@@ -113,38 +113,17 @@ internal readonly partial struct ItemRef
     }
 
     // Fills the content storage of the new slot at handle from the content object (not a String's or an Any's: StoreChars,
-    // StoreValues); the slot holds the kind and the length.
-    private static void StoreContent(Slab slab, int handle, SlotKind kind, IContentEx content)
+    // StoreValues) or, for a Type, from type or else the type of the content object; the slot holds the kind and the length.
+    private static void StoreContent(Slab slab, int handle, SlotKind kind, IContentEx content, AbstractType type)
     {
         if (kind == SlotKind.Type)
         {
-            var typeIndex = ((ContentType)content).Type.TableIndex(slab.Types);
+            var typeIndex = (type ?? ((ContentType)content).Type).TableIndex(slab.Types);
             slab.Write(handle).Payload = typeIndex;
         }
         else if (kind.HasObject())
         {
             slab.SetRef(handle, content);
-        }
-    }
-
-    // The part before offset leaves the item (integrated from an offset); a Type cannot be cut.
-    private void CutContentHead(int offset)
-    {
-        switch (Kind)
-        {
-            case SlotKind.Deleted:
-                break;
-            case SlotKind.Type:
-                throw TypeContent.Unsplittable();
-            case SlotKind.String:
-                CutCharsHead(offset);
-                break;
-            case SlotKind.Any:
-                CutValuesHead(offset);
-                break;
-            default:
-                Content = (IContentEx)Content.Splice(offset);
-                break;
         }
     }
 

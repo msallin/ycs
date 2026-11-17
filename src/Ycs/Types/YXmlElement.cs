@@ -60,9 +60,4 @@ public sealed partial class YXmlElement : YXmlFragment
         encoder.WriteTypeRef(YXmlElementRefId);
         encoder.WriteKey(NodeName);
     }
-
-    internal static new YXmlElement Read(IUpdateDecoder decoder)
-    {
-        return new YXmlElement(decoder.ReadKey());
-    }
 }

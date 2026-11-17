@@ -90,16 +90,7 @@ internal static class StagingDifferential
                 formatValue = format.Value;
                 break;
             case ContentType type:
-                (typeRef, typeName) = type.Type switch
-                {
-                    YXmlElement element => (YXmlElement.YXmlElementRefId, element.NodeName),
-                    YXmlHook hook => (YXmlHook.YXmlHookRefId, hook.HookName),
-                    YXmlText => (YXmlText.YXmlTextRefId, null),
-                    YXmlFragment => (YXmlFragment.YXmlFragmentRefId, null),
-                    YText => (YText.YTextRefId, null),
-                    YMap => (YMap.YMapRefId, null),
-                    _ => (YArray.YArrayRefId, null),
-                };
+                (typeRef, typeName) = (type.TypeRef, type.TypeName);
                 break;
             case ContentDoc doc:
                 docGuid = doc.Doc.Guid;

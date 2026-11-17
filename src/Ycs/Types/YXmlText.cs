@@ -32,9 +32,4 @@ public sealed partial class YXmlText : YText
     {
         encoder.WriteTypeRef(YXmlTextRefId);
     }
-
-    internal static new YXmlText Read(IUpdateDecoder decoder)
-    {
-        return new YXmlText();
-    }
 }

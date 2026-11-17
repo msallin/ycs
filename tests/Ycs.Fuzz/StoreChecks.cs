@@ -10,7 +10,6 @@ public static class StoreChecks
     public static void RecountAfterEveryTransaction(TestContext context)
     {
         StructStore.CheckAfterTransactionsForTests = true;
-        StructStore.IntegrationPlan.CompareRestForTests = true;
 
         if (Environment.GetEnvironmentVariable("YCS_SLAB_FIRST") is { Length: > 0 } first)
         {

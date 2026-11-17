@@ -80,7 +80,7 @@ internal sealed partial class StructStore
     /// client id first, each list from its first struct (Yjs' <c>writeClientsStructs</c> with an empty state vector). The
     /// plan writes the same from its table (<see cref="IntegrationPlan.EncodeRest"/>); this is what it must equal.
     /// </summary>
-    private static void WriteRest(IUpdateEncoder encoder, Dictionary<long, List<AbstractStruct>> rest)
+    internal static void WriteRest(IUpdateEncoder encoder, Dictionary<long, List<AbstractStruct>> rest)
     {
         var clients = new long[rest.Count];
         rest.Keys.CopyTo(clients, 0);

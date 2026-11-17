@@ -100,9 +100,4 @@ public partial class YMap : YType
     {
         encoder.WriteTypeRef(YMapRefId);
     }
-
-    internal static YMap Read(IUpdateDecoder decoder)
-    {
-        return new YMap();
-    }
 }

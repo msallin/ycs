@@ -55,7 +55,8 @@ internal readonly partial struct ItemRef
 
     /// <summary>
     /// Integrates this item, which is not in the store yet or is a store item put in again (Yjs' <c>Item#integrate</c>):
-    /// <paramref name="offset"/> is the part of its range the store holds already.
+    /// <paramref name="offset"/> is the part of its range the store holds already: the item's id, length and content start
+    /// there, so a positive offset only makes it continue the store's struct before it.
     /// </summary>
     public void Integrate(Transaction transaction, int offset) => IntegrateItem(transaction, offset);
 
@@ -98,9 +99,10 @@ internal readonly partial struct ItemRef
         };
 
     // A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet): the object
-    // of a kind that has one, else the chars of a String or the values of an Any: the span, or the range of the store item
-    // copyOf (read after the compaction hook that opens this method, which may move it).
-    private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, SlotKind kind, int length, IContentEx content, ReadOnlySpan<char> chars, ReadOnlySpan<object> values, ItemRef copyOf)
+    // of a kind that has one, the given type of a Type (else the one of its content object), else the chars of a String or
+    // the values of an Any: the span, or the range of the store item copyOf (read after the compaction hook that opens
+    // this method, which may move it). firstReplaced: the first char of the span is U+FFFD (see StoreChars).
+    private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, SlotKind kind, int length, IContentEx content, ReadOnlySpan<char> chars, ReadOnlySpan<object> values, ItemRef copyOf, AbstractType type = null, bool firstReplaced = false)
     {
         StructStore.CompactForTests(slab, true);
 
@@ -126,7 +128,7 @@ internal readonly partial struct ItemRef
         slab.SetKey(item._handle, parentSub);
         if (kind == SlotKind.String)
         {
-            StoreChars(slab, item._handle, copyOf.IsNull ? chars : copyOf.Chars);
+            StoreChars(slab, item._handle, copyOf.IsNull ? chars : copyOf.Chars, firstReplaced);
         }
         else if (kind == SlotKind.Any)
         {
@@ -134,7 +136,7 @@ internal readonly partial struct ItemRef
         }
         else
         {
-            StoreContent(slab, item._handle, kind, content);
+            StoreContent(slab, item._handle, kind, content, type);
         }
 
         return item;
@@ -323,14 +325,14 @@ internal readonly partial struct ItemRef
     {
         if (offset > 0)
         {
-            Id = new ID(Id.Client, Id.Clock + offset);
-            Left = transaction.Doc.Store.GetItemCleanEnd(transaction, new ID(Id.Client, Id.Clock - 1));
+            var id = Id;
+            Left = transaction.Doc.Store.GetItemCleanEnd(transaction, new ID(id.Client, id.Clock - 1));
             if (Left.IsGC && Parent != null)
             {
                 // The store collected the first part of an item that still has a parent: no peer writes that. Yjs
                 // throws (a TypeError, in the conflict resolution) at the same point.
                 throw new YUpdateException(
-                    $"The struct {Id.Client}:{Id.Clock - offset} continues a struct the document holds as garbage collected, but has a parent. " +
+                    $"The struct {id.Client}:{id.Clock - offset} continues a struct the document holds as garbage collected, but has a parent. " +
                     "The structs integrated before stay in the document; the rest of the update, and its deletions, were not applied.")
                 {
                     PartlyApplied = true,
@@ -338,8 +340,6 @@ internal readonly partial struct ItemRef
             }
 
             LeftOrigin = Left.IsItem ? Left.LastId : null;
-            CutContentHead(offset);
-            Length -= offset;
         }
 
         // Rule: no ref Slot is held across a call that can allocate a slot (a split, ResolveConflict's Find does not) or

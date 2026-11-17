@@ -8,7 +8,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// A decoded struct enters the store only through <see cref="ItemRef.Adopt"/>, and the library allocates an
+/// A staged struct enters the store only through <see cref="ItemRef.Adopt"/>, and the library allocates an
 /// <see cref="Item"/> or <see cref="GC"/> object only for the decoded form: a struct of the store is a slot, never an object.
 /// </summary>
 [TestClass]
@@ -23,11 +23,74 @@ public class ItemRefAdoptionTests
     }
 
     [TestMethod]
-    public void Library_EveryMethodBody_AdoptsDecodedStructsOnlyInTheIntegrationPlansExecute()
+    public void Library_EveryMethodBody_AdoptsStagedStructsOnlyInTheIntegrationPlansExecute()
     {
         var found = Callers(["ItemRef"], ["Adopt"]).Select(c => $"{c.Type}.{c.Method}").Distinct().ToArray();
 
         Assert.AreEqual("IntegrationPlan.Execute", string.Join("\n", found));
+    }
+
+    private static (YDoc Doc, StagingTable Table) Staged(int typeRef, string typeName)
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 2 });
+        doc.GetMap("m").TableIndex(doc.Store.Types);
+        var table = new StagingTable();
+        table.BeginClient(1, 0);
+        var i = table.Add(StagedKind.Type, 1);
+        table.SetParentRoot(i, "m");
+        table.SetParentSub(i, "k");
+        table.SetType(i, typeRef, typeName);
+        return (doc, table);
+    }
+
+    [TestMethod]
+    [DataRow(0, null, typeof(YArray))]
+    [DataRow(1, null, typeof(YMap))]
+    [DataRow(2, null, typeof(YText))]
+    [DataRow(3, "div", typeof(YXmlElement))]
+    [DataRow(4, null, typeof(YXmlFragment))]
+    [DataRow(5, "hook", typeof(YXmlHook))]
+    [DataRow(6, null, typeof(YXmlText))]
+    public void Adopt_StagedType_IsMadeThereWithItsNameAndItsTableIndex(int typeRef, string typeName, Type expected)
+    {
+        var (doc, table) = Staged(typeRef, typeName);
+        var before = doc.Store.Types.Count;
+
+        doc.Transact(tr => ItemRef.Adopt(table, 0, tr, 0, true), origin: null, local: false);
+
+        var item = doc.Store.Find(new ItemId(1, 0));
+        var type = item.TypeOf;
+        Assert.AreEqual(
+            (expected, typeName, before + 1, (long)type.TableIndexForTests),
+            (type.GetType(), (type as YXmlElement)?.NodeName ?? (type as YXmlHook)?.HookName, doc.Store.Types.Count, doc.Store.Slab.Read(item.Handle).Payload));
+    }
+
+    [TestMethod]
+    public void Adopt_StagedTypeNotIntegrated_MakesNoTypeAndNoSlot()
+    {
+        var (doc, table) = Staged(3, "div");
+        var (types, live) = (doc.Store.Types.Count, doc.Store.Slab.LiveCount);
+
+        doc.Transact(tr => ItemRef.Adopt(table, 0, tr, 0, false), origin: null, local: false);
+
+        Assert.AreEqual((types, live), (doc.Store.Types.Count, doc.Store.Slab.LiveCount));
+    }
+
+    [TestMethod]
+    public void Adopt_StagedColdContent_IsTheSlotsObject()
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = 2 });
+        doc.GetArray("a");
+        var binary = new ContentBinary([1, 2, 3]);
+        var table = new StagingTable();
+        table.BeginClient(1, 0);
+        var i = table.Add(StagedKind.Binary, 1);
+        table.SetParentRoot(i, "a");
+        table.SetCold(i, binary);
+
+        doc.Transact(tr => ItemRef.Adopt(table, i, tr, 0, true), origin: null, local: false);
+
+        Assert.AreSame(binary, doc.Store.Find(new ItemId(1, 0)).Cold);
     }
 
     private static List<(string Outer, string Type, string Method, string Target)> Callers(string[] types, string[] names, OpCode? only = null)

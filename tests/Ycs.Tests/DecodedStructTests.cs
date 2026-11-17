@@ -200,19 +200,9 @@ public class DecodedStructTests
         Assert.AreEqual(d.Kind == ItemKind.String ? ((ContentString)content).GetString() : null, d.Text);
         Assert.AreEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Key : null, d.FormatKey);
         Assert.IsTrue(StagingDifferential.DeepEqual(d.Kind == ItemKind.Format ? ((ContentFormat)content).Value : null, d.FormatValue), $"format value of {s.Id}");
-        var type = d.Kind == ItemKind.Type ? ((ContentType)content).Type : null;
-        Assert.AreEqual(type == null ? -1 : type.GetType().Name switch
-        {
-            "YArray" => 0,
-            "YMap" => 1,
-            "YText" => 2,
-            "YXmlElement" => 3,
-            "YXmlFragment" => 4,
-            "YXmlHook" => 5,
-            "YXmlText" => 6,
-            var other => throw new AssertFailedException(other),
-        }, d.TypeRef);
-        Assert.AreEqual((type as YXmlElement)?.NodeName ?? (type as YXmlHook)?.HookName, d.TypeName);
+        var type = d.Kind == ItemKind.Type ? (ContentType)content : null;
+        Assert.AreEqual(type?.TypeRef ?? -1, d.TypeRef);
+        Assert.AreEqual(type?.TypeName, d.TypeName);
         Assert.AreEqual(d.Kind == ItemKind.Doc ? ((ContentDoc)content).Doc.Guid : null, d.DocGuid);
     }
 

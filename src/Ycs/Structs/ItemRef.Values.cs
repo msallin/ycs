@@ -6,8 +6,8 @@ namespace Ycs;
 // its Length the range's length (an Any is never empty).
 // The range's elements are the only references the arena keeps: every exit of a range clears them (Arena.Clear), so a
 // value is collectible as soon as nothing else holds it, before any compaction.
-// Each write path keeps it: NewItem (copy in), AppendValues (extend; a copy clears the old range), SplitItem (payload + diff),
-// MergeItemWith (extend, or copy: the old ranges are cleared), CutValuesHead (an item integrated from an offset),
+// Each write path keeps it: NewItem (copy in; an item adopted at an offset copies from there), AppendValues (extend; a copy
+// clears the old range), SplitItem (payload + diff), MergeItemWith (extend, or copy: the old ranges are cleared),
 // ReleaseValues (collected, freed): the Any cases of the dispatchers in ItemRef.Content.cs.
 //
 // The windows where a slot's Length lags its range are those of ItemRef.Chars.cs: no compaction hook may sit in them.
@@ -26,16 +26,6 @@ internal readonly partial struct ItemRef
     /// </summary>
     public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ReadOnlySpan<object> values) =>
         NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.Any, values.Length, null, default, values, default);
-
-    // The part before offset leaves the item (an item integrated from an offset): its range is the rest.
-    private void CutValuesHead(int offset)
-    {
-        var values = _slab.Values;
-        var start = Read().Payload;
-        values.Clear(start, offset);
-        values.MarkDead(start, offset);
-        Write().Payload = start + offset;
-    }
 
     // The range of the right part after a split of this Any at diff; the tail reservation of the range stays with its end,
     // which the right part holds.

@@ -67,10 +67,6 @@ public sealed partial class YArray : YArrayBase
         encoder.WriteTypeRef(YArrayRefId);
     }
 
-    internal static YArray Read(IUpdateDecoder decoder)
-    {
-        return new YArray();
-    }
 
     /// <summary>
     /// Creates YArrayEvent and calls observers.
