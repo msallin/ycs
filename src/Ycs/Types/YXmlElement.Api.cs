@@ -124,7 +124,7 @@ public sealed partial class YXmlElement
         var parts = new List<string>(keys.Count);
         foreach (var key in keys)
         {
-            parts.Add($"{key}=\"{attrs[key]}\"");
+            parts.Add($"{key}=\"{JsValue.ToJsString(attrs[key].Stored())}\"");
         }
 
         var nodeName = NodeName.ToLowerInvariant();
