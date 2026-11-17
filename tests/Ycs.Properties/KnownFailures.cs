@@ -92,13 +92,14 @@ internal static partial class KnownFailures
             """{"clients":[{"gc":false,"id":55967,"quiet":true},{"gc":false,"id":849942},{"gc":false,"gcf":2,"id":785458,"quiet":true}],"roots":[{"kind":"text","name":"t"},{"kind":"array","name":"a"}],"steps":[{"at":0,"c":2,"op":"insert","path":["t"],"text":"a"},{"at":0,"c":1,"op":"insert","path":["t"],"text":"a"},{"at":0,"c":2,"op":"insert","path":["t"],"text":"a"},{"from":2,"k":0,"op":"deliver","to":1,"via":"v1"},{"at":0,"c":1,"op":"insert","path":["t"],"text":"a"},{"c":2,"op":"push","path":["a"],"values":["s"]},{"from":2,"k":2,"op":"deliver","to":0,"via":"v1to2"},{"from":1,"k":1,"op":"deliver","to":0,"via":"v1"},{"from":1,"k":0,"op":"deliver","to":0,"via":"v1to2"},{"from":2,"k":0,"op":"deliver","to":0,"via":"v2"}]}""")
         {
             Documented = true,
-            Matches = (m, _) => m.Op == "deliver" && (m.Primary is "roots" or "ev:update") && YcsAheadOnly(m),
+            Matches = (m, script) => (m.Op is "deliver" or "merged" || (m.Op == "transact" && HoldsDeliver(Step(script, m)))) && (m.Primary is "roots" or "ev:update") && YcsAheadOnly(m),
         },
     ];
 
-    // The differences of a deliver step are the retried struct's: the update events, the roots and the state vector, with
-    // Ycs' clocks higher than Yjs' in at least one place and lower in none.
-    [GeneratedRegex(@"^\.st\.\d+\.sv\.\d+: yjs (\d+) \| ycs (\d+)$")]
+    // The differences of a deliver step (or a merged one, or a transact step holding a deliver) are the retried struct's: the update and
+    // observer events, the roots and the state vector, with Ycs' clocks higher than Yjs' in at least one place and lower
+    // in none. A client Yjs has no entry for (null) is at clock 0.
+    [GeneratedRegex(@"^\.st\.\d+\.sv\.\d+: yjs (\d+|null) \| ycs (\d+)$")]
     private static partial Regex StateVectorLine();
 
     private static bool YcsAheadOnly(Mismatch m)
@@ -108,7 +109,8 @@ internal static partial class KnownFailures
         {
             if (StateVectorLine().Match(d) is { Success: true } sv)
             {
-                var (yjs, ycs) = (long.Parse(sv.Groups[1].Value, CultureInfo.InvariantCulture), long.Parse(sv.Groups[2].Value, CultureInfo.InvariantCulture));
+                var yjs = sv.Groups[1].Value == "null" ? 0 : long.Parse(sv.Groups[1].Value, CultureInfo.InvariantCulture);
+                var ycs = long.Parse(sv.Groups[2].Value, CultureInfo.InvariantCulture);
                 if (ycs <= yjs)
                 {
                     return false;
@@ -116,7 +118,7 @@ internal static partial class KnownFailures
 
                 ahead = true;
             }
-            else if (!Regex.IsMatch(d, @"^\.(ev\[\d+\]\.u|st\.\d+\.(svb|roots\..*)):"))
+            else if (!Regex.IsMatch(d, @"^\.(ev\[\d+\]\.(u|es\[.*)|st\.\d+\.(svb|roots\..*)):"))
             {
                 return false;
             }
@@ -124,6 +126,9 @@ internal static partial class KnownFailures
 
         return ahead;
     }
+
+    private static bool HoldsDeliver(Dictionary<string, object> step) =>
+        step.List("ops") is { } ops && ops.Any(o => o is Dictionary<string, object> d && d.Str("op") == "deliver");
 
     private static bool Threw(string observation) => Json.Parse(observation) is Dictionary<string, object> o && o.Get("err") is true;
 
