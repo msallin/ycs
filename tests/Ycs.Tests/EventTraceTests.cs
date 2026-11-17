@@ -200,7 +200,7 @@ public class EventTraceTests
     private static object Describe(YEvent e) => new Dictionary<string, object>
     {
         ["path"] = e.Path.Select(p => p.Key ?? (object)p.Index).ToList(),
-        ["keys"] = e.Keys.Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue }).ToList(),
+        ["keys"] = e.Keys.Select(kv => (object)new List<object> { kv.Key, kv.Value.Action.ToString().ToLowerInvariant(), kv.Value.OldValue.ToObject() }).ToList(),
         ["delta"] = e.Changes.Delta,
         ["added"] = e.Changes.Added.Count,
         ["deleted"] = e.Changes.Deleted.Count,

@@ -28,7 +28,7 @@ var doc = new YDoc();
 // Text, with formatting.
 var text = doc.GetText("notes");
 text.Insert(0, "Hello world");
-text.Format(0, 5, new Dictionary<string, YValue> { ["bold"] = true });
+text.Format(0, 5, [new("bold", true)]);
 foreach (var d in text.ToDelta())
 {
     Console.WriteLine($"{((Delta.Insert)d).Value} {(d.Attributes is null ? "" : string.Join(",", d.Attributes.Keys))}");

@@ -18,7 +18,7 @@ public abstract record Delta
     /// attribute from the range; on an <see cref="Insert"/> from <see cref="YText.ToDelta()"/> the attributes of the text,
     /// with <c>ychange</c> where a snapshot asked for it.
     /// </summary>
-    public IReadOnlyDictionary<string, YValue>? Attributes { get; init; }
+    public YAttributes? Attributes { get; init; }
 
     /// <summary>
     /// Text, or one embed (a nested shared type or a value) of a text. An embed whose value is null (Yjs'

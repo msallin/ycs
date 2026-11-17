@@ -16,6 +16,9 @@ public sealed class YArrayEvent : YEvent
     {
         // Do nothing.
     }
+
+    /// <summary>The array that changed.</summary>
+    public new YArray Target => (YArray)base.Target;
 }
 
 public sealed partial class YArray : YArrayBase

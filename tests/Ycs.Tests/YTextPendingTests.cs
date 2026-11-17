@@ -20,7 +20,7 @@ public class YTextPendingTests
         Assert.AreEqual(direct.ToString(), prelim.ToString());
         Assert.AreEqual(Describe(direct.ToDelta()), Describe(prelim.ToDelta()));
         Assert.AreEqual("en", prelim.GetAttribute("lang"));
-        Assert.IsNull(prelim.GetAttribute("gone"));
+        Assert.IsTrue(prelim.GetAttribute("gone").IsNull);
     }
 
     [TestMethod]

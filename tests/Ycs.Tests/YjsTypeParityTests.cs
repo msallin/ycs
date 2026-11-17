@@ -183,11 +183,12 @@ public class YjsTypeParityTests
     }
 
     [TestMethod]
-    public void TextNotInADocument_ToDeltaToStringClone_ReadAsEmpty()
+    public void TextNotInADocument_ToDeltaToStringClone_ReadTheContentAsAnArrayDoes()
     {
         var result = $"{Json(new YText("abc").ToDelta())} '{new YXmlText("abc")}' {Json(new YText("abc").Clone().ToDelta())}";
 
-        Assert.AreEqual("[] '' []", result);
+        // Yjs reads such a text as empty; here its pending content is readable, as a detached array's is.
+        Assert.AreEqual("""[{"insert":"abc"}] 'abc' [{"insert":"abc"}]""", result);
     }
 
     [TestMethod]
@@ -286,7 +287,7 @@ public class YjsTypeParityTests
         YEvent kept = null;
         map.Observe(e => kept = e);
         string keys = null;
-        doc.AfterTransactionCleanup += (_, _) => keys = string.Join(",", kept.Keys.Select(kv => $"{kv.Key} {kv.Value.Action} {kv.Value.OldValue ?? "null"}"));
+        doc.AfterTransactionCleanup += (_, _) => keys = string.Join(",", kept.Keys.Select(kv => $"{kv.Key} {kv.Value.Action} {(kv.Value.OldValue.ToObject() ?? "null")}"));
         map["k"] = 1;
 
         map["k"] = 2;

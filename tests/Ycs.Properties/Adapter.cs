@@ -625,7 +625,7 @@ namespace Ycs.Properties
                 {
                     kd[key] = ch.Action == KeyChangeAction.Add
                         ? Obj(("action", "add"))
-                        : Obj(("action", ch.Action == KeyChangeAction.Update ? "update" : "delete"), ("old", Replica.View(ch.OldValue)));
+                        : Obj(("action", ch.Action == KeyChangeAction.Update ? "update" : "delete"), ("old", Replica.View(ch.OldValue.ToObject())));
                 }
 
                 o["keys"] = kd;
@@ -1075,7 +1075,7 @@ namespace Ycs.Properties
 
         private static int Clamp(long i, int n) => (int)Math.Max(0, Math.Min(i, n));
 
-        private static IReadOnlyDictionary<string, YValue> AttrsOf(object a) =>
+        private static YAttributes AttrsOf(object a) =>
             a == null ? null : ((IDictionary<string, object>)Val(a)).ToDictionary(kv => kv.Key, kv => YValue.FromObject(kv.Value));
 
         /// <summary>A script delta (docs/testing.md) as a Ycs delta.</summary>

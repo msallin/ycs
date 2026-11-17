@@ -10,6 +10,6 @@ public enum KeyChangeAction
 
 /// <summary>
 /// The change of one map key by one transaction. <paramref name="OldValue"/> is the value the key held before
-/// (null for an <see cref="KeyChangeAction.Add"/>, and for a value that is itself null).
+/// (<see cref="YValue.Null"/> for an <see cref="KeyChangeAction.Add"/>, and for a value that is itself null).
 /// </summary>
-public readonly record struct KeyChange(KeyChangeAction Action, object? OldValue);
+public readonly record struct KeyChange(KeyChangeAction Action, YValue OldValue);

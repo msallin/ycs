@@ -227,7 +227,7 @@ public abstract partial class YEvent
                         }
                     }
 
-                    keys[key] = new KeyChange(action, oldValue);
+                    keys[key] = new KeyChange(action, YValue.FromStored(oldValue));
                 }
             }
 

@@ -31,5 +31,10 @@ public sealed record UndoManagerOptions
     public bool IgnoreRemoteMapChanges { get; init; }
 
     /// <summary>What the capture timeout reads the time from; default <see cref="TimeProvider.System"/>.</summary>
+    /// <remarks>
+    /// The manager reads <see cref="TimeProvider.GetTimestamp"/> and <see cref="TimeProvider.GetElapsedTime(long, long)"/>, not
+    /// <see cref="TimeProvider.GetUtcNow"/>: a provider of your own must override those (or <c>TimestampFrequency</c> with
+    /// them); one that only overrides <c>GetUtcNow</c> has no effect. <c>FakeTimeProvider</c> does it right.
+    /// </remarks>
     public TimeProvider? TimeProvider { get; init; }
 }

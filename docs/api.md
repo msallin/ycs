@@ -102,18 +102,26 @@ setting is Yjs' `set`), `TryGetValue(key, out value)` and `TryGetValue(key, snap
 
 ### YText
 
-`YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `InsertEmbed(index, YValue,
-attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
-`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `RemoveNonText()`, `CleanupFormatting()`, `ToString()`,
+`YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `Append(string, attributes?)`,
+`InsertEmbed(index, YValue, attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
+`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `RemoveNonText()`, `ToString()`, `Substring(start, length)`,
 `CopyTo(Span<char>)` (returns the characters written; an `ArgumentException` when the span is shorter than the text, and
-`Length` is always enough), `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is null when unset,
-`GetAttributes`, `SetAttribute`, `RemoveAttribute`) and `Clone`. Formatting attributes and embeds are `YValue`s; in the
-attribute dictionary of `Format` or of a `Retain`, a `YValue.Null` removes the attribute.
+`Length` is always enough), `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is `YValue.Null` when
+unset, `TryGetAttribute(name, out value)` tells that from one set to null, as on `YXmlElement`; `GetAttributes`,
+`SetAttribute`, `RemoveAttribute`) and `Clone`. A text that is not in a document yet reads what was inserted into it
+(`ToString()`, `Length`, `ToDelta()`, its attributes), as a detached array or map does; a shared type among that content reads
+as null until the text is added.
+
+Formatting attributes and embeds are `YValue`s. Attributes are a `YAttributes`, a small immutable
+`IReadOnlyDictionary<string, YValue>` that a collection expression builds: `text.Insert(0, "hi", [new("bold", true)])`; one
+pair converts implicitly, `text.Format(0, 2, ("bold", true))`, and so does a `Dictionary<string, YValue>`
+(`YAttributes.From` takes any sequence of pairs). In the attributes of `Format` or of a `Retain`, a `YValue.Null` removes the
+attribute.
 
 A `Delta` is one operation of a delta, one of the sealed cases `Delta.Insert(YValue Value)` (a string, or an embed: a
 shared type or a value; an embed of null is `YValue.Null`), `Delta.InsertItems(IReadOnlyList<YValue> Items)` (what an
 array's or an XML fragment's event inserted), `Delta.Retain(int Length)` and `Delta.Delete(int Length)`, with `Attributes`
-(`IReadOnlyDictionary<string, YValue>?`) on every case. `ToDelta(snapshot, previous)` marks added and removed runs with a
+(`YAttributes?`) on every case. `ToDelta(snapshot, previous)` marks added and removed runs with a
 `ychange` attribute, an object of `type` (`"added"` or `"removed"`) and, when `computeYChange` returns a `YChange(YChangeKind,
 long? User)` with one, `user`. Applying an `InsertItems` to a text throws.
 
@@ -141,12 +149,16 @@ Each shared type observes its own events: `YArray.Observe(Action<YArrayEvent>)`,
 `YXmlText` (`YTextEvent`), `YXmlFragment` and `YXmlElement` (`YXmlEvent`). `YType.ObserveDeep(Action<IReadOnlyList<YEvent>,
 Transaction>)` gets the events of the type and everything nested in it, the outer types' first. Both return an
 `IDisposable`; disposing it removes that registration (one handler registered twice is two registrations). A handler may
-be typed more generally (an `Action<YEvent>` observes any type). Every handler runs even when one threw; the last
+be typed more generally: a delegate variable of type `Action<YEvent>` observes any type (`text.Observe(handler)`); a lambda
+written inline is typed by the parameter, `text.Observe(e => ...)` with `e` a `YTextEvent`, and `(YEvent e) => ...` does not
+compile there. Every handler runs even when one threw; the last
 exception escapes.
 
-An event is read-only: `Target`, `CurrentTarget`, `Transaction`, `Path` (an `IReadOnlyList<PathSegment>`: a map key, or the
+An event is read-only: `Target` (typed in each subclass: `YTextEvent.Target` is a `YText`, `YXmlEvent.Target` a
+`YXmlFragment`; `YEvent.Target` is a `YType`), `CurrentTarget`, `Transaction`, `Doc` (the transaction's document, never null;
+`Target.Doc` is null once the type left its document), `Path` (an `IReadOnlyList<PathSegment>`: a map key, or the
 index in a list when `Key` is null), `Changes` (`YChanges`: `Added`, `Deleted`, `Delta`, `Keys`), `Delta`, `Keys`
-(`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, an `object?`), and `Adds(view)`,
+(`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, a `YValue`, `YValue.Null` for an added key), and `Adds(view)`,
 `Deletes(view)`. The subclasses add `YMapEvent.KeysChanged`, `YTextEvent.KeysChanged` and `ChildListChanged`, and
 `YXmlEvent.AttributesChanged` and `ChildListChanged`. An event is valid during the handler, its transaction's observers
 and cleanup; compute what you keep there.
@@ -297,7 +309,7 @@ unhook it from the document.
 | --- | --- |
 | `TrackedOrigins` | the transaction origins to track; by default only the null origin, so apply a peer's update with an origin and it is never undone |
 | `CaptureTimeout` | a `TimeSpan` (500 ms by default): changes within it form one step |
-| `TimeProvider` | the clock of `CaptureTimeout`; a test moves it by hand |
+| `TimeProvider` | the clock of `CaptureTimeout`; a test moves it by hand. The manager reads `GetTimestamp` and `GetElapsedTime`, never `GetUtcNow`: a hand-written provider must override those (`FakeTimeProvider` does) |
 | `CaptureTransaction` | `Func<Transaction, bool>`: false keeps a transaction out of the stack |
 | `DeleteFilter` | `Func<ItemView, bool>`: false keeps an undo or redo from deleting the item |
 | `IgnoreRemoteMapChanges` | true: an undo or redo overwrites a map key (or attribute) that another change set since; by default it leaves such a key alone. Also a settable property of the manager |

@@ -24,7 +24,7 @@ using var deepSubscription = doc.GetMap("map").ObserveDeep((events, _) => deepOb
 doc.Updated += (_, e) => kept = e.Update;
 
 text.Insert(0, "AOT ");
-text.Format(0, 3, new Dictionary<string, YValue> { ["italic"] = true, ["size"] = 1.5 });
+text.Format(0, 3, [new("italic", true), new("size", 1.5)]);
 doc.GetMap("map")["added"] = YValue.FromObject(new Dictionary<string, object> { ["n"] = 42, ["list"] = new object?[] { "x", 2.5, null } });
 
 doc.GetMap("map")["observed"] = 1;
@@ -94,7 +94,7 @@ var note = edited.GetText("note");
 note.Insert(0, "ab");
 note.InsertEmbed(1, YValue.Object(new KeyValuePair<string, YValue>("image", "x.png")));
 var before = edited.CreateSnapshot();
-note.ApplyDelta([new Delta.Retain(1), new Delta.Insert("Z") { Attributes = new Dictionary<string, YValue> { ["bold"] = true } }, new Delta.Delete(1)]);
+note.ApplyDelta([new Delta.Retain(1), new Delta.Insert("Z") { Attributes = [new("bold", true)] }, new Delta.Delete(1)]);
 var runs = note.ToDelta();
 Check(runs.Count == 3 && runs[1] is Delta.Insert { Value.Kind: YValueKind.String } && runs[1].Attributes!["bold"] == YValue.True, "text delta lost");
 var changes = note.ToDelta(edited.CreateSnapshot(), before, (kind, id) => new YChange(kind, id.Client));
