@@ -344,7 +344,7 @@ public partial class YXmlFragment : IReadOnlyList<YType>
                             }
                             else
                             {
-                                n = ((YType)n.Parent).CurrentItem();
+                                n = ((YType)n.Parent!).CurrentItem();
                             }
                         }
                     }

@@ -48,7 +48,7 @@ public partial class YDoc
             throw new ArgumentException("The document is already a subdocument and cannot be inserted again: create a second YDoc with the same guid instead. Nothing was inserted.");
         }
 
-        for (var d = parent; d != null; d = d._item.IsNull || d._itemCollected ? null : ((YType)d._item.Parent).Doc)
+        for (var d = parent; d != null; d = d._item.IsNull || d._itemCollected ? null : ((YType)d._item.Parent!).Doc)
         {
             if (d == this)
             {
@@ -64,7 +64,7 @@ public partial class YDoc
             return;
         }
 
-        _collectedParentDoc = ((YType)_item.Parent).Doc;
+        _collectedParentDoc = ((YType)_item.Parent!).Doc;
         _itemCollected = true;
         if (YType.PoisonCollectedHandleForTests)
         {

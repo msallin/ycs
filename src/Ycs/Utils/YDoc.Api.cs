@@ -42,7 +42,7 @@ public partial class YDoc
     {
         if (!ShouldLoad)
         {
-            var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : ((YType)_item.Parent).Doc;
+            var parentDoc = _itemCollected ? _collectedParentDoc : _item.IsNull ? null : ((YType)_item.Parent!).Doc;
             parentDoc?.Transact(this, static (doc, tr) => tr.LoadedSubdocs.Add(doc));
         }
         ShouldLoad = true;
@@ -79,7 +79,7 @@ public partial class YDoc
                 item.RecreateSubdoc(Guid, _opts.Limits);
             }
 
-            var parentDoc = ((YType)item.Parent).Doc;
+            var parentDoc = ((YType)item.Parent!).Doc;
             Debug.Assert(parentDoc != null);
             parentDoc.Transact((doc: this, item), static (s, tr) =>
             {

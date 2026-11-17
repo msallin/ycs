@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 using System.Runtime.ExceptionServices;
 
@@ -22,7 +21,7 @@ public abstract partial class YType
 
     // The slab of the document's store, set when the type is integrated (a store's slab never changes); every holder
     // below is none until then.
-    internal Slab _slab;
+    internal Slab _slab = null!;
 
     internal ItemRef _item
     {
@@ -62,9 +61,9 @@ public abstract partial class YType
     // The facts of the item a collected type was in. Its struct can merge away once the type is collected, and its slot
     // be reused, while user code still holds the type: Collect sets them before the struct is replaced; none changes later.
     private bool _collected;
-    private YType _collectedParent;
+    private YType? _collectedParent;
     private ItemId _collectedId;
-    private string _collectedParentSub;
+    private string? _collectedParentSub;
     private bool _collectedKeep;
 
     // The index in the type table of the store the type's items are in: given when the type's item is made (ItemRef.New
@@ -102,7 +101,7 @@ public abstract partial class YType
             return _item;
         }
 
-        return Doc.Store.Find(_collectedId).AsItem;
+        return Doc!.Store.Find(_collectedId).AsItem;
     }
 
     /// <summary>
@@ -110,14 +109,14 @@ public abstract partial class YType
     /// after the position the type held (a collected type's struct may be a part of a longer deleted item).
     /// </summary>
     internal ItemRef ItemToInsertAfter(Transaction transaction) =>
-        _collected ? Doc.Store.GetItemCleanEnd(transaction, _collectedId) : _item;
+        _collected ? Doc!.Store.GetItemCleanEnd(transaction, _collectedId) : _item;
 
     internal bool IsRoot => !_collected && _item.IsNull;
 
     /// <summary>Whether the type was collected: its facts are kept, its item may be gone.</summary>
     internal bool IsCollected => _collected;
 
-    internal YType ParentType => _collected ? _collectedParent : _item.IsNull ? null : _item.Parent as YType;
+    internal YType? ParentType => _collected ? _collectedParent : _item.IsNull ? null : _item.Parent as YType;
 
     /// <summary>The id of the item the type is in; a root type has none.</summary>
     internal ItemId ItemId => _collected ? _collectedId : _item.Id;
@@ -126,7 +125,7 @@ public abstract partial class YType
     internal bool ItemDeleted => _collected || (!_item.IsNull && _item.Deleted);
 
     /// <summary>The key of the item the type is in, null in a list.</summary>
-    internal string ItemParentSub => _collected ? _collectedParentSub : _item.ParentSub;
+    internal string? ItemParentSub => _collected ? _collectedParentSub : _item.ParentSub;
 
     /// <summary>The item's keep flag; a collected type's item is deleted, so its keep only decides where <see cref="KeepItemAndParents"/> stops.</summary>
     internal bool ItemKeep
@@ -149,7 +148,7 @@ public abstract partial class YType
     /// <summary>Sets the keep flag of this type's item and of the items above it, up to the first that has it (Yjs' <c>keepItem</c> on the item's parents).</summary>
     internal void KeepItemAndParents(bool value)
     {
-        for (var type = this; !type.IsRoot && type.ItemKeep != value; type = type.ParentType)
+        for (var type = this; !type.IsRoot && type.ItemKeep != value; type = type.ParentType!)
         {
             type.ItemKeep = value;
         }
@@ -169,12 +168,12 @@ public abstract partial class YType
         _collected = true;
         if (_tableIndex >= 0)
         {
-            Doc.Store.Types.Collect(_tableIndex);
+            Doc!.Store.Types.Collect(_tableIndex);
         }
 
         if (PoisonCollectedHandleForTests)
         {
-            _item = Doc.Store.OtherItemForTests(_item);
+            _item = Doc!.Store.OtherItemForTests(_item);
         }
     }
 
@@ -239,7 +238,7 @@ public abstract partial class YType
     /// For a type whose JSON holds the JSON of the types nested in it (a map, an array): its JSON without them,
     /// each listed in <paramref name="nested"/> with where it goes; null for any other type.
     /// </summary>
-    internal virtual object ShallowJson(List<(YType Type, object Container, string Key, int Index)> nested) => null;
+    internal virtual object? ShallowJson(List<(YType Type, object Container, string? Key, int Index)> nested) => null;
 
     /// <summary>
     /// <see cref="ToJsonTree"/> of <paramref name="root"/> and the maps and arrays nested in it, without recursion: they
@@ -247,34 +246,34 @@ public abstract partial class YType
     /// </summary>
     internal static object JsonTree(YType root)
     {
-        var nested = new List<(YType Type, object Container, string Key, int Index)>();
+        var nested = new List<(YType Type, object Container, string? Key, int Index)>();
         var result = root.ShallowJson(nested);
         while (nested.Count > 0)
         {
             var (type, container, key, index) = nested[^1];
             nested.RemoveAt(nested.Count - 1);
             var json = type.ShallowJson(nested) ?? type.ToJsonTree();
-            if (container is List<object> list)
+            if (container is List<object?> list)
             {
                 list[index] = json;
             }
             else
             {
-                ((Dictionary<string, object>)container)[key] = json;
+                ((Dictionary<string, object?>)container)[key!] = json;
             }
         }
 
-        return result;
+        return result!; // A map's or an array's own ShallowJson, never null.
     }
 
     // The observers of this type's own events (the leaf types' typed Observe wraps each handler) and of the events of
     // it and its descendants.
-    private Action<YEvent> _observers;
-    private Action<IReadOnlyList<YEvent>, Transaction> _deepObservers;
+    private Action<YEvent>? _observers;
+    private Action<IReadOnlyList<YEvent>, Transaction>? _deepObservers;
 
     private sealed class Subscription(Action unsubscribe) : IDisposable
     {
-        private Action _unsubscribe = unsubscribe;
+        private Action? _unsubscribe = unsubscribe;
 
         public void Dispose()
         {
@@ -331,7 +330,7 @@ public abstract partial class YType
                 break;
             }
 
-            type = type.ParentType;
+            type = type.ParentType!;
         }
 
         InvokeEventHandlers(evt, transaction);
@@ -341,7 +340,7 @@ public abstract partial class YType
     /// Creates YEvent and calls all type observers.
     /// Must be implemented by each type.
     /// </summary>
-    internal virtual void CallObserver(Transaction transaction, ISet<string> parentSubs)
+    internal virtual void CallObserver(Transaction transaction, ISet<string?> parentSubs)
     {
         // Do nothing.
     }
@@ -387,7 +386,7 @@ public abstract partial class YType
             return;
         }
 
-        ExceptionDispatchInfo error = null;
+        ExceptionDispatchInfo? error = null;
         foreach (var h in Delegate.EnumerateInvocationList(handler))
         {
             try
@@ -411,7 +410,7 @@ public abstract partial class YType
             return;
         }
 
-        ExceptionDispatchInfo error = null;
+        ExceptionDispatchInfo? error = null;
         foreach (var h in Delegate.EnumerateInvocationList(handler))
         {
             try
@@ -428,11 +427,11 @@ public abstract partial class YType
     }
 
     // The name of a root type: it never changes, and finding it walks the document's root types.
-    private string _rootTypeKey;
+    private string? _rootTypeKey;
 
     internal string FindRootTypeKey()
     {
-        return _rootTypeKey ??= Doc.FindRootTypeKey(this);
+        return _rootTypeKey ??= Doc!.FindRootTypeKey(this);
     }
 
     private protected IEnumerable<KeyValuePair<string, ItemRef>> TypeMapEnumerate() => _map.Select(kvp => new KeyValuePair<string, ItemRef>(kvp.Key, MapItem(kvp.Value))).Where(kvp => !kvp.Value.Deleted);

@@ -359,7 +359,7 @@ public abstract partial class YEvent
         get
         {
             var length = 0;
-            for (var child = Target; !child.IsRoot && child != CurrentTarget; child = child.ParentType)
+            for (var child = Target; !child.IsRoot && child != CurrentTarget; child = child.ParentType!)
             {
                 length++;
             }
@@ -385,7 +385,7 @@ public abstract partial class YEvent
                 // Parent is array-ish.
                 int i = 0;
                 var id = child.ItemId;
-                var c = child.ParentType._start;
+                var c = child.ParentType!._start;
                 while (!c.IsNull && !c.Id.Equals(id))
                 {
                     var cItem = c.AsItem;
@@ -400,7 +400,7 @@ public abstract partial class YEvent
                 path[--at] = new PathSegment(null, i);
             }
 
-            child = child.ParentType;
+            child = child.ParentType!;
         }
 
         return path;

@@ -346,7 +346,7 @@ public sealed partial class UndoManager
             return store.GetItemCleanStart(transaction, item.Redone.Value);
         }
 
-        var parentItem = ((YType)item.Parent)._item;
+        var parentItem = ((YType)item.Parent!)._item;
         ItemRef left = default;
         ItemRef right;
 

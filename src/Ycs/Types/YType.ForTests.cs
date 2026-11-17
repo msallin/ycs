@@ -1,4 +1,3 @@
-#nullable disable // Not annotated for nullable reference types yet.
 
 namespace Ycs;
 
@@ -15,7 +14,7 @@ public abstract partial class YType
     /// <summary>Whether this type, or the type that holds it, or the one above, is deleted.</summary>
     internal bool InDeletedTypeForTests()
     {
-        for (var type = this; !type.IsRoot; type = type.ParentType)
+        for (var type = this; !type.IsRoot; type = type.ParentType!)
         {
             if (type.ItemDeleted)
             {
