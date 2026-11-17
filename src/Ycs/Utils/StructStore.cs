@@ -17,7 +17,7 @@ internal sealed partial class StructStore
 
     // The values of Clients by the client's index in the slab's client table (what a slot names its client by): the paths
     // that start from a struct find its list without hashing the client. Set where Clients is, by AddStruct.
-    private ClientStructs[] _structsByIndex = new ClientStructs[4];
+    private ClientStructs[] _structsByIndex = [];
 
     /// <summary>The list of the struct's client; null when the store holds no struct of that client.</summary>
     private ClientStructs? StructsOf(ItemRef item)
