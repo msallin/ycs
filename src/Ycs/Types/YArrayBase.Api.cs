@@ -60,11 +60,13 @@ public abstract partial class YArrayBase
                 n = SeekRight(n, ref index);
             }
 
-            if (!n.Deleted && n.Countable)
+            // The slot is read before the split, which allocates; the loop leaves right after it.
+            ref readonly var slot = ref n.Peek();
+            if ((slot.Info & (Slot.DeletedFlag | Slot.CountableFlag)) == Slot.CountableFlag)
             {
-                if (index <= n.Length)
+                if (index <= slot.Length)
                 {
-                    if (index < n.Length)
+                    if (index < slot.Length)
                     {
                         // Insert in-between. After a stale marker beyond the index, index is negative, as in Yjs: the
                         // clock lies in an earlier struct of n's client, which is split as Yjs splits it, or below 0,
@@ -75,7 +77,7 @@ public abstract partial class YArrayBase
                     break;
                 }
 
-                index -= n.Length;
+                index -= slot.Length;
             }
         }
 
@@ -117,10 +119,12 @@ public abstract partial class YArrayBase
                 n = SeekRight(n, ref index);
             }
 
-            if (!n.Deleted && n.Countable)
+            ref readonly var slot = ref n.Peek();
+            if ((slot.Info & (Slot.DeletedFlag | Slot.CountableFlag)) == Slot.CountableFlag)
             {
-                if (index < n.Length)
+                if (index < slot.Length)
                 {
+                    // The split allocates: the length is read again after it.
                     transaction.Doc.Store.GetItemCleanStart(transaction, new ID(n.Id.Client, n.Id.Clock + index));
                 }
 

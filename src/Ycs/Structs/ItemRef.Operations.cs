@@ -256,18 +256,31 @@ internal readonly partial struct ItemRef
     /// mergeable kind always merges with one of its kind).
     /// </summary>
     /// https://github.com/yjs/yjs/blob/c2f0ca3faef731a93ba28f286ffafe0e1ea1a3aa/src/structs/Item.js#L557
-    private bool CanMergeItemWith(ItemRef right) =>
-        right.IsItem &&
-        right.LeftOrigin == LastId &&
-        Right == right &&
-        right.RightOrigin == RightOrigin &&
-        ClientIndex == right.ClientIndex &&
-        Clock + Length == right.Clock &&
-        Deleted == right.Deleted &&
-        Redone == null &&
-        right.Redone == null &&
-        Content.GetType() == right.Content.GetType() &&
-        Content.Mergeable;
+    private bool CanMergeItemWith(ItemRef right)
+    {
+        // No allocation here: both slots stay valid. The origins and the client compare by index, which names one client
+        // in the slab, and clock; no origin is -1.
+        if (right.IsNull)
+        {
+            return false;
+        }
+
+        ref readonly var l = ref Read();
+        ref readonly var r = ref right.Peek();
+        return r.Kind != 0 &&
+            l.Kind == r.Kind &&
+            r.OriginClient == l.Client &&
+            r.OriginClock == l.Clock + l.Length - 1 &&
+            l.Right == right._handle &&
+            r.ROriginClient == l.ROriginClient &&
+            (l.ROriginClient < 0 || r.ROriginClock == l.ROriginClock) &&
+            l.Client == r.Client &&
+            l.Clock + l.Length == r.Clock &&
+            ((l.Info ^ r.Info) & Slot.DeletedFlag) == 0 &&
+            ((l.Info | r.Info) & Slot.HasRedoneFlag) == 0 &&
+            Content.GetType() == right.Content.GetType() &&
+            Content.Mergeable;
+    }
 
     /// <summary>Try to merge two items.</summary>
     private bool MergeItemWith(ItemRef right)
