@@ -35,6 +35,17 @@ public class GarbageCollectionCheckOrderTests
     }
 
     [TestMethod]
+    public void ApplyUpdate_DeletedPlannedTypeTheFilterKeeps_IsNotCollectedAndApplies()
+    {
+        var asked = 0;
+        var doc = new YDoc(new YDocOptions { GarbageCollectionFilter = _ => { asked++; return false; } });
+
+        doc.ApplyUpdate(Convert.FromHexString(ReplacedAndDeleted));
+
+        Assert.IsTrue(asked > 0 && doc.Store.PendingBytes == 0);
+    }
+
+    [TestMethod]
     public void ApplyUpdate_WaitingDeleteRangeAppliesToASplitValue_Rejects()
     {
         var doc = new YDoc();

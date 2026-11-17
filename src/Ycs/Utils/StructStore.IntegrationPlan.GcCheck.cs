@@ -73,6 +73,9 @@ internal sealed partial class StructStore
             }
         }
 
+        // The filter is given a view of a planned item read from the staging table, or of a stored item.
+        private static ItemView GcViewOf(YDoc doc, PlanItem item) => item.GcView(doc);
+
         private static YUpdateException MapValueSplit() => new(
             "The update deletes a type in which a key has two values (its value was split, by this update or an earlier one), " +
             "which the garbage collection cannot remove. The document is unchanged.");

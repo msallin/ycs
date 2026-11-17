@@ -7,19 +7,19 @@ namespace Ycs;
 internal sealed partial class StructStore
 {
     /// <summary>
-    /// One client's range of the update's staging table (<see cref="StagingTable.RangeOf"/>) and how far the plan has
-    /// read it. The plan keeps one per client index.
+    /// How far the plan has read one client's range of the update's staging table (<see cref="StagingTable.RangeOf"/>).
+    /// The plan keeps one per client index.
     /// </summary>
-    internal sealed class ClientStructRefs
+    internal struct ClientStructRefs
     {
-        /// <summary>The client's index in the table.</summary>
-        public int Client { get; set; }
-
         /// <summary>The table index of the next struct to read.</summary>
-        public int Next { get; set; }
+        public int Next;
 
         /// <summary>The table index after the client's last struct; the range is empty when <see cref="Next"/> reaches it.</summary>
-        public int End { get; set; }
+        public int End;
+
+        /// <summary>Whether the client's structs went to <see cref="Rest"/>; the range is then empty.</summary>
+        public bool SetAside;
     }
 
     // The plan of the last update, kept for the next one (null while one is in use).
@@ -53,14 +53,12 @@ internal sealed partial class StructStore
         // Planning state, kept between updates. _table is null while no update is planned: what holds an index of a
         // table is cleared before the table is reset or reused (Clear).
         private StagingTable _table;
-        private readonly List<ClientStructRefs> _clientsStructRefs = new();
+        private ClientStructRefs[] _clientsStructRefs = [];
         private readonly List<int> _clientsStructRefsIds = new();
         private readonly List<int> _stack = new();
-        private readonly List<ClientStructRefs> _freeRefs = new();
         private readonly List<PlanItem> _chain = new();
 
-        // The decoded objects of the update by client index, at the positions of the table: Execute and the pre-check still
-        // adopt and read them (StructAt).
+        // The decoded objects of the update by client index, at the positions of the table, which Execute adopts (StructAt).
         private readonly List<List<AbstractStruct>> _objects = new();
 
         // The last client and struct a planned id was looked up in: planned structs refer mostly to the one before them.
@@ -159,7 +157,7 @@ internal sealed partial class StructStore
 
         /// <summary>
         /// The structs set aside as <see cref="EncodeRest"/> writes them, from the decoded objects (what Yjs does, which
-        /// the table's encoding must equal byte for byte). Kept for the test of that equality until the objects go.
+        /// the table's encoding must equal byte for byte). The test of that equality compares them.
         /// </summary>
         internal byte[] EncodeRestFromObjects()
         {
@@ -236,15 +234,6 @@ internal sealed partial class StructStore
             _steps.Clear();
             _stack.Clear();
             _clientsStructRefsIds.Clear();
-            foreach (var refs in _clientsStructRefs)
-            {
-                if (refs != null)
-                {
-                    _freeRefs.Add(refs);
-                }
-            }
-
-            _clientsStructRefs.Clear();
             _objects.Clear();
             _plannedHint = 0;
             _typeDepths?.Clear();
@@ -265,10 +254,15 @@ internal sealed partial class StructStore
             Clear();
             _table = table;
             _maxDepth = maxDepth;
+            if (_clientsStructRefs.Length < table.ClientCount)
+            {
+                _clientsStructRefs = new ClientStructRefs[Math.Max(table.ClientCount, _clientsStructRefs.Length * 2)];
+            }
+
             var clientsStructRefs = _clientsStructRefs;
             for (var c = 0; c < table.ClientCount; c++)
             {
-                clientsStructRefs.Add(null);
+                clientsStructRefs[c] = default;
                 _objects.Add(null);
             }
 
@@ -290,21 +284,7 @@ internal sealed partial class StructStore
                 planned += count;
                 _store.ReserveStructs(table.ClientAt(client), count);
 
-                ClientStructRefs clientRefs;
-                if (_freeRefs.Count > 0)
-                {
-                    clientRefs = _freeRefs[^1];
-                    _freeRefs.RemoveAt(_freeRefs.Count - 1);
-                }
-                else
-                {
-                    clientRefs = new ClientStructRefs();
-                }
-
-                clientRefs.Client = client;
-                clientRefs.Next = start;
-                clientRefs.End = start + count;
-                clientsStructRefs[client] = clientRefs;
+                clientsStructRefs[client] = new ClientStructRefs { Next = start, End = start + count };
                 _clientsStructRefsIds.Add(client);
                 i = start + count;
             }
@@ -316,13 +296,13 @@ internal sealed partial class StructStore
             _clientsStructRefsIds.Sort(_byClientId);
 
             var curStructsTarget = GetNextStructTarget();
-            if (curStructsTarget == null)
+            if (curStructsTarget < 0)
             {
                 return;
             }
 
             var stack = _stack;
-            var stackHead = curStructsTarget.Next++;
+            var stackHead = clientsStructRefs[curStructsTarget].Next++;
 
             // Iterate over all struct readers until we are done.
             while (true)
@@ -361,8 +341,7 @@ internal sealed partial class StructStore
 
                             // Get the struct reader that has the missing struct.
                             var missingClient = table.ClientAt(missing);
-                            var structRefs = clientsStructRefs[missing];
-                            if (structRefs == null || structRefs.End == structRefs.Next)
+                            if (clientsStructRefs[missing].End == clientsStructRefs[missing].Next)
                             {
                                 // This update message causally depends on another update message that doesn't exist yet.
                                 UpdateMissingSv(missingClient, GetState(missingClient));
@@ -373,7 +352,7 @@ internal sealed partial class StructStore
                                 // Recorded now, as the walk may stop further on and then only records what its last struct
                                 // waits for: the retry check would not fire when this client's structs arrive (yjs/yjs#824).
                                 UpdateMissingSv(missingClient, GetState(missingClient));
-                                stackHead = structRefs.Next++;
+                                stackHead = clientsStructRefs[missing].Next++;
                                 continue;
                             }
                         }
@@ -402,39 +381,40 @@ internal sealed partial class StructStore
                     stackHead = stack[^1];
                     stack.RemoveAt(stack.Count - 1);
                 }
-                else if (curStructsTarget != null && curStructsTarget.Next < curStructsTarget.End)
+                else if (curStructsTarget >= 0 && clientsStructRefs[curStructsTarget].Next < clientsStructRefs[curStructsTarget].End)
                 {
-                    stackHead = curStructsTarget.Next++;
+                    stackHead = clientsStructRefs[curStructsTarget].Next++;
                 }
                 else
                 {
                     curStructsTarget = GetNextStructTarget();
-                    if (curStructsTarget == null)
+                    if (curStructsTarget < 0)
                     {
                         // We are done!
                         break;
                     }
 
-                    stackHead = curStructsTarget.Next++;
+                    stackHead = clientsStructRefs[curStructsTarget].Next++;
                 }
             }
         }
 
-        private ClientStructRefs GetNextStructTarget()
+        /// <summary>The client index of the highest client that has structs left to read, -1 when none has; exhausted clients (and those set aside) are dropped.</summary>
+        private int GetNextStructTarget()
         {
             var ids = _clientsStructRefsIds;
             while (ids.Count > 0)
             {
-                var target = _clientsStructRefs[ids[^1]];
-                if (target.Next < target.End)
+                var client = ids[^1];
+                if (_clientsStructRefs[client].Next < _clientsStructRefs[client].End)
                 {
-                    return target;
+                    return client;
                 }
 
                 ids.RemoveAt(ids.Count - 1);
             }
 
-            return null;
+            return -1;
         }
 
         /// <summary>
@@ -483,26 +463,22 @@ internal sealed partial class StructStore
             foreach (var index in _stack)
             {
                 var client = _table.At(index).Client;
-                var inapplicableItems = _clientsStructRefs[client];
-                if (inapplicableItems != null)
+                ref var inapplicableItems = ref _clientsStructRefs[client];
+                if (!inapplicableItems.SetAside)
                 {
                     // Decrement because we weren't able to apply previous operation.
                     inapplicableItems.Next--;
                     Rest[client] = (inapplicableItems.Next, inapplicableItems.End - inapplicableItems.Next);
-                    _clientsStructRefs[client] = null;
 
-                    // The plan may still read it as its current target: it is empty now.
+                    // Empty, so that the walk skips it (GetNextStructTarget) and no struct of it is read again.
                     inapplicableItems.Next = inapplicableItems.End;
-                    _freeRefs.Add(inapplicableItems);
+                    inapplicableItems.SetAside = true;
                 }
                 else
                 {
                     // The client's structs went to the rest already (an earlier struct of the stack): as Yjs, the struct alone replaces them.
                     Rest[client] = (index, 1);
                 }
-
-                // Remove client from clientsStructRefsIds to prevent users from applying the same update again.
-                _clientsStructRefsIds.Remove(client);
             }
 
             _stack.Clear();
@@ -600,8 +576,5 @@ internal sealed partial class StructStore
             var client = _table.FindClient(id.Client);
             return client < 0 ? -1 : _table.FindByClock(client, id.Clock, ref _plannedHint);
         }
-
-        /// <summary>The view the garbage collection filter is asked about for <paramref name="item"/>, a planned item or a stored one.</summary>
-        private static ItemView GcViewOf(YDoc doc, PlanItem item) => item.GcView(doc);
     }
 }

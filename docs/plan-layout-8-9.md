@@ -61,8 +61,9 @@ coordinator merges the rows).
 
 Step 8: 8.0 (`Arena<T>`), 8.1 (slot kind and the content accessors), 8.2a/b/c (every caller on the accessors), 8.9
 (Deleted inline), 8.10 (Type inline, `Payload` the type-table index). Step 9: 9.0 (`StagingTable`), 9.1 (strings read as
-spans), 9.2 (`StructCursor.NextStaged`, `UpdateReader`'s shadow behind `StageForTests`), 9.3 (`UpdateOperations` on
-staging, `DecodeUpdate` from staging). **8.3** (the char arena as a shadow of String content, `Slab.Chars`,
+spans), 9.2 (`StructCursor.NextStaged`; `UpdateReader` always stages), 9.3 (`UpdateOperations` on
+staging, `DecodeUpdate` from staging), 9.4a (the integration plan on staging; the planned raise of a remote-update
+budget row (D11) was not needed). **8.3** (the char arena as a shadow of String content, `Slab.Chars`,
 `ItemRef.Chars.cs`, `CharsViolation` after every test transaction, the switches tiny pages and `CopyOnMergeForTests`) is
 built on `layout-8-3` and under review. Its reviewer may note two performance points, both for 8.3a, neither a
 correctness issue: `Arena.Extend` looks the tail table up before it tests the write end, and a page of its own carries a
