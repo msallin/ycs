@@ -154,7 +154,7 @@ public class EnumeratorLifetimeTests
     }
 
     [TestMethod]
-    public void WriteTo_ItemMergedAwayWhileTheWriterRuns_ContinuesWithTheNextItem()
+    public void WriteTo_ItemDeletedWhileTheWriterRuns_WritesNothingForItAndContinues()
     {
         var a = new YDoc(new YDocOptions { ClientId = 1 });
         var text = a.GetText("t");
@@ -174,7 +174,7 @@ public class EnumeratorLifetimeTests
 
         text.WriteTo(writer);
 
-        Assert.AreEqual("acdz", new string(writer.Written.ToArray()));
+        Assert.AreEqual("az", new string(writer.Written.ToArray()));
     }
 
     [TestMethod]

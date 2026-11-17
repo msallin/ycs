@@ -53,6 +53,11 @@ public class ScalingTests
 #if DEBUG
         Assert.Inconclusive("Timed with -c Release (a Debug build checks every marker lookup against Yjs' literal walk).");
 #endif
+        if (Slab.CompactEveryTimeForTests)
+        {
+            Assert.Inconclusive("Compacting on every call is quadratic by construction.");
+        }
+
         ScalingProbe.AssertNotQuadratic(
             n =>
             {

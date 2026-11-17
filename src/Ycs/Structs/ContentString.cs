@@ -175,8 +175,6 @@ internal class ContentString : IContentEx
         return true;
     }
 
-    internal bool EndsWithHighSurrogate => Length > 0 && char.IsHighSurrogate(_builder != null ? _builder[_builder.Length - 1] : _string![_start + _length - 1]);
-
     /// <summary>Appends <paramref name="text"/>, as <see cref="MergeWith"/> appends a content of it.</summary>
     internal void Append(string text)
     {

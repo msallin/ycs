@@ -48,6 +48,13 @@ internal readonly partial struct ItemRef
             return;
         }
 
+        if (Kind == SlotKind.String)
+        {
+            Item.WriteItemHeader(encoder, ContentString._ref, offset, Id, LeftOrigin, RightOrigin, ParentSub, root, parentId);
+            encoder.WriteString(Chars[offset..]);
+            return;
+        }
+
         Item.WriteItem(encoder, offset, Id, LeftOrigin, RightOrigin, ParentSub, Content, root, parentId);
     }
 }

@@ -79,8 +79,33 @@ internal readonly partial struct ItemRef
         _slab.Chars.MarkDead(slot.Payload, slot.Length);
     }
 
-    /// <summary>The text of a <see cref="SlotKind.String"/> item; valid until the item's content changes.</summary>
-    internal ReadOnlySpan<char> Chars => Typed<ContentString>(SlotKind.String).GetString().AsSpan();
+    /// <summary>
+    /// The text of a <see cref="SlotKind.String"/> item, read from the arena. The span is valid only until user code runs
+    /// or a batch ends (a compaction moves and frees ranges): consume it before.
+    /// </summary>
+    internal ReadOnlySpan<char> Chars
+    {
+        get
+        {
+            ref readonly var slot = ref Read();
+            return slot.Kind == (int)SlotKind.String
+                ? _slab.Chars.Slice(slot.Payload, slot.Length)
+                : throw new InvalidOperationException($"The struct holds {Kind}, not {SlotKind.String} content.");
+        }
+    }
+
+    /// <summary>The text of a <see cref="SlotKind.String"/> item, one string per UTF-16 code unit (Yjs' <c>getContent</c>).</summary>
+    private object[] CharElements()
+    {
+        var chars = Chars;
+        var result = new object[chars.Length];
+        for (var i = 0; i < result.Length; i++)
+        {
+            result[i] = chars[i].ToString();
+        }
+
+        return result;
+    }
 
     /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
     internal void AppendChars(string text)
@@ -91,18 +116,48 @@ internal readonly partial struct ItemRef
         slot.Payload = _slab.Chars.Extend(slot.Payload, slot.Length, text);
     }
 
-    /// <summary>Copies the text of a <see cref="SlotKind.String"/> item to <paramref name="destination"/>, which holds at least <see cref="Length"/> characters, without materializing a run kept in a builder.</summary>
-    internal void CopyCharsTo(Span<char> destination) => Typed<ContentString>(SlotKind.String).CopyTo(destination);
+    /// <summary>Copies the text of a <see cref="SlotKind.String"/> item to <paramref name="destination"/>, which holds at least <see cref="Length"/> characters.</summary>
+    internal void CopyCharsTo(Span<char> destination) => Chars.CopyTo(destination);
 
     /// <summary>
-    /// Writes the text of a <see cref="SlotKind.String"/> item to <paramref name="writer"/>. The content is read before the writer
-    /// is asked for its span: a writer that runs user code there may change the item.
+    /// Writes the text of a <see cref="SlotKind.String"/> item to <paramref name="writer"/> and returns the item the walk
+    /// goes on with (default at the end of the list). The writer is asked for its span first: user code in <c>GetSpan</c>
+    /// may edit the document, the end of its batch may compact the arena and a struct that left the list may have freed
+    /// this item's slot. The struct that holds the item's id is looked up again after it, and its current text is
+    /// sliced from that id, a piece at a time while it is longer than the span asked for; a struct that is not a live
+    /// String now writes nothing.
     /// </summary>
-    internal void WriteCharsTo(IBufferWriter<char> writer)
+    internal ItemRef WriteCharsTo(IBufferWriter<char> writer, StructStore store)
     {
-        var content = Typed<ContentString>(SlotKind.String);
-        var length = content.Length;
-        content.CopyTo(writer.GetSpan(length));
-        writer.Advance(length);
+        var id = Id;
+        var length = Length;
+        var held = this;
+        while (true)
+        {
+            var departures = store.Departures;
+            var span = writer.GetSpan(length);
+            held = store.Resolve(held, id, departures);
+            if (held.IsNull)
+            {
+                return default;
+            }
+
+            if (held.Kind != SlotKind.String || held.Deleted)
+            {
+                return held.Right.AsItem;
+            }
+
+            var offset = (int)(id.Clock - held.Id.Clock);
+            var count = Math.Min(length, held.Length - offset);
+            held.Chars.Slice(offset, count).CopyTo(span);
+            writer.Advance(count);
+            if (offset + count == held.Length)
+            {
+                return held.Right.AsItem;
+            }
+
+            id = new ID(id.Client, id.Clock + count);
+            length = held.Length - offset - count;
+        }
     }
 }
