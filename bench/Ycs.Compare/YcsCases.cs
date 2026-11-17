@@ -332,7 +332,7 @@ internal static class YcsCases
     }
 
     private static Prepared MapResult(YDoc doc, YMap map, Action body) =>
-        new(body, () => Canonical.Map(map.Select(kv => (kv.Key, Convert.ToInt64(kv.Value)))), () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
+        new(body, () => Canonical.Map(map.Select(kv => (kv.Key, kv.Value.GetInt64()))), () => doc.EncodeStateAsUpdate(), () => doc.EncodeStateAsUpdate(format: UpdateFormat.V2), doc.Destroy);
 
     public static Prepared MapSetDistinct(Fixtures f, bool oneTxn)
     {
@@ -635,7 +635,7 @@ internal static class YcsCases
         return root switch
         {
             "text" => doc.GetText("text").ToString(),
-            "map" => Canonical.Map(doc.GetMap("map").Select(kv => (kv.Key, Convert.ToInt64(kv.Value)))),
+            "map" => Canonical.Map(doc.GetMap("map").Select(kv => (kv.Key, kv.Value.GetInt64()))),
             "array" => Canonical.Array(doc.GetArray("array").Select(v => v.GetInt64())),
             _ => throw new ArgumentException(root),
         };
