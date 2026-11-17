@@ -216,11 +216,13 @@ internal sealed partial class ClientStructs
         {
             // Position by position in leaf k, up to the run's last position, which the walk never passes.
             var leaf = LeafAt(k);
+            var flags = leaf.Flags;
+            var starts = leaf.Starts;
             var end = k == lastLeaf ? lastOffset : leaf.Count;
             for (; i < end; i++)
             {
-                var value = ValueAt(k, i);
-                if (sum + value >= target || (stopAtFormats && (leaf.Flags[i] & Format) != 0))
+                var value = (flags[i] & Visible) == 0 ? 0 : (i + 1 < leaf.Count ? starts[i + 1] : NextFirstStart(k)) - starts[i];
+                if (sum + value >= target || (stopAtFormats && (flags[i] & Format) != 0))
                 {
                     passed = sum;
                     return FirstPosition(k) + i;
@@ -276,10 +278,13 @@ internal sealed partial class ClientStructs
         while (true)
         {
             // Position by position in leaf k, down to the run's head.
+            var leaf = LeafAt(k);
+            var flags = leaf.Flags;
+            var starts = leaf.Starts;
             var low = k == headLeaf ? headOffset : 0;
             for (; j > low; j--)
             {
-                var value = ValueAt(k, j - 1);
+                var value = (flags[j - 1] & Visible) == 0 ? 0 : (j < leaf.Count ? starts[j] : NextFirstStart(k)) - starts[j - 1];
                 if (sum + value >= target)
                 {
                     passed = sum;
