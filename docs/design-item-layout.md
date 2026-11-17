@@ -193,7 +193,7 @@ struct of a store is a slot of its document's `Slab`.
 
 `Utils/Arena.cs`, `Utils/Slab.Compaction.cs`, `Utils/StructStore.Compaction.cs`, `Utils/SlotKind.cs`,
 `Structs/ItemRef.Content.cs` and the partials it dispatches to (`ItemRef.Chars.cs`, `ItemRef.Values.cs`,
-`ItemRef.Content.Collections.cs`, `ItemRef.Content.Other.cs`, `ItemRef.Content.Text.cs`, `ItemRef.Runs.cs`,
+`ItemRef.Content.Collections.cs`, `ItemRef.Content.Elements.cs`, `ItemRef.Content.Text.cs`, `ItemRef.Runs.cs`,
 `ItemRef.Write.cs`). The content of an item is in its slot or in the slab beside it, by kind (`SlotKind`: the wire's
 reference numbers, with `Skip` for the staged form only and `Free` for a slot on a free list):
 
