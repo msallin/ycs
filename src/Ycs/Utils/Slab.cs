@@ -70,14 +70,14 @@ internal sealed partial class Slab
 
     // The pages' arrays by page number, for the reads: two indexes reach a slot. Published whenever a page is made, grown,
     // gets its object pages or is released.
-    private Slot[]?[] _slotPages = new Slot[]?[4];
-    private object?[]?[] _refPages = new object?[]?[4];
-    private object?[]?[] _keyPages = new object?[]?[4];
-    private readonly Stack<int> _released = [];
+    private Slot[]?[] _slotPages = [];
+    private object?[]?[] _refPages = [];
+    private object?[]?[] _keyPages = [];
+    private Stack<int>? _released;
 
     // Pages that may have room, most recently opened last; an entry for a released or full page is dropped when met.
-    private readonly Stack<int> _open = [];
-    private readonly List<int> _pending = [];
+    private Stack<int>? _open;
+    private List<int>? _pending;
     private readonly int _firstSlots;
     private int _live;
 
@@ -122,7 +122,7 @@ internal sealed partial class Slab
     public int LiveCount => _live;
 
     /// <summary>The pages held, released ones excluded.</summary>
-    public int PageCount => _pages.Count - _released.Count;
+    public int PageCount => _pages.Count - (_released?.Count ?? 0);
 
     /// <summary>The slots page 0 holds room for (0 before the first allocation).</summary>
     public int FirstPageCapacity => _pages.Count == 0 ? 0 : _pages[0]!.Slots.Length;
@@ -333,7 +333,7 @@ internal sealed partial class Slab
         if (!page.Dirty)
         {
             page.Dirty = true;
-            _pending.Add(PageOf(handle));
+            (_pending ??= []).Add(PageOf(handle));
         }
 
         _live--;
@@ -344,6 +344,11 @@ internal sealed partial class Slab
     /// </summary>
     public void AllowReuse()
     {
+        if (_pending == null)
+        {
+            return;
+        }
+
         foreach (var number in _pending)
         {
             var page = _pages[number]!;
@@ -372,12 +377,12 @@ internal sealed partial class Slab
             {
                 _pages[number] = null;
                 Publish(number, null);
-                _released.Push(number);
+                (_released ??= []).Push(number);
             }
             else if (!page.Open)
             {
                 page.Open = true;
-                _open.Push(number);
+                (_open ??= []).Push(number);
             }
         }
 
@@ -396,7 +401,7 @@ internal sealed partial class Slab
             if (page == null)
             {
                 released++;
-                if (!_released.Contains(number))
+                if (_released?.Contains(number) != true)
                 {
                     found.Add($"page {number} is released but not listed as such");
                 }
@@ -408,9 +413,9 @@ internal sealed partial class Slab
             live += page.Live;
         }
 
-        if (released != _released.Count)
+        if (released != (_released?.Count ?? 0))
         {
-            found.Add($"{_released.Count} pages listed as released, {released} are");
+            found.Add($"{_released?.Count ?? 0} pages listed as released, {released} are");
         }
 
         if (live != _live)
@@ -505,7 +510,7 @@ internal sealed partial class Slab
 
     private Page FindPage(out int number)
     {
-        while (_open.Count > 0)
+        while (_open is { Count: > 0 })
         {
             number = _open.Peek();
             var page = _pages[number];
@@ -521,7 +526,7 @@ internal sealed partial class Slab
             }
         }
 
-        if (_released.Count > 0)
+        if (_released is { Count: > 0 })
         {
             number = _released.Pop();
         }
@@ -539,7 +544,7 @@ internal sealed partial class Slab
         NewGenerations(fresh);
         _pages[number] = fresh;
         Publish(number, fresh);
-        _open.Push(number);
+        (_open ??= []).Push(number);
         return fresh;
     }
 
