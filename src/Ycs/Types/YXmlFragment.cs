@@ -41,7 +41,7 @@ internal static class YXmlNodeHelpers
     }
 
     /// <summary>The type a visible (not deleted) node item holds.</summary>
-    internal static YType NodeOf(ItemRef item) => (YType)item.Content.GetContent()[0];
+    internal static YType NodeOf(ItemRef item) => (YType)item.TypeOf;
 
     internal static YType? ContentTypeOf(ItemRef item)
     {
@@ -50,8 +50,7 @@ internal static class YXmlNodeHelpers
             return null;
         }
 
-        var content = item.Content.GetContent();
-        return content.Count > 0 ? content[0] as YType : null;
+        return item.Kind == SlotKind.Type ? item.TypeOf as YType : null;
     }
 }
 

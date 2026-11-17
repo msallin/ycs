@@ -62,9 +62,9 @@ public abstract partial class YType
             }
 
             length += s.Length;
-            if (s.Content is ContentString cs)
+            if (s.Kind == SlotKind.String)
             {
-                text.Append(cs.GetString());
+                text.Append(s.Chars);
             }
         }
 

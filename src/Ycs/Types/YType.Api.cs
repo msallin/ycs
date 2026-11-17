@@ -91,7 +91,7 @@ public abstract partial class YType
     {
         if (TryGetMapItem(key, out var val) && !val.Deleted)
         {
-            value = ValueAt(val.Content, val.Length - 1);
+            value = val.StoredValueAt(val.Length - 1);
             return true;
         }
 
@@ -110,7 +110,7 @@ public abstract partial class YType
             }
 
             var key = kvp.Key;
-            var value = ValueAt(item.Content, item.Length - 1);
+            var value = item.StoredValueAt(item.Length - 1);
             yield return new KeyValuePair<string, object?>(key, value);
         }
     }

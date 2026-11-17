@@ -430,13 +430,7 @@ public abstract partial class YType
     /// The value at <paramref name="index"/> of <paramref name="content"/>; for 'any' content without the read-only wrapper.
     /// Null for collected content, as Yjs' <c>getContent()[index]</c> of <c>[]</c> is <c>undefined</c>.
     /// </summary>
-    internal static object ValueAt(IContent content, int index) => content switch
-    {
-        ContentAny any => any.ValueAt(index),
-        ContentJson json => json.ValueAt(index),
-        ContentDeleted => null,
-        _ => content.GetContent()[index],
-    };
+    internal static object ValueAt(IContent content, int index) => ItemRef.StoredValueAt(content, index);
 
     /// <summary>How many keys have a value that is not deleted, by walking the map (<see cref="_mapCount"/> is kept instead).</summary>
     internal int TypeMapCount()

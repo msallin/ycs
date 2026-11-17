@@ -29,7 +29,7 @@ public abstract partial class YType
             return false;
         }
 
-        value = ValueAt(v.Content, v.Length - 1);
+        value = v.StoredValueAt(v.Length - 1);
         return true;
     }
 
@@ -43,7 +43,7 @@ public abstract partial class YType
             var v = MapItemAt(MapItem(kvp.Value), snapshot);
             if (!v.IsNull && v.IsVisible(snapshot))
             {
-                res[kvp.Key] = YValue.FromStored(ValueAt(v.Content, v.Length - 1));
+                res[kvp.Key] = YValue.FromStored(v.StoredValueAt(v.Length - 1));
             }
         }
 

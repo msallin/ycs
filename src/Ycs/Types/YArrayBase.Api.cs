@@ -179,7 +179,7 @@ public abstract partial class YArrayBase
                 {
                     for (var i = start; i < n.Length && length > 0; i++)
                     {
-                        cs.Add(ValueAt(n.Content, i));
+                        cs.Add(n.StoredValueAt(i));
                         length--;
                     }
 
@@ -228,7 +228,7 @@ public abstract partial class YArrayBase
             {
                 if (index < n.Length)
                 {
-                    value = ValueAt(n.Content, index);
+                    value = n.StoredValueAt(index);
                     return true;
                 }
 
@@ -251,7 +251,7 @@ public abstract partial class YArrayBase
             {
                 for (var i = 0; i < n.Length; i++)
                 {
-                    result.Add(ValueAt(n.Content, i));
+                    result.Add(n.StoredValueAt(i));
                 }
             }
         }
@@ -272,10 +272,10 @@ public abstract partial class YArrayBase
             if (n.Countable && !n.Deleted)
             {
                 var length = n.Length;
-                var content = n.Content;
+                var content = n.Stored;
                 for (var i = 0; i < length; i++)
                 {
-                    yield return ValueAt(content, i);
+                    yield return content.ValueAt(i);
                 }
             }
 

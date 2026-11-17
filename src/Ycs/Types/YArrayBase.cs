@@ -397,10 +397,10 @@ public abstract partial class YArrayBase : YType
 
         void packJsonContent()
         {
-            if (jsonContent.Count > 0 && !left.IsNull && left.CanExtendRun(transaction, this, right, typeof(ContentAny), ownClientId))
+            if (jsonContent.Count > 0 && !left.IsNull && left.CanExtendAnyRun(transaction, this, right, ownClientId))
             {
                 // Appending to this client's run: the run takes the values in place of a new item.
-                ((ContentAny)left.Content).Append(jsonContent);
+                left.AppendValues(jsonContent);
                 left.ExtendRun(transaction, jsonContent.Count);
                 jsonContent.Clear();
             }

@@ -183,7 +183,7 @@ public partial class YMap : IReadOnlyDictionary<string, YValue>
             var item = MapItem(kvp.Value);
             if (!item.Deleted)
             {
-                yield return new KeyValuePair<string, YValue>(kvp.Key, YValue.FromStored(ValueAt(item.Content, item.Length - 1)));
+                yield return new KeyValuePair<string, YValue>(kvp.Key, YValue.FromStored(item.StoredValueAt(item.Length - 1)));
             }
         }
     }
