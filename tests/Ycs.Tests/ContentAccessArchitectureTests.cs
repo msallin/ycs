@@ -24,7 +24,7 @@ public class ContentAccessArchitectureTests
 
     // ItemView reads the decoded form, StructStore its decoded structs in the integration plan and the content object
     // against its kind in the store checks; the IL does not tell StructStore's partial files apart.
-    private static readonly string[] DecodedReaders = ["ItemView", "StructStore"];
+    private static readonly string[] DecodedReaders = ["ItemView"];
 
     [TestMethod]
     public void Library_EveryMethodBody_ReadsContentOnlyInTheAllowedTypes()
@@ -71,6 +71,33 @@ public class ContentAccessArchitectureTests
 
             if (op.Op == OpCodes.Newobj && op.Token.Kind == HandleKind.MethodDefinition
                 && md.GetString(md.GetTypeDefinition(md.GetMethodDefinition((MethodDefinitionHandle)op.Token).GetDeclaringType()).Name) == "ContentDeleted")
+            {
+                found.Add($"{outerName} ({type}.{method})");
+            }
+        }
+
+        Assert.AreEqual(string.Empty, string.Join("\n", found));
+    }
+
+    // A store slot holds no ContentString either: the text of a String item is in the character arena. Only the decoded
+    // form makes one (ContentString itself: Read, Copy).
+    [TestMethod]
+    public void Library_EveryMethodBody_MakesContentStringOnlyInTheDecodedForm()
+    {
+        using var scan = IlScan.Read();
+        var (_, ops, md) = scan;
+        var found = new SortedSet<string>(StringComparer.Ordinal);
+
+        foreach (var (type, method, outer, _, op) in ops)
+        {
+            var outerName = md.GetString(md.GetTypeDefinition(outer).Name);
+            if (outerName.StartsWith("ContentString", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            if (op.Op == OpCodes.Newobj && op.Token.Kind == HandleKind.MethodDefinition
+                && md.GetString(md.GetTypeDefinition(md.GetMethodDefinition((MethodDefinitionHandle)op.Token).GetDeclaringType()).Name) == "ContentString")
             {
                 found.Add($"{outerName} ({type}.{method})");
             }

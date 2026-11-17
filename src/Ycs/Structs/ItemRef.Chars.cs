@@ -4,9 +4,8 @@ using System.Buffers;
 
 namespace Ycs;
 
-// The shadow of a String item's text in the slab's character arena: the slot's Payload is the offset of a range, its
-// Length the range's length, and the range equals the text of the content object at every write (a String is never empty:
-// the decoder and the inserts refuse an empty one).
+// The text of a String item lives in the slab's character arena and nowhere else: the slot's Payload is the offset of a
+// range, its Length the range's length (a String is never empty: the decoder and the inserts refuse an empty one).
 // Each write path of the text keeps it: NewItem (copy in), AppendChars (extend), SplitItem (payload + diff), MergeItemWith
 // (extend or copy), CutCharsHead (an item integrated from an offset), ReleaseChars (collected, freed): the String cases of
 // the dispatchers in ItemRef.Content.cs.
@@ -21,8 +20,19 @@ internal readonly partial struct ItemRef
     /// <summary>Test switch: a merge of two Strings copies even when the right range follows the left.</summary>
     internal static bool CopyOnMergeForTests;
 
-    private static long CopyChars(Slab slab, ContentString text) =>
-        slab.Chars.Append(text.TryGetSpan(out var span) ? span : text.GetString());
+    // Copies the text into the arena and makes the range the slot's.
+    private static void StoreChars(Slab slab, int handle, ReadOnlySpan<char> text)
+    {
+        var payload = slab.Chars.Append(text);
+        slab.Write(handle).Payload = payload;
+    }
+
+    /// <summary>
+    /// A new String item (not integrated) between <paramref name="left"/> and <paramref name="right"/> whose text is a copy
+    /// of <paramref name="text"/>, which must not be empty.
+    /// </summary>
+    public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, ReadOnlySpan<char> text) =>
+        NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, SlotKind.String, text.Length, null, text, default);
 
     // The part before offset leaves the item (an item integrated from an offset): its range is the rest.
     private void CutCharsHead(int offset)
@@ -111,7 +121,11 @@ internal readonly partial struct ItemRef
     internal void AppendChars(string text)
     {
         StructStore.CompactForTests(_slab, true);
-        Typed<ContentString>(SlotKind.String).Append(text);
+        if (Kind != SlotKind.String)
+        {
+            throw new InvalidOperationException($"The struct holds {Kind}, not {SlotKind.String} content.");
+        }
+
         ref var slot = ref Write();
         slot.Payload = _slab.Chars.Extend(slot.Payload, slot.Length, text);
     }

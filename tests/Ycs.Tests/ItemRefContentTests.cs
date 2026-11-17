@@ -191,13 +191,33 @@ public class ItemRefContentTests
     }
 
     [TestMethod]
-    public void CopyContent_StringItem_IsAnotherObjectOfTheSameText()
+    public void NewCopyOf_StringItem_CopiesTheRangeToAnotherOne()
+    {
+        var slab = new Slab();
+        var item = NewItem(slab, new ContentString("abc"));
+
+        var copy = ItemRef.NewCopyOf(slab, new ItemId(1, 10), default, default, item.Parent, null, item);
+
+        Assert.AreEqual(("abc", true), (copy.Chars.ToString(), slab.Read(copy.Handle).Payload != slab.Read(item.Handle).Payload));
+    }
+
+    [TestMethod]
+    public void CopyContent_StringItem_Throws()
     {
         var item = NewItem(new Slab(), new ContentString("abc"));
 
-        var copy = item.CopyContent();
+        Assert.ThrowsExactly<InvalidOperationException>(() => item.CopyContent());
+    }
 
-        Assert.IsTrue(copy is ContentString text && text.GetString() == "abc" && !ReferenceEquals(copy, item.Content));
+    [TestMethod]
+    public void NewCopyOf_AnyItem_CopiesTheContent()
+    {
+        var slab = new Slab();
+        var item = NewItem(slab, new ContentAny(new object[] { 1L, 2L }));
+
+        var copy = ItemRef.NewCopyOf(slab, new ItemId(1, 10), default, default, item.Parent, null, item);
+
+        Assert.AreEqual((true, false), (copy.Content is ContentAny, ReferenceEquals(copy.Content, item.Content)));
     }
 
     [TestMethod]

@@ -6,12 +6,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// The range of a String slot in the slab's character arena, as each write path of the text keeps it (the store's checks,
-/// which every transaction of every suite runs, find a range that differs from the text; these tests state what the
+/// The range of a String slot in the slab's character arena, the only holder of the text, as each write path keeps it (the
+/// store's checks, which every transaction of every suite runs, find a range outside a held page; these tests state what the
 /// counters and offsets are). They run with the default page sizes and merge rule and without forced compaction whatever the run mode.
 /// </summary>
 [TestClass]
-public class CharArenaShadowTests
+public class CharArenaTests
 {
     private static (int First, int Max, bool Copy, StructStore.CompactionMode Compaction) _mode;
 

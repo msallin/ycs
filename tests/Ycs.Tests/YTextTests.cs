@@ -130,7 +130,7 @@ public class YTextTests : YTestBase
         delta = null;
 
         // Check that there are no duplicate markers inserted.
-        Assert.AreEqual("b", (text0._start.Right.Right.Right.Content as ContentString)?.GetString());
+        Assert.AreEqual("b", text0._start.Right.Right.Right.Chars.ToString());
 
         text0.Insert(0, "y");
         Assert.AreEqual("yzb", text0.ToString());

@@ -326,7 +326,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
         get
         {
             Check();
-            return (IContentEx)_slab.ReadRef(_handle);
+            return Kind == SlotKind.String ? new ContentChars(Chars.ToString()) : (IContentEx)_slab.ReadRef(_handle);
         }
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         set

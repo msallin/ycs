@@ -435,7 +435,7 @@ copies the runs of every page less than half live (the write page included) to a
 run's new offset, frees those pages (Debug fills them with a marker character) and drops the tail table. Only the slots
 and the tail table hold an offset: the readers of a text (enumerators, `YText` positions, `ItemTextListPosition`,
 events) hold handles and read the slot's range in the moment they use it (`ItemRef.Chars`, `CopyCharsTo`, `WriteCharsTo`,
-the elements of a String, the encoding of an item; the content object is the mirror the store's checks compare it with). A
+the elements of a String, the encoding of an item; a String slot holds no object: the arena is the one source of its text). A
 span of the arena is consumed before any call that runs user code or ends a batch; `WriteCharsTo` asks the writer for its
 span first and slices the arena after, from the item it re-reads (an item that is no longer a live String of its
 length writes nothing). The offsets the item operations hold in locals do not live across a call that can compact. A collected item's values are nulled in the value arena at GC, so it

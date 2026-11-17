@@ -34,9 +34,9 @@ internal static class SlotKinds
     internal static bool IsMergeable(this SlotKind kind) =>
         kind is SlotKind.Deleted or SlotKind.String or SlotKind.Any or SlotKind.Json;
 
-    /// <summary>Whether a slot of <paramref name="kind"/> holds a content object in the slab's reference pages.</summary>
+    /// <summary>Whether a slot of <paramref name="kind"/> holds a content object in the slab's reference pages (a String's text is in the character arena).</summary>
     internal static bool HasObject(this SlotKind kind) =>
-        kind is SlotKind.String or SlotKind.Any or SlotKind.Json or SlotKind.Binary or SlotKind.Embed or SlotKind.Format or SlotKind.Doc;
+        kind is SlotKind.Any or SlotKind.Json or SlotKind.Binary or SlotKind.Embed or SlotKind.Format or SlotKind.Doc;
 
     /// <summary>The public kind of a struct; a free slot is none.</summary>
     internal static ItemKind ToItemKind(this SlotKind kind) =>
