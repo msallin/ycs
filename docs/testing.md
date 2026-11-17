@@ -1,17 +1,23 @@
 # Testing
 
-What each project guards, and how to run, soak and update them. CI
-(`.github/workflows/ci.yml`) runs all of it on every push.
+What each project guards, and how to run, soak and update them. CI (`.github/workflows/ci.yml`) builds the solution and
+runs the unit, corpus, server, client, fuzz, property and budget projects, the interop checks against Yjs, the sync
+server against real clients, the AOT, Blazor and wasm samples, and the browser checks of the demo and Blazor pages. It does
+not run `bench/Ycs.Compare`, the soaks and the switches listed under [Environment variables](#environment-variables).
+
+The test projects use MSTest. A project's tests run with `dotnet test <project>`; add `-c Release` for the ones with
+timings or allocation limits.
 
 | Project | Guards | Run |
 | --- | --- | --- |
-| `tests/Ycs.Tests` | Behaviour: unit tests, updates written by real Yjs (byte-identical re-encoding), merges and pending structs of updates that hold a GC struct and an item for one clock (`interop/js/merge-conflicts.mjs`), pending structs of updates that overlap by clock in every order of 3 to 5 (`interop/js/pending-orders.mjs`), the sort of `MergeUpdates` against V8's (`interop/js/v8-sort.mjs`), 40 randomized concurrent sessions replayed from Yjs, 1,425 differential traces of the shared types and their events (see below), the windows of the run extension and the search markers against Yjs and against a reference (see [below](#runs-extended-in-place-and-search-markers)), and the public API baseline (`PublicApi.txt`). | `dotnet test tests/Ycs.Tests` |
-| `tests/Ycs.Corpus` | Convergence with Yjs on a recorded corpus of Yjs 13.6.32 sessions (`interop/corpus/`): the observer's state byte for byte, and for the scripted sessions (concurrent formatting) every client's, replayed with a Ycs document per client (`ClientReplayTests`); and the UndoManager, step by step, on random sessions run in Yjs (`UndoDifferentialTests`, `interop/corpus/undo-gen.mjs`). | `dotnet test tests/Ycs.Corpus` |
-| `tests/Ycs.Fuzz` | Robustness of `ApplyUpdate`/`ApplyUpdateV2` against damaged input. | `dotnet test tests/Ycs.Fuzz -c Release` |
+| `tests/Ycs.Tests` | Behaviour: unit tests, updates written by real Yjs (byte-identical re-encoding), merges and pending structs of updates that hold a GC struct and an item for one clock (`interop/js/merge-conflicts.mjs`), pending structs of updates that overlap by clock in every order of 3 to 5 (`interop/js/pending-orders.mjs`), the sort of `YUpdate.Merge` against V8's (`interop/js/v8-sort.mjs`), 1,425 differential traces of the shared types and their events (see below), the windows of the run extension and the search markers against Yjs and against a reference (see [below](#runs-extended-in-place-and-search-markers)), the public API baseline (`PublicApi.txt`), and hardening tests of limits, retries and conflicts (`Hardening/`). | `dotnet test tests/Ycs.Tests` |
+| `tests/Ycs.Corpus` | Convergence with Yjs on a recorded corpus of Yjs 13.6.32 sessions (`interop/corpus/`): the observer's state byte for byte, and for the scripted sessions (concurrent formatting) every client's, replayed with a Ycs document per client (`ClientReplayTests`); 40 seeded random concurrent sessions of 2 to 4 replicas run in Yjs and replayed in Ycs (`ConvergenceTests`); and the UndoManager, step by step, on random sessions run in Yjs (`UndoDifferentialTests`, `interop/corpus/undo-gen.mjs`). | `dotnet test tests/Ycs.Corpus` |
+| `tests/Ycs.Fuzz` | Robustness of `ApplyUpdate` (v1 and v2) against damaged input, and that the staged decoding agrees with the decoded structs. | `dotnet test tests/Ycs.Fuzz -c Release` |
 | `tests/Ycs.Properties` | Differential testing against real Yjs over the whole API (texts, arrays, maps, XML, nested types, subdocuments, transactions, undo, snapshots, relative positions, events, every network path and encoding), on recorded scripts (no Node) and in a live soak; properties that need no oracle; a structure-aware update fuzzer. See [below](#model-based-differential-testing-testsycsproperties). | `dotnet test tests/Ycs.Properties -c Release` |
 | `tests/Ycs.Budgets` | Allocated bytes and time per operation for a fixed set of scenarios. | `dotnet test tests/Ycs.Budgets -c Release --logger "console;verbosity=detailed"` |
-| `samples/Ycs.AotSample`, `samples/Ycs.WasmSample` | Native AOT and browser-wasm: publish without trim/AOT warnings and run. | see the README |
-| `interop/run.sh`, `interop/corpus/roundtrip.sh`, `interop/v14/roundtrip.sh` | Live round-trips against real Yjs (Node); `run.sh` runs the v14 one too. | see the README |
+| `tests/Ycs.Client.Tests` | The .NET sync client of `samples/Ycs.Client` (provider, awareness, presence, the shared text and its diff), against a server process. | `dotnet test tests/Ycs.Client.Tests -c Release` |
+| `samples/Ycs.AotSample`, `samples/Ycs.WasmSample` | Native AOT and browser-wasm: publish without trim or AOT warnings and run. | `dotnet publish samples/Ycs.AotSample -c Release -o out/aot && out/aot/Ycs.AotSample`; `dotnet publish samples/Ycs.WasmSample -c Release -o out/wasm && node out/wasm/wwwroot/main.mjs` |
+| `interop/run.sh`, `interop/corpus/roundtrip.sh`, `interop/v14/roundtrip.sh` | Live round-trips against real Yjs (Node); `run.sh` runs the v14 one too. The `Ycs.*.Interop` console apps under `interop/` are what `run.sh` drives. | `bash interop/run.sh` (see [`interop/README.md`](../interop/README.md)) |
 | `tests/Ycs.Server.Tests` | The sync server (`samples/Ycs.Server`, [plan-server.md](plan-server.md)): the awareness port against vectors written by y-protocols 1.0.7, rooms and sessions, the WebSocket endpoint and the SignalR hub in-process, and a seeded fuzz of hostile sessions against honest clients (`HostileFuzzTests`; `YCS_SERVER_FUZZ=first:count` for more seeds). Ycs bugs it found are ignored tests listed in [findings-server.md](findings-server.md). | `dotnet test tests/Ycs.Server.Tests -c Release` |
 | `interop/server/smoke.sh`, `interop/signalr/smoke.sh`, `interop/server/converge.sh` | The sync server against real clients: two `y-websocket` (or SignalR) providers sync text and awareness; random clients that edit, drop, edit offline and rejoin converge with each other, with a fresh client and with plain Yjs given every update, on the Ycs server (WebSocket, SignalR, mixed) and on the reference server `@y/websocket-server` with the same seeds. See [interop/server/README.md](../interop/server/README.md). | `bash interop/server/converge.sh [seeds] [first]` |
 | `interop/demo/check.sh` | The demo page in Chromium (Playwright): two pages per transport and one mixed pair converge, show each other's cursor and merge offline edits. Not in CI (it needs a browser). | `bash interop/demo/check.sh` |
@@ -237,22 +243,22 @@ XML children and map keys):
 
 | `op` | Fields | API |
 | --- | --- | --- |
-| `insert`, `delete`, `format`, `embed`, `delta` | `at`, `text`, `len`, `attrs`, `value`, `delta` (`[{insert, retain, delete, attrs}]`), `sanitize` | `YText`/`YXmlText` `Insert`, `Delete`, `Format`, `InsertEmbed`, `ApplyDelta` |
+| `insert`, `delete`, `format`, `embed`, `delta` | `at`, `text`, `len`, `attrs`, `value`, `delta` (`[{insert, retain, delete, attrs}]`), `sanitize` | `YText`/`YXmlText` `Insert`, `Remove`, `Format`, `InsertEmbed`, `ApplyDelta` |
 | `setAttr`, `rmAttr` | `key`, `value` | `YText`/`YXmlElement` `SetAttribute`, `RemoveAttribute` |
 | `ains`, `push`, `unshift`, `delete`, `xafter` | `at`, `values`, `ref` | `YArray`/`YXmlFragment` `Insert`, `Add`, `RemoveRange`, `InsertAfter` |
 | `set`, `mdel`, `clear` | `key`, `value` | `YMap` indexer, `Remove`, `Clear` |
 | `transact` | `origin`, `ops` (local steps without `c`, and `deliver`s to this client: an update applied inside the transaction) | `YDoc.Transact` |
 | `um`, `undo`, `redo`, `stop`, `umclear` | `id`, `scope` (paths or `"$doc"`), `timeout` (`"0"` or `"inf"`), `origins` | `UndoManager` |
-| `snap`, `readSnap`, `docFromSnap` | `id`, `prev` | `CreateSnapshot`, `ToDelta(snapshot, prev)`, `ToArray(snapshot)`, `ToDictionary(snapshot)`, `CreateDocFromSnapshot`, `EncodeSnapshot(V2)` |
+| `snap`, `readSnap`, `docFromSnap` | `id`, `prev` | `CreateSnapshot`, `ToDelta(snapshot, prev)`, `ToArray(snapshot)`, `ToDictionary(snapshot)`, `CreateDocFromSnapshot`, `Snapshot.Encode(format)` |
 | `rpos`, `rres` | `id`, `at`, `assoc` (`rres` on any client) | `RelativePosition.FromIndex`, `Encode`, `WriteJson`, `Decode`, `TryResolve` |
 | `observe` | | `Observe`/`ObserveDeep` on a nested type |
 | `react` | `id`, `ops`, `txn` | `Observe` on any type: the first time it changes, the handler makes `ops` (in one `Transact` with `txn`, else each in its own), also during another transaction's cleanup; the results are an event (`react`) |
 
 Network steps: `deliver` (`from`, `k`: the k-th update `from` made, `to`, `via`: `v1`, `v2`,
 `v1to2`, `v2to1`), `sync` (`from`, `to`, `via`; y-protocols' step 1 / step 2 through
-`SyncProtocol`; with `diff`, step 2 is `DiffUpdate` of the whole state), `merged` (`from`:
-`[[client, k]...]`, `to`, `via`, `diff`: `MergeUpdates(V2)`, `DiffUpdate(V2)`, `ParseUpdateMeta`,
-`EncodeStateVectorFromUpdate`), `raw` (`to`, `u`: base64 bytes, `via`; the fuzzer's updates).
+`SyncProtocol`; with `diff`, step 2 is `YUpdate.Diff` of the whole state), `merged` (`from`:
+`[[client, k]...]`, `to`, `via`, `diff`: `YUpdate.Merge`, `Diff`, `ParseMeta`,
+`EncodeStateVector`), `raw` (`to`, `u`: base64 bytes, `via`; the fuzzer's updates).
 
 Values: JSON null, booleans, strings (lone surrogates included), integers, decimals; and tagged
 `{"$i": "4294967296"}` (an integer), `{"$f": "NaN" | "Infinity" | "-Infinity" | "-0" | 16 hex digits}`
@@ -266,7 +272,7 @@ events with target path, relative path, kind, delta, keys with old values, attri
 flags, origin and local flag; `afterTransaction` with the changed types and keys; the v1 and v2 bytes
 of every `update`; `subdocs`; UndoManager stack events), and `st` for the client the step touched:
 the content of every root (a deep view with kinds, `toJSON`, length), the state vector (decoded and
-encoded), the delete set, `EncodeStateAsUpdate` and `EncodeStateAsUpdateV2` (bytes; hashed in
+encoded), the delete set, `EncodeStateAsUpdate` in both formats (bytes; hashed in
 compact scripts) and whether structs are pending. The last observation (`"i": "end"`) holds every
 client's full state.
 
@@ -340,8 +346,7 @@ out, to see what a property alone finds). `walk-index` fails when the index miss
 another one was integrated before, the leaf sums after a split, the leaf sums after a merge.
 
 Each fails on a sabotaged change (a marker index off by one in a merge, a map entry not moved to the struct a
-run merges into, the split before the observers left out, the surrogate condition of the run extension dropped);
-`run-extension` also on the version of the run extension the review refused (f857189).
+run merges into, the split before the observers left out, the surrogate condition of the run extension dropped).
 
 ### Laws Yjs breaks
 
@@ -370,9 +375,7 @@ minimal script, its severity and why. An entry may carry:
 
 * `Matches`: recognizes a mismatch it causes (the soak, the fuzzer and the recorder use it);
 * `Normalize`: rewrites both sides' observations so that a divergence that shows in nearly every
-  script does not hide the others (none is needed today: the ones the first runs needed, for
-  `ToDelta` opening a transaction, the missing `stack-item-updated` and pending structs left out of
-  the encodings, went with their fixes in `modernize`);
+  script does not hide the others (none is needed today);
 * `Property`: the signature of a property violation it explains;
 * `Documented`: not a bug of Ycs (a documented difference, or a Yjs bug); `DebugOnly`.
 
@@ -406,3 +409,42 @@ record the fixtures again. Its script stays as a regression case: a divergence's
 2. Generate it in `Generator.cs` (a new `OpKinds` constant, in `OpKinds.Paired` to get its pairwise
    fixtures), and list it in `RecordedTests.Fixtures_CoverEveryOperationAndPair`.
 3. Run a short soak; record the fixtures.
+
+## Environment variables
+
+The switches the tests and scripts read. A value is a number unless the table says otherwise. All are off or at their
+default when unset.
+
+| Variable | Read by | What it does |
+| --- | --- | --- |
+| `YCS_ACCEPT_API=1` | `PublicApiTests` | writes the current public surface into `tests/Ycs.Tests/PublicApi.txt` instead of comparing |
+| `YCS_CONVERGENCE_SEEDS=<n>` | `Ycs.Corpus` `ConvergenceTests` | runs seeds 1 to n instead of 1 to 40 |
+| `YCS_CORPUS_EXPORT=<dir>` | `Ycs.Corpus` `RoundTripExport` | writes Ycs' answers for the corpus into the directory (set by `interop/corpus/roundtrip.sh`) |
+| `YCS_EXTENSION_FUZZ=<first>:<count>` | `RunExtensionFuzzTests` | runs these seeds of the run-extension fuzz instead of the 300 default (40,000 take about ten minutes) |
+| `YCS_FUZZ_ITERATIONS=<n>` | `Ycs.Fuzz` | inputs per fuzz test; default 20,000 |
+| `YCS_FUZZ_SEED=<n>` or `random` | `Ycs.Fuzz` `MutatedUpdates_FailCleanly` | the seed of the soak; `random` picks one and prints it |
+| `YCS_HARDENING_ITERATIONS=<n>`, `YCS_HARDENING_SEED=<n>` | `Ycs.Tests` `UpdateOperationsFuzzTests` | iterations (default 3,000) and seed (default 12345) of the update-operations fuzz |
+| `YCS_LEAF_CAPACITY=<n>` | `StoreChecks` of `Ycs.Tests` and `Ycs.Properties` | the leaf capacity of the struct lists, so that short lists split and merge leaves (`Ycs.Properties` default 4; `Ycs.Tests` the library's) |
+| `YCS_NO_RECOUNT=1` | `StoreChecks` of `Ycs.Properties` | leaves out the recount of the struct lists after every transaction, to see what a property alone finds |
+| `YCS_POISON=1` | `StoreChecks` of `Ycs.Tests`, `PlanItemKeysTests` | replaces a collected type's handle by an unrelated live item's, so that any read of the collected struct shows |
+| `YCS_PROP_DEBUG=1` | `Ycs.Properties` `Adapter` | prints the exceptions that script operations threw (they are observed only as `err`) |
+| `YCS_PROP_EXPLAIN=<script.json>` | `Ycs.Properties` `Explain_PrintsBothObservations` | prints one script and how Yjs' and Ycs' observations of it differ (needs Node) |
+| `YCS_PROP_FUZZ=<count>` | `Ycs.Properties` `UpdateFuzzTests` | compares that many fuzzed update scripts with Yjs (needs Node) |
+| `YCS_PROP_FUZZ_DUMP=<seed>`, `YCS_PROP_FUZZ_OUT=<file>` | `UpdateFuzzTests` | writes that seed's fuzz script to the file |
+| `YCS_PROP_HOOKS=<count>` | `HookScriptTests` | scripts with handlers that make nested transactions; default 300 from seed 90,001 (190,001 for the slot-reuse variant) |
+| `YCS_PROP_INTEROP=<dir>` | `Ycs.Properties` `Oracle` | the `interop/properties` directory, when not the source tree's |
+| `YCS_PROP_NODE=<path>` | `Ycs.Properties` `Oracle` | the Node executable; default `node` |
+| `YCS_PROP_ONE=<script.json>`, `YCS_PROP_ONE_PROPERTY=<name>` | `PropertyTests` | checks one property on one script and prints the violation |
+| `YCS_PROP_ONLY=<name>,<name>...` | `PropertyTests` | checks only these properties |
+| `YCS_PROP_RECORD=1` | `RecordedTests` | regenerates `interop/properties/fixtures/*.jsonl` from the generator and real Yjs |
+| `YCS_PROP_SEED=<n>` | `Ycs.Properties` | the first seed of the property, soak, hook and fuzz runs (default 1; hooks 90,001) |
+| `YCS_PROP_SEEDS=<n>` | `PropertyTests` | scripts per property; default 2,000 |
+| `YCS_PROP_SOAK=<n>` | `SoakTests` | the live soak: n scripts against Yjs (off when unset; `interop/properties/soak.sh` sets it) |
+| `YCS_PROP_WORKERS=<n>` | `SoakTests` | the number of Node workers of the soak; default the processor count |
+| `YCS_SERVER_FUZZ=<first>:<count>` | `Ycs.Server.Tests` `HostileFuzzTests` | runs these seeds of the hostile-session fuzz |
+| `YCS_SERVER_URL=<url>` | `interop/server/{smoke,converge}.mjs`, `interop/signalr/smoke.mjs` | the server to test, when not given as an argument |
+| `YCS_SLAB_FIRST=<n>` | `StoreChecks` of every suite, `SlabTests` | the first size of the slab's page 0 (1: every allocation of it copies) |
+| `YCS_STALE_MARKER_SCRIPTS=<file>` | `StaleMarkerScriptTests` | replays that file of generated scripts instead of the fixture (set by `interop/markers/soak.sh`) |
+| `YCS_UNDO_FUZZ=<file>` | `Ycs.Corpus` `UndoDifferentialTests` | replays a larger set of undo scripts written by `interop/corpus/undo-gen.mjs` |
+| `YCS_UNDO_SHOW=<n>` | `UndoDifferentialTests` | how many divergent scripts the failure message shows; default 3 |
+| `YCS_V14_EXPORT=<dir>` | `V14InteropTests` | writes Ycs' answers for the v14 documents into the directory (set by `interop/v14/roundtrip.sh`) |

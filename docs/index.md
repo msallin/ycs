@@ -23,7 +23,7 @@ byte[] update = doc.EncodeStateAsUpdate();   // what a Yjs peer applies with Y.a
 
 ## For contributors
 
-The code is on [GitHub](https://github.com/msallin/ycs). `dotnet test tests/Ycs.Tests` runs the main suite without
-Node; [testing.md](https://github.com/msallin/ycs/blob/modernize/docs/testing.md) says what each suite checks and how to
-run the interop checks against Yjs. The design notes and code walkthroughs are the other files in
-[`docs/`](https://github.com/msallin/ycs/tree/modernize/docs).
+The code is on [GitHub](https://github.com/msallin/ycs). `dotnet test tests/Ycs.Tests -c Release` runs the main suite
+without Node; [testing.md](https://github.com/msallin/ycs/blob/modernize/docs/testing.md) says what each suite checks, how
+to run the interop checks against Yjs and which `YCS_*` switches exist. The design notes and code walkthroughs are the other
+files in [`docs/`](https://github.com/msallin/ycs/tree/modernize/docs).
