@@ -72,9 +72,10 @@ internal static class Differential
             return new Mismatch(-1, "-", primary, [$"yjs: {Trim(yjs)}", $"ycs: {Trim(ycs)}"], yjs, ycs);
         }
 
-        if (normalize)
+        foreach (var step in la.Concat(lb).OfType<Dictionary<string, object>>())
         {
-            foreach (var step in la.Concat(lb).OfType<Dictionary<string, object>>())
+            WireIdentityOfPosition(step);
+            if (normalize)
             {
                 KnownFailures.Normalize(step, normalizeExcept);
             }
@@ -127,6 +128,17 @@ internal static class Differential
         }
 
         return Json.Canonical(steps);
+    }
+
+    // Yjs' createRelativePositionFromTypeIndex sets the type (or the root name) next to the item, which its bytes drop;
+    // RelativePosition.FromIndex sets what the bytes carry. The bytes ("b") are compared as they are, the JSON by the item.
+    private static void WireIdentityOfPosition(Dictionary<string, object> step)
+    {
+        if (step.Get("r") is Dictionary<string, object> r && r.Get("j") is Dictionary<string, object> json && json.ContainsKey("item"))
+        {
+            json.Remove("type");
+            json.Remove("tname");
+        }
     }
 
     private static string Hash(string s) =>
