@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
 
-/// <summary>A reference to a struct of the store reads its slot; one that left the store reads nothing.</summary>
+/// <summary>A reference to a struct of the store reads its slot, whatever else holds; one that left the store, in Debug, throws.</summary>
 [TestClass]
 public class ItemRefSlotReadTests
 {
@@ -20,17 +20,45 @@ public class ItemRefSlotReadTests
         doc.Store.Slab.At(item.Handle).Length = 99;
         doc.Store.Slab.At(item.Handle).Info |= Slot.DeletedFlag | Slot.KeepFlag;
 
-        Assert.AreEqual((99, true, true, 3), (item.Length, item.Deleted, item.Keep, item.ToItem().Length));
+        Assert.AreEqual((99, true, true), (item.Length, item.Deleted, item.Keep));
     }
 
     [TestMethod]
-    public void Read_ItemOutsideAStore_ComesFromTheObject()
+    public void Write_Member_GoesToTheSlot()
     {
-        var item = ItemRef.New(new ItemId(5, 7), default, default, new YMap(), "k", new ContentAny(new object[] { 1, 2 }));
+        var doc = NewDoc();
+        var text = doc.GetText("t");
+        text.Insert(0, "abc");
+        var item = text._start;
 
-        Assert.AreEqual((new ItemId(5, 7), 2, "k", -1), (item.Id, item.Length, item.ParentSub, item.Handle));
+        item.Length = 7;
+        item.Marker = true;
+        item.Redone = new ItemId(9, 9);
+
+        var slot = doc.Store.Slab.Read(item.Handle);
+        Assert.AreEqual((7, Slot.MarkerFlag, Slot.HasRedoneFlag), (slot.Length, slot.Info & Slot.MarkerFlag, slot.Info & Slot.HasRedoneFlag));
+        item.Length = 3;
+        item.Marker = false;
+        item.Redone = null;
     }
 
+    [TestMethod]
+    public void IsFreed_StructMergedAway_IsTrueUntilTheSlotIsReused()
+    {
+        var doc = NewDoc();
+        var text = doc.GetText("t");
+        text.Insert(0, "a");
+        ItemRef merged = default;
+        doc.Transact(_ =>
+        {
+            text.Insert(1, "b");
+            merged = doc.Store.Find(new ItemId(1, 1));
+        });
+
+        Assert.AreEqual((true, false), (merged.IsFreed, doc.Store.Find(new ItemId(1, 0)).IsFreed));
+    }
+
+#if DEBUG
     [TestMethod]
     public void Read_StructMergedAway_Throws()
     {
@@ -46,6 +74,7 @@ public class ItemRefSlotReadTests
 
         var thrown = Assert.ThrowsExactly<InvalidOperationException>(() => _ = merged.Length);
 
-        Assert.AreEqual((true, true), (merged.IsDetached, thrown.Message.Contains("1:1", StringComparison.Ordinal)));
+        Assert.IsTrue(thrown.Message.Contains("outlived its struct", StringComparison.Ordinal));
     }
+#endif
 }

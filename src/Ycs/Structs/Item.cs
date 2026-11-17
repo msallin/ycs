@@ -10,131 +10,53 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-internal partial class Item : AbstractStruct
+/// <summary>
+/// An item as decoded from an update (and as the update operations read it): in no store, without neighbours. Its
+/// parent is a root's name or the id of its type's item (<see cref="ItemRef.Adopt"/> resolves it); an item of a store
+/// is a slot (<see cref="ItemRef"/>).
+/// </summary>
+internal sealed class Item : AbstractStruct
 {
-    [Flags]
-    private enum InfoEnum : int
-    {
-        Keep = 1 << 0,
-        Countable = 1 << 1,
-        Deleted = 1 << 2,
-        Marker = 1 << 3,
-
-        // Whether _leftOrigin, _rightOrigin, _redone hold an id: an ID? field is 24 bytes, an ID 16.
-        HasLeftOrigin = 1 << 4,
-        HasRightOrigin = 1 << 5,
-        HasRedone = 1 << 6,
-
-        // Set once, on the right part of a merge and on an item a GC struct replaced: the struct is in no list, and
-        // its Id and Length are the range it held (an ItemView's hint is stale).
-        Detached = 1 << 7,
-    }
-
-    private InfoEnum _info;
+    // Whether _leftOrigin and _rightOrigin hold an id: an ID? field is 24 bytes, an ID 16.
+    private bool _hasLeftOrigin;
+    private bool _hasRightOrigin;
     private ID _leftOrigin;
     private ID _rightOrigin;
-    private ID _redone;
 
-    // A neighbour without a slot yet (an item not attached) is -1 in this slot; its AttachSlot writes the handle here.
-    private AbstractStruct _left;
-    private AbstractStruct _right;
-    private object _parent;
-
-    internal Item(ID id, AbstractStruct left, ID? leftOrigin, AbstractStruct right, ID? rightOrigin, object parent, string parentSub, IContent content)
+    internal Item(ID id, ID? leftOrigin, ID? rightOrigin, object parent, string parentSub, IContent content)
         : base(id, content.Length)
     {
-        _info = content.Countable ? InfoEnum.Countable : 0;
-        LeftOrigin = leftOrigin;
-        Left = left;
-        Right = right;
-        RightOrigin = rightOrigin;
+        if (leftOrigin is { } left)
+        {
+            _leftOrigin = left;
+            _hasLeftOrigin = true;
+        }
+
+        if (rightOrigin is { } right)
+        {
+            _rightOrigin = right;
+            _hasRightOrigin = true;
+        }
+
         Parent = parent;
         ParentSub = parentSub;
-        Redone = null;
         Content = (IContentEx)content;
     }
 
     /// <summary>
     /// The item that was originally to the left of this item.
     /// </summary>
-    public ID? LeftOrigin
-    {
-        get => (_info & InfoEnum.HasLeftOrigin) != 0 ? _leftOrigin : null;
-        internal set
-        {
-            SetId(ref _leftOrigin, InfoEnum.HasLeftOrigin, value);
-            if (Handle >= 0)
-            {
-                WriteOrigins();
-            }
-        }
-    }
-
-    /// <summary>
-    /// The item that is currently to the left of this item.
-    /// </summary>
-    // Whether it is this item's predecessor by clock is in the run-head index: a writer of an item the store holds
-    // calls StructStore.Refresh (Integrate); a split and a merge go through ClientStructs, which keeps it.
-    public AbstractStruct Left
-    {
-        get => _left;
-        internal set
-        {
-            _left = value;
-            if (Handle >= 0)
-            {
-                SlotStore.Slab.At(Handle).Left = value?.Handle ?? -1;
-            }
-        }
-    }
+    public ID? LeftOrigin => _hasLeftOrigin ? _leftOrigin : null;
 
     /// <summary>
     /// The item that was originally to the right of this item.
     /// </summary>
-    public ID? RightOrigin
-    {
-        get => (_info & InfoEnum.HasRightOrigin) != 0 ? _rightOrigin : null;
-        internal set
-        {
-            SetId(ref _rightOrigin, InfoEnum.HasRightOrigin, value);
-            if (Handle >= 0)
-            {
-                WriteOrigins();
-            }
-        }
-    }
+    public ID? RightOrigin => _hasRightOrigin ? _rightOrigin : null;
 
     /// <summary>
-    /// The item that is currently to the right of this item.
+    /// A root's name (string), the id of the type's item (<see cref="ID"/>), or null when an origin names the parent.
     /// </summary>
-    public AbstractStruct Right
-    {
-        get => _right;
-        internal set
-        {
-            _right = value;
-            if (Handle >= 0)
-            {
-                SlotStore.Slab.At(Handle).Right = value?.Handle ?? -1;
-            }
-        }
-    }
-
-    /// <summary>
-    /// AbstractType or ID.
-    /// </summary>
-    public object Parent
-    {
-        get => _parent;
-        internal set
-        {
-            _parent = value;
-            if (Handle >= 0)
-            {
-                WriteParent();
-            }
-        }
-    }
+    public object Parent { get; }
 
     /// <summary>
     /// If the parent refers to this item with some kind of key (e.g. YMap).
@@ -142,139 +64,16 @@ internal partial class Item : AbstractStruct
     /// If 'parentSub = null', type._start is the list in which to insert to.
     /// Otherwise, it is 'parent._map'.
     /// </summary>
-    public string ParentSub
-    {
-        get => _parentSub;
-        internal set
-        {
-            _parentSub = value;
-            WriteKey();
-        }
-    }
+    public string ParentSub { get; }
 
-    private string _parentSub;
+    internal IContentEx Content { get; }
 
-    /// <summary>
-    /// Refers to the type that undid this operation.
-    /// </summary>
-    public ID? Redone
-    {
-        get => (_info & InfoEnum.HasRedone) != 0 ? _redone : null;
-        internal set
-        {
-            SetId(ref _redone, InfoEnum.HasRedone, value);
-            WriteInfo();
-        }
-    }
+    public bool Countable => Content.Countable;
 
-    private void SetId(ref ID field, InfoEnum flag, ID? value)
-    {
-        if (value is ID id)
-        {
-            field = id;
-            _info |= flag;
-        }
-        else
-        {
-            field = default;
-            _info &= ~flag;
-        }
-    }
+    public override bool Deleted => false;
 
-    private IContentEx _content;
-
-    internal IContentEx Content
-    {
-        get => _content;
-        set
-        {
-            _content = value;
-            WriteInfo();
-            WriteContent();
-        }
-    }
-
-    public bool Marker
-    {
-        get => _info.HasFlag(InfoEnum.Marker);
-        internal set
-        {
-            if (value)
-            {
-                _info |= InfoEnum.Marker;
-            }
-            else
-            {
-                _info &= ~InfoEnum.Marker;
-            }
-
-            WriteInfo();
-        }
-    }
-
-    /// <summary>
-    /// If set to 'true', do not garbage collect this item.
-    /// </summary>
-    public bool Keep
-    {
-        get => _info.HasFlag(InfoEnum.Keep);
-        internal set
-        {
-            if (value)
-            {
-                _info |= InfoEnum.Keep;
-            }
-            else
-            {
-                _info &= ~InfoEnum.Keep;
-            }
-
-            WriteInfo();
-        }
-    }
-
-    public bool Countable
-    {
-        get => _info.HasFlag(InfoEnum.Countable);
-        internal set
-        {
-            if (value)
-            {
-                _info |= InfoEnum.Countable;
-            }
-            else
-            {
-                _info &= ~InfoEnum.Countable;
-            }
-
-            WriteInfo();
-        }
-    }
-
-    public override bool Deleted => _info.HasFlag(InfoEnum.Deleted);
-
-    internal bool Detached => (_info & InfoEnum.Detached) != 0;
-
-    internal void MarkDetached()
-    {
-        _info |= InfoEnum.Detached;
-        FreeSlot();
-    }
-
-    internal void SetStart(ID id) => Id = id;
-
-    internal void SetLength(int length) => Length = length;
-
-    // The run-head index holds whether an item is deleted: for an item the store holds, the caller then calls
-    // StructStore.Refresh (ItemRef.MarkDeleted(Transaction), ContentDeleted.Integrate); a split's right part is not in it yet.
-    internal void MarkDeleted()
-    {
-        _info |= InfoEnum.Deleted;
-        WriteInfo();
-    }
-
-    // An item of the store is ItemRef's (ItemRef.Operations.cs). A decoded item (MergeUpdates, DiffUpdate, the conversions,
-    // the rest store) never enters the store's walks: Write and the merge rules below run on its own fields.
+    // A decoded item (MergeUpdates, DiffUpdate, the conversions, the rest store) never enters the store's walks: Write and
+    // the merge rules below run on its own fields; an item of the store is ItemRef's (ItemRef.Operations.cs).
     internal override bool CanMergeWith(AbstractStruct right) => false; // Yjs' Item#mergeWith needs this.right === right; a decoded item has no neighbours.
 
     internal override bool MergeWith(AbstractStruct right) => false;

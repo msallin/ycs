@@ -438,14 +438,14 @@ internal static class Editing
     {
         doc.TryGetRoot(r.Root, out var type);
         var list = new List<Entry>();
-        for (AbstractStruct s = type._start.ToStruct(); s != null; s = (s as Item)?.Right)
+        for (var s = type._start; !s.IsNull; s = s.AsItem.Right)
         {
             list.Add(new(null, s.Id.Client, s.Id.Clock, s.Length, s.Deleted));
         }
 
         foreach (var (key, last) in type._map.OrderBy(kv => kv.Key, StringComparer.Ordinal))
         {
-            for (AbstractStruct s = last.ToStruct(); s != null; s = (s as Item)?.Left)
+            for (var s = last; !s.IsNull; s = s.AsItem.Left)
             {
                 list.Add(new(key, s.Id.Client, s.Id.Clock, s.Length, s.Deleted));
             }

@@ -30,7 +30,7 @@ public class SlotReuseBatchTests
             freed = -1;
             text.Insert(0, "x");
             text.Insert(0, "y");
-            takenInNested = doc.Store.Slab.ReadOwner(nested) != null;
+            takenInNested = doc.Store.Slab.TryRead(nested, out var slot) && !slot.IsFree;
         };
 
         doc.Transact(_ =>
@@ -57,6 +57,6 @@ public class SlotReuseBatchTests
 
         text.Insert(0, "x");
 
-        Assert.IsNotNull(doc.Store.Slab.ReadOwner(freed));
+        Assert.IsTrue(doc.Store.Slab.TryRead(freed, out var slot) && !slot.IsFree);
     }
 }

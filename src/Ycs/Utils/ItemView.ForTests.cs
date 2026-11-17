@@ -51,7 +51,7 @@ public readonly partial struct ItemView
     /// </summary>
     internal static void Check(YDoc doc, ItemRef str)
     {
-        if (str.IsDetached)
+        if (str.IsFreed)
         {
             return;
         }

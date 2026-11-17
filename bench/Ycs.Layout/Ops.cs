@@ -147,8 +147,8 @@ internal static class Ops
     private static void WalkLeft(YDoc doc, Action<bool, string> check)
     {
         var store = Builder.Build(doc);
-        var items = new List<Item>();
-        for (var it = doc.GetArray("array")._start.ToItem(); it != null; it = it.Right as Item)
+        var items = new List<ItemRef>();
+        for (var it = doc.GetArray("array")._start.AsItem; !it.IsNull; it = it.Right.AsItem)
         {
             items.Add(it);
         }
@@ -169,9 +169,9 @@ internal static class Ops
             {
                 var p = starts[i];
                 long delta = 0;
-                while (p.Left != null && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
+                while (!p.Left.IsNull && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)
                 {
-                    p = p.Left as Item;
+                    p = p.Left.AsItem;
                     if (!p.Deleted && p.Countable)
                     {
                         delta += p.Length;

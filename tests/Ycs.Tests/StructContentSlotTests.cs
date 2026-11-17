@@ -5,8 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// The slot of an item holds its content object and its map key, and a freed slot holds neither
-/// (<c>StructStore.CheckForTests</c> compares them with the objects).
+/// The slot of an item holds its content object and its map key, and a freed slot holds neither.
 /// </summary>
 [TestClass]
 public class StructContentSlotTests
@@ -49,7 +48,7 @@ public class StructContentSlotTests
         map["k"] = 1;
 
         var item = doc.Store.Find(new ItemId(1, 0));
-        Assert.AreEqual((true, "k"), (ReferenceEquals(doc.Store.Slab.GetRef(item.Handle), item.Content), doc.Store.Slab.GetKey(item.Handle)));
+        Assert.AreEqual((true, "k", "k"), (doc.Store.Slab.GetRef(item.Handle) is ContentAny, doc.Store.Slab.GetKey(item.Handle), item.ParentSub));
     }
 
     [TestMethod]

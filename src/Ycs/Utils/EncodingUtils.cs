@@ -442,7 +442,7 @@ internal static class EncodingUtils
                     parentSub = (info & Bit.Bit6) == Bit.Bit6 ? decoder.ReadString() : null;
                 }
 
-                str = new Item(id, null, leftOrigin, null, rightOrigin, parent, parentSub, ReadItemContent(decoder, info));
+                str = new Item(id, leftOrigin, rightOrigin, parent, parentSub, ReadItemContent(decoder, info));
                 break;
         }
 

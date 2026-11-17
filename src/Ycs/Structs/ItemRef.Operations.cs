@@ -65,101 +65,164 @@ internal readonly partial struct ItemRef
     /// </summary>
     public void Integrate(Transaction transaction, int offset) => IntegrateItem(transaction, offset);
 
+    /// <summary>A new GC struct (not in a list) for the range <paramref name="length"/> from <paramref name="id"/>, in <paramref name="slab"/>.</summary>
+    internal static ItemRef NewGC(Slab slab, ID id, int length)
+    {
+        var clientIndex = slab.Clients.GetOrAdd(id.Client);
+        var gc = new ItemRef(slab, slab.Allocate());
+        ref var slot = ref gc.Write();
+        slot.Clock = id.Clock;
+        slot.Client = clientIndex;
+        slot.Length = length;
+        slot.Info = Slot.DeletedFlag;
+        return gc;
+    }
+
     /// <summary>
-    /// Where a decoded struct enters the store (the one place; <see cref="Of"/> and the object's own methods are not a way
-    /// in). <paramref name="decoded"/> is a struct of an update the integration plan has put in order, with everything
-    /// it refers to in the store or planned before it. An item's references are resolved first, whether or not it is
-    /// integrated, in the order of Yjs: the origins' structs are split where an origin points into one, and the parent
-    /// is resolved (to nothing when a neighbour is a GC struct or the parent type is collected: the item then enters as
-    /// a GC struct). Then, when <paramref name="integrate"/> is set, the struct is integrated from
-    /// <paramref name="offset"/>, which is the part of its range the store holds already (an item that is integrated
-    /// whole in the store is the same object; a GC struct is trimmed in place); an item whose parent is gone enters as
-    /// a new GC struct. Without <paramref name="integrate"/> the struct stays outside the store.
-    /// A <see cref="Skip"/> struct is never adopted: it throws.
+    /// A new item (not integrated) in <paramref name="slab"/> between <paramref name="left"/> and <paramref name="right"/>,
+    /// which are its origins (Yjs' <c>new Item(id, left, left &amp;&amp; left.lastId, right, right &amp;&amp; right.id, parent, parentSub, content)</c>).
+    /// </summary>
+    public static ItemRef New(Slab slab, ID id, ItemRef left, ItemRef right, AbstractType parent, string parentSub, IContent content) =>
+        NewItem(slab, id, left, left.IsNull ? null : left.LastId, right, right.IsNull ? null : right.Id, parent, parentSub, (IContentEx)content);
+
+    /// <summary>A new item whose slot holds the given links, origins, parent, key and content (nothing links to it yet).</summary>
+    private static ItemRef NewItem(Slab slab, ID id, ItemRef left, ID? leftOrigin, ItemRef right, ID? rightOrigin, AbstractType parent, string parentSub, IContentEx content)
+    {
+        var item = new ItemRef(slab, slab.Allocate());
+        item.Id = id;
+        item.Length = content.Length;
+        item.Write().Info = (content.Countable ? Slot.CountableFlag : 0) | (content.Ref << 8);
+        item.LeftOrigin = leftOrigin;
+        item.RightOrigin = rightOrigin;
+        item.Left = left;
+        item.Right = right;
+        item.Parent = parent;
+        slab.SetKey(item._handle, parentSub);
+        slab.SetRef(item._handle, content);
+        return item;
+    }
+
+    /// <summary>
+    /// Where a decoded struct enters the store (the one place). <paramref name="decoded"/> is a struct of an update the
+    /// integration plan has put in order, with everything it refers to in the store or planned before it. An item's
+    /// references are resolved first, whether or not it is integrated, in the order of Yjs: the origins' structs are split
+    /// where an origin points into one, and the parent is resolved (to nothing when a neighbour is a GC struct or the
+    /// parent type is collected: the item then enters as a GC struct). Then, when <paramref name="integrate"/> is set, the
+    /// struct gets a slot and is integrated from <paramref name="offset"/>, which is the part of its range the store holds
+    /// already; a GC struct is trimmed by it. Without <paramref name="integrate"/> nothing enters the store. The decoded
+    /// object is read, never changed. A <see cref="Skip"/> struct is never adopted: it throws.
     /// </summary>
     public static void Adopt(AbstractStruct decoded, Transaction transaction, int offset, bool integrate)
     {
-        var adopted = Of(decoded);
-        if (decoded is not (Item or GC))
+        var store = transaction.Doc.Store;
+        switch (decoded)
         {
-            throw new InvalidOperationException("Only items and GC structs are adopted; a Skip struct stands for a gap and never enters a store.");
-        }
+            case Item item:
+                var (left, leftOrigin, right, rightOrigin, parent, parentSub) = ResolveReferences(item, transaction, store);
+                if (integrate)
+                {
+                    var adopted = NewItem(store.Slab, item.Id, left, leftOrigin, right, rightOrigin, parent, parentSub, item.Content);
+                    var start = item.Id.Clock + offset;
+                    try
+                    {
+                        adopted.IntegrateItem(transaction, offset);
+                    }
+                    catch when (store.GetState(item.Id.Client) <= start)
+                    {
+                        // Not in its list yet, and nothing links to it: the slot would live without a struct.
+                        adopted.FreeSlot();
+                        throw;
+                    }
+                }
 
-        if (adopted.IsItem)
-        {
-            adopted.ResolveReferences(transaction, transaction.Doc.Store);
-        }
+                break;
+            case GC gc:
+                if (integrate)
+                {
+                    store.AddStruct(NewGC(store.Slab, new ID(gc.Id.Client, gc.Id.Clock + offset), gc.Length - offset));
+                }
 
-        if (!integrate)
-        {
-            return;
-        }
-
-        if (adopted.IsItem)
-        {
-            adopted.IntegrateItem(transaction, offset);
-        }
-        else
-        {
-            ((GC)decoded).TrimStart(offset);
-            transaction.Doc.Store.AddStruct(adopted);
+                break;
+            default:
+                throw new InvalidOperationException("Only items and GC structs are adopted; a Skip struct stands for a gap and never enters a store.");
         }
     }
 
     /// <summary>
     /// Finds the structs a decoded item refers to, once they are all there (the second half of Yjs' <c>Item.getMissing</c>):
-    /// left and right are set, splitting store structs where needed, and the parent is resolved to a type, or to null when
-    /// the item is to be integrated as a GC struct.
+    /// left and right are the store's structs, split where needed, the origins are the ids of what they ended up naming,
+    /// and the parent is resolved to a type, or to null when the item is to be integrated as a GC struct.
     /// </summary>
-    private void ResolveReferences(Transaction transaction, StructStore store)
+    private static (ItemRef Left, ID? LeftOrigin, ItemRef Right, ID? RightOrigin, AbstractType Parent, string ParentSub) ResolveReferences(Item item, Transaction transaction, StructStore store)
     {
-        if (Parent is string rootName)
+        var parent = item.Parent;
+        var parentSub = item.ParentSub;
+        var leftOrigin = item.LeftOrigin;
+        var rightOrigin = item.RightOrigin;
+        ItemRef left = default;
+        ItemRef right = default;
+        if (parent is string rootName)
         {
-            Parent = transaction.Doc.Get<AbstractType>(rootName);
+            parent = transaction.Doc.Get<AbstractType>(rootName);
         }
 
-        if (LeftOrigin != null)
+        if (leftOrigin != null)
         {
-            var left = store.GetItemCleanEnd(transaction, LeftOrigin.Value);
-            Left = left;
-            LeftOrigin = left.IsItem ? left.LastId : null;
+            left = store.GetItemCleanEnd(transaction, leftOrigin.Value);
+            leftOrigin = left.IsItem ? left.LastId : null;
         }
 
-        if (RightOrigin != null)
+        if (rightOrigin != null)
         {
-            var right = store.GetItemCleanStart(transaction, RightOrigin.Value);
-            Right = right;
-            RightOrigin = right.Id;
+            right = store.GetItemCleanStart(transaction, rightOrigin.Value);
+            rightOrigin = right.Id;
         }
 
-        if (Left.IsGC || Right.IsGC)
+        if (left.IsGC || right.IsGC)
         {
-            Parent = null;
+            parent = null;
         }
-        else if (Parent == null)
+        else if (parent == null)
         {
             // Only set parent if this shouldn't be garbage collected; the left neighbour first, as Yjs.
-            if (Left.IsItem)
+            if (left.IsItem)
             {
-                Parent = Left.Parent;
-                ParentSub = Left.ParentSub;
+                parent = left.Parent;
+                parentSub = left.ParentSub;
             }
-            else if (Right.IsItem)
+            else if (right.IsItem)
             {
-                Parent = Right.Parent;
-                ParentSub = Right.ParentSub;
+                parent = right.Parent;
+                parentSub = right.ParentSub;
             }
         }
-        else if (Parent is ID pid)
+        else if (parent is ID pid)
         {
             var parentItem = store.Find(pid);
-            Parent = parentItem.IsGC ? null : ((parentItem.IsItem ? parentItem.Content : null) as ContentType)?.Type;
+            parent = parentItem.IsGC ? null : ((parentItem.IsItem ? parentItem.Content : null) as ContentType)?.Type;
         }
+
+        return (left, leftOrigin, right, rightOrigin, parent as AbstractType, parentSub);
     }
 
-    public bool CanMergeWith(ItemRef right) => IsItem ? CanMergeItemWith(right) : _struct.CanMergeWith(right._struct);
+    public bool CanMergeWith(ItemRef right) => IsItem ? CanMergeItemWith(right) : right.IsGC;
 
-    public bool MergeWith(ItemRef right) => IsItem ? MergeItemWith(right) : _struct.MergeWith(right._struct);
+    public bool MergeWith(ItemRef right)
+    {
+        if (IsItem)
+        {
+            return MergeItemWith(right);
+        }
+
+        if (!right.IsGC)
+        {
+            return false;
+        }
+
+        Length += right.Length;
+        right.FreeSlot();
+        return true;
+    }
 
     public void Write(IUpdateEncoder encoder, int offset)
     {
@@ -169,13 +232,14 @@ internal readonly partial struct ItemRef
         }
         else
         {
-            _struct.Write(encoder, offset);
+            encoder.WriteInfo(GC.StructGCRefNumber);
+            encoder.WriteLength(Length - offset);
         }
     }
 
     // The run-head index holds whether an item is deleted: for an item the store holds, the caller then calls
     // StructStore.Refresh (MarkDeleted(Transaction), ContentDeleted.Integrate); a split's right part is not in it yet.
-    public void MarkDeleted() => ItemObject.MarkDeleted();
+    public void MarkDeleted() => Write().Info |= Slot.DeletedFlag;
 
     /// <summary>
     /// Whether <paramref name="right"/> merges into this item (Yjs' <c>Item#mergeWith</c> conditions; a content of a
@@ -210,8 +274,9 @@ internal readonly partial struct ItemRef
                 "Ycs). Nothing was changed.");
         }
 
-        (Parent as AbstractType)?.Doc?.Store.NoteDeparture();
-        (Parent as YArrayBase)?.OnMerge(this, right);
+        var parent = Parent;
+        parent?.Doc?.Store.NoteDeparture();
+        (parent as YArrayBase)?.OnMerge(this, right);
 
         if (right.Keep)
         {
@@ -226,21 +291,42 @@ internal readonly partial struct ItemRef
         }
 
         Length += right.Length;
-        right.MarkDetached();
+        right.FreeSlot();
         return true;
     }
 
-    /// <summary>Marks the struct as out of every list (merged away, or replaced by a GC struct, which has taken its slot over).</summary>
-    public void MarkDetached()
+    /// <summary>
+    /// Frees the slot of a struct that left every list (merged into its left neighbour): the reference and every copy of
+    /// it are stale from here on, and the slot is reused after the outermost batch (<see cref="Slab.AllowReuse"/>).
+    /// </summary>
+    public void FreeSlot()
     {
-        if (_struct is Item item)
+        Check();
+        _slab.Free(_handle);
+    }
+
+    /// <summary>
+    /// Makes this struct a GC struct of the range it held, in its slot: what it held in objects and links is dropped.
+    /// The references to it stay valid and read a GC struct.
+    /// </summary>
+    internal void BecomeGC()
+    {
+        ref var slot = ref Write();
+        slot = new Slot
         {
-            item.MarkDetached();
-        }
-        else
-        {
-            ((GC)_struct).MarkDetached();
-        }
+            Clock = slot.Clock,
+            Client = slot.Client,
+            Length = slot.Length,
+            Info = Slot.DeletedFlag,
+            OriginClient = -1,
+            ROriginClient = -1,
+            Left = -1,
+            Right = -1,
+            Parent = -1,
+        };
+        _slab.SetRef(_handle, null);
+        _slab.SetKey(_handle, null);
+        _slab.SetRedone(_handle, null);
     }
 
     /// <summary>
@@ -288,9 +374,10 @@ internal readonly partial struct ItemRef
     {
         var start = new ID(Id.Client, Id.Clock + Length);
         Length += length;
-        ((AbstractType)Parent).Length += length;
+        var parent = Parent;
+        parent.Length += length;
         transaction.Doc.Store.NoteRunExtended(this, length);
-        transaction.AddChangedTypeToTransaction((AbstractType)Parent, null);
+        transaction.AddChangedTypeToTransaction(parent, null);
         transaction.RecordRunExtension(start);
     }
 
@@ -316,7 +403,7 @@ internal readonly partial struct ItemRef
             return false;
         }
 
-        var parent = Parent as AbstractType;
+        var parent = Parent;
         if (Countable && ParentSub == null)
         {
             Debug.Assert(parent != null);
@@ -358,7 +445,8 @@ internal readonly partial struct ItemRef
             Length -= offset;
         }
 
-        if (Parent != null)
+        var parent = Parent;
+        if (parent != null)
         {
             AbstractType mapParent = null;
             var previousCounted = false;
@@ -375,10 +463,7 @@ internal readonly partial struct ItemRef
                 }
                 else if (ParentSub != null)
                 {
-                    Debug.Assert(Parent is AbstractType);
-
-                    ItemRef item = default;
-                    (Parent as AbstractType)?._map?.TryGetValue(ParentSub, out item);
+                    parent._map.TryGetValue(ParentSub, out var item);
                     o = item;
 
                     while (!o.IsNull && o.IsItem && !o.Left.IsNull)
@@ -388,17 +473,10 @@ internal readonly partial struct ItemRef
                 }
                 else
                 {
-                    Debug.Assert(Parent is AbstractType);
-                    o = Parent is AbstractType start ? start._start : default;
+                    o = parent._start;
                 }
 
                 Left = transaction.Doc.Store.ResolveConflict(this, left, o);
-            }
-
-            // Its neighbours' links name its handle from here on, so it has one before the first of them is written.
-            if (Handle < 0)
-            {
-                AttachSlot(transaction.Doc.Store);
             }
 
             // Reconnect left/right + update parent map/start if necessary.
@@ -422,8 +500,7 @@ internal readonly partial struct ItemRef
 
                 if (ParentSub != null)
                 {
-                    ItemRef item = default;
-                    (Parent as AbstractType)?._map?.TryGetValue(ParentSub, out item);
+                    parent._map.TryGetValue(ParentSub, out var item);
                     r = item;
 
                     while (!r.IsNull && r.IsItem && !r.Left.IsNull)
@@ -433,15 +510,8 @@ internal readonly partial struct ItemRef
                 }
                 else
                 {
-                    if (Parent is AbstractType abstractTypeParent)
-                    {
-                        r = abstractTypeParent._start;
-                        abstractTypeParent._start = this;
-                    }
-                    else
-                    {
-                        r = default;
-                    }
+                    r = parent._start;
+                    parent._start = this;
                 }
 
                 Right = r;
@@ -466,7 +536,7 @@ internal readonly partial struct ItemRef
             else if (ParentSub != null)
             {
                 // Set as current parent value if right == null and this is parentSub.
-                mapParent = (AbstractType)Parent;
+                mapParent = parent;
                 previousCounted = mapParent._map.TryGetValue(ParentSub, out var previous) && !previous.Deleted;
                 mapParent._map[ParentSub] = this;
 
@@ -480,8 +550,7 @@ internal readonly partial struct ItemRef
             // Adjust length of parent.
             if (ParentSub == null && Countable && !Deleted)
             {
-                Debug.Assert(Parent is AbstractType);
-                (Parent as AbstractType).Length += Length;
+                parent.Length += Length;
             }
 
             transaction.Doc.Store.AddStruct(this);
@@ -494,9 +563,9 @@ internal readonly partial struct ItemRef
             }
 
             // Add parent to transaction.changed.
-            transaction.AddChangedTypeToTransaction(Parent as AbstractType, ParentSub);
+            transaction.AddChangedTypeToTransaction(parent, ParentSub);
 
-            if ((Parent is AbstractType { ItemDeleted: true }) || (ParentSub != null && !Right.IsNull))
+            if (parent.ItemDeleted || (ParentSub != null && !Right.IsNull))
             {
                 // Delete if parent is deleted or if this is not the current attribute value of parent.
                 Delete(transaction);
@@ -504,10 +573,9 @@ internal readonly partial struct ItemRef
         }
         else
         {
-            // Parent is not defined. Integrate GC struct instead.
-            var gc = NewGC(Id, Length);
-            transaction.Doc.Store.AddStruct(gc);
-            return gc;
+            // Parent is not defined. Integrate a GC struct instead.
+            BecomeGC();
+            transaction.Doc.Store.AddStruct(this);
         }
 
         return this;
@@ -524,7 +592,7 @@ internal readonly partial struct ItemRef
 
         if (parentGCd)
         {
-            store.ReplaceStruct(this, NewGC(Id, Length));
+            store.ReplaceWithGC(this);
         }
         else
         {
@@ -542,7 +610,7 @@ internal readonly partial struct ItemRef
         if (!IsNull && Keep != value)
         {
             Keep = value;
-            (Parent as AbstractType)?.KeepItemAndParents(value);
+            Parent?.KeepItemAndParents(value);
         }
     }
 
@@ -559,16 +627,14 @@ internal readonly partial struct ItemRef
         ID parentId = default;
         if (offset == 0 && LeftOrigin == null && RightOrigin == null)
         {
-            switch (Parent)
+            var parent = Parent ?? throw new InvalidOperationException("An item without origins has no parent.");
+            if (parent.IsRoot)
             {
-                case AbstractType { IsRoot: true } rootType:
-                    root = rootType.FindRootTypeKey();
-                    break;
-                case AbstractType type:
-                    parentId = type.ItemId;
-                    break;
-                default:
-                    throw new InvalidOperationException("An item without origins has no parent.");
+                root = parent.FindRootTypeKey();
+            }
+            else
+            {
+                parentId = parent.ItemId;
             }
         }
 
@@ -583,16 +649,8 @@ internal readonly partial struct ItemRef
         var client = Id.Client;
         var clock = Id.Clock;
 
-        var rightItem = Of(new Item(
-            new ID(client, clock + diff),
-            _struct,
-            new ID(client, clock + diff - 1),
-            Right._struct,
-            RightOrigin,
-            Parent,
-            ParentSub,
-            Content.Splice(diff)));
-        rightItem.AttachSlot(transaction.Doc.Store);
+        var content = (IContentEx)Content.Splice(diff);
+        var rightItem = NewItem(_slab, new ID(client, clock + diff), this, new ID(client, clock + diff - 1), Right, RightOrigin, Parent, ParentSub, content);
 
         if (Deleted)
         {
@@ -625,7 +683,7 @@ internal readonly partial struct ItemRef
         // Update parent._map.
         if (rightItem.ParentSub != null && rightItem.Right.IsNull)
         {
-            (rightItem.Parent as AbstractType)._map[rightItem.ParentSub] = rightItem;
+            rightItem.Parent._map[rightItem.ParentSub] = rightItem;
         }
 
         Length = diff;

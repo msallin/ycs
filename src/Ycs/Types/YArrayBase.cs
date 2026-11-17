@@ -86,7 +86,7 @@ public abstract partial class YArrayBase : YType
         /// </summary>
         /// <remarks>
         /// An insert moves a marker on a deleted or uncountable item onto the countable item left of it, which in Yjs
-        /// is the last of the items that a run extended in place (<see cref="Item.ExtendRun"/>) stands for: the runs
+        /// is the last of the items that a run extended in place (<see cref="ItemRef.ExtendRun"/>) stands for: the runs
         /// of <paramref name="transaction"/> are split back into Yjs' items first. That can split the item left of the
         /// insert, so the caller takes the item right before its right neighbour again (<see cref="LeftOf"/>).
         /// </remarks>
@@ -373,7 +373,7 @@ public abstract partial class YArrayBase : YType
         }
 
         // The values between the other kinds of content, packed into one item each. The list goes to the item, or,
-        // when the run before takes the values (Item.ExtendRun), back to _spareValues for the next insert.
+        // when the run before takes the values (ItemRef.ExtendRun), back to _spareValues for the next insert.
         var jsonContent = _spareValues ?? new List<object?>();
         _spareValues = null;
 
@@ -388,7 +388,7 @@ public abstract partial class YArrayBase : YType
             }
             else if (jsonContent.Count > 0)
             {
-                left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, ContentAny.Own(jsonContent));
+                left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, ContentAny.Own(jsonContent));
                 left.Integrate(transaction, 0);
                 jsonContent = new List<object?>();
             }
@@ -425,17 +425,17 @@ public abstract partial class YArrayBase : YType
                     packJsonContent();
 
                     // A copy, as Yjs: the caller's array must not change the document later.
-                    left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentBinary((byte[])arr.Clone()));
+                    left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentBinary((byte[])arr.Clone()));
                     left.Integrate(transaction, 0);
                     break;
                 case YDoc d:
                     packJsonContent();
-                    left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentDoc(d));
+                    left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentDoc(d));
                     left.Integrate(transaction, 0);
                     break;
                 case YType at:
                     packJsonContent();
-                    left = ItemRef.New(new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentType(at));
+                    left = ItemRef.New(store.Slab, new ID(ownClientId, store.GetState(ownClientId)), left, right, this, null, new ContentType(at));
                     left.Integrate(transaction, 0);
                     break;
                 default:
@@ -580,7 +580,7 @@ public abstract partial class YArrayBase : YType
         // On to the left while the left neighbour has the same client and the clock right before p (Yjs' findMarker).
         // Which item a marker sits on is observable: where Yjs leaves markers stale (an update applied within a local
         // transaction, an observer editing during a remote transaction's cleanup), later lookups start from it. The
-        // walk ends at the same item whether a run extended in place (Item.ExtendRun) is one item or Yjs' several:
+        // walk ends at the same item whether a run extended in place (ItemRef.ExtendRun) is one item or Yjs' several:
         // their boundaries continue each other by clock.
         steps = 0;
         while (!p.Left.IsNull && p.Left.Id.Client == p.Id.Client && p.Left.Id.Clock + p.Left.Length == p.Id.Clock)

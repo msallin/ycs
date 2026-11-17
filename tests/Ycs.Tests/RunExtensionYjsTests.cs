@@ -6,7 +6,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// The windows in which a run extended in place (<see cref="Item.ExtendRun"/>) or the search markers could tell
+/// The windows in which a run extended in place (<see cref="ItemRef.ExtendRun"/>) or the search markers could tell
 /// Ycs from Yjs, each with what Yjs 13.6.32 gives (recorded with interop/markers/blockers.mjs): search markers left
 /// stale by a remote change (also one beyond the index looked up), a garbage collection filter, snapshot reads within
 /// a transaction, and a transaction started from an observer.

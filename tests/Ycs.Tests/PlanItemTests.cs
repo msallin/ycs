@@ -14,7 +14,7 @@ public class PlanItemTests
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         doc.GetText("t").Insert(0, "abc");
-        return (doc, new Item(new ItemId(1, 0), null, null, null, null, "t", null, new ContentString("abcd")));
+        return (doc, new Item(new ItemId(1, 0), null, null, "t", null, new ContentString("abcd")));
     }
 
     [TestMethod]

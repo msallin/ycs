@@ -12,6 +12,14 @@ internal sealed partial class StructStore
 
     private long _checks;
 
+    /// <summary>Adds a GC struct of <paramref name="length"/> from <paramref name="id"/> to its client's list, outside any transaction.</summary>
+    internal ItemRef AddGcForTests(ID id, int length)
+    {
+        var gc = ItemRef.NewGC(Slab, id, length);
+        AddStruct(gc);
+        return gc;
+    }
+
     /// <summary>
     /// What <see cref="CheckAfterTransactionsForTests"/> checks: every list (<see cref="ClientStructs.Violations"/>), the
     /// links and holders around its structs (<c>ConsistencyViolation</c>), the slot of every struct (<c>SlotViolation</c>)

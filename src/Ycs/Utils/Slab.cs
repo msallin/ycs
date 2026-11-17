@@ -44,12 +44,14 @@ internal struct Slot
 /// <summary>
 /// Slots in pages, addressed by 32-bit handles (<c>page &lt;&lt; 10 | index</c>). Page 0 starts small and doubles by
 /// copy up to <see cref="PageSlots"/>; later pages hold <see cref="PageSlots"/> slots and never move. Beside each page
-/// are three object pages: <c>Refs</c> (content) and <c>Keys</c> (a map item's key), allocated on first use, and
-/// <c>Owners</c> (the struct a handle resolves to); null for a free slot.
+/// are two object pages, <c>Refs</c> (content) and <c>Keys</c> (a map item's key), allocated on first use, null for a
+/// free slot; beside the slab, the id each redone item names (<see cref="GetRedone"/>). In Debug each slot also has a
+/// generation, which a free changes: an <see cref="ItemRef"/> keeps the generation it was made with, and a read through it
+/// that finds another one throws.
 /// </summary>
 /// <remarks>
 /// A freed slot keeps its fields but <see cref="Slot.Payload"/>, which holds the free-list link (readers in the same
-/// cleanup may still look at the others), and its object entries are cleared. It is reused only after
+/// cleanup may still look at the others), and its object entries and redone id are cleared. It is reused only after
 /// <see cref="AllowReuse"/>, which the owner calls when nothing that could read a freed slot is pending (the outermost
 /// batch's end). A page, but page 0, whose slots are all free is released then. A <c>ref Slot</c> is valid until the
 /// next <see cref="Allocate"/>, which may move page 0.
@@ -71,7 +73,6 @@ internal sealed class Slab
     private Slot[]?[] _slotPages = new Slot[]?[4];
     private object?[]?[] _refPages = new object?[]?[4];
     private object?[]?[] _keyPages = new object?[]?[4];
-    private object?[]?[] _ownerPages = new object?[]?[4];
     private readonly Stack<int> _released = [];
 
     // Pages that may have room, most recently opened last; an entry for a released or full page is dropped when met.
@@ -80,10 +81,21 @@ internal sealed class Slab
     private readonly int _firstSlots;
     private int _live;
 
-    public Slab(int firstPageSlots = 0)
+    // The id of each live slot with the has-redone flag; entries leave with the slot.
+    private Dictionary<int, ID>? _redone;
+
+    /// <summary>The clients the slots name, by index.</summary>
+    internal readonly ClientTable Clients;
+
+    /// <summary>The types the slots name as their parent, by index.</summary>
+    internal readonly TypeTable Types;
+
+    public Slab(int firstPageSlots = 0, ClientTable? clients = null, TypeTable? types = null)
     {
         var first = firstPageSlots != 0 ? firstPageSlots : FirstPageSlotsForTests != 0 ? FirstPageSlotsForTests : DefaultFirstSlots;
         _firstSlots = Math.Clamp(first, 1, PageSlots);
+        Clients = clients ?? new ClientTable();
+        Types = types ?? new TypeTable();
     }
 
     public int LiveCount => _live;
@@ -144,35 +156,97 @@ internal sealed class Slab
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public object? ReadKey(int handle) => _keyPages[handle >> PageBits]?[handle & (PageSlots - 1)];
 
-    /// <summary>The struct that owns a live slot (the object a handle resolves to).</summary>
+    /// <summary>
+    /// The slot of a live handle for writing, without <see cref="At"/>'s checks, valid until the next
+    /// <see cref="Allocate"/>.
+    /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public object ReadOwner(int handle) => _ownerPages[handle >> PageBits]![handle & (PageSlots - 1)]!;
+    public ref Slot Write(int handle) => ref _slotPages[handle >> PageBits]![handle & (PageSlots - 1)];
 
     /// <summary>
-    /// Debug only: the slot's owner is <paramref name="owner"/>. A handle that outlived its struct names a free slot or,
-    /// once the slot is reused, another struct; it fails here, not as a wrong answer later.
+    /// Reads the slot of <paramref name="handle"/> if it is a slot of this slab, live or freed and not yet reused;
+    /// false for a handle that names no page or no allocated slot.
     /// </summary>
-    [Conditional("DEBUG")]
-    public void CheckOwner(int handle, object owner)
+    public bool TryRead(int handle, out Slot slot)
     {
         var number = handle >> PageBits;
-        var owners = handle >= 0 && number < _ownerPages.Length ? _ownerPages[number] : null;
-        if (owners == null || !ReferenceEquals(owners[IndexOf(handle)], owner))
+        var page = handle >= 0 && number < _pages.Count ? _pages[number] : null;
+        if (page == null || IndexOf(handle) >= page.Used)
         {
-            ThrowNotOwner(handle, owners?[IndexOf(handle)]);
+            slot = default;
+            return false;
+        }
+
+        slot = page.Slots[IndexOf(handle)];
+        return true;
+    }
+
+    /// <summary>The id the redone item at <paramref name="handle"/> names; only for a slot with <see cref="Slot.HasRedoneFlag"/>.</summary>
+    public ID GetRedone(int handle) => _redone![handle];
+
+    /// <summary>Sets the id the item at <paramref name="handle"/> names as its redo, or removes it (null); the flag is the caller's.</summary>
+    public void SetRedone(int handle, ID? value)
+    {
+        if (value is { } id)
+        {
+            (_redone ??= [])[handle] = id;
+        }
+        else
+        {
+            _redone?.Remove(handle);
         }
     }
 
-    private static void ThrowNotOwner(int handle, object? current) =>
-        throw new InvalidOperationException(
-            $"The slot {handle} is owned by {(current == null ? "no struct (it is free)" : "another struct")}, not by the struct that reads it: a handle outlived its struct and the slot was freed or reused. Nothing was changed.");
+    /// <summary>Whether the slot at <paramref name="handle"/> has a redone id.</summary>
+    public bool HasRedone(int handle) => _redone?.ContainsKey(handle) ?? false;
 
-    public void SetOwner(int handle, object? owner)
+    /// <summary>How many slots name a redone id (the free ones none).</summary>
+    public int RedoneCount => _redone?.Count ?? 0;
+
+    /// <summary>
+    /// Debug only: the slot at <paramref name="handle"/> is still the one a reference made with
+    /// <paramref name="generation"/> named. A reference that outlived its struct (merged away, freed, the slot reused)
+    /// throws here, not as a wrong answer later; a handle that names no allocated slot throws too. A link read from a
+    /// slot is current by construction when it is made (<see cref="Generation"/>): a link to a slot that was freed and
+    /// reused is for the store's checks to find.
+    /// </summary>
+#pragma warning disable CA1822 // Instance data in Debug.
+    [Conditional("DEBUG")]
+    public void CheckGeneration(int handle, int generation)
     {
-        var page = PageAt(handle);
-        CheckLive(page, handle);
-        page.Owners[IndexOf(handle)] = owner;
+#if DEBUG
+        var number = handle >> PageBits;
+        var page = handle >= 0 && number < _pages.Count ? _pages[number] : null;
+        if (page == null || IndexOf(handle) >= page.Used)
+        {
+            throw new InvalidOperationException($"The handle {handle} names no slot of the slab (its page was released, or it was never allocated): a reference outlived its struct. Nothing was changed.");
+        }
+
+        if (page.Generations[IndexOf(handle)] != generation)
+        {
+            throw new InvalidOperationException($"The slot {handle} was freed after the reference to it was made (generation {generation}, now {page.Generations[IndexOf(handle)]}): the reference outlived its struct. Nothing was changed.");
+        }
+#endif
     }
+#pragma warning restore CA1822
+
+#if DEBUG
+    /// <summary>
+    /// The generation a reference to the live slot at <paramref name="handle"/> keeps. Throws for a handle that names no
+    /// slot or a slot on a free list: a link read from a slot names its target as it is now.
+    /// </summary>
+    public int Generation(int handle)
+    {
+        var number = handle >> PageBits;
+        var page = handle >= 0 && number < _pages.Count ? _pages[number] : null;
+        if (page == null || IndexOf(handle) >= page.Used || page.Slots[IndexOf(handle)].IsFree)
+        {
+            throw new InvalidOperationException($"The handle {handle} names a free slot or none: a link or a reference outlived its target. Nothing was changed.");
+        }
+
+        return page.Generations[IndexOf(handle)];
+    }
+#endif
 
     public void SetRef(int handle, object? value)
     {
@@ -222,7 +296,8 @@ internal sealed class Slab
             page.Keys[index] = null;
         }
 
-        page.Owners[index] = null;
+        _redone?.Remove(handle);
+        BumpGeneration(page, index);
 
         if (!page.Dirty)
         {
@@ -315,7 +390,7 @@ internal sealed class Slab
         return found;
     }
 
-    private static void CheckPage(Page page, int number, List<string> found)
+    private void CheckPage(Page page, int number, List<string> found)
     {
         if (page.Used > page.Slots.Length || (number != 0 && page.Slots.Length != PageSlots) || page.Slots.Length > PageSlots)
         {
@@ -333,13 +408,13 @@ internal sealed class Slab
                 found.Add($"page {number}: slot {i} is free but on no list");
             }
 
-            if (onList[i] && ((page.Refs?[i] ?? page.Keys?[i] ?? page.Owners[i]) != null))
+            if (onList[i] && ((page.Refs?[i] ?? page.Keys?[i]) != null || (_redone?.ContainsKey(number << PageBits | i) ?? false)))
             {
-                found.Add($"page {number}: free slot {i} holds an object");
+                found.Add($"page {number}: free slot {i} holds an object or a redone id");
             }
         }
 
-        if (page.Owners.Length != page.Slots.Length || (page.Refs != null && page.Refs.Length != page.Slots.Length) || (page.Keys != null && page.Keys.Length != page.Slots.Length))
+        if ((page.Refs != null && page.Refs.Length != page.Slots.Length) || (page.Keys != null && page.Keys.Length != page.Slots.Length))
         {
             found.Add($"page {number}: an object page does not match the slots");
         }
@@ -430,6 +505,7 @@ internal sealed class Slab
         }
 
         var fresh = new Page(number == 0 ? _firstSlots : PageSlots) { Open = true };
+        NewGenerations(fresh);
         _pages[number] = fresh;
         Publish(number, fresh);
         _open.Push(number);
@@ -444,13 +520,11 @@ internal sealed class Slab
             Array.Resize(ref _slotPages, size);
             Array.Resize(ref _refPages, size);
             Array.Resize(ref _keyPages, size);
-            Array.Resize(ref _ownerPages, size);
         }
 
         _slotPages[number] = page?.Slots;
         _refPages[number] = page?.Refs;
         _keyPages[number] = page?.Keys;
-        _ownerPages[number] = page?.Owners;
     }
 
     private void Grow(Page page, int number)
@@ -459,7 +533,7 @@ internal sealed class Slab
         var slots = new Slot[Math.Min(old.Length * 2, PageSlots)];
         Array.Copy(old, slots, old.Length);
         page.Slots = slots;
-        Array.Resize(ref page.Owners, slots.Length);
+        GrowGenerations(page, slots.Length);
         if (page.Refs != null)
         {
             Array.Resize(ref page.Refs, slots.Length);
@@ -473,6 +547,41 @@ internal sealed class Slab
         Publish(number, page);
         PoisonOld(old);
     }
+
+    // Every generation is unique to the slab, a page's fresh ones included, so that a reference made before its page was
+    // released names no slot of a later page.
+#pragma warning disable CA1822 // Instance data in Debug.
+    [Conditional("DEBUG")]
+    private void NewGenerations(Page page)
+    {
+#if DEBUG
+        Array.Fill(page.Generations, ++_generationCounter);
+#endif
+    }
+
+    [Conditional("DEBUG")]
+    private void GrowGenerations(Page page, int length)
+    {
+#if DEBUG
+        var old = page.Generations.Length;
+        Array.Resize(ref page.Generations, length);
+        Array.Fill(page.Generations, ++_generationCounter, old, length - old);
+#endif
+    }
+
+    [Conditional("DEBUG")]
+    private void BumpGeneration(Page page, int index)
+    {
+#if DEBUG
+        page.Generations[index] = ++_generationCounter;
+#endif
+    }
+
+#pragma warning restore CA1822
+
+#if DEBUG
+    private int _generationCounter;
+#endif
 
     // A slot may be read until it can be reused; from then on its fields (but the kind and the free-list link) are garbage,
     // so a holder that still reads one gets a handle that names no page.
@@ -518,7 +627,9 @@ internal sealed class Slab
         public Slot[] Slots = new Slot[capacity];
         public object?[]? Refs;
         public object?[]? Keys;
-        public object?[] Owners = new object?[capacity];
+#if DEBUG
+        public int[] Generations = new int[capacity];
+#endif
         public int Used;
         public int FreeHead = -1;
         public int FreeCount;

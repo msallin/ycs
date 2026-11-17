@@ -24,16 +24,9 @@ internal sealed partial class StructStore
                 continue;
             }
 
-            var left = s.ObjectLeft; // the objects' links: the slots' are compared in SlotViolation
-            if (!left.IsNull && (!IsAttached(left) || !left.IsItem || left.ObjectRight != s))
+            if (LinkViolation(s) is { } link)
             {
-                return $"the left of {s.Id.Client}:{s.Id.Clock} is detached or does not point back";
-            }
-
-            var right = s.ObjectRight;
-            if (!right.IsNull && (!IsAttached(right) || !right.IsItem || right.ObjectLeft != s))
-            {
-                return $"the right of {s.Id.Client}:{s.Id.Clock} is detached or does not point back";
+                return link;
             }
 
             if (s.Content is ContentType content && content.Type._item != s)
@@ -61,6 +54,29 @@ internal sealed partial class StructStore
                     return $"{violation} (reached from {s.Id.Client}:{s.Id.Clock})";
                 }
             }
+        }
+
+        return null;
+    }
+
+    // The links of an item as its slot holds them, read without a reference to a slot that is free: left and right name
+    // attached items that name it back.
+    private string LinkViolation(ItemRef s)
+    {
+        var slot = Slab.Read(s.Handle);
+        if (slot.Kind == 0)
+        {
+            return null;
+        }
+
+        if (slot.Left >= 0 && (!IsAttached(slot.Left) || Slab.Read(slot.Left).Kind == 0 || Slab.Read(slot.Left).Right != s.Handle))
+        {
+            return $"the left of {s.Id.Client}:{s.Id.Clock} is detached or does not point back";
+        }
+
+        if (slot.Right >= 0 && (!IsAttached(slot.Right) || Slab.Read(slot.Right).Kind == 0 || Slab.Read(slot.Right).Left != s.Handle))
+        {
+            return $"the right of {s.Id.Client}:{s.Id.Clock} is detached or does not point back";
         }
 
         return null;
@@ -139,9 +155,9 @@ internal sealed partial class StructStore
     }
 
     /// <summary>
-    /// What is wrong with the slots of the structs of one client, or null: a struct whose handle is not a live slot of
-    /// this store's slab (or that shares it with another: <paramref name="handles"/> holds the ones seen), or whose slot
-    /// differs from the object (<see cref="SlotViolation(ItemRef)"/>).
+    /// What is wrong with the slots of the structs of one client, or null: a struct whose slot is not a live slot of
+    /// this store's slab or that shares it with another (<paramref name="handles"/> holds the ones seen), or whose slot
+    /// contradicts itself (<see cref="SlotViolation(ItemRef)"/>).
     /// </summary>
     private string SlotViolation(ClientStructs structs, HashSet<int> handles)
     {
@@ -162,32 +178,48 @@ internal sealed partial class StructStore
     }
 
     /// <summary>
-    /// What is wrong with the slot of one struct, or null: its handle is not a live slot of this store's slab, or the slot
-    /// differs from the object in clock, client, length, origins, info (the flags and the content's kind), content object (by reference), key, the handles
-    /// of its left and right neighbours, or its parent (the index of the parent type in the type table, whose entry is
-    /// that type until it is collected).
+    /// What is wrong with the slot of one struct, or null: it is not a live slot of this store's slab, or its kind, flags,
+    /// content, key, redone id and parent do not fit each other. A GC struct holds no links, origins, parent, content
+    /// or key; an item holds a content object of its kind, and the index of a parent type that exists in the type table.
     /// </summary>
-    private string SlotViolation(ItemRef s) => s.SlotViolation(this);
-
-    internal string ParentViolation(ID id, int parent, AbstractType type)
+    private string SlotViolation(ItemRef s)
     {
-        if (type == null)
+        if (!ReferenceEquals(s.Slab, Slab) || !Slab.TryRead(s.Handle, out var slot) || slot.IsFree)
         {
-            return parent == -1 ? null : $"the slot of {id.Client}:{id.Clock} names parent {parent}, the struct has none";
+            return $"a struct of the list has no live slot in this store (handle {s.Handle})";
         }
 
-        var index = type.TableIndexForTests;
-        if (index < 0 || parent != index || index >= Types.Count || !(ReferenceEquals(Types[index], type) || (type.IsCollected && Types[index] == null)))
+        var id = $"{ClientTable[slot.Client]}:{slot.Clock}";
+        var content = Slab.GetRef(s.Handle);
+        var hasRedone = (slot.Info & Slot.HasRedoneFlag) != 0;
+        if (hasRedone != Slab.HasRedone(s.Handle))
         {
-            return $"the slot of {id.Client}:{id.Clock} names parent {parent}, the struct's type has index {index} ({(index >= 0 && index < Types.Count && Types[index] != null ? "a live entry" : "no live entry")})";
+            return $"the slot of {id} has the has-redone flag {hasRedone} and {(hasRedone ? "no" : "a")} redone id";
+        }
+
+        if (slot.Kind == 0)
+        {
+            return slot.Info == Slot.DeletedFlag && slot.Left == -1 && slot.Right == -1 && slot.Parent == -1 && slot.OriginClient == -1 && slot.ROriginClient == -1 && content == null && Slab.GetKey(s.Handle) == null
+                ? null
+                : $"the slot of the GC struct {id} holds more than a range";
+        }
+
+        if (content is not IContentEx held || held.Ref != slot.Kind || held.Length != slot.Length)
+        {
+            return $"the slot of {id} holds the kind {slot.Kind} and length {slot.Length}, its content another";
+        }
+
+        if (slot.Parent < 0 || slot.Parent >= Types.Count)
+        {
+            return $"the slot of {id} names parent {slot.Parent} of {Types.Count} types";
         }
 
         return null;
     }
 
     /// <summary>
-    /// What is wrong with the slots of the structs <paramref name="transaction"/> touched, which every transaction
-    /// compares whatever the length of their lists: the structs added, those of its merge list, and their neighbours in
+    /// What is wrong with the slots and links of the structs <paramref name="transaction"/> touched, which every transaction
+    /// checks whatever the length of their lists: the structs added, those of its merge list, and their neighbours in
     /// the list (a merge changes the left one's links).
     /// </summary>
     private string TouchedSlotViolation(Transaction transaction)
@@ -199,7 +231,7 @@ internal sealed partial class StructStore
             {
                 for (var i = structs.FindIndex(from); i < structs.Count; i++)
                 {
-                    if (SlotViolation(structs[i]) is { } violation)
+                    if ((SlotViolation(structs[i]) ?? LinkViolation(structs[i])) is { } violation)
                     {
                         return violation;
                     }
@@ -217,7 +249,7 @@ internal sealed partial class StructStore
             var index = structs.FindIndex(id.Clock);
             for (var i = Math.Max(0, index - 1); i <= Math.Min(structs.Count - 1, index + 1); i++)
             {
-                if (SlotViolation(structs[i]) is { } violation)
+                if ((SlotViolation(structs[i]) ?? LinkViolation(structs[i])) is { } violation)
                 {
                     return violation;
                 }
@@ -226,9 +258,6 @@ internal sealed partial class StructStore
 
         return null;
     }
-
-    internal bool SlotOrigin(ID? origin, int client, long clock) =>
-        origin is ID id ? ClientTable.TryGetIndex(id.Client, out var index) && index == client && id.Clock == clock : client == -1 && clock == 0;
 
     /// <summary>
     /// What is wrong with the slab as a whole, or null: its pages and free lists recount (<see cref="Slab.Violations"/>),
@@ -252,9 +281,20 @@ internal sealed partial class StructStore
 
     // A document inserted twice belongs to the item integrated last, possibly in another document.
     private static bool IsAttachedInOwner(ItemRef item) =>
-        !item.IsNull && item.Parent is AbstractType { Doc: { } owner } && owner.Store.IsAttached(item);
+        !item.IsNull && item.Parent is { Doc: { } owner } && owner.Store.IsAttached(item);
 
-    // By the object: a holder that names a detached struct is what is looked for, and reading it would throw.
-    private bool IsAttached(ItemRef held) =>
-        held.HasSlot && Clients.TryGetValue(held.ObjectId.Client, out var structs) && structs.FindIndex(held.ObjectId.Clock) is var index && index >= 0 && index < structs.Count && structs[index] == held;
+    // By the slot, without a read through the reference: a holder that names a freed slot is what is looked for, and a
+    // Debug read would throw. A holder of a slot that was freed and then reused names another struct of the list, which
+    // only the Debug generation check of its next read finds.
+    private bool IsAttached(ItemRef held) => !held.IsNull && ReferenceEquals(held.Slab, Slab) && IsAttached(held.Handle);
+
+    private bool IsAttached(int handle)
+    {
+        if (!Slab.TryRead(handle, out var slot) || slot.IsFree)
+        {
+            return false;
+        }
+
+        return Clients.TryGetValue(ClientTable[slot.Client], out var structs) && slot.Clock < structs.End && structs.FindIndex(slot.Clock) is var index && index >= 0 && index < structs.Count && structs[index].Handle == handle;
+    }
 }

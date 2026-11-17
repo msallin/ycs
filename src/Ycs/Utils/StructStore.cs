@@ -12,13 +12,13 @@ namespace Ycs;
 
 internal sealed partial class StructStore
 {
-    /// <summary>One live slot for every struct of <see cref="Clients"/> (shadows the objects; <see cref="AbstractStruct.AttachSlot"/>).</summary>
+    /// <summary>The struct of <see cref="Clients"/>: one live slot for each (more while an item is being integrated).</summary>
     internal readonly Slab Slab = new();
 
-    internal readonly ClientTable ClientTable = new();
+    internal ClientTable ClientTable => Slab.Clients;
 
     /// <summary>The types that items of this store name as their parent, by the index a slot holds.</summary>
-    internal readonly TypeTable Types = new();
+    internal TypeTable Types => Slab.Types;
 
     // TODO: [alekseyk] To private?
     public readonly Dictionary<long, ClientStructs> Clients = new Dictionary<long, ClientStructs>();
@@ -61,7 +61,7 @@ internal sealed partial class StructStore
         return held.Right.AsItem;
     }
 
-    /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="Item.ExtendRun"/>).</summary>
+    /// <summary><paramref name="item"/>, the last struct of its client, grew in place by <paramref name="length"/> (<see cref="ItemRef.ExtendRun"/>).</summary>
     internal void NoteRunExtended(ItemRef item, int length)
     {
         Clients[item.Id.Client].LastExtended(length);
@@ -136,12 +136,6 @@ internal sealed partial class StructStore
         if (known && structs.End != str.Id.Clock)
         {
             throw new Exception("Unexpected");
-        }
-
-        // The slot first: when it cannot be attached the store is unchanged, and a list never holds a struct without one.
-        if (str.Handle < 0)
-        {
-            str.AttachSlot(this);
         }
 
         if (!known)
@@ -307,17 +301,20 @@ internal sealed partial class StructStore
         return str;
     }
 
-    public void ReplaceStruct(ItemRef oldStruct, ItemRef newStruct)
+    /// <summary>
+    /// Replaces <paramref name="item"/> in its list by a GC struct of the same range, which keeps its slot: the
+    /// references to it stay valid and read the GC struct.
+    /// </summary>
+    public void ReplaceWithGC(ItemRef item)
     {
-        if (!Clients.TryGetValue(oldStruct.Id.Client, out var structs))
+        if (!Clients.TryGetValue(item.Id.Client, out var structs))
         {
             throw new Exception();
         }
 
-        int index = FindIndexSS(structs, oldStruct.Id.Clock);
-        structs.Replace(index, newStruct);
-        newStruct.TakeSlotFrom(oldStruct);
-        oldStruct.MarkDetached();
+        int index = FindIndexSS(structs, item.Id.Clock);
+        item.BecomeGC();
+        structs.Replace(index, item);
         Departures++;
     }
 

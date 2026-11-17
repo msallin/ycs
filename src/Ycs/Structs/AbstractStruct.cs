@@ -8,7 +8,11 @@ using System.Diagnostics;
 
 namespace Ycs;
 
-internal abstract partial class AbstractStruct
+/// <summary>
+/// A struct as decoded from an update: in no store and without neighbours. The structs of a store are slots
+/// (<see cref="ItemRef"/>); a decoded one enters a store through <see cref="ItemRef.Adopt"/>.
+/// </summary>
+internal abstract class AbstractStruct
 {
     protected AbstractStruct(ID id, int length)
     {
@@ -24,27 +28,13 @@ internal abstract partial class AbstractStruct
     public ID Id
     {
         get => _id;
-        protected set
-        {
-            _id = value;
-            if (Handle >= 0)
-            {
-                WriteId();
-            }
-        }
+        protected set => _id = value;
     }
 
     public int Length
     {
         get => _length;
-        protected set
-        {
-            _length = value;
-            if (Handle >= 0)
-            {
-                SlotStore.Slab.At(Handle).Length = value;
-            }
-        }
+        protected set => _length = value;
     }
 
     public abstract bool Deleted { get; }

@@ -11,7 +11,7 @@ internal static class Builder
     {
         var store = new LayoutStore(paging);
         var clients = doc.Store.Clients;
-        var handles = new Dictionary<AbstractStruct, int>(ReferenceEqualityComparer.Instance);
+        var handles = new Dictionary<ItemRef, int>();
         var types = new Dictionary<YType, int>(ReferenceEqualityComparer.Instance);
 
         store.ClientIds = [.. clients.Keys];
@@ -29,7 +29,7 @@ internal static class Builder
             foreach (var s in list)
             {
                 var h = store.NewSlot();
-                handles[s.ToStruct()] = h;
+                handles[s] = h;
                 order.Add(Clock(s.Id.Clock), h);
             }
         }
@@ -51,7 +51,7 @@ internal static class Builder
             return i;
         }
 
-        int Handle(AbstractStruct s) => s == null ? -1 : handles[s];
+        int Handle(ItemRef s) => s.IsNull ? -1 : handles[s];
 
         foreach (var (s, h) in handles)
         {
@@ -60,7 +60,8 @@ internal static class Builder
             slot.Length = s.Length;
             slot.Client = store.ClientIndex[s.Id.Client];
             slot.Left = slot.Right = slot.Parent = slot.OriginClient = slot.ROriginClient = -1;
-            if (s is not Item item)
+            var item = s;
+            if (!s.IsItem)
             {
                 slot.Info = (int)ContentKind.Gc << 8;
                 continue;
@@ -80,7 +81,7 @@ internal static class Builder
                 slot.ROriginClock = Clock(ro.Clock);
             }
 
-            slot.Parent = TypeIndex(item.Parent as YType);
+            slot.Parent = TypeIndex(item.Parent);
             var info = (item.Keep ? Flags.Keep : 0) | (item.Countable ? Flags.Countable : 0) | (item.Deleted ? Flags.Deleted : 0) | (item.Marker ? Flags.Marker : 0);
             if (item.Redone is ItemId redone)
             {
@@ -131,7 +132,7 @@ internal static class Builder
         foreach (var (t, i) in types)
         {
             var e = store.Types[i];
-            e.Start = Handle(t._start.ToStruct());
+            e.Start = Handle(t._start);
             e.Length = t.Length;
             e.MapCount = t._mapCount;
             if (t._map.Count > 0)
@@ -139,7 +140,7 @@ internal static class Builder
                 e.Map = new Dictionary<string, int>(t._map.Count);
                 foreach (var (k, v) in t._map)
                 {
-                    e.Map[k] = Handle(v.ToStruct());
+                    e.Map[k] = Handle(v);
                 }
             }
 

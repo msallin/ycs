@@ -6,7 +6,7 @@ namespace Ycs;
 
 /// <summary>
 /// The slot of an item names its neighbours by handle and its parent by index in the document's type table, and
-/// <c>StructStore.CheckForTests</c> compares them with the objects, the structs a transaction touched always.
+/// <c>StructStore.CheckForTests</c> checks that they mirror each other, the structs a transaction touched always.
 /// </summary>
 [TestClass]
 public class StructLinkSlotTests

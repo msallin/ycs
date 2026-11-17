@@ -479,7 +479,7 @@ public partial class YText : YArrayBase
             {
                 var left = Left;
                 var right = Right;
-                var nextFormat = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), left, right, parent, null, new ContentFormat(kvp.Key, kvp.Value));
+                var nextFormat = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), left, right, parent, null, new ContentFormat(kvp.Key, kvp.Value));
                 nextFormat.Integrate(transaction, 0);
                 Right = nextFormat;
                 Forward();
@@ -689,7 +689,7 @@ public partial class YText : YArrayBase
                 // Save negated attribute (set null if currentVal is not set).
                 (negatedAttributes ??= new OrderedDictionary<string, object?>())[key] = currentVal;
 
-                currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, new ContentFormat(key, ValueFreezer.Freeze(value, doc.Limits.MaxDepth)));
+                currPos.Right = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, new ContentFormat(key, ValueFreezer.Freeze(value, doc.Limits.MaxDepth)));
                 currPos.Right.Integrate(transaction, 0);
                 currPos.Forward();
             }
@@ -753,7 +753,7 @@ public partial class YText : YArrayBase
             return;
         }
 
-        currPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, str != null ? new ContentString(str) : content);
+        currPos.Right = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), currPos.Left, currPos.Right, this, null, str != null ? new ContentString(str) : content);
         currPos.Right.Integrate(transaction, 0);
         currPos.Forward();
 
@@ -823,7 +823,7 @@ public partial class YText : YArrayBase
         // inserted - i.e. when length is bigger than type.length.
         if (length > 0)
         {
-            curPos.Right = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Right, this, null, new ContentString(new string('\n', length)));
+            curPos.Right = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), curPos.Left, curPos.Right, this, null, new ContentString(new string('\n', length)));
             curPos.Right.Integrate(transaction, 0);
             curPos.Forward();
         }

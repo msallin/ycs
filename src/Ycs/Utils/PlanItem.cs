@@ -41,7 +41,7 @@ internal readonly struct PlanItem : IEquatable<PlanItem>
 
     public bool Deleted => _decoded is null ? _stored.Deleted : _decoded.Deleted;
 
-    public bool Keep => _decoded is null ? _stored.Keep : _decoded.Keep;
+    public bool Keep => _decoded is null && _stored.Keep;
 
     public object Parent => _decoded is null ? _stored.Parent : _decoded.Parent;
 

@@ -74,7 +74,7 @@ public sealed partial class Transaction
     // struct that holds the id now.
     internal readonly List<ID> _mergeStructs = new();
 
-    // Where an insert continued the run of the item before it in place (Item.ExtendRun) instead of integrating an
+    // Where an insert continued the run of the item before it in place (ItemRef.ExtendRun) instead of integrating an
     // item of its own, in clock order: the clock at which that item would have started, as runs of equal steps
     // (typing one character at a time is one entry). Yjs merges such an item into its left neighbour at the end of
     // the transaction, so the store ends up the same; until then, everything that could tell the two apart

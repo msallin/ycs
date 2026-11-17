@@ -83,7 +83,7 @@ public abstract partial class YType
             }
         }
 
-        var newItem = ItemRef.New(new ID(ownClientId, doc.Store.GetState(ownClientId)), left, default, this, key, content);
+        var newItem = ItemRef.New(doc.Store.Slab, new ID(ownClientId, doc.Store.GetState(ownClientId)), left, default, this, key, content);
         newItem.Integrate(transaction, 0);
     }
 

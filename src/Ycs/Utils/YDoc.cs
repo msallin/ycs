@@ -182,7 +182,7 @@ public partial class YDoc
     /// <summary>No search markers are made or used in this document (the tests' reference: markers must not change any output).</summary>
     internal bool SearchMarkersDisabledForTests;
 
-    /// <summary>Every insert integrates an item of its own, as in Yjs (the tests' reference for <see cref="Item.ExtendRun"/>).</summary>
+    /// <summary>Every insert integrates an item of its own, as in Yjs (the tests' reference for <see cref="ItemRef.ExtendRun"/>).</summary>
     internal bool RunExtensionsDisabledForTests;
 
     /// <summary>The marker lookups walk as Yjs' loops do, item by item (the tests' reference for the run-head index, <see cref="ClientStructs.RunHead"/>).</summary>

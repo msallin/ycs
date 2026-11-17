@@ -442,7 +442,7 @@ public sealed partial class UndoManager
         }
 
         var nextId = new ID(ownClientId, store.GetState(ownClientId));
-        var redoneItem = ItemRef.New(nextId, left, right, parentType, item.ParentSub, item.Content.Copy());
+        var redoneItem = ItemRef.New(store.Slab, nextId, left, right, parentType, item.ParentSub, item.Content.Copy());
         item.Redone = nextId;
         redoneItem.KeepItemAndParents(true);
         redoneItem.Integrate(transaction, 0);

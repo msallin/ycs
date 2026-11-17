@@ -19,7 +19,7 @@ namespace Ycs;
 /// <remarks>
 /// Yjs' walk-left steps from p to p.left while p.left has p's client and ends at p's clock. The struct that ends at a
 /// struct's clock is unique: its predecessor in its client's clock order. So the walk steps from position i to i - 1
-/// exactly when the item at i has the struct at i - 1 as its <see cref="Item.Left"/>, by reference ("linked"); every
+/// exactly when the item at i has the struct at i - 1 as its <see cref="ItemRef.Left"/>, by reference ("linked"); every
 /// other position is a break (position 0, a GC struct, a struct after a GC struct, an item whose left is another
 /// client's or not its predecessor). A walk from i ends at the last break at or before i. The visible lengths give the
 /// index it subtracts on the way. A position's visible length is its clock length when the flag says visible.
@@ -205,7 +205,7 @@ internal sealed partial class ClientStructs
     /// <summary>
     /// How far a walk to the right that has <paramref name="target"/> visible elements to go can jump from position
     /// <paramref name="index"/> within its run (the positions after it up to the next break, which the walk reaches
-    /// by <see cref="Item.Right"/> links: a linked position is its predecessor's right): the furthest position k such
+    /// by <see cref="ItemRef.Right"/> links: a linked position is its predecessor's right): the furthest position k such
     /// that the positions passed, [index, k), are shorter than <paramref name="target"/> (so every walk that stops at
     /// the item holding the target, or at the end of one, passes over them), and, with
     /// <paramref name="stopAtFormats"/>, hold no live format (a text's walk reads those). <paramref name="passed"/>

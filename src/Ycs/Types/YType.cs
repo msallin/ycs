@@ -143,8 +143,9 @@ public abstract partial class YType
     // any read of the struct instead of the facts changes behaviour.
     internal static bool PoisonCollectedHandleForTests;
 
+    // The slot is in a slab of its own, which no store's checks count.
     internal static ItemRef PoisonItem() =>
-        ItemRef.New(new ID(424242, 7), default, default, new YMap(), "POISON", new ContentAny(new object[] { "poison" }));
+        ItemRef.New(new Slab(), new ID(424242, 7), default, default, new YMap(), "POISON", new ContentAny(new object[] { "poison" }));
 
     // How many keys of _map have a value that is not deleted, kept by ItemRef.Integrate and ItemRef.Delete.
     internal int _mapCount;

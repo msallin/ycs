@@ -4,8 +4,8 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// Every struct of the store has one live slot of the document's slab, which shadows its object
-/// (<c>StructStore.CheckForTests</c> compares them after every transaction of the suite; these tests name the rules).
+/// Every struct of the store is one live slot of the document's slab
+/// (<c>StructStore.CheckForTests</c> checks them after every transaction of the suite; these tests name the rules).
 /// </summary>
 [TestClass]
 public class StructSlotTests
@@ -75,7 +75,7 @@ public class StructSlotTests
     }
 
     [TestMethod]
-    public void Cleanup_MergingAdjacentItems_ResetsTheHandleOfTheMergedAwayStruct()
+    public void Cleanup_MergingAdjacentItems_FreesTheSlotOfTheMergedAwayStructForItsReference()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 }) { RunExtensionsDisabledForTests = true };
         var text = doc.GetText("t");
@@ -90,11 +90,11 @@ public class StructSlotTests
             held = right.Handle;
         });
 
-        Assert.AreEqual((true, -1), (held >= 0, right.Handle));
+        Assert.AreEqual((true, true), (held >= 0, right.IsFreed));
     }
 
     [TestMethod]
-    public void Collect_ReplacingAnItemByGc_ResetsTheHandleOfTheReplacedItem()
+    public void Collect_ReplacingAnItemByGc_ReadsAGcStructThroughTheReferenceOfTheReplacedItem()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var array = doc.GetArray("a");
@@ -102,11 +102,11 @@ public class StructSlotTests
         array.Add(outer);
         outer["k"] = 1;
         var item = doc.Store.Find(new ItemId(1, 1));
-        Assert.AreNotEqual(-1, item.Handle);
+        Assert.IsTrue(item.IsItem);
 
         array.RemoveAt(0);
 
-        Assert.AreEqual(-1, item.Handle);
+        Assert.AreEqual((true, false), (item.IsGC, item.IsFreed));
     }
 
     [TestMethod]

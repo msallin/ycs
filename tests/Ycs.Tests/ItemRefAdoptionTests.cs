@@ -8,42 +8,33 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs;
 
 /// <summary>
-/// A decoded struct enters the store only through <see cref="ItemRef.Adopt"/>, and no method of the library but
-/// <see cref="ItemRef"/>'s own wraps an object in a reference or takes the object out of one
-/// (<c>Of</c>, <c>ToStruct</c>, <c>ToItem</c>): the object disappears behind the reference in step 7.
+/// A decoded struct enters the store only through <see cref="ItemRef.Adopt"/>, and the library allocates an
+/// <see cref="Item"/> or <see cref="GC"/> object only for the decoded form: a struct of the store is a slot, never an object.
 /// </summary>
 [TestClass]
 public class ItemRefAdoptionTests
 {
     [TestMethod]
-    public void Library_EveryMethodBody_CallsNoObjectAccessOfItemRefOutsideItemRef()
+    public void Library_EveryMethodBody_AllocatesItemAndGcObjectsOnlyWhereAnUpdateIsDecoded()
     {
-        var found = Callers(["Of", "ToStruct", "ToItem"]).Where(c => c.Outer != "ItemRef").Select(c => $"{c.Type}.{c.Method} calls {c.Target}");
+        var found = Callers(["Item", "GC"], [".ctor"], OpCodes.Newobj).Select(c => $"{c.Outer}.{c.Method}").Distinct().OrderBy(s => s, StringComparer.Ordinal);
 
-        Assert.AreEqual(string.Empty, string.Join("\n", found.Distinct().OrderBy(s => s, StringComparer.Ordinal)));
+        Assert.AreEqual("EncodingUtils.ReadStruct", string.Join("\n", found));
     }
 
     [TestMethod]
     public void Library_EveryMethodBody_AdoptsDecodedStructsOnlyInTheIntegrationPlansExecute()
     {
-        var found = Callers(["Adopt"]).Select(c => $"{c.Type}.{c.Method}").Distinct().ToArray();
+        var found = Callers(["ItemRef"], ["Adopt"]).Select(c => $"{c.Type}.{c.Method}").Distinct().ToArray();
 
         Assert.AreEqual("IntegrationPlan.Execute", string.Join("\n", found));
     }
 
-    [TestMethod]
-    public void Library_EveryMethodBody_WrapsADecodedStructInAReferenceOnlyForItsViews()
-    {
-        var found = Callers(["Decoded"]).Select(c => $"{c.Type}.{c.Method}").Distinct().ToArray();
-
-        Assert.AreEqual("ItemView.Detached", string.Join("\n", found));
-    }
-
-    private static List<(string Outer, string Type, string Method, string Target)> Callers(string[] names)
+    private static List<(string Outer, string Type, string Method, string Target)> Callers(string[] types, string[] names, OpCode? only = null)
     {
         using var scan = IlScan.Read();
         var (_, ops, md) = scan;
-        var itemRef = md.TypeDefinitions.Single(h => md.GetString(md.GetTypeDefinition(h).Name) == nameof(ItemRef));
+        var wanted = md.TypeDefinitions.Where(h => types.Contains(md.GetString(md.GetTypeDefinition(h).Name))).ToHashSet();
         var callers = new List<(string, string, string, string)>();
         foreach (var (type, method, outer, _, op) in ops)
         {
@@ -52,8 +43,13 @@ public class ItemRefAdoptionTests
                 continue;
             }
 
+            if (only != null && op.Op != only.Value)
+            {
+                continue;
+            }
+
             var target = Target(md, op.Token);
-            if (target.Declaring == itemRef && names.Contains(target.Name))
+            if (wanted.Contains(target.Declaring) && names.Contains(target.Name))
             {
                 callers.Add((md.GetString(md.GetTypeDefinition(outer).Name), type, method, target.Name));
             }

@@ -150,7 +150,7 @@ internal class ContentType : IContentEx
                 open.RemoveAt(open.Count - 1);
                 if (!frame.Owner.IsNull)
                 {
-                    store.ReplaceStruct(frame.Owner, ItemRef.NewGC(frame.Owner.Id, frame.Owner.Length));
+                    store.ReplaceWithGC(frame.Owner);
                 }
 
                 continue;
@@ -168,7 +168,7 @@ internal class ContentType : IContentEx
             else
             {
                 item.Content.Gc(store);
-                store.ReplaceStruct(item, ItemRef.NewGC(item.Id, item.Length));
+                store.ReplaceWithGC(item);
             }
         }
     }

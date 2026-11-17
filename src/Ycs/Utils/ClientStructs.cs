@@ -20,9 +20,9 @@ namespace Ycs;
 /// The structs are contiguous by clock: the end of position i is the start of i + 1, and <see cref="End"/> is the end
 /// of the last one. Every change of the list goes through this class, which keeps the starts, the leaves and the
 /// run-head index (ClientStructs.RunHeads.cs) in step. Three changes of items made elsewhere change what the index
-/// holds and call <see cref="StructStore.Refresh"/>: an item deleted (<see cref="Item.MarkDeleted()"/>), a deleted
+/// holds and call <see cref="StructStore.Refresh"/>: an item deleted (<see cref="ItemRef.MarkDeleted()"/>), a deleted
 /// content integrated (<see cref="ContentDeleted"/>), an item integrated between a struct and its predecessor
-/// (<see cref="Item.Left"/>).
+/// (<see cref="ItemRef.Left"/>).
 /// </remarks>
 internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
 {
@@ -292,7 +292,7 @@ internal sealed partial class ClientStructs : IReadOnlyList<ItemRef>
         RefreshSuccessor(k, offset);
     }
 
-    /// <summary>The last struct grew in place by <paramref name="length"/> (<see cref="Item.ExtendRun"/>).</summary>
+    /// <summary>The last struct grew in place by <paramref name="length"/> (<see cref="ItemRef.ExtendRun"/>).</summary>
     public void LastExtended(int length)
     {
         _end += length;
