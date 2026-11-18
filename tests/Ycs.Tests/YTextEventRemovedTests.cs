@@ -23,6 +23,26 @@ public class YTextEventRemovedTests
         return string.Join(" ", result);
     }
 
+    /// <summary>The runs with the adjacent ones joined: how an item list is cut differs between documents, the text and positions do not.</summary>
+    private static string JoinedRuns(YTextEvent e)
+    {
+        var joined = new List<(int Start, int Length, string Text)>();
+        foreach (var run in e.Removed)
+        {
+            if (joined.Count > 0 && joined[^1].Start + joined[^1].Length == run.Start)
+            {
+                var last = joined[^1];
+                joined[^1] = (last.Start, last.Length + run.Length, last.Text + run.Text.ToString());
+            }
+            else
+            {
+                joined.Add((run.Start, run.Length, run.Text.ToString()));
+            }
+        }
+
+        return string.Join(" ", joined.Select(r => $"{r.Start}:{r.Length}:{r.Text}"));
+    }
+
     private static string RunsOf(YText text, Action edit)
     {
         var runs = "";
@@ -113,6 +133,25 @@ public class YTextEventRemovedTests
     }
 
     [TestMethod]
+    public void Removed_EmbedRun_IsEmbed()
+    {
+        var text = Typed();
+        text.InsertEmbed(3, (YValue)5);
+        var flags = "";
+        text.Observe(e =>
+        {
+            foreach (var run in e.Removed)
+            {
+                flags += run.IsEmbed ? "E" : "T";
+            }
+        });
+
+        text.Remove(2, 3);
+
+        Assert.AreEqual("TET", flags);
+    }
+
+    [TestMethod]
     public void Removed_FormattedRun_YieldsTheCharactersOnly()
     {
         var text = Typed();
@@ -135,7 +174,7 @@ public class YTextEventRemovedTests
     }
 
     [TestMethod]
-    public void Removed_RemoteTransaction_YieldsTheSameRunsAsTheLocalOne()
+    public void Removed_RemoteTransaction_YieldsTheSameTextAtTheSamePositionsAsTheLocalOne()
     {
         var a = new YDoc(new YDocOptions { ClientId = 1 });
         var local = Typed(a);
@@ -143,12 +182,14 @@ public class YTextEventRemovedTests
         b.ApplyUpdate(a.EncodeStateAsUpdate());
         var remote = b.GetText("t");
         var seen = "";
-        remote.Observe(e => seen = Runs(e));
+        remote.Observe(e => seen = JoinedRuns(e));
 
-        var localRuns = RunsOf(local, () => local.Remove(2, 3));
+        var localRuns = "";
+        local.Observe(e => localRuns = JoinedRuns(e));
+        local.Remove(2, 3);
         b.ApplyUpdate(a.EncodeStateAsUpdate(b.EncodeStateVector()));
 
-        Assert.AreEqual((localRuns, localRuns), (seen, "2:3:llo"));
+        Assert.AreEqual(("2:3:llo", "2:3:llo"), (localRuns, seen));
     }
 
     [TestMethod]

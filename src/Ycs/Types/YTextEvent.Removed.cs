@@ -9,7 +9,10 @@ public sealed partial class YTextEvent
     /// before the transaction: <c>foreach (var run in e.Removed)</c>. Characters inserted and deleted within the
     /// transaction are in neither the old text nor the runs. Formatting counts nothing and yields nothing; the characters of
     /// a formatted run come without their attributes (<see cref="Delta"/> has those). One run is one item of the document:
-    /// text that was typed by two clients, or at two times, comes as several runs that follow each other.
+    /// text that was typed by two clients, or at two times, comes as several runs that follow each other. Which items there are, and so
+    /// how many runs, can differ between documents; their joined text and their positions do not. A surrogate half that this
+    /// transaction's delete split off reads U+FFFD (as in <see cref="YText.ToString()"/>, where its other half shows so); its
+    /// <see cref="RemovedRun.Length"/> is right.
     /// </summary>
     /// <remarks>
     /// Computed on demand, without allocating and without keeping anything: <see cref="RemovedRun.Text"/> is valid
@@ -23,7 +26,8 @@ public sealed partial class YTextEvent
     /// <see cref="Delta.Delete"/>. Do not edit the document while enumerating: the walk is over the items of the text
     /// when each step runs. An observer that edits the text before reading sees only what this event's transaction
     /// removed (the edit is a transaction of its own); text that edit deleted counts nothing, so the positions are those of
-    /// the text before this transaction less that text.
+    /// the text before this transaction less that text; likewise a transaction that an observer started reports positions in the text after
+    /// the earlier transactions' changes.
     /// </para>
     /// </remarks>
     /// <exception cref="InvalidOperationException">The removed text can no longer be read.</exception>
@@ -58,6 +62,9 @@ public sealed partial class YTextEvent
 
         /// <summary>The positions the run takes in that index space: its characters, and one for an embed or a nested type.</summary>
         public int Length { get; }
+
+        /// <summary>Whether the run is an embed or a nested type: it has a length and no text.</summary>
+        public bool IsEmbed => Text.IsEmpty;
 
         /// <summary>The removed characters; empty for an embed or a nested type. Valid until the next <c>MoveNext</c> or any edit of the document.</summary>
         public ReadOnlySpan<char> Text { get; }

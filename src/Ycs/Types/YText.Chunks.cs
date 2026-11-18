@@ -27,7 +27,7 @@ public partial class YText
     /// document. The body of the loop may edit the document (the enumerator is a <c>ref struct</c>: it cannot be stored,
     /// captured or held across an <c>await</c>), but each chunk is read as the text is when <c>MoveNext</c> runs: a run
     /// deleted meanwhile yields nothing, one split or merged yields its current text from where the walk stopped, and
-    /// text inserted before the walk's position is not read. The document is not thread-safe: read it as you write it.
+    /// text inserted before the walk's position is not read; text inserted at it may or may not be (an insert lands after deleted items and matching formats at that position). The document is not thread-safe: read it as you write it.
     /// </para>
     /// </remarks>
     /// <exception cref="ArgumentOutOfRangeException">The range is not within the text, that is within 0 and <see cref="Length"/>.</exception>

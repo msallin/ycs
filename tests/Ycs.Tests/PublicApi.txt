@@ -629,6 +629,7 @@ sealed class Ycs.YTextEvent : YEvent
     override YChanges Changes { get; }
 readonly struct Ycs.YTextEvent.RemovedRun
     System.ReadOnlySpan<char> Text { get; }
+    bool IsEmbed { get; }
     int Length { get; }
     int Start { get; }
 struct Ycs.YTextEvent.RemovedRunEnumerator

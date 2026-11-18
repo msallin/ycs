@@ -202,7 +202,7 @@ index in a list when `Key` is null), `Changes` (`YChanges`: `Added`, `Deleted`, 
 (`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, a `YValue`, `YValue.Null` for an added key), and `Adds(view)`,
 `Deletes(view)`. The subclasses add `YMapEvent.KeysChanged`, `YTextEvent.KeysChanged` and `ChildListChanged`, and
 `YXmlEvent.AttributesChanged` and `ChildListChanged`. `YTextEvent.Removed` is a `ref struct` enumerator of the removed runs (`Start` in
-the text before the transaction, in the index space of `Length`; `Length`, 1 for an embed; `Text`, a span, empty for an embed), with no copy; it is readable in the
+the text before the transaction, in the index space of `Length`; `Length`, 1 for an embed; `Text`, a span, empty for an embed, as `IsEmbed` says; a surrogate half that the delete split off reads U+FFFD; the joined runs and their positions, not how many there are, are the same in every document), with no copy; it is readable in the
 observers, the deep observers and the `AfterTransaction` handlers (whether or not the document collects garbage) and throws
 `InvalidOperationException` after them. An event is valid during the handler, its transaction's observers
 and cleanup; compute what you keep there.
