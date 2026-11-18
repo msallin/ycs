@@ -37,7 +37,11 @@ internal static class BufferPool<T>
         return array;
     }
 
-    public static void Return(T[] array)
+    /// <summary>Returns an array that holds no document content (state vectors, counts).</summary>
+    public static void Return(T[] array) => Return(array, 0);
+
+    /// <summary>Clears the first <paramref name="used"/> elements, the only ones the renter wrote, and returns the array: a buffer of content does not leave the process's pool holding it.</summary>
+    public static void Return(T[] array, int used)
     {
 #if DEBUG
         lock (s_rented)
@@ -54,6 +58,7 @@ internal static class BufferPool<T>
         }
 #endif
         t_outstanding--;
+        array.AsSpan(0, used).Clear();
         ArrayPool<T>.Shared.Return(array);
     }
 }

@@ -32,6 +32,9 @@ internal sealed class Lib0Writer
     private byte[] _buffer = Array.Empty<byte>();
     private int _length;
 
+    // The most bytes any write since the last reset reached: Clear lowers _length, the bytes above it stay in the buffer.
+    private int _dirty;
+
     // How much the pooled writer held when it was last reset, up to MaxRememberedLength: its first buffer is rented
     // that large, so a writer that encodes documents of about the same size again and again (a pooled encoder) does
     // not grow and copy from the initial capacity each time.
@@ -84,6 +87,7 @@ internal sealed class Lib0Writer
     public void Clear()
     {
         ThrowIfWritingToDestination();
+        _dirty = Math.Max(_dirty, _length);
         _length = 0;
     }
 
@@ -96,7 +100,7 @@ internal sealed class Lib0Writer
         if (_pooled && _buffer.Length > 0)
         {
             _lastLength = Math.Min(_length, MaxRememberedLength);
-            BufferPool<byte>.Return(_buffer);
+            BufferPool<byte>.Return(_buffer, Math.Max(_dirty, _length));
             _buffer = Array.Empty<byte>();
         }
         else if (_buffer.Length > MaxRetainedCapacity)
@@ -105,6 +109,7 @@ internal sealed class Lib0Writer
         }
 
         _length = 0;
+        _dirty = 0;
         _destination = null;
         _chunk = default;
         _committed = 0;
@@ -322,9 +327,10 @@ internal sealed class Lib0Writer
             _buffer.AsSpan(0, _length).CopyTo(newBuffer);
             if (_buffer.Length > 0)
             {
-                BufferPool<byte>.Return(_buffer);
+                BufferPool<byte>.Return(_buffer, Math.Max(_dirty, _length));
             }
 
+            _dirty = 0;
             _buffer = newBuffer;
         }
         else

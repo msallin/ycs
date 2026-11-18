@@ -118,7 +118,7 @@ public static class YUpdate
     }
 }
 
-/// <summary>A span copied into an array of the shared pool, for the decoders that read arrays. Returned by <see cref="Dispose"/>; the copy is not cleared.</summary>
+/// <summary>A span copied into an array of the shared pool, for the decoders that read arrays. Cleared and returned by <see cref="Dispose"/>.</summary>
 internal readonly struct PooledCopy : IDisposable
 {
     private readonly byte[] _array;
@@ -133,5 +133,9 @@ internal readonly struct PooledCopy : IDisposable
 
     public ArraySegment<byte> Segment => new(_array, 0, _count);
 
-    public void Dispose() => ArrayPool<byte>.Shared.Return(_array);
+    public void Dispose()
+    {
+        _array.AsSpan(0, _count).Clear();
+        ArrayPool<byte>.Shared.Return(_array);
+    }
 }

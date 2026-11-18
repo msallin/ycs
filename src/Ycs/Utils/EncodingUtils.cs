@@ -635,7 +635,7 @@ internal static class EncodingUtils
             finally
             {
                 _reader.Clear();
-                BufferPool<byte>.Return(buffer);
+                BufferPool<byte>.Return(buffer, encoded.Length);
             }
         }
 

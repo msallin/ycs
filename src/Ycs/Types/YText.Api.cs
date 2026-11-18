@@ -538,7 +538,7 @@ public partial class YText
         }
         finally
         {
-            ArrayPool<char>.Shared.Return(buffer);
+            ArrayPool<char>.Shared.Return(buffer, clearArray: true);
         }
     }
 

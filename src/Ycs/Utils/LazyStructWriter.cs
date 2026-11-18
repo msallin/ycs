@@ -171,7 +171,7 @@ internal sealed class LazyStructWriter
         }
         finally
         {
-            BufferPool<byte>.Return(fragments);
+            BufferPool<byte>.Return(fragments, length);
         }
     }
 

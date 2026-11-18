@@ -177,6 +177,7 @@ public static class SyncProtocol
         }
         finally
         {
+            rented.AsSpan(0, length).Clear();
             ArrayPool<byte>.Shared.Return(rented);
         }
     }
@@ -248,6 +249,7 @@ public static class SyncProtocol
 
         public void Dispose()
         {
+            _buffer.AsSpan(0, _count).Clear();
             ArrayPool<byte>.Shared.Return(_buffer);
             _buffer = [];
         }
@@ -262,6 +264,7 @@ public static class SyncProtocol
 
             var larger = ArrayPool<byte>.Shared.Rent(Math.Max(needed, _buffer.Length * 2));
             _buffer.AsSpan(0, _count).CopyTo(larger);
+            _buffer.AsSpan(0, _count).Clear();
             ArrayPool<byte>.Shared.Return(_buffer);
             _buffer = larger;
         }

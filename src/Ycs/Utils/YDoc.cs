@@ -212,6 +212,7 @@ public sealed partial class YDoc
         }
         finally
         {
+            buffer.AsSpan(0, update.Length).Clear();
             ArrayPool<byte>.Shared.Return(buffer);
         }
     }
