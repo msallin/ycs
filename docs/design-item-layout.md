@@ -564,4 +564,6 @@ members that expose a struct are:
   closed: `read-array` and `read-map` were slow in `YValue.FromStored` (a call whose result the caller reloaded
   through a store-forwarding stall), not in the slab, and now take less than with objects ("Reading an array and a map").
   The editing gaps are spread over the transaction with no phase above 10%; the encode gap is spread over the write of
-  the structs, with no single cost in it.
+  the structs, with no single cost in it, and is left: about 0.06 ms per encode of a 289 KB state, invisible in a join
+  or a save. A v1 write path that bypasses `IUpdateEncoder` would close it at the cost of a second encoder; worth it
+  only for a server that spends real time encoding.
