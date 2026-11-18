@@ -315,4 +315,18 @@ public class ArenaCompactionTests
 
         Assert.AreEqual((expected.ToString(), true), (text.ToString(), doc.Store.Slab.LiveCount > 2048));
     }
+
+    [TestMethod]
+    public void Compaction_TypingAtTheEndOfAPastedText_FreesThePageTheRunLeft()
+    {
+        var doc = NewDoc();
+        var text = doc.GetText("t");
+        var pasted = new string('a', 100_000);
+        text.Insert(0, pasted);
+        var pasteOnly = Held(doc);
+
+        text.Insert(text.Length, "b");
+
+        Assert.AreEqual((100_000L, 200_002L, 1, pasted + "b"), (pasteOnly, Held(doc), Chars(doc).CompactionCount, text.ToString()));
+    }
 }

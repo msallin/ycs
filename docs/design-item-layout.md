@@ -354,7 +354,7 @@ use. A String or Any slot's `Payload` is the offset of its range, `Length` the r
 part `offset + diff` (no copy). Typing at a run's end appends in place when the run ends at its page's used part or
 inside its reservation; otherwise the merged run is copied to the write end with as much slack again, kept in a tail
 table (`TailTable`: run end to reservation end), so two runs growing alternately copy each other O(log n) times, not
-once per keystroke. A run longer than a page has a page of its own, twice its length, and no table entry (a transaction
+once per keystroke. A run longer than a page has a page of its own and no table entry: exactly its length when appended or relocated by a compaction, twice its length when a keystroke at its end moves it (a page whose every element is dead is freed by the next compaction, which `Arena.WorthCompacting` starts for it once such pages amount to the number of slots) (a transaction
 that types 100,000 characters in one run allocates about 2.4 times what the object layout did, 530 KB against 218 KB,
 because that run doubles by copy; the budget row says so, and it is accepted: held memory and time are what the layout
 is for).

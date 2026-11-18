@@ -582,4 +582,32 @@ public class ArenaTests
 
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => arena.Overwrite(offset + 3, ['X', 'Y']));
     }
+
+    [TestMethod]
+    public void WorthCompacting_AnOversizedPageWhollyDead_FiresWithLessGarbageThanLiveText()
+    {
+        var arena = new Arena<char>(2, 4);
+        var big = arena.Append(Text(10));
+        var moved = arena.Extend(big, 10, Text(1));
+        var wholeBefore = arena.WorthCompacting(10);
+        arena.Append(Text(3));
+
+        var worth = (arena.Dead < arena.Live, wholeBefore, arena.WorthCompacting(10), arena.WorthCompacting(11));
+        arena.Compact([(moved, 11, 0)], (_, offset) => moved = offset);
+
+        Assert.AreEqual(((true, true, true, false), 0L, 22, 11L), (worth, arena.Dead, arena.PageCapacity(Arena<char>.PageOf(moved)), arena.Live));
+    }
+
+    [TestMethod]
+    public void Compact_RunLongerThanAPageLeftPartLive_IsRelocatedIntoAPageOfExactlyItsLength()
+    {
+        var arena = new Arena<char>(2, 4);
+        var big = arena.Append(Text(20));
+        arena.MarkDead(big + 8, 12);
+        long moved = -1;
+
+        arena.Compact([(big, 8, 0)], (_, offset) => moved = offset);
+
+        Assert.AreEqual((true, 8, 8L, 0L), (arena.Slice(moved, 8).SequenceEqual(Text(8)), arena.PageCapacity(Arena<char>.PageOf(moved)), arena.Live, arena.Dead));
+    }
 }

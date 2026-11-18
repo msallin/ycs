@@ -19,8 +19,7 @@ internal static class Arena
 /// </summary>
 /// <remarks>
 /// A run lies in one page. Page k, counted among the pages held, holds <c>min(first * 2^k, max)</c> elements (more when
-/// a run needs it). A run longer than <c>max</c> gets a page of its own, twice its length, with no reservation: it grows in place while it ends at the page's used part.
-/// A run that outgrows its room is copied to the write end with as much slack again, kept in a tail table: run end offset to the end of its
+/// a run needs it). A run longer than <c>max</c> gets a page of its own with no reservation: exactly its length when appended or relocated by a compaction, twice it when <see cref="Extend"/> moves it (so typing at its end copies it O(log n) times); it grows in place while it ends at the page's used part. A run that outgrows its room is copied to the write end with as much slack again, kept in a tail table: run end offset to the end of its
 /// reservation, so two runs growing alternately copy O(log n) times. A table entry is the only owner of the space
 /// between a run's end and its reservation end; a run split in two leaves the entry with the right part, which holds
 /// the end. Per page, <c>Used = live + dead + reserved</c>; the page's elements past <c>Used</c> are unwritten.
@@ -42,6 +41,8 @@ internal sealed class Arena<T>
     private long _live;
     private long _dead;
     private long _deadAfterCompaction;
+    // Elements on oversized pages (longer than max) whose every element is dead: a compaction frees them without a copy.
+    private long _deadWholePages;
     private int _compactions;
     private int _freeing;
 
@@ -66,9 +67,11 @@ internal sealed class Arena<T>
     /// <summary>
     /// Garbage outweighs the live elements and the garbage made since the last compaction amounts to a largest page and
     /// to <paramref name="floor"/> (the caller's cost of a compaction, in elements): each compaction is paid for by that
-    /// much new garbage, whatever it freed.
+    /// much new garbage, whatever it freed; or the pages of a run's own that hold only garbage amount to
+    /// <paramref name="floor"/> (freeing them copies nothing).
     /// </summary>
-    public bool WorthCompacting(long floor) => _dead > _live && _dead - _deadAfterCompaction >= Math.Max(_max, floor);
+    public bool WorthCompacting(long floor) =>
+        (_dead > _live && _dead - _deadAfterCompaction >= Math.Max(_max, floor)) || _deadWholePages >= Math.Max(_max, floor);
 
     /// <summary>The runs that have room reserved after them.</summary>
     public int TailCount => _tails.Count;
@@ -260,6 +263,7 @@ internal sealed class Arena<T>
         _live = total;
         _dead = used - total - Reserved();
         _deadAfterCompaction = _dead;
+        _deadWholePages = 0;
         _compactions++;
     }
 
@@ -412,6 +416,16 @@ internal sealed class Arena<T>
     {
         _dead += length;
         _live -= length;
+        var page = PageAt(offset);
+        if (page.Data.Length > _max)
+        {
+            page.Dead += length;
+            if (page.Dead == page.Used)
+            {
+                _deadWholePages += page.Used;
+            }
+        }
+
         var end = offset + length;
         if (_tails.Remove(end, out var reservedEnd))
         {
@@ -429,8 +443,7 @@ internal sealed class Arena<T>
                 throw new InvalidOperationException("The run would outgrow the largest array; nothing was changed.");
             }
 
-            // Elements past Used are never read, and the run fills [0, length) at once: an unzeroed array is sound for values.
-            var number = Open(slack ? length * 2 : length, uninitialized: true);
+            var number = Open(slack ? length * 2 : length);
             _pages[number]!.Used = length;
             return (long)number << 32;
         }
@@ -461,7 +474,8 @@ internal sealed class Arena<T>
     // Pages a compaction is about to free do not count: it sizes the pages it opens by the ones that remain.
     private long NextSize() => Math.Min(_max, (long)_first << Math.Min(PageCount - _freeing, 30));
 
-    private int Open(int size, bool uninitialized = false)
+    // Elements past a page's Used are never read, so a T without references needs no zeroed array.
+    private int Open(int size)
     {
         var number = _released is { Count: > 0 } ? _released.Pop() : _pageCount;
         if (number == _pageCount)
@@ -474,7 +488,7 @@ internal sealed class Arena<T>
             _pageCount++;
         }
 
-        _pages[number] = new Page(uninitialized && !RuntimeHelpers.IsReferenceOrContainsReferences<T>() ? GC.AllocateUninitializedArray<T>(size) : new T[size]);
+        _pages[number] = new Page(!RuntimeHelpers.IsReferenceOrContainsReferences<T>() ? GC.AllocateUninitializedArray<T>(size) : new T[size]);
         return number;
     }
 
@@ -515,5 +529,6 @@ internal sealed class Arena<T>
     {
         public readonly T[] Data = data;
         public int Used;
+        public int Dead;
     }
 }

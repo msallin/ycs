@@ -268,7 +268,7 @@ public class CharArenaTests
         text.Insert(40_002, "de");
 
         var item = At(doc, 1, 0);
-        Assert.AreEqual((40_004, true, moved, 40_004L, 40_000L), (item.Length, moved != first, Payload(doc, item), doc.Store.Slab.Chars.Live, doc.Store.Slab.Chars.Dead));
+        Assert.AreEqual((40_004, true, moved, 40_004L, 0L), (item.Length, moved != first, Payload(doc, item), doc.Store.Slab.Chars.Live, doc.Store.Slab.Chars.Dead));
     }
 
     [TestMethod]
