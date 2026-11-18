@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Text;
+using System.Text.Unicode;
 
 namespace Ycs;
 
@@ -44,6 +46,8 @@ internal sealed class Lib0Reader
         _buffer = buffer;
         _pos = offset;
         _end = offset + count;
+        _stringStart = 0;
+        _stringLength = 0;
     }
 
     /// <summary>Drops the reference to the input.</summary>
@@ -195,25 +199,19 @@ internal sealed class Lib0Reader
         }
 
         var bytes = ReadBytes(length);
-        try
-        {
-            return StrictUtf8.GetString(bytes);
-        }
-        catch (DecoderFallbackException)
-        {
-            throw new YUpdateException("A string is not valid UTF-8.");
-        }
+        return DecodeUtf8(bytes);
     }
 
     private int _stringStart;
     private int _stringLength;
 
-    /// <summary>The bytes of the string <see cref="BeginVarString"/> read last; valid until the reader is reset.</summary>
+    /// <summary>The bytes of the string <see cref="BeginVarString"/> read last; valid until the next <see cref="BeginVarString"/> or <see cref="Reset"/>.</summary>
     public ReadOnlySpan<byte> PendingString => _buffer.AsSpan(_stringStart, _stringLength);
 
     /// <summary>
-    /// First half of <see cref="ReadVarString"/>: consumes the string, validates it (same position, same exceptions)
-    /// and returns its length in UTF-16 units; <see cref="EndVarString"/> then writes the characters.
+    /// First half of <see cref="ReadVarString"/>: consumes the string's bytes (the same end-of-input exceptions) and
+    /// returns their count, which is at least the string's length in UTF-16 units. <see cref="EndVarString"/> then
+    /// validates and decodes them.
     /// </summary>
     public int BeginVarString()
     {
@@ -225,27 +223,40 @@ internal sealed class Lib0Reader
             return 0;
         }
 
-        var bytes = ReadBytes(length);
+        ReadBytes(length);
         _stringStart = _pos - length;
         _stringLength = length;
+        return length;
+    }
+
+    /// <summary>
+    /// Decodes the string <see cref="BeginVarString"/> consumed into <paramref name="destination"/>, which holds at
+    /// least that many characters, and returns the characters written. Invalid UTF-8 is rejected as in <see cref="ReadVarString"/>.
+    /// </summary>
+    public int EndVarString(Span<char> destination)
+    {
+        if (Utf8.ToUtf16(PendingString, destination, out _, out var written, replaceInvalidSequences: false) != OperationStatus.Done)
+        {
+            throw InvalidUtf8();
+        }
+
+        return written;
+    }
+
+    /// <summary>The string of <paramref name="utf8"/>; invalid UTF-8 is rejected as in <see cref="ReadVarString"/>.</summary>
+    public static string DecodeUtf8(ReadOnlySpan<byte> utf8)
+    {
         try
         {
-            return StrictUtf8.GetCharCount(bytes);
+            return StrictUtf8.GetString(utf8);
         }
         catch (DecoderFallbackException)
         {
-            throw new YUpdateException("A string is not valid UTF-8.");
+            throw InvalidUtf8();
         }
     }
 
-    /// <summary>Writes the string <see cref="BeginVarString"/> validated into <paramref name="destination"/>, which holds exactly its characters.</summary>
-    public void EndVarString(Span<char> destination) => StrictUtf8.GetChars(PendingString, destination);
-
-    /// <summary>Writes <paramref name="length"/> bytes of <see cref="PendingString"/> from <paramref name="start"/>, which are whole characters, into <paramref name="destination"/>.</summary>
-    public void DecodePending(int start, int length, Span<char> destination) => StrictUtf8.GetChars(PendingString.Slice(start, length), destination);
-
-    /// <summary>The characters of <see cref="PendingString"/> from byte <paramref name="byteOffset"/> on.</summary>
-    public string PendingStringFrom(int byteOffset) => StrictUtf8.GetString(PendingString[byteOffset..]);
+    private static YUpdateException InvalidUtf8() => new("A string is not valid UTF-8.");
 
     /// <summary>Length-prefixed byte array (lib0 <c>readVarUint8Array</c>), as a span over the input.</summary>
     public ReadOnlySpan<byte> ReadVarUint8ArraySpan() => ReadBytes(ReadVarLength());

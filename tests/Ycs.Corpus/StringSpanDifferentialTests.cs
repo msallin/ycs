@@ -157,12 +157,39 @@ public class StringSpanDifferentialTests
 
         public long MaxStructs => inner.MaxStructs;
 
-        public string ReadString()
+        public string ReadString() => Logged(inner.ReadString, true);
+
+        private string pending = "";
+
+        // The reference reads the whole string here; the split path only the bound, and logs the characters in ReadStringChars.
+        public int ReadStringBound() => span ? Logged(() => new string(' ', inner.ReadStringBound()), false).Length : (pending = ReadString()).Length;
+
+        public int ReadStringChars(Span<char> destination)
+        {
+            if (!span)
+            {
+                pending.CopyTo(destination);
+                return pending.Length;
+            }
+
+            var room = new char[destination.Length];
+            var written = 0;
+            Logged(() => new string(room, 0, written = inner.ReadStringChars(room)), true);
+            room.AsSpan(0, written).CopyTo(destination);
+            return written;
+        }
+
+        // A string is logged with its characters, a failure with its type, message and position.
+        private string Logged(Func<string> read, bool record)
         {
             try
             {
-                var value = span ? ReadSplit() : inner.ReadString();
-                log.Add("s:" + value);
+                var value = read();
+                if (record)
+                {
+                    log.Add("s:" + value);
+                }
+
                 return value;
             }
             catch (Exception e) when (e is YUpdateException or OverflowException)
@@ -170,19 +197,6 @@ public class StringSpanDifferentialTests
                 log.Add("e:" + e.GetType().Name + ":" + e.Message + ":" + inner.Reader.Remaining);
                 throw;
             }
-        }
-
-        private string pending = "";
-
-        public int ReadStringLength() => (pending = ReadString()).Length;
-
-        public void ReadStringChars(Span<char> destination) => pending.CopyTo(destination);
-
-        private string ReadSplit()
-        {
-            var chars = new char[inner.ReadStringLength()];
-            inner.ReadStringChars(chars);
-            return new string(chars);
         }
 
         public void ResetDsCurVal() => inner.ResetDsCurVal();

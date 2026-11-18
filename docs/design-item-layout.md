@@ -254,8 +254,10 @@ reference numbers, with `Skip` for the staged form only and `Free` for a slot on
 * **The read.** `UpdateReader.Read` (one reader per thread and open lease, two kept: the pending update's retry reads
   inside the lease of the update that set it aside) decodes with a `StructCursor`, whose `NextStaged` stages one
   struct at a time and makes the checks that need no document (ranges, no empty struct, no client twice, the struct
-  limit, an origin or parent of the same client only at an earlier clock). A String's characters come from the
-  decoder as a span (`IUpdateDecoder.ReadStringSpan`) and are copied into the table once; a Type's reference and name
+  limit, an origin or parent of the same client only at an earlier clock). A String's characters are decoded
+  in place: `IUpdateDecoder.ReadStringBound` consumes the string, the table offers that much room after its
+  characters (`StagingTable.CharRoom`; v1: the bytes of the string, v2: its exact length), `ReadStringChars`
+  writes them there and returns their number, and the struct added next keeps that many; a Type's reference and name
   are read by `ContentType.ReadHeader`; a cold kind is read as its object. Disposing the lease resets the table.
 * **The apply.** `YDoc.ApplyUpdate` decodes the whole update before it touches the document, then
   `StructStore.ApplyUpdate` plans on the staged fields: `IntegrationPlan` works on `PlanItem`s (a store item by id, or

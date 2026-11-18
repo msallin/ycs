@@ -1,22 +1,21 @@
+using System.Text;
+
 namespace Ycs;
 
 /// <summary>
-/// Decoder for <see cref="StringEncoder"/> (lib0 <c>StringDecoder</c>). The lengths count UTF-16 code units; the
-/// column stays UTF-8 and a value is decoded from the bytes that hold its units. A length that ends between the two
-/// halves of a surrogate pair decodes the rest of the column to a string once and slices that.
+/// Decoder for <see cref="StringEncoder"/> (lib0 <c>StringDecoder</c>). The lengths count UTF-16 code units. An
+/// all-ASCII column stays bytes and a value is widened from them; any other column is decoded to a string once.
 /// </summary>
 internal sealed class StringDecoder : IDecoder<string>
 {
     private readonly UintOptRleDecoder _lengthDecoder;
     private int _unitsLeft;
-    private int _bytePos;
-    private bool _ascii;
+    private int _pos;
 
-    // Set once a length splits a surrogate pair: the rest of the column as a string, read from _stringPos.
+    // The column as a string unless it is all ASCII (then its bytes are Input.PendingString, one unit each).
     private string? _value;
-    private int _stringPos;
 
-    // The value BeginRead returned: bytes of the column, or characters of _value.
+    // The value BeginRead returned: where it starts in the column and its length.
     private int _segmentStart;
     private int _segmentLength;
 
@@ -34,11 +33,15 @@ internal sealed class StringDecoder : IDecoder<string>
     public void Reset()
     {
         _value = null;
-        _bytePos = 0;
+        _pos = 0;
         _segmentLength = 0;
         _lengthDecoder.Reset();
         _unitsLeft = Input.BeginVarString();
-        _ascii = _unitsLeft == Input.PendingString.Length;
+        if (!Ascii.IsValid(Input.PendingString))
+        {
+            _value = Lib0Reader.DecodeUtf8(Input.PendingString);
+            _unitsLeft = _value.Length;
+        }
     }
 
     /// <summary>Drops the decoded string and the reference to the input.</summary>
@@ -72,40 +75,19 @@ internal sealed class StringDecoder : IDecoder<string>
             throw new YUpdateException("A string in a v2 update is longer than the string column.");
         }
 
-        var units = (int)length;
-        if (_value == null)
-        {
-            var bytes = BytesOf(units);
-            if (bytes < 0)
-            {
-                _value = Input.PendingStringFrom(_bytePos);
-                _stringPos = 0;
-            }
-            else
-            {
-                _segmentStart = _bytePos;
-                _bytePos += bytes;
-                _segmentLength = bytes;
-            }
-        }
-
-        if (_value != null)
-        {
-            _segmentStart = _stringPos;
-            _segmentLength = units;
-            _stringPos += units;
-        }
-
-        _unitsLeft -= units;
-        return units;
+        _segmentStart = _pos;
+        _segmentLength = (int)length;
+        _pos += _segmentLength;
+        _unitsLeft -= _segmentLength;
+        return _segmentLength;
     }
 
-    /// <summary>Writes the value <see cref="BeginRead"/> consumed into <paramref name="destination"/>, which holds exactly its length.</summary>
-    public void EndRead(Span<char> destination)
+    /// <summary>Writes the value <see cref="BeginRead"/> consumed into <paramref name="destination"/>, which holds at least its length, and returns the length.</summary>
+    public int EndRead(Span<char> destination)
     {
         if (_segmentLength == 0)
         {
-            return;
+            return 0;
         }
 
         if (_value != null)
@@ -114,49 +96,25 @@ internal sealed class StringDecoder : IDecoder<string>
         }
         else
         {
-            Input.DecodePending(_segmentStart, _segmentLength, destination);
+            Widen(Input.PendingString.Slice(_segmentStart, _segmentLength), destination);
         }
+
+        return _segmentLength;
     }
 
-    // The bytes that hold the next `units` units of the validated column, or -1 when the last one is half a pair.
-    private int BytesOf(int units)
+    // A typing session is mostly values of a few characters, where a loop beats the vectorized call's setup.
+    private static void Widen(ReadOnlySpan<byte> ascii, Span<char> destination)
     {
-        if (_ascii)
+        if (ascii.Length >= 16)
         {
-            return units;
+            Ascii.ToUtf16(ascii, destination, out _);
+            return;
         }
 
-        var column = Input.PendingString;
-        var i = _bytePos;
-        for (var u = 0; u < units;)
+        destination = destination[..ascii.Length];
+        for (var i = 0; i < destination.Length; i++)
         {
-            var lead = column[i];
-            if (lead < 0x80)
-            {
-                i++;
-                u++;
-            }
-            else if (lead < 0xE0)
-            {
-                i += 2;
-                u++;
-            }
-            else if (lead < 0xF0)
-            {
-                i += 3;
-                u++;
-            }
-            else if (units - u < 2)
-            {
-                return -1;
-            }
-            else
-            {
-                i += 4;
-                u += 2;
-            }
+            destination[i] = (char)ascii[i];
         }
-
-        return i - _bytePos;
     }
 }

@@ -21,14 +21,18 @@ internal interface IUpdateDecoder : IDSDecoder
     string ReadString();
 
     /// <summary>
-    /// First half of <see cref="ReadString"/> without the allocation: consumes the string, validates it (the same
-    /// exceptions at the same position) and returns its length in UTF-16 units. <see cref="ReadStringChars"/> must
+    /// First half of <see cref="ReadString"/> without the allocation: consumes the string and returns the room its
+    /// characters need, at least their number and at most the input it took. <see cref="ReadStringChars"/> must
     /// follow before any other read on this decoder.
     /// </summary>
-    int ReadStringLength();
+    int ReadStringBound();
 
-    /// <summary>Writes the string <see cref="ReadStringLength"/> consumed into <paramref name="destination"/>, which holds exactly its length.</summary>
-    void ReadStringChars(Span<char> destination);
+    /// <summary>
+    /// Writes the string <see cref="ReadStringBound"/> consumed into <paramref name="destination"/>, which holds at
+    /// least the bound, and returns its length in UTF-16 units. Rejects invalid UTF-8 as <see cref="ReadString"/>
+    /// does, after the same input has been consumed.
+    /// </summary>
+    int ReadStringChars(Span<char> destination);
     bool ReadParentInfo();
     uint ReadTypeRef();
     int ReadLength();

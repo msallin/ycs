@@ -415,10 +415,9 @@ internal static class EncodingUtils
                 i = table.Add(StagedKind.Deleted, deleted, leftOrigin, rightOrigin);
                 break;
             case 4:
-                var textLength = decoder.ReadStringLength();
+                var textLength = decoder.ReadStringChars(table.CharRoom(decoder.ReadStringBound()));
                 Limits.CheckRange(clock, textLength);
                 i = table.Add(StagedKind.String, textLength, leftOrigin, rightOrigin);
-                decoder.ReadStringChars(table.Chars(i));
                 break;
             case 8:
                 var count = decoder.ReadLength();

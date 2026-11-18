@@ -10,21 +10,19 @@ public class StringSpanTests
 {
     private static string ReadSplit(Lib0Reader reader, ref char[] chars)
     {
-        var length = reader.BeginVarString();
-        if (chars.Length < length)
+        var bound = reader.BeginVarString();
+        if (chars.Length < bound)
         {
-            chars = new char[length];
+            chars = new char[bound];
         }
 
-        reader.EndVarString(chars.AsSpan(0, length));
-        return new string(chars, 0, length);
+        return new string(chars, 0, reader.EndVarString(chars));
     }
 
     private static string ReadSplit(IUpdateDecoder decoder)
     {
-        var chars = new char[decoder.ReadStringLength()];
-        decoder.ReadStringChars(chars);
-        return new string(chars);
+        var chars = new char[decoder.ReadStringBound()];
+        return new string(chars, 0, decoder.ReadStringChars(chars));
     }
 
     private static byte[] VarString(params byte[] utf8) => [(byte)utf8.Length, .. utf8];
@@ -105,9 +103,8 @@ public class StringSpanTests
         var total = 0;
         for (var i = 0; i < 1000; i++)
         {
-            var length = reader.BeginVarString();
-            reader.EndVarString(chars.AsSpan(0, length));
-            total += length;
+            reader.BeginVarString();
+            total += reader.EndVarString(chars);
         }
 
         var allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
@@ -145,8 +142,8 @@ public class StringSpanTests
         var before = System.GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < count; i++)
         {
-            var length = decoder.ReadStringLength();
-            decoder.ReadStringChars(buffer.AsSpan(0, length));
+            decoder.ReadStringBound();
+            decoder.ReadStringChars(buffer);
         }
 
         var allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
@@ -196,6 +193,8 @@ public class StringSpanTests
     [DataRow("h\u00e9", "\u20ac", "x\U0001F600", "", "y", DisplayName = "multi-byte and a pair")]
     [DataRow("q\uD83D", "\uDE00z", "\U0001F600\U0001F601", DisplayName = "a length inside a pair")]
     [DataRow("\uD83D", "\uDE00\uD83D", "\uDE01", DisplayName = "every length inside a pair")]
+    [DataRow("ab", "\uD83D", "\uDE00c", DisplayName = "bytes, then a split pair")]
+    [DataRow("\u00e9\u20ac", "\uD83D", "\uDE00", "\U0001F600", DisplayName = "multi-byte, then a split pair, then a pair")]
     public void StringDecoder_SeveralValues_ReadAsWritten(params string[] values)
     {
         var encoder = new StringEncoder();
@@ -236,5 +235,50 @@ public class StringSpanTests
 
             Assert.AreEqual(expected, other.GetText("t").ToString());
         }
+    }
+
+    [TestMethod]
+    public void StringDecoder_RandomColumns_MatchTheJoinedStringSlicedByLength()
+    {
+        // The oracle shares no code with the decoder: the values joined and round-tripped through UTF-8 (a lone half
+        // becomes U+FFFD, a pair split over two values is rejoined), then cut at each value's length.
+        var random = new Random(7);
+        string[] alphabet = ["a", "z", "\u00e9", "\u20ac", "\uFEFF", "\U0001F600", "\uD83D", "\uDE00"];
+        for (var round = 0; round < 3000; round++)
+        {
+            var values = Enumerable.Range(0, random.Next(0, 6))
+                .Select(_ => string.Concat(Enumerable.Range(0, random.Next(0, 4)).Select(_ => alphabet[random.Next(alphabet.Length)])))
+                .ToArray();
+            var encoder = new StringEncoder();
+            foreach (var value in values)
+            {
+                encoder.Write(value);
+            }
+
+            var joined = Encoding.UTF8.GetString(Encoding.UTF8.GetBytes(string.Concat(values)));
+            var expected = new string[values.Length];
+            var at = 0;
+            for (var i = 0; i < values.Length; i++)
+            {
+                expected[i] = joined.Substring(at, values[i].Length);
+                at += values[i].Length;
+            }
+
+            var column = encoder.ToArray();
+            var whole = new StringDecoder(new Lib0Reader(column));
+            var split = new StringDecoder(new Lib0Reader(column));
+            var viaRead = values.Select(_ => whole.Read()).ToArray();
+            var viaSplit = values.Select(_ => ReadSplit(split)).ToArray();
+
+            CollectionAssert.AreEqual(expected, viaRead, $"Read, round {round}");
+            CollectionAssert.AreEqual(expected, viaSplit, $"split, round {round}");
+        }
+    }
+
+    private static string ReadSplit(StringDecoder decoder)
+    {
+        var chars = new char[decoder.BeginRead()];
+        decoder.EndRead(chars);
+        return new string(chars);
     }
 }

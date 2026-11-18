@@ -273,6 +273,16 @@ internal sealed class StagingTable
 
     public string? ParentSub(int i) => At(i).ParentSub < 0 ? null : (string)_refs[At(i).ParentSub]!;
 
+    /// <summary>
+    /// Room for <paramref name="length"/> characters after the ones staged, valid until the next <c>Add*</c>: a String
+    /// struct added next, of at most that length, owns the front of it.
+    /// </summary>
+    public Span<char> CharRoom(int length)
+    {
+        Ensure(ref _chars, _charsUsed, length);
+        return _chars.AsSpan(_charsUsed, length);
+    }
+
     /// <summary>The characters of a String struct (its length), in UTF-16 units.</summary>
     public Span<char> Chars(int i)
     {
@@ -689,6 +699,12 @@ internal sealed class StagingTable
 
     private static void Reserve<T>(ref T[] buffer, ref int used, int length)
     {
+        Ensure(ref buffer, used, length);
+        used += length;
+    }
+
+    private static void Ensure<T>(ref T[] buffer, int used, int length)
+    {
         if (length > buffer.Length - used)
         {
             var needed = (long)used + length;
@@ -700,8 +716,6 @@ internal sealed class StagingTable
 
             Array.Resize(ref buffer, (int)size);
         }
-
-        used += length;
     }
 
     private static void Grow<T>(ref T[] buffer, int first) => Array.Resize(ref buffer, Math.Max(buffer.Length * 2, first));
