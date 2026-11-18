@@ -395,6 +395,43 @@ public class YTextChunksTests
         Assert.Throws<ArgumentNullException>(() => text.WriteTo((TextWriter)null));
     }
 
+    private sealed class EditingWriter(Action edit) : StringWriter
+    {
+        private bool _edited;
+
+        public override void Write(ReadOnlySpan<char> buffer)
+        {
+            base.Write(buffer);
+            if (!_edited)
+            {
+                _edited = true;
+                edit();
+            }
+        }
+    }
+
+    [TestMethod]
+    public void WriteTo_WriterDeletesTheNextRun_WritesTheTextAsItIsWhenEachChunkIsRead()
+    {
+        var text = ThreeItems();
+        var writer = new EditingWriter(() => text.Remove(4, 4));
+
+        text.WriteTo(writer);
+
+        Assert.AreEqual("abcdtail", writer.ToString());
+    }
+
+    [TestMethod]
+    public void WriteTo_WriterSplitsTheNextRunByAnInsert_WritesItsCurrentTextFromWhereTheWalkStopped()
+    {
+        var text = ThreeItems();
+        var writer = new EditingWriter(() => text.Insert(6, "--"));
+
+        text.WriteTo(writer);
+
+        Assert.AreEqual("abcdwx--yztail", writer.ToString());
+    }
+
     /// <summary>"abcd" of client 1, "wxyz" of client 2 and "tail" of client 3, in this order, as three items.</summary>
     private static YText ThreeItems()
     {
