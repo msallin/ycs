@@ -124,7 +124,7 @@ public partial class YText
                 // The item is looked up again: user code between two steps may have split it (the id then lies beyond
                 // its end), or merged and freed it.
                 var held = store!.Resolve(_held, _id, _departures);
-                if (!held.IsNull && _id.Clock >= held.Id.Clock + held.Length)
+                if (!held.IsNull && _id.Clock >= held.Clock + held.Length)
                 {
                     held = store.Find(_id).AsItem;
                 }
@@ -136,22 +136,24 @@ public partial class YText
                     return false;
                 }
 
-                if (held.Deleted || !held.Countable)
+                // MoveNext allocates no slot, so the slot stays valid through the step.
+                ref readonly var slot = ref held.Peek();
+                if ((slot.Info & Slot.DeletedFlag) != 0 || (slot.Info & Slot.CountableFlag) == 0)
                 {
                     GoToRightOf(held);
                     continue;
                 }
 
-                var offset = (int)(_id.Clock - held.Id.Clock);
-                var count = Math.Min(_remaining, held.Length - offset);
+                var offset = (int)(_id.Clock - slot.Clock);
+                var count = Math.Min(_remaining, slot.Length - offset);
                 _remaining -= count;
-                var isString = held.Kind == SlotKind.String;
+                var isString = slot.Kind == (int)SlotKind.String;
                 if (isString)
                 {
                     _current = held.Chars.Slice(offset, count);
                 }
 
-                if (offset + count == held.Length)
+                if (offset + count == slot.Length)
                 {
                     GoToRightOf(held);
                 }
