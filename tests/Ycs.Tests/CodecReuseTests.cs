@@ -50,17 +50,6 @@ public class CodecReuseTests
     }
 
     [TestMethod]
-    public void ApplyUpdate_NullArray_Throws()
-    {
-        var doc = new YDoc();
-
-        Assert.ThrowsExactly<ArgumentNullException>(() => doc.ApplyUpdate((byte[])null!));
-        Assert.ThrowsExactly<ArgumentNullException>(() => doc.ApplyUpdate((byte[])null!, UpdateFormat.V2));
-        Assert.ThrowsExactly<ArgumentNullException>(() => doc.TryApplyUpdate((byte[])null!));
-        Assert.ThrowsExactly<ArgumentNullException>(() => doc.TryApplyUpdate((byte[])null!, UpdateFormat.V2));
-    }
-
-    [TestMethod]
     public void Lib0Writer_LargeUtf8WithSplitSurrogate_MatchesTheEncodingOfTheConcatenation()
     {
         var first = new string('a', 5000) + "\uD83D";

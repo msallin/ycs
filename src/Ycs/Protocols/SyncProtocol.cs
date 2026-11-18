@@ -112,7 +112,7 @@ public static class SyncProtocol
     /// <summary>
     /// Handles one sync message, as the y-websocket message type has been stripped from it: a step 1 appends the answer (a step 2) to
     /// <paramref name="reply"/>; a step 2 or an update is applied to <paramref name="doc"/> with
-    /// <paramref name="origin"/> as the transaction origin, and writes nothing. The result tells the type and whether
+    /// <paramref name="origin"/> as the transaction origin, and writes nothing. The span is read in place. The result tells the type and whether
     /// <paramref name="reply"/> got an answer.
     /// </summary>
     /// <exception cref="YUpdateException">
@@ -159,6 +159,7 @@ public static class SyncProtocol
         ReadSyncMessage(message, reply, doc, UpdateFormat.V1, origin);
 
     /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, UpdateFormat, object)"/>
+    /// <remarks>A message of one segment is read in place; one of several segments is copied once into a pooled array.</remarks>
     public static SyncReadResult ReadSyncMessage(ReadOnlySequence<byte> message, IBufferWriter<byte> reply, YDoc doc, UpdateFormat format, object? origin = null)
     {
         if (message.IsSingleSegment)
@@ -166,8 +167,9 @@ public static class SyncProtocol
             return ReadSyncMessage(message.FirstSpan, reply, doc, format, origin);
         }
 
-        // A message of several segments is copied once, to one array, as the length comes from the peer: the
-        // copy is bounded by the message the caller already holds.
+        // A single segment is read in place. A message of several segments is copied once, to a pooled array of exactly
+        // its length (cleared on return), because the readers take one contiguous span and testing the segment on every
+        // byte would cost the common case; the copy is bounded by the message the caller already holds.
         var length = checked((int)message.Length);
         var rented = ArrayPool<byte>.Shared.Rent(length);
         try

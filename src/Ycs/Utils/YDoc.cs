@@ -132,20 +132,7 @@ public sealed partial class YDoc
     {
         try
         {
-            ApplyPooledCopy(update, v2, transactionOrigin, limits);
-            return true;
-        }
-        catch (YUpdateException)
-        {
-            return false;
-        }
-    }
-
-    private bool TryApply(byte[] update, int offset, int count, bool v2, object? transactionOrigin, UpdateLimits? limits)
-    {
-        try
-        {
-            ApplyUpdate(update, offset, count, v2, transactionOrigin, limits);
+            ApplyUpdate(update, v2, transactionOrigin, limits);
             return true;
         }
         catch (YUpdateException)
@@ -159,13 +146,13 @@ public sealed partial class YDoc
     /// it (<see cref="StructStore.ApplyUpdate"/>), which checks what depends on the document before it
     /// changes anything.
     /// </summary>
-    private void ApplyUpdate(byte[] buffer, int offset, int count, bool v2, object? transactionOrigin, UpdateLimits? limits)
+    private void ApplyUpdate(ReadOnlySpan<byte> update, bool v2, object? transactionOrigin, UpdateLimits? limits)
     {
         limits ??= _opts.Limits;
-        UpdateReader.Lease update;
+        UpdateReader.Lease lease;
         try
         {
-            update = UpdateReader.Read(buffer.AsSpan(offset, count), v2, limits.MaxStructsPerUpdate, limits.MaxDepth);
+            lease = UpdateReader.Read(update, v2, limits.MaxStructsPerUpdate, limits.MaxDepth);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {
@@ -176,7 +163,7 @@ public sealed partial class YDoc
         // themselves are integrated (or encoded as pending) inside the transaction.
         try
         {
-            Transact((store: Store, update, limits), static (s, tr) =>
+            Transact((store: Store, update: lease, limits), static (s, tr) =>
             {
                 // As Yjs' readUpdateV2: also when this runs in the caller's transaction.
                 tr.Local = false;
@@ -193,27 +180,7 @@ public sealed partial class YDoc
         }
         finally
         {
-            update.Dispose();
-        }
-    }
-
-    /// <summary>
-    /// The decoders read from an array; a span is copied into a pooled one first. Nothing
-    /// decoded keeps a reference to the input once the lease is disposed, so the array can be
-    /// returned afterwards.
-    /// </summary>
-    private void ApplyPooledCopy(ReadOnlySpan<byte> update, bool v2, object? transactionOrigin, UpdateLimits? limits)
-    {
-        var buffer = ArrayPool<byte>.Shared.Rent(update.Length);
-        try
-        {
-            update.CopyTo(buffer);
-            ApplyUpdate(buffer, 0, update.Length, v2, transactionOrigin, limits);
-        }
-        finally
-        {
-            buffer.AsSpan(0, update.Length).Clear();
-            ArrayPool<byte>.Shared.Return(buffer);
+            lease.Dispose();
         }
     }
 

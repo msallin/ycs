@@ -15,13 +15,6 @@ public class PooledBufferClearingTests
 
     private static bool Holds(byte[] array) => array.AsSpan().IndexOf(SecretBytes) >= 0;
 
-    private static byte[] SecretUpdate(UpdateFormat format = UpdateFormat.V1)
-    {
-        var doc = new YDoc();
-        doc.GetText("t").Insert(0, Secret);
-        return doc.EncodeStateAsUpdate(format: format);
-    }
-
     [TestMethod]
     public void BufferPoolReturn_WithAUsedCount_ClearsThatPrefix()
     {
@@ -31,44 +24,6 @@ public class PooledBufferClearingTests
         BufferPool<byte>.Return(array, 40);
 
         Assert.IsFalse(array.Contains((byte)0x5A));
-    }
-
-    [TestMethod]
-    public void ApplyUpdate_FromASpan_LeavesNoContentInTheRentedCopy()
-    {
-        var update = SecretUpdate();
-        new YDoc().ApplyUpdate(update.AsSpan());
-
-        var rented = ArrayPool<byte>.Shared.Rent(update.Length);
-        var holds = Holds(rented);
-        ArrayPool<byte>.Shared.Return(rented);
-
-        Assert.IsFalse(holds);
-    }
-
-    [TestMethod]
-    public void Decode_FromASpan_LeavesNoContentInTheRentedCopy()
-    {
-        var update = SecretUpdate();
-        YUpdate.Decode(update.AsSpan());
-
-        var rented = ArrayPool<byte>.Shared.Rent(update.Length);
-        var holds = Holds(rented);
-        ArrayPool<byte>.Shared.Return(rented);
-
-        Assert.IsFalse(holds);
-    }
-
-    [TestMethod]
-    public void PooledCopy_Disposed_LeavesNoContent()
-    {
-        var update = SecretUpdate();
-        var copy = new PooledCopy(update);
-        var array = copy.Segment.Array!;
-
-        copy.Dispose();
-
-        Assert.IsFalse(Holds(array));
     }
 
     [TestMethod]
