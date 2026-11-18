@@ -630,4 +630,21 @@ public class YArrayTests : YTestBase
 
         CollectionAssert.AreEqual(new[] { YValueKind.Number, YValueKind.SharedType, YValueKind.Number }, seen);
     }
+
+    [TestMethod]
+    public void GetEnumerator_EveryStoredKind_GivesItsValueAndBytesStayPrivate()
+    {
+        var doc = new YDoc();
+        var array = doc.GetArray("a");
+        array.Add(7, 0.5, "text", true, YValue.Null, 1L << 40, YValue.BigInt(3), new byte[] { 1, 2 });
+
+        var seen = array.Select(v => v.Kind).ToArray();
+        var copy = (byte[])array[7];
+        copy[0] = 9;
+
+        CollectionAssert.AreEqual(
+            new[] { YValueKind.Number, YValueKind.Number, YValueKind.String, YValueKind.Boolean, YValueKind.Null, YValueKind.Number, YValueKind.BigInt, YValueKind.Bytes },
+            seen);
+        CollectionAssert.AreEqual(new byte[] { 1, 2 }, (byte[])array[7]);
+    }
 }

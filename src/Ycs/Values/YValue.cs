@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Globalization;
 using System.Numerics;
+using System.Runtime.CompilerServices;
 
 namespace Ycs;
 
@@ -146,7 +147,24 @@ public readonly partial struct YValue : IEquatable<YValue>
     };
 
     /// <summary>The value of something a document stores (a scalar, a frozen container, a type, a subdocument), without a copy; for the code that reads documents.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static YValue FromStored(object? stored)
+    {
+        // The common cases are inlined into the readers' loops, each a single type-handle comparison.
+        if (stored is int integer)
+        {
+            return Number(integer);
+        }
+
+        if (stored is string text)
+        {
+            return new YValue(YValueKind.String, text, 0);
+        }
+
+        return stored is double number ? Number(number) : FromStoredOther(stored);
+    }
+
+    private static YValue FromStoredOther(object? stored)
     {
         switch (stored)
         {

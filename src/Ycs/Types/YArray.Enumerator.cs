@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Runtime.CompilerServices;
 
 namespace Ycs;
 
@@ -11,10 +12,11 @@ public sealed partial class YArray
 
         internal Enumerator(RawEnumerator raw) => _raw = raw;
 
-        public readonly YValue Current => YValue.FromStored(_raw.Current);
+        public readonly YValue Current => YValue.FromStored(_raw.Stored);
 
         readonly object IEnumerator.Current => Current;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool MoveNext() => _raw.MoveNext();
 
         public void Dispose() => _raw.Dispose();
@@ -53,11 +55,27 @@ public sealed partial class YArray
             _item = array.FirstItem;
         }
 
-        public object? Current { get; private set; }
+        // The value as the walk holds it: an Any's value is the stored object itself (YValue never hands a byte array out
+        // uncopied), so the YValue enumerator reads this and skips the copy of Current.
+        internal object? Stored { readonly get; private set; }
+
+        public readonly object? Current => _values != null ? ValueFreezer.OnRead(Stored) : Stored;
 
         public readonly RawEnumerator GetEnumerator() => this;
 
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
         public bool MoveNext()
+        {
+            if (_index < _length && _values != null)
+            {
+                Stored = _values[_index++];
+                return true;
+            }
+
+            return MoveNextSlow();
+        }
+
+        private bool MoveNextSlow()
         {
             if (_doc == null)
             {
@@ -66,7 +84,7 @@ public sealed partial class YArray
                     return false;
                 }
 
-                Current = _prelim.Current;
+                Stored = _prelim.Current;
                 return true;
             }
 
@@ -80,7 +98,7 @@ public sealed partial class YArray
             {
                 if (_inRun && _index < _length)
                 {
-                    Current = _values != null ? ValueFreezer.OnRead(_values[_index]) : _content.ValueAt(_index);
+                    Stored = _values != null ? _values[_index] : _content.ValueAt(_index);
                     _index++;
                     return true;
                 }
@@ -123,6 +141,7 @@ public sealed partial class YArray
                 _content.Release();
                 _content = default;
                 _values = null;
+                _length = 0;
                 _inRun = false;
             }
         }
