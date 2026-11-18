@@ -22,6 +22,9 @@ The project is in `Ycs.sln`, so CI builds it and it cannot stop compiling unnoti
 only place YDotNet (`YDotNet` and `YDotNet.Native`, exactly `[0.7.0]`) is referenced: neither `src`, the tests nor
 `bench/Ycs.Benchmarks` depends on a native library.
 
+The decoders as structs over the input span, `ApplyUpdate` reading in place (2026-11-18): allocation and time equal
+within the noise of a shared machine, [`results/2026-11-18-span/`](results/2026-11-18-span/).
+
 ## Reading an array and a map (2026-11-18)
 
 `read-array` was 2.7 times and `read-map` 44 % slower than with items as objects, `encode-v1` 19 % (the final round above).

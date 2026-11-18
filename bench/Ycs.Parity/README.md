@@ -26,4 +26,4 @@ dotnet /path/to/scratch/change/Ycs.Parity.dll change.txt 4000 interop/corpus/cas
 cmp base.txt change.txt && echo identical
 ```
 
-With 4,000 seeds the file has 813,550 lines and a run takes a few seconds. The output is deterministic.
+With 4,000 seeds the file has 831,756 lines and a run takes a few seconds. The output is deterministic.

@@ -1,0 +1,65 @@
+load before: 6.49 20.68 25.63 10/2790 3885637
+  Determining projects to restore...
+  Restored /tmp/p7base/tests/Ycs.Budgets/Ycs.Budgets.csproj (in 198 ms).
+  1 of 2 projects are up-to-date for restore.
+  Ycs -> /tmp/p7base/src/Ycs/bin/Release/net11.0/Ycs.dll
+  Ycs.Budgets -> /tmp/p7base/tests/Ycs.Budgets/bin/Release/net11.0/Ycs.Budgets.dll
+Test run for /tmp/p7base/tests/Ycs.Budgets/bin/Release/net11.0/Ycs.Budgets.dll (.NETCoreApp,Version=v11.0)
+A total of 1 test files matched the specified pattern.
+/tmp/p7base/tests/Ycs.Budgets/bin/Release/net11.0/Ycs.Budgets.dll
+  Passed Scenarios_StayWithinBudgets [8 s]
+  Standard Output Messages:
+ 
+ 
+ TestContext Messages:
+ scenario                                     bytes/op     budget     µs/op   ceiling  note
+ text.insert-char-at-caret-100k                      0          0       0.9        50  
+ text.insert-char-in-document-of-5000-clients          0          0       0.3        30  
+ doc.apply-remote-char-update-100k                   0          0       1.1        50  
+ doc.encode-small-document-v1                       88        104       0.4        50  
+ doc.encode-diff-of-one-edit-100k                 6656       7656     320.5      2000  
+ doc.encode-diff-100k-into-buffer-writer             0          0     345.5      2000  
+ text.to-string-100k                                 0          0       0.0     15000  
+ text.to-string-after-edit-100k                 200166     230784     907.4     15000  
+ position.relative-from-index-deep-100k              0          0     261.6      5000  
+ position.absolute-from-relative-deep-100k           0          0     259.7      5000  
+ map.set-existing-key                              318        368       1.0        50  
+ text.insert-formatted-char-100k                   304        360     333.6      2000  
+ text.event-delta-read-100k                        800        976     839.1      6000  
+ undo.undo-redo-typing-100k                       2764       3336       2.4        50  
+ undo.redo-after-undoing-typing-100k              1620       1956       1.8        50  
+ undo.delete-backwards-one-capture-100k            387        510       2.7        50  
+ array.push-100k-in-one-transaction            2113584    2425568   17911.1    800000  
+ array.enumerate-100k                                0        256    1541.5     20000  improved: lower the budget to 0
+ text.type-100k-in-one-transaction              537856     611400   16405.8    840000  
+ array.delete-random-100k                          183        216       2.7        52  
+ doc.encode-state-with-pending-100k             708066     814352   10659.6     80000  
+ update.merge-10-large-v1                       289624     333312    6170.8     80000  
+ update.merge-two-states-100k-20k-v1            454432     523296    7655.3     90000  
+ update.diff-100k-v1                            352977     406056    3494.9     50000  
+ update.convert-100k-v1                         262446     301928    4083.0     50000  
+ update.encode-state-vector-100k-v1                552        760    2084.7     40000  improved: lower the budget to 640
+ update.parse-meta-100k-v1                         704        936    2056.3     40000  
+ update.merge-10-large-v2                       233097     268208    3807.4     80000  
+ update.merge-two-states-100k-20k-v2            350877     403488    5821.6     80000  
+ update.diff-100k-v2                            263216     303088    4009.1    150000  
+ update.convert-100k-v2                         354177     407416    3785.3     50000  
+ update.encode-state-vector-100k-v2               1568       1928    2084.6     40000  
+ update.parse-meta-100k-v2                        1720       2104    2104.5     40000  
+ 
+
+
+  Passed MillionPushesInOneTransaction_StayWithinMemoryBounds [165 ms]
+  Standard Output Messages:
+ 
+ 
+ TestContext Messages:
+ 1000000 pushes: 1000000 elements, 16 MiB allocated (bound 512), 8 MiB held (bound 64), 156 ms
+
+
+
+Test Run Successful.
+Total tests: 2
+     Passed: 2
+ Total time: 9.1406 Seconds
+load after: 6.62 20.24 25.43 2/2884 3886652
