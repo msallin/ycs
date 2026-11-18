@@ -61,6 +61,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ycs.Blazor", "samples\Ycs.B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ycs.Footprint", "bench\Ycs.Footprint\Ycs.Footprint.csproj", "{51752D0E-6A43-45A2-84F8-004928B21017}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Ycs.DecodeProbe", "bench\Ycs.DecodeProbe\Ycs.DecodeProbe.csproj", "{13E0F00D-38B5-4647-87EC-EFCBB03A755C}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -359,6 +361,18 @@ Global
 		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|x64.Build.0 = Release|Any CPU
 		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|x86.ActiveCfg = Release|Any CPU
 		{51752D0E-6A43-45A2-84F8-004928B21017}.Release|x86.Build.0 = Release|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Debug|x64.Build.0 = Debug|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Debug|x86.Build.0 = Debug|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Release|x64.ActiveCfg = Release|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Release|x64.Build.0 = Release|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Release|x86.ActiveCfg = Release|Any CPU
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -385,6 +399,7 @@ Global
 		{33AAFF5B-085E-4494-8B4C-4198EDE53718} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{E0914132-62C5-4376-900A-FA168665EC8F} = {5D20AA90-6969-D8BD-9DCD-8634F4692FDA}
 		{51752D0E-6A43-45A2-84F8-004928B21017} = {760AB15A-8938-8D9B-BEDE-5CE1484B84C3}
+		{13E0F00D-38B5-4647-87EC-EFCBB03A755C} = {760AB15A-8938-8D9B-BEDE-5CE1484B84C3}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {3D7D58AD-F6FB-4263-A6DA-C9D0E655D3C2}

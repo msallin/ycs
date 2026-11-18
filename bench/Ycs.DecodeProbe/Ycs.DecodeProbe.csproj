@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Not a part of the library: decodes the same inputs through the public entry points and prints every outcome (README.md).
+    Built against two trees (an old commit and the working tree), the two outputs must be byte-identical.
+    The fuzzer's generator is compiled from tests/Ycs.Properties.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net11.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\tests\Ycs.Properties\UpdateFuzz.cs" Link="Fuzz\UpdateFuzz.cs" />
+    <Compile Include="..\..\tests\Ycs.Properties\Json.cs" Link="Fuzz\Json.cs" />
+    <Compile Include="..\Ycs.Parity\Rng.cs" Link="Fuzz\Rng.cs" />
+    <ProjectReference Include="..\..\src\Ycs\Ycs.csproj" />
+  </ItemGroup>
+
+</Project>
