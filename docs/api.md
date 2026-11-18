@@ -143,7 +143,10 @@ setting is Yjs' `set`), `TryGetValue(key, out value)` and `TryGetValue(key, snap
 `ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `ToRuns(snapshot?, previous?, computeYChange?)` (the delta's runs without their characters: a `TextRun(Length, Attributes, Embed)` each, `Length` in the index space of `YText.Length`, `Embed` null for text; no allocation by the text's size), `RemoveNonText()`, `ToString()`, `ToString(snapshot)`, `Substring(start, length)`
 (indexed as `Length` and `Insert` are: an embed in the range counts one and adds no character),
 `CopyTo(Span<char>)` (returns the characters written; an `ArgumentException` when the span is shorter than the text, and
-`Length` is always enough), `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is `YValue.Null` when
+`Length` is always enough), `WriteTo(IBufferWriter<char>)`, `WriteTo(TextWriter)`, `Chunks()` and `Chunks(start, length)` (a `ref struct`
+enumerator of `ReadOnlySpan<char>`, a read in place: no transaction, no allocation, no change to the document; indexed as `Substring`;
+an embed counts one and yields nothing, where a chunk ends means nothing and a surrogate pair may straddle two; `Current` is valid until
+the next `MoveNext` or any edit, and each step reads the text as it is then), the text's own attributes (`GetAttribute` is `YValue.Null` when
 unset, `TryGetAttribute(name, out value)` tells that from one set to null, as on `YXmlElement`; `GetAttributes(snapshot?)`
 returns an `IReadOnlyDictionary<string, YValue>`, `SetAttribute`, `RemoveAttribute`) and `Clone`. A text that is not in a document yet reads what was inserted into it
 (`ToString()`, `Length`, `ToDelta()`, its attributes), as a detached array or map does; a shared type among that content reads
@@ -198,7 +201,10 @@ An event is read-only: `Target` (typed in each subclass: `YTextEvent.Target` is 
 index in a list when `Key` is null), `Changes` (`YChanges`: `Added`, `Deleted`, `Delta`, `Keys`), `Delta`, `Keys`
 (`IReadOnlyDictionary<string, KeyChange>`: a `KeyChangeAction` and the old value, a `YValue`, `YValue.Null` for an added key), and `Adds(view)`,
 `Deletes(view)`. The subclasses add `YMapEvent.KeysChanged`, `YTextEvent.KeysChanged` and `ChildListChanged`, and
-`YXmlEvent.AttributesChanged` and `ChildListChanged`. An event is valid during the handler, its transaction's observers
+`YXmlEvent.AttributesChanged` and `ChildListChanged`. `YTextEvent.Removed` is a `ref struct` enumerator of the removed runs (`Start` in
+the text before the transaction, in the index space of `Length`; `Length`, 1 for an embed; `Text`, a span, empty for an embed), with no copy; it is readable in the
+observers, the deep observers and the `AfterTransaction` handlers (whether or not the document collects garbage) and throws
+`InvalidOperationException` after them. An event is valid during the handler, its transaction's observers
 and cleanup; compute what you keep there.
 
 On `YDoc`, the events are:

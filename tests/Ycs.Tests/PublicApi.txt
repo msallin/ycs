@@ -595,6 +595,8 @@ class Ycs.YText : YArrayBase
     System.IDisposable Observe(System.Action<YTextEvent> handler)
     YText Clone()
     YText(string? text = null)
+    YText.ChunkEnumerator Chunks()
+    YText.ChunkEnumerator Chunks(int start, int length)
     YValue GetAttribute(string name)
     bool RemoveNonText()
     bool TryGetAttribute(string name, out YValue value)
@@ -613,12 +615,26 @@ class Ycs.YText : YArrayBase
     void RemoveAttribute(string name)
     void SetAttribute(string name, YValue value)
     void WriteTo(System.Buffers.IBufferWriter<char> writer)
+    void WriteTo(System.IO.TextWriter writer)
+struct Ycs.YText.ChunkEnumerator
+    System.ReadOnlySpan<char> Current { get; }
+    YText.ChunkEnumerator GetEnumerator()
+    bool MoveNext()
 sealed class Ycs.YTextEvent : YEvent
     System.Collections.Generic.IReadOnlySet<string> KeysChanged { get; }
     YText Target { get; }
+    YTextEvent.RemovedRunEnumerator Removed { get; }
     bool ChildListChanged { get; }
     override System.Collections.Generic.IReadOnlyList<Delta> Delta { get; }
     override YChanges Changes { get; }
+readonly struct Ycs.YTextEvent.RemovedRun
+    System.ReadOnlySpan<char> Text { get; }
+    int Length { get; }
+    int Start { get; }
+struct Ycs.YTextEvent.RemovedRunEnumerator
+    YTextEvent.RemovedRun Current { get; }
+    YTextEvent.RemovedRunEnumerator GetEnumerator()
+    bool MoveNext()
 abstract class Ycs.YType
     System.IDisposable ObserveDeep(System.Action<System.Collections.Generic.IReadOnlyList<YEvent>, Transaction> handler)
     YDoc? Doc { get; }
