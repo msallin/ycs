@@ -1,0 +1,8 @@
+trace: 259778 transactions, 259778 patches, 104852 chars final
+replay      median     489.1 ms  (min     484.0)  alloc      52.6 MiB
+  259778 updates, 5700582 bytes; doc v1 289132 bytes, v2 159927 bytes
+apply-incr  median     284.6 ms  (min     280.9)  alloc      12.1 MiB
+encode-v1   median       8.9 ms  (min       8.7)  alloc       2.8 MiB
+encode-v2   median      10.8 ms  (min      10.7)  alloc       1.5 MiB
+decode-v1   median      84.4 ms  (min      83.7)  alloc      38.1 MiB
+decode-v2   median      85.6 ms  (min      85.0)  alloc      38.1 MiB

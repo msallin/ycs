@@ -1,9 +1,0 @@
-# best case: LeafCapacity = 1 << 20 in both builds (every client one flat leaf, no directory); ab.py 4 6
- 14:28:48 up 3 days, 22:16,  1 user,  load average: 2.78, 3.37, 14.44
-apply-state-v1/ycs       base median      50.0 ms (min 48.5 max 53.7; pass medians 50.5, 50.1, 49.6, 49.2)  alloc    32.95 MiB  held 4.5 MiB  peak RSS 77 MiB  load 2.46
-apply-state-v1/ycs       new  median      49.3 ms (min 48.2 max 51.2; pass medians 49.6, 48.8, 49.2, 49.0)  alloc    32.95 MiB  held 4.5 MiB  peak RSS 76 MiB  load 2.46
-apply-state-v2/ycs       base median      52.4 ms (min 48.2 max 54.0; pass medians 52.6, 50.7, 52.8, 52.5)  alloc    34.95 MiB  held 4.4 MiB  peak RSS 71 MiB  load 2.18
-apply-state-v2/ycs       new  median      50.8 ms (min 47.7 max 53.1; pass medians 50.9, 51.1, 50.1, 50.3)  alloc    34.95 MiB  held 4.4 MiB  peak RSS 73 MiB  load 2.18
-concurrent-20            base median      63.5 ms (min 61.6 max 71.0; pass medians 62.6, 63.2, 64.1, 63.3)  alloc    27.61 MiB  held 28.2 MiB  peak RSS 121 MiB  load 1.91
-concurrent-20            new  median      62.7 ms (min 61.0 max 65.9; pass medians 62.7, 62.9, 63.2, 62.7)  alloc    27.62 MiB  held 28.2 MiB  peak RSS 109 MiB  load 1.99
- 14:29:53 up 3 days, 22:17,  1 user,  load average: 1.84, 2.98, 13.55

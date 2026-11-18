@@ -1,0 +1,14 @@
+UpdateLimits.Default: 131072 structs per update, 131072 pending structs, 16777216 pending bytes
+shape                                                           v1 B      v2 B      ms  alloc MiB  kept MiB  B/struct
+characters (prepended, one item each)                         900998    131111     332       28.7      12.4       229
+deleted items                                                 769932        42     326       31.9      11.8       255
+YText                                                         769926        36     339      105.2      74.9       841
+YArray                                                        769926        36     173      110.2      75.9       881
+YMap                                                          769926        36     135       98.2      57.9       785
+YXmlElement                                                  1032070    131120     211      123.2      73.9       985
+subdocuments                                                 5750662   4980778     654      173.4     138.8      1387
+YText, pending                                                769922        35      39       18.0       2.0       144
+  EncodeStateAsUpdate with them pending                            0         0      98        2.5       1.0        19
+  an update lets them integrate and brings N more                  0        45     254      139.2      74.9       556
+GC structs, pending (hand-written v2)                              0        23       8       18.0       2.0       144
+  EncodeStateAsUpdate with them pending                            0         0      47        1.0       0.5         8

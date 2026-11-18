@@ -1,4 +1,0 @@
-apply-updates/ycs        base median     286.0 ms (min 279.8 max 311.1; pass medians 284.3, 291.4, 284.5, 288.5)  alloc    55.05 MiB  held 18.5 MiB  peak RSS 132 MiB  load 1.57
-apply-updates/ycs        new  median     289.7 ms (min 282.1 max 301.7; pass medians 293.8, 290.6, 286.0, 284.0)  alloc    55.05 MiB  held 18.5 MiB  peak RSS 117 MiB  load 1.53
-trace-replay             base median     276.0 ms (min 265.7 max 303.3; pass medians 279.6, 274.6, 273.2, 276.9)  alloc    43.13 MiB  held 2.9 MiB  peak RSS 225 MiB  load 1.87
-trace-replay             new  median     279.5 ms (min 270.5 max 302.4; pass medians 280.9, 283.6, 280.2, 272.2)  alloc    43.13 MiB  held 2.9 MiB  peak RSS 225 MiB  load 1.87

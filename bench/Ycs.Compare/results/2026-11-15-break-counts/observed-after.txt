@@ -1,4 +1,0 @@
-text-append-1txn-observed new  median     378.5 ms (min 370.3 max 391.1; pass medians 371.3, 388.5)  alloc    21.25 MiB  held 4.4 MiB  peak RSS 83 MiB  load 1.63
-text-append-1txn-observed-200k new  median     993.2 ms (min 940.2 max 1156.6; pass medians 1032.1, 979.4)  alloc    42.47 MiB  held 8.7 MiB  peak RSS 107 MiB  load 1.80
-text-append-1txn-observed-400k new  median    2665.5 ms (min 2607.0 max 2772.0; pass medians 2661.8, 2682.5)  alloc    84.94 MiB  held 17.4 MiB  peak RSS 154 MiB  load 2.02
-text-append-1txn-observed-25k new  median      73.4 ms (min 72.0 max 75.0; pass medians 73.4, 72.8)  alloc     5.33 MiB  held 1.1 MiB  peak RSS 62 MiB  load 1.73

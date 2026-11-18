@@ -3,7 +3,7 @@
 # (3 passes, every workload in a child process per library), the Native AOT probe and the wasm probe.
 # Results go to results/<UTC date>/ (or $1); what the checks read goes to $WORK. SUITE_ARGS adds suite options, e.g.
 # to run ycs only and carry YDotNet over from an earlier run (see Program.cs):
-#   SUITE_ARGS="--carry-yrs results/2026-11-15 --carry-yrs-work <its work dir> --yrs-controls text-append,map-set-distinct" ./run.sh
+#   SUITE_ARGS="--carry-yrs results/2026-11-18-e794d65 --carry-yrs-work <its work dir> --yrs-controls text-append,map-set-distinct" ./run.sh
 set -euo pipefail
 cd "$(dirname "$0")"
 OUT="${1:-results/$(date -u +%F)}"

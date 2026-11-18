@@ -1,6 +1,0 @@
-YcsAot	fdd	publish=0	bytes=514129	libyrs=0	warnings=[]	run(exit 0): Hello, world 42 events=1 v1=36
-YcsAot	trimmed	publish=0	bytes=21125452	libyrs=0	warnings=[]	run(exit 0): Hello, world 42 events=1 v1=36
-YcsAot	aot	publish=0	bytes=2790488	libyrs=0	warnings=[]	run(exit 0): Hello, world 42 events=1 v1=36
-YDotNetAot	fdd	publish=0	bytes=2446349	libyrs=2261056	warnings=[]	run(exit 0): Hello, world 42 events=1 v1=43
-YDotNetAot	trimmed	publish=0	bytes=22607778	libyrs=2261056	warnings=[ 3 IL2091]	run(exit 0): Hello, world 42 events=1 v1=43
-YDotNetAot	aot	publish=0	bytes=4291872	libyrs=2261056	warnings=[ 3 IL2091]	run(exit 0): Hello, world 42 events=1 v1=43

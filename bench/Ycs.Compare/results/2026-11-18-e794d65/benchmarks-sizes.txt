@@ -1,0 +1,6 @@
+kind                                          held B/item  alloc B/op
+character, one item each (typed at the start)         80.9        81.7
+run of 16 characters, one item each                 111.5       113.3
+array element (an integer), one item each            87.1        87.8
+map entry (distinct key, an integer)                132.4       215.4
+array element and a deleted one (collected)         173.2       174.2

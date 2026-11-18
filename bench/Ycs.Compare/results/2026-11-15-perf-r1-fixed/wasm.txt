@@ -1,7 +1,0 @@
-/home/claude/.nuget/packages/ydotnet/0.7.0/lib/net10.0/YDotNet.dll : warning IL2104: Assembly 'YDotNet' produced trim warnings. For more information see https://aka.ms/il2104
-native files in the publish output: 0
-MONO_WASM: yrs
-   at YDotNet.Document.Doc.CreateDoc(DocOptions)
-   at YDotNet.Document.Doc..ctor(DocOptions)
-   at Program.<Main>$(String[])
-exit 1
