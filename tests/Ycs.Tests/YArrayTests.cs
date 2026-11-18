@@ -638,9 +638,15 @@ public class YArrayTests : YTestBase
         var array = doc.GetArray("a");
         array.Add(7, 0.5, "text", true, YValue.Null, 1L << 40, YValue.BigInt(3), new byte[] { 1, 2 });
 
-        var seen = array.Select(v => v.Kind).ToArray();
-        var copy = (byte[])array[7];
-        copy[0] = 9;
+        var seen = new List<YValueKind>();
+        foreach (var value in array)
+        {
+            seen.Add(value.Kind);
+            if (value.Kind == YValueKind.Bytes)
+            {
+                ((byte[])value)[0] = 9;
+            }
+        }
 
         CollectionAssert.AreEqual(
             new[] { YValueKind.Number, YValueKind.Number, YValueKind.String, YValueKind.Boolean, YValueKind.Null, YValueKind.Number, YValueKind.BigInt, YValueKind.Bytes },
