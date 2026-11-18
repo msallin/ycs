@@ -594,7 +594,7 @@ public class HardeningTests
         }
 
         var decoder = new UpdateDecoderV2(new Lib0Reader(writer.ToArray()), long.MaxValue);
-        Assert.ThrowsExactly<YUpdateException>(() => decoder.ReadKey());
+        Assert.ThrowsExactly<YUpdateException>(() => decoder.ReadKey(default));
     }
 
     [TestMethod]

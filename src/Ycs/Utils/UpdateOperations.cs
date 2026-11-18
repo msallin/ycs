@@ -5,9 +5,10 @@ using System.Text;
 namespace Ycs;
 
 /// <summary>
-/// The operations of <see cref="YUpdate"/> on an input held by a segment of an array: merging, diffing against a state
-/// vector, extracting a state vector or clock-range metadata, converting between the v1 and v2 formats, describing.
-/// Ported from Yjs' <c>src/utils/updates.js</c> (Yjs 13.6.32). Every one builds on <see cref="LazyStructReader"/> /
+/// The operations of <see cref="YUpdate"/>: merging, diffing against a state vector, extracting a state vector or
+/// clock-range metadata, converting between the v1 and v2 formats, describing. The decoders read arrays, so an input
+/// is copied into a buffer of the shared array pool for the call.
+/// Ported from Yjs' <c>src/utils/updates.js</c> (Yjs 13.6.32). Every one builds on <see cref="LazyStructReader{TDecoder}"/> /
 /// <see cref="LazyStructWriter"/>, which stream structs (including 'Skip' placeholders) without a document.
 /// Every function takes the <see cref="UpdateLimits"/> of its caller (<see cref="UpdateLimits.Default"/> when null).
 /// </summary>
@@ -19,8 +20,9 @@ internal static class UpdateOperations
     private static Lib0Reader Reader(ArraySegment<byte> update, UpdateLimits? limits) =>
         new(update.Array!, update.Offset, update.Count) { MaxDepth = (limits ?? UpdateLimits.Default).MaxDepth };
 
-    private static IUpdateDecoder Decoder(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
-        v2 ? new UpdateDecoderV2(Reader(update, limits), MaxStructs(limits)) : new UpdateDecoderV1(Reader(update, limits), MaxStructs(limits));
+    private static UpdateDecoderV1 DecoderV1(ArraySegment<byte> update, UpdateLimits? limits) => new(Reader(update, limits), MaxStructs(limits));
+
+    private static UpdateDecoderV2 DecoderV2(ArraySegment<byte> update, UpdateLimits? limits) => new(Reader(update, limits), MaxStructs(limits));
 
     private static IUpdateEncoder Encoder(bool v2) => v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
 
@@ -31,8 +33,36 @@ internal static class UpdateOperations
     /// produced (which may hold 'Skip' gaps). As in Yjs, not where one update holds a GC struct and another an item
     /// for the same clock: the struct kept then depends on the order and the grouping (Yjs under V8's sort).
     /// </summary>
-    public static byte[] MergeUpdates(IList<ArraySegment<byte>> updates, bool v2, UpdateLimits? limits) =>
-        YUpdateException.Decode(() => MergeUpdatesCore(updates, v2, MaxStructs(limits), (limits ?? UpdateLimits.Default).MaxDepth, out _));
+    public static byte[] MergeUpdates(ReadOnlySpan<ReadOnlyMemory<byte>> updates, bool v2, UpdateLimits? limits)
+    {
+        var copies = new PooledCopy[updates.Length];
+        var segments = new ArraySegment<byte>[updates.Length];
+        var copied = 0;
+        try
+        {
+            for (; copied < updates.Length; copied++)
+            {
+                copies[copied] = new PooledCopy(updates[copied].Span);
+                segments[copied] = copies[copied].Segment;
+            }
+
+            try
+            {
+                return MergeUpdatesCore(segments, v2, MaxStructs(limits), (limits ?? UpdateLimits.Default).MaxDepth, out _);
+            }
+            catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+            {
+                throw YUpdateException.Wrap(e);
+            }
+        }
+        finally
+        {
+            for (var i = 0; i < copied; i++)
+            {
+                copies[i].Dispose();
+            }
+        }
+    }
 
     /// <summary>
     /// Merges v2 updates this library wrote (pending structs), any number of them: in groups of a few,
@@ -74,8 +104,20 @@ internal static class UpdateOperations
             return updates[0].Array!;
         }
 
-        var updateDecoders = new List<IUpdateDecoder>(updates.Count);
-        var lazyStructDecoders = new List<LazyStructReader>(updates.Count);
+        return v2
+            ? MergeCore<UpdateDecoderV2>(updates, maxStructs, maxDepth, out written)
+            : MergeCore<UpdateDecoderV1>(updates, maxStructs, maxDepth, out written);
+    }
+
+    private static byte[] MergeCore<TDecoder>(IList<ArraySegment<byte>> updates, long maxStructs, int maxDepth, out long written)
+        where TDecoder : IUpdateDecoder
+    {
+        written = -1;
+        var v2 = typeof(TDecoder) == typeof(UpdateDecoderV2);
+
+        // All the inputs, which stay to read their delete sets; the list MergeStructs works on loses an input once it is drained.
+        var inputs = new List<MergeInput<TDecoder>>(updates.Count);
+        var lazyStructDecoders = new List<MergeInput<TDecoder>>(updates.Count);
         var tables = new List<StagingTable>(updates.Count + 1);
         IUpdateEncoder updateEncoder = v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
         try
@@ -83,11 +125,15 @@ internal static class UpdateOperations
             foreach (var update in updates)
             {
                 var reader = new Lib0Reader(update.Array!, update.Offset, update.Count) { MaxDepth = maxDepth };
-                var decoder = v2 ? (IUpdateDecoder)new UpdateDecoderV2(reader, maxStructs) : new UpdateDecoderV1(reader, maxStructs);
-                updateDecoders.Add(decoder);
+                var decoder = v2
+                    ? (TDecoder)(IUpdateDecoder)new UpdateDecoderV2(reader, maxStructs)
+                    : (TDecoder)(IUpdateDecoder)new UpdateDecoderV1(reader, maxStructs);
                 var table = StagingTable.Rent();
                 tables.Add(table);
-                lazyStructDecoders.Add(new LazyStructReader(decoder, filterSkips: true, table));
+                var bytes = new ReadOnlyMemory<byte>(update.Array!, update.Offset, update.Count);
+                var input = new MergeInput<TDecoder>(bytes, new LazyStructReader<TDecoder>(decoder, bytes.Span, filterSkips: true, table));
+                inputs.Add(input);
+                lazyStructDecoders.Add(input);
             }
 
             var pending = StagingTable.Rent();
@@ -98,10 +144,10 @@ internal static class UpdateOperations
 
             // Every decoder above was drained (Curr < 0) before the loop could exit, so
             // each one's stream is now positioned right at the start of its delete set.
-            var deleteSets = new List<DeleteSet>(updateDecoders.Count);
-            foreach (var decoder in updateDecoders)
+            var deleteSets = new List<DeleteSet>(inputs.Count);
+            foreach (var input in inputs)
             {
-                deleteSets.Add(DeleteSet.Read(decoder));
+                deleteSets.Add(DeleteSet.Read(ref input.Reader.Decoder, input.Bytes.Span));
             }
 
             new DeleteSet(deleteSets).Write(updateEncoder);
@@ -115,6 +161,17 @@ internal static class UpdateOperations
                 StagingTable.Return(table);
             }
         }
+    }
+
+    /// <summary>One input of a merge: its bytes, which its reader was made over and reads in <see cref="Next"/>, and the reader.</summary>
+    private readonly struct MergeInput<TDecoder>(ReadOnlyMemory<byte> bytes, LazyStructReader<TDecoder> reader)
+        where TDecoder : IUpdateDecoder
+    {
+        public ReadOnlyMemory<byte> Bytes { get; } = bytes;
+
+        public LazyStructReader<TDecoder> Reader { get; } = reader;
+
+        public bool Next() => Reader.Next(Bytes.Span);
     }
 
     private static void ReturnEncoder(IUpdateEncoder encoder)
@@ -149,7 +206,8 @@ internal static class UpdateOperations
         /// Whole, the struct moves: the reader's table is swapped for this one, so the reader must advance before it is read
         /// again. Cut, it is copied.
         /// </remarks>
-        public void Set(LazyStructReader reader, int cut)
+        public void Set<TDecoder>(LazyStructReader<TDecoder> reader, int cut)
+            where TDecoder : IUpdateDecoder
         {
             if (cut == 0)
             {
@@ -195,7 +253,8 @@ internal static class UpdateOperations
     private static bool SameShape(StagedKind a, StagedKind b) =>
         a == b || a != StagedKind.GC && a != StagedKind.Skip && b != StagedKind.GC && b != StagedKind.Skip;
 
-    private static void MergeStructs(List<LazyStructReader> lazyStructDecoders, LazyStructWriter lazyStructEncoder, StagingTable pendingTable)
+    private static void MergeStructs<TDecoder>(List<MergeInput<TDecoder>> lazyStructDecoders, LazyStructWriter lazyStructEncoder, StagingTable pendingTable)
+        where TDecoder : IUpdateDecoder
     {
         var currWrite = new PendingStruct(lazyStructEncoder, pendingTable);
 
@@ -205,9 +264,11 @@ internal static class UpdateOperations
         while (true)
         {
             // Write higher clients first - sort by clientID & clock and remove decoders without content.
-            lazyStructDecoders.RemoveAll(static dec => dec.Curr < 0);
-            StableSort.Sort(lazyStructDecoders, static (dec1, dec2) =>
+            lazyStructDecoders.RemoveAll(static dec => dec.Reader.Curr < 0);
+            StableSort.Sort(lazyStructDecoders, static (input1, input2) =>
             {
+                var dec1 = input1.Reader;
+                var dec2 = input2.Reader;
                 if (dec1.Client == dec2.Client)
                 {
                     var clockCompare = dec1.Clock.CompareTo(dec2.Clock);
@@ -228,7 +289,8 @@ internal static class UpdateOperations
                 break;
             }
 
-            var currDecoder = lazyStructDecoders[0];
+            var currInput = lazyStructDecoders[0];
+            var currDecoder = currInput.Reader;
 
             // Write from currDecoder until the next operation is from another client or if
             // filler-struct, then we need to reorder the decoders and find the next operation to write.
@@ -244,7 +306,7 @@ internal static class UpdateOperations
                        currDecoder.Clock + currDecoder.Length <= currWrite.End &&
                        currDecoder.Client >= currWrite.Client)
                 {
-                    currDecoder.Next();
+                    currInput.Next();
                     iterated = true;
                 }
 
@@ -259,7 +321,7 @@ internal static class UpdateOperations
                 {
                     currWrite.Write();
                     currWrite.Set(currDecoder, 0);
-                    currDecoder.Next();
+                    currInput.Next();
                 }
                 else
                 {
@@ -309,7 +371,7 @@ internal static class UpdateOperations
                         {
                             currWrite.Write();
                             currWrite.Set(currDecoder, cut);
-                            currDecoder.Next();
+                            currInput.Next();
                         }
                     }
                 }
@@ -317,7 +379,7 @@ internal static class UpdateOperations
             else
             {
                 currWrite.Set(currDecoder, 0);
-                currDecoder.Next();
+                currInput.Next();
             }
 
             for (;
@@ -325,7 +387,7 @@ internal static class UpdateOperations
                  currDecoder.Client == firstClient &&
                  currDecoder.Clock == currWrite.End &&
                  currDecoder.Kind != StagedKind.Skip;
-                 currDecoder.Next())
+                 currInput.Next())
             {
                 currWrite.Write();
                 currWrite.Set(currDecoder, 0);
@@ -345,23 +407,40 @@ internal static class UpdateOperations
     #region DiffUpdate
 
     /// <summary>Extracts the part of <paramref name="update"/> that is missing relative to the encoded <paramref name="stateVector"/>.</summary>
-    public static byte[] DiffUpdate(ArraySegment<byte> update, ArraySegment<byte> stateVector, bool v2, UpdateLimits? limits) =>
-        YUpdateException.Decode(() =>
+    public static byte[] DiffUpdate(ReadOnlySpan<byte> update, ReadOnlySpan<byte> stateVector, bool v2, UpdateLimits? limits)
+    {
+        using var input = new PooledCopy(update);
+        using var vector = new PooledCopy(stateVector);
+        var segment = input.Segment;
+        try
         {
             var encoder = Encoder(v2);
             try
             {
-                DiffUpdateCore(Decoder(update, v2, limits), stateVector, encoder);
+                var vectorReader = new Lib0Reader(vector.Segment.Array!, vector.Segment.Offset, vector.Segment.Count);
+                if (v2)
+                {
+                    var decoder = DecoderV2(segment, limits);
+                    DiffUpdateCore(decoder, segment, EncodingUtils.DecodeStateVector(vectorReader), encoder);
+                }
+                else
+                {
+                    var decoder = DecoderV1(segment, limits);
+                    DiffUpdateCore(decoder, segment, EncodingUtils.DecodeStateVector(vectorReader), encoder);
+                }
+
                 return encoder.ToArray();
             }
             finally
             {
                 ReturnEncoder(encoder);
             }
-        });
-
-    private static void DiffUpdateCore(IUpdateDecoder decoder, ArraySegment<byte> stateVector, IUpdateEncoder encoder) =>
-        DiffUpdateCore(decoder, EncodingUtils.DecodeStateVector(new Lib0Reader(stateVector.Array!, stateVector.Offset, stateVector.Count)), encoder);
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
+    }
 
     /// <summary>
     /// What <see cref="EncodingUtils.EncodeStateAsUpdate(StructStore, ReadOnlySpan{byte}, bool)"/>
@@ -393,7 +472,8 @@ internal static class UpdateOperations
             {
                 var pending = store.Pending.Merge();
                 // Its values were read under the limits of the updates that brought them.
-                DiffUpdateCore(new UpdateDecoderV2(new Lib0Reader(pending) { MaxDepth = int.MaxValue }, store.Pending.Structs), targetStateVector, encoder);
+                var decoder = new UpdateDecoderV2(new Lib0Reader(pending) { MaxDepth = int.MaxValue }, store.Pending.Structs);
+                DiffUpdateCore(decoder, pending, targetStateVector, encoder);
                 updates.Add(encoder.ToArray());
             }
             finally
@@ -405,13 +485,15 @@ internal static class UpdateOperations
         return MergeUpdatesCore(updates, v2, maxStructs: long.MaxValue, maxDepth: int.MaxValue, out _);
     }
 
-    private static void DiffUpdateCore(IUpdateDecoder decoder, IDictionary<long, long> state, IUpdateEncoder encoder)
+    private static void DiffUpdateCore<TDecoder>(TDecoder decoder, ReadOnlySpan<byte> update, IDictionary<long, long> state, IUpdateEncoder encoder)
+        where TDecoder : IUpdateDecoder
     {
         var table = StagingTable.Rent();
+        LazyStructReader<TDecoder> reader;
         try
         {
             var lazyStructWriter = new LazyStructWriter(encoder);
-            var reader = new LazyStructReader(decoder, filterSkips: false, table);
+            reader = new LazyStructReader<TDecoder>(decoder, update, filterSkips: false, table);
 
             while (reader.Curr >= 0)
             {
@@ -420,7 +502,7 @@ internal static class UpdateOperations
                 if (reader.Kind == StagedKind.Skip)
                 {
                     // The first written struct shouldn't be a Skip.
-                    reader.Next();
+                    reader.Next(update);
                     continue;
                 }
 
@@ -429,12 +511,12 @@ internal static class UpdateOperations
                 if (reader.Clock + reader.Length > svClock)
                 {
                     LazyStructWriter.WriteStruct(lazyStructWriter, table, reader.Curr, (int)Math.Max(svClock - reader.Clock, 0));
-                    reader.Next();
+                    reader.Next(update);
 
                     while (reader.Curr >= 0 && reader.Client == currClient)
                     {
                         LazyStructWriter.WriteStruct(lazyStructWriter, table, reader.Curr, 0);
-                        reader.Next();
+                        reader.Next(update);
                     }
                 }
                 else
@@ -442,7 +524,7 @@ internal static class UpdateOperations
                     // Read until something new comes up.
                     while (reader.Curr >= 0 && reader.Client == currClient && reader.Clock + reader.Length <= svClock)
                     {
-                        reader.Next();
+                        reader.Next(update);
                     }
                 }
             }
@@ -454,7 +536,7 @@ internal static class UpdateOperations
             StagingTable.Return(table);
         }
 
-        var ds = DeleteSet.Read(decoder);
+        var ds = DeleteSet.Read(ref reader.Decoder, update);
         ds.Write(encoder);
     }
 
@@ -466,16 +548,30 @@ internal static class UpdateOperations
     /// Computes the state vector implied by an update, without applying it to a document: far cheaper than applying the
     /// update to an empty document and encoding its state vector.
     /// </summary>
-    public static byte[] EncodeStateVectorFromUpdate(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
-        YUpdateException.Decode(() => EncodeStateVectorFromUpdateCore(Decoder(update, v2, limits)));
+    public static byte[] EncodeStateVectorFromUpdate(ReadOnlySpan<byte> update, bool v2, UpdateLimits? limits)
+    {
+        using var input = new PooledCopy(update);
+        var segment = input.Segment;
+        try
+        {
+            return v2
+                ? EncodeStateVectorFromUpdateCore(DecoderV2(segment, limits), segment)
+                : EncodeStateVectorFromUpdateCore(DecoderV1(segment, limits), segment);
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
+    }
 
-    private static byte[] EncodeStateVectorFromUpdateCore(IUpdateDecoder decoder)
+    private static byte[] EncodeStateVectorFromUpdateCore<TDecoder>(TDecoder decoder, ReadOnlySpan<byte> update)
+        where TDecoder : IUpdateDecoder
     {
         var pairs = new List<(long Client, long Clock)>();
         var table = StagingTable.Rent();
         try
         {
-            var reader = new LazyStructReader(decoder, filterSkips: false, table);
+            var reader = new LazyStructReader<TDecoder>(decoder, update, filterSkips: false, table);
 
             if (reader.Curr >= 0)
             {
@@ -483,7 +579,7 @@ internal static class UpdateOperations
                 var stopCounting = reader.Clock != 0; // Must start at 0.
                 var currClock = stopCounting ? 0 : reader.Clock + reader.Length;
 
-                for (; reader.Curr >= 0; reader.Next())
+                for (; reader.Curr >= 0; reader.Next(update))
                 {
                     if (currClient != reader.Client)
                     {
@@ -538,10 +634,24 @@ internal static class UpdateOperations
     #region ParseUpdateMeta
 
     /// <summary>For every client that contributed at least one struct to an update, the clock range it covers.</summary>
-    public static UpdateMeta ParseUpdateMeta(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
-        YUpdateException.Decode(() => ParseUpdateMetaCore(Decoder(update, v2, limits)));
+    public static UpdateMeta ParseUpdateMeta(ReadOnlySpan<byte> update, bool v2, UpdateLimits? limits)
+    {
+        using var input = new PooledCopy(update);
+        var segment = input.Segment;
+        try
+        {
+            return v2
+                ? ParseUpdateMetaCore(DecoderV2(segment, limits), segment)
+                : ParseUpdateMetaCore(DecoderV1(segment, limits), segment);
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
+    }
 
-    private static UpdateMeta ParseUpdateMetaCore(IUpdateDecoder decoder)
+    private static UpdateMeta ParseUpdateMetaCore<TDecoder>(TDecoder decoder, ReadOnlySpan<byte> update)
+        where TDecoder : IUpdateDecoder
     {
         var from = new Dictionary<long, long>();
         var to = new Dictionary<long, long>();
@@ -549,7 +659,7 @@ internal static class UpdateOperations
         var table = StagingTable.Rent();
         try
         {
-            var reader = new LazyStructReader(decoder, filterSkips: false, table);
+            var reader = new LazyStructReader<TDecoder>(decoder, update, filterSkips: false, table);
 
             if (reader.Curr >= 0)
             {
@@ -559,7 +669,7 @@ internal static class UpdateOperations
                 // Write the beginning to 'from'.
                 from[currClient] = currClock;
 
-                for (; reader.Curr >= 0; reader.Next())
+                for (; reader.Curr >= 0; reader.Next(update))
                 {
                     if (currClient != reader.Client)
                     {
@@ -594,30 +704,48 @@ internal static class UpdateOperations
     /// and the overlapping ones merged, which deletes the same. (Yjs writes negative clock differences,
     /// which its own decoder reads as other ranges.)
     /// </summary>
-    public static byte[] ConvertUpdateFormat(ArraySegment<byte> update, bool fromV2, bool toV2, UpdateLimits? limits) =>
-        YUpdateException.Decode(() =>
+    public static byte[] ConvertUpdateFormat(ReadOnlySpan<byte> update, bool fromV2, bool toV2, UpdateLimits? limits)
+    {
+        using var input = new PooledCopy(update);
+        var segment = input.Segment;
+        try
         {
             var encoder = Encoder(toV2);
             try
             {
-                ConvertUpdateFormatCore(Decoder(update, fromV2, limits), encoder);
+                if (fromV2)
+                {
+                    ConvertUpdateFormatCore(DecoderV2(segment, limits), segment, encoder);
+                }
+                else
+                {
+                    ConvertUpdateFormatCore(DecoderV1(segment, limits), segment, encoder);
+                }
+
                 return encoder.ToArray();
             }
             finally
             {
                 ReturnEncoder(encoder);
             }
-        });
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
+    }
 
-    private static void ConvertUpdateFormatCore(IUpdateDecoder decoder, IUpdateEncoder encoder)
+    private static void ConvertUpdateFormatCore<TDecoder>(TDecoder decoder, ReadOnlySpan<byte> update, IUpdateEncoder encoder)
+        where TDecoder : IUpdateDecoder
     {
         var table = StagingTable.Rent();
+        LazyStructReader<TDecoder> reader;
         try
         {
-            var reader = new LazyStructReader(decoder, filterSkips: false, table);
+            reader = new LazyStructReader<TDecoder>(decoder, update, filterSkips: false, table);
             var writer = new LazyStructWriter(encoder);
 
-            for (; reader.Curr >= 0; reader.Next())
+            for (; reader.Curr >= 0; reader.Next(update))
             {
                 LazyStructWriter.WriteStruct(writer, table, reader.Curr, 0);
             }
@@ -629,7 +757,7 @@ internal static class UpdateOperations
             StagingTable.Return(table);
         }
 
-        var ds = DeleteSet.Read(decoder);
+        var ds = DeleteSet.Read(ref reader.Decoder, update);
         OrderRanges(ds);
         ds.Write(encoder);
     }
@@ -679,19 +807,36 @@ internal static class UpdateOperations
     #region DecodeUpdate
 
     /// <summary>Decodes an update into its structs (in order) and its delete set, without applying it to a document.</summary>
-    public static DecodedUpdate DecodeUpdate(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
-        YUpdateException.Decode(() => DecodeUpdateCore(Decoder(update, v2, limits)));
+    public static DecodedUpdate DecodeUpdate(ReadOnlySpan<byte> update, bool v2, UpdateLimits? limits)
+    {
+        using var input = new PooledCopy(update);
+        var segment = input.Segment;
+        try
+        {
+            if (v2)
+            {
+                var decoder = DecoderV2(segment, limits);
+                return DecodeUpdateCore(ref decoder, segment);
+            }
+            else
+            {
+                var decoder = DecoderV1(segment, limits);
+                return DecodeUpdateCore(ref decoder, segment);
+            }
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
+    }
 
-    private static DecodedUpdate DecodeUpdateCore(IUpdateDecoder decoder)
+    private static DecodedUpdate DecodeUpdateCore<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> update)
+        where TDecoder : IUpdateDecoder
     {
         // The table is the result's: it keeps every struct and is not returned.
         var structs = new StagingTable();
-        var cursor = new EncodingUtils.StructCursor(decoder, staging: structs);
-        while (cursor.NextStaged() >= 0)
-        {
-        }
-
-        var ds = DeleteSet.Read(decoder);
+        var ds = new DeleteSet();
+        EncodingUtils.ReadUpdate(ref decoder, update, structs, ds, seenClients: null, spareLists: null);
         var deleteSet = new Dictionary<long, IReadOnlyList<DeletedRange>>();
 
         foreach (var kvp in ds.Clients)
@@ -707,7 +852,7 @@ internal static class UpdateOperations
     #region Describe
 
     /// <summary>Describes an update (its structs and its delete set) as a plain string, for debugging.</summary>
-    public static string DescribeUpdate(ArraySegment<byte> update, bool v2, UpdateLimits? limits) =>
+    public static string DescribeUpdate(ReadOnlySpan<byte> update, bool v2, UpdateLimits? limits) =>
         DescribeDecodedUpdate(DecodeUpdate(update, v2, limits));
 
     private static string DescribeDecodedUpdate(DecodedUpdate decoded)

@@ -340,8 +340,8 @@ public class CodecReuseTests
         var fresh = Allocated(() =>
         {
             var decoder = new UpdateDecoderV2(new Lib0Reader(update), long.MaxValue);
-            ReadStructs(decoder);
-            DeleteSet.Read(decoder);
+            ReadStructs(decoder, update);
+            DeleteSet.Read(ref decoder, update);
         });
 
         // The decoders, their readers, the staging table and the collections are not new when reused.
@@ -356,7 +356,7 @@ public class CodecReuseTests
         Assert.ThrowsExactly<YUpdateException>(() => UpdateReader.Read(update, 0, update.Length - 3, v2: false, long.MaxValue));
         using var lease = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
 
-        Assert.AreEqual(Describe(ReadStructs(new UpdateDecoderV1(new Lib0Reader(update), long.MaxValue))), Describe(lease.Staging));
+        Assert.AreEqual(Describe(ReadStructs(new UpdateDecoderV1(new Lib0Reader(update), long.MaxValue), update)), Describe(lease.Staging));
     }
 
     [TestMethod]
@@ -558,7 +558,7 @@ public class CodecReuseTests
             var fresh = Outcome(() =>
             {
                 IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue);
-                return Describe(ReadStructs(decoder)) + " | " + Describe(DeleteSet.Read(decoder));
+                return Describe(ReadStructs(decoder, bytes)) + " | " + Describe(DeleteSet.Read(ref decoder, bytes));
             });
             var reused = Outcome(() =>
             {
@@ -696,11 +696,12 @@ public class CodecReuseTests
         return (System.GC.GetAllocatedBytesForCurrentThread() - before) / 100;
     }
 
-    private static StagingTable ReadStructs(IUpdateDecoder decoder)
+    private static StagingTable ReadStructs<TDecoder>(TDecoder decoder, byte[] input)
+        where TDecoder : IUpdateDecoder
     {
         var table = new StagingTable();
-        var cursor = new EncodingUtils.StructCursor(decoder, table);
-        while (cursor.NextStaged() >= 0)
+        var cursor = EncodingUtils.StructCursor.Begin(ref decoder, input, table);
+        while (cursor.NextStaged(ref decoder, input) >= 0)
         {
         }
 

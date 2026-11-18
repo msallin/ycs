@@ -106,8 +106,9 @@ public class StructStagingTests
 
         var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);
         var table = new StagingTable();
-        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited), table);
-        while (cursor.NextStaged() >= 0)
+        var decoder = new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited);
+        var cursor = EncodingUtils.StructCursor.Begin(ref decoder, gapped, table);
+        while (cursor.NextStaged(ref decoder, gapped) >= 0)
         {
         }
 
@@ -131,8 +132,9 @@ public class StructStagingTests
     private static StagingTable ReadTable(byte[] update)
     {
         var table = new StagingTable();
-        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV1(new Lib0Reader(update), Unlimited), table);
-        while (cursor.NextStaged() >= 0)
+        var decoder = new UpdateDecoderV1(new Lib0Reader(update), Unlimited);
+        var cursor = EncodingUtils.StructCursor.Begin(ref decoder, update, table);
+        while (cursor.NextStaged(ref decoder, update) >= 0)
         {
         }
 

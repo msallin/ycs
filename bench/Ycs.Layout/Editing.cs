@@ -164,8 +164,8 @@ internal static class Editing
             // A table of its own per update: a lease's table is reset when it is disposed.
             var table = new StagingTable();
             var decoder = new UpdateDecoderV1(new Lib0Reader(u) { MaxDepth = int.MaxValue }, long.MaxValue);
-            var cursor = new EncodingUtils.StructCursor(decoder, table);
-            while (cursor.NextStaged() is >= 0 and var i)
+            var cursor = EncodingUtils.StructCursor.Begin(ref decoder, u, table);
+            while (cursor.NextStaged(ref decoder, u) is >= 0 and var i)
             {
                 // Every struct starts at its client's state: integrated in this order, each at offset 0.
                 var (id, s) = (table.IdOf(i), table.At(i));
@@ -179,7 +179,7 @@ internal static class Editing
                 staged.Add((table, i));
             }
 
-            foreach (var (client, items) in DeleteSet.Read(decoder).Clients)
+            foreach (var (client, items) in DeleteSet.Read(ref decoder, u).Clients)
             {
                 deletes.Add((client, [.. items.Select(i => (i.Clock, i.Length))]));
             }

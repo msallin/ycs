@@ -102,8 +102,8 @@ internal static class StagingDifferential
         {
             var reader = new Lib0Reader(input);
             IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader, maxStructs) : new UpdateDecoderV1(reader, maxStructs);
-            var cursor = new EncodingUtils.StructCursor(decoder, table, []);
-            while (cursor.NextStaged() >= 0)
+            var cursor = EncodingUtils.StructCursor.Begin(ref decoder, input, table, []);
+            while (cursor.NextStaged(ref decoder, input) >= 0)
             {
             }
 

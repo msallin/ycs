@@ -76,9 +76,10 @@ internal class ContentJson : IContent
         }
     }
 
-    internal static ContentJson Read(IUpdateDecoder decoder)
+    internal static ContentJson Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
+        where TDecoder : IUpdateDecoder
     {
-        var len = decoder.ReadLength();
+        var len = decoder.ReadLength(input);
 
         // Each value takes at least one byte (in v1; in v2 the strings are in their own column).
         var content = new List<object?>(Limits.Capacity(len, decoder.Reader.Remaining));
@@ -86,7 +87,7 @@ internal class ContentJson : IContent
         var undefined = false;
         for (int i = 0; i < len; i++)
         {
-            var jsonStr = decoder.ReadString();
+            var jsonStr = decoder.ReadString(input);
             if (string.Equals(jsonStr, "undefined", StringComparison.Ordinal))
             {
                 undefined = true;

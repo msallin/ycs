@@ -50,9 +50,10 @@ internal class ContentEmbed : IContent
         encoder.WriteJson(_embed);
     }
 
-    internal static ContentEmbed Read(IUpdateDecoder decoder)
+    internal static ContentEmbed Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
+        where TDecoder : IUpdateDecoder
     {
-        var content = decoder.ReadJson();
+        var content = decoder.ReadJson(input);
         return new ContentEmbed(content);
     }
 }

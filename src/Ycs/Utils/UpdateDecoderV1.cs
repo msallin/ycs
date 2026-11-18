@@ -18,9 +18,9 @@ internal class DSDecoderV1 : IDSDecoder
         // Nothing to do.
     }
 
-    public long ReadDsClock() => Reader.ReadVarUint();
+    public long ReadDsClock(ReadOnlySpan<byte> input) => Reader.ReadVarUint();
 
-    public long ReadDsLength() => Reader.ReadVarUint();
+    public long ReadDsLength(ReadOnlySpan<byte> input) => Reader.ReadVarUint();
 }
 
 internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
@@ -34,27 +34,27 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
 
     public long MaxStructs { get; set; }
 
-    public ItemId ReadLeftId() => new ItemId(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
+    public ItemId ReadLeftId(ReadOnlySpan<byte> input) => new ItemId(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
 
-    public ItemId ReadRightId() => new ItemId(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
+    public ItemId ReadRightId(ReadOnlySpan<byte> input) => new ItemId(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
 
-    public long ReadClient() => Reader.ReadVarUint53();
+    public long ReadClient(ReadOnlySpan<byte> input) => Reader.ReadVarUint53();
 
-    public byte ReadInfo() => Reader.ReadByte();
+    public byte ReadInfo(ReadOnlySpan<byte> input) => Reader.ReadByte();
 
-    public string ReadString() => Reader.ReadVarString();
+    public string ReadString(ReadOnlySpan<byte> input) => Reader.ReadVarString();
 
-    public int ReadStringBound() => Reader.BeginVarString();
+    public int ReadStringBound(ReadOnlySpan<byte> input) => Reader.BeginVarString();
 
-    public int ReadStringExact() => Reader.PendingStringLength();
+    public int ReadStringExact(ReadOnlySpan<byte> input) => Reader.PendingStringLength();
 
-    public int ReadStringChars(Span<char> destination) => Reader.EndVarString(destination);
+    public int ReadStringChars(ReadOnlySpan<byte> input, Span<char> destination) => Reader.EndVarString(destination);
 
-    public bool ReadParentInfo() => Reader.ReadVarUint() == 1;
+    public bool ReadParentInfo(ReadOnlySpan<byte> input) => Reader.ReadVarUint() == 1;
 
-    public uint ReadTypeRef() => Reader.ReadVarUint();
+    public uint ReadTypeRef(ReadOnlySpan<byte> input) => Reader.ReadVarUint();
 
-    public int ReadLength()
+    public int ReadLength(ReadOnlySpan<byte> input)
     {
         var value = Reader.ReadVarUint();
         if (value > Limits.MaxClock)
@@ -65,13 +65,13 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
         return (int)value;
     }
 
-    public object? ReadAny() => Reader.ReadAny();
+    public object? ReadAny(ReadOnlySpan<byte> input) => Reader.ReadAny();
 
-    public byte[] ReadBuffer() => Reader.ReadVarUint8Array();
+    public byte[] ReadBuffer(ReadOnlySpan<byte> input) => Reader.ReadVarUint8Array();
 
-    public string ReadKey() => Reader.ReadVarString();
+    public string ReadKey(ReadOnlySpan<byte> input) => Reader.ReadVarString();
 
     // Plain CLR values: the same content may be re-encoded with the v2 encoder,
     // which writes it through WriteAny.
-    public object? ReadJson() => YJson.Parse(Reader.ReadVarUint8ArraySpan(), Reader.MaxDepth);
+    public object? ReadJson(ReadOnlySpan<byte> input) => YJson.Parse(Reader.ReadVarUint8ArraySpan(), Reader.MaxDepth);
 }

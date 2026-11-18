@@ -91,8 +91,9 @@ public class ItemRefAdoptionTests
         // A legacy ContentJSON item of two values in the root array 'a'.
         var update = Convert.FromBase64String("AQECAAIBAWECCXVuZGVmaW5lZAd7ImsiOjF9AA==");
         var table = new StagingTable();
-        var cursor = new EncodingUtils.StructCursor(new UpdateDecoderV1(new Lib0Reader(update), long.MaxValue), table);
-        cursor.NextStaged();
+        var decoder = new UpdateDecoderV1(new Lib0Reader(update), long.MaxValue);
+        var cursor = EncodingUtils.StructCursor.Begin(ref decoder, update, table);
+        cursor.NextStaged(ref decoder, update);
         var doc = new YDoc(new YDocOptions { ClientId = 2 });
 
         // The store holds the first clock of the struct's client, as when the first part came earlier.

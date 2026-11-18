@@ -223,13 +223,22 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
         var v2 = format.IsV2();
         using var input = new PooledCopy(bytes);
         var segment = input.Segment;
-        return YUpdateException.Decode(() =>
+        try
         {
             var reader = new Lib0Reader(segment.Array!, segment.Offset, segment.Count);
-            IDSDecoder decoder = v2 ? new DSDecoderV2(reader) : new DSDecoderV1(reader);
-            var ds = DeleteSet.Read(decoder);
-            return new Snapshot(ds, EncodingUtils.ReadStateVector(decoder));
-        });
+            return v2 ? Decode(new DSDecoderV2(reader), segment) : Decode(new DSDecoderV1(reader), segment);
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
+    }
+
+    private static Snapshot Decode<TDecoder>(TDecoder decoder, ReadOnlySpan<byte> input)
+        where TDecoder : IDSDecoder
+    {
+        var ds = DeleteSet.Read(ref decoder, input);
+        return new Snapshot(ds, EncodingUtils.ReadStateVector(ref decoder, input));
     }
 
     /// <summary>
@@ -241,31 +250,32 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
         var v2 = format.IsV2();
         using var input = new PooledCopy(update);
         var segment = input.Segment;
-        return YUpdateException.Decode(() => ContainsUpdate(segment, !v2, (limits ?? UpdateLimits.Default).MaxStructsPerUpdate));
+        try
+        {
+            var stream = new Lib0Reader(segment.Array!, segment.Offset, segment.Count);
+            var maxStructs = (limits ?? UpdateLimits.Default).MaxStructsPerUpdate;
+            return v2
+                ? ContainsUpdate(new UpdateDecoderV2(stream, maxStructs), segment)
+                : ContainsUpdate(new UpdateDecoderV1(stream, maxStructs), segment);
+        }
+        catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
+        {
+            throw YUpdateException.Wrap(e);
+        }
     }
 
     /// <summary>
     /// Unlike Yjs' version, which reads the struct headers lazily and stops at the first client the
     /// snapshot does not cover, this reads all structs first.
     /// </summary>
-    private bool SnapshotContainsUpdateCore(byte[] update, bool isV1, UpdateLimits? limits)
+    private bool ContainsUpdate<TDecoder>(TDecoder decoder, ReadOnlySpan<byte> update)
+        where TDecoder : IUpdateDecoder
     {
-        ArgumentNullException.ThrowIfNull(update);
-        return YUpdateException.Decode(() => ContainsUpdate(update, isV1, (limits ?? UpdateLimits.Default).MaxStructsPerUpdate));
-    }
-
-    private bool ContainsUpdate(ArraySegment<byte> update, bool isV1, long maxStructs)
-    {
-        var stream = new Lib0Reader(update.Array!, update.Offset, update.Count);
-        IUpdateDecoder decoder = isV1
-            ? (IUpdateDecoder)new UpdateDecoderV1(stream, maxStructs)
-            : new UpdateDecoderV2(stream, maxStructs);
-
         var table = StagingTable.Rent();
         try
         {
-            var cursor = new EncodingUtils.StructCursor(decoder, table);
-            while (cursor.NextStaged() >= 0)
+            var cursor = EncodingUtils.StructCursor.Begin(ref decoder, update, table);
+            while (cursor.NextStaged(ref decoder, update) >= 0)
             {
             }
 
@@ -291,7 +301,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
             StagingTable.Return(table);
         }
 
-        var updateDs = DeleteSet.Read(decoder);
+        var updateDs = DeleteSet.Read(ref decoder, update);
         var merged = new DeleteSet(new List<DeleteSet> { DeleteSet, updateDs });
         return DeleteSetsEqual(DeleteSet, merged);
     }
@@ -299,7 +309,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
     /// <summary>
     /// Yjs parity: <c>equalDeleteSets(ds1, ds2)</c> (utils/DeleteSet.js) - not otherwise exposed on
     /// the internal <see cref="Ycs.DeleteSet"/> type, so ported here for
-    /// <see cref="ContainsUpdate(ArraySegment{byte}, bool, long)"/>'s use. Structurally the same comparison
+    /// <see cref="ContainsUpdate{TDecoder}(TDecoder, ReadOnlySpan{byte})"/>'s use. Structurally the same comparison
     /// <see cref="Equals(Snapshot)"/> already does for its two delete sets.
     /// </summary>
     private static bool DeleteSetsEqual(DeleteSet a, DeleteSet b)

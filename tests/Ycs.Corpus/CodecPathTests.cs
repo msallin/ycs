@@ -68,13 +68,13 @@ public class CodecPathTests
                 var bytes = update.Get(v2);
                 IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue);
                 var fresh = new StagingTable();
-                var cursor = new EncodingUtils.StructCursor(decoder, fresh);
-                while (cursor.NextStaged() >= 0)
+                var cursor = EncodingUtils.StructCursor.Begin(ref decoder, bytes, fresh);
+                while (cursor.NextStaged(ref decoder, bytes) >= 0)
                 {
                 }
 
                 var expectedStructs = Describe(fresh);
-                var expectedDs = Describe(DeleteSet.Read(decoder));
+                var expectedDs = Describe(DeleteSet.Read(ref decoder, bytes));
 
                 using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2, long.MaxValue);
                 Assert.AreEqual(expectedStructs, Describe(lease.Staging));

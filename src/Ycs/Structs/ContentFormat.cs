@@ -59,10 +59,11 @@ internal class ContentFormat : IContent
         encoder.WriteJson(_value);
     }
 
-    internal static ContentFormat Read(IUpdateDecoder decoder)
+    internal static ContentFormat Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
+        where TDecoder : IUpdateDecoder
     {
-        var key = decoder.ReadKey();
-        var value = decoder.ReadJson();
+        var key = decoder.ReadKey(input);
+        var value = decoder.ReadJson(input);
         return new ContentFormat(key, value);
     }
 }

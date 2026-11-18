@@ -66,14 +66,15 @@ public class UpdateOperationsStagedTests
         var structs = Enumerable.Range(0, 1000).Select(k => (Action<IUpdateEncoder, ItemId>)((e, id) =>
             WriteDeleted(e, id, new ItemId(100 + k, 0), 1))).ToArray();
         var bytes = Update(v2, (1, 0, structs));
-        var reader = new LazyStructReader(
+        var reader = new LazyStructReader<IUpdateDecoder>(
             v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue),
+            bytes,
             filterSkips: false,
             new StagingTable());
         var most = 0;
         var read = 0;
 
-        for (; reader.Curr >= 0; reader.Next())
+        for (; reader.Curr >= 0; reader.Next(bytes))
         {
             most = Math.Max(most, reader.Table.ClientCount);
             read++;

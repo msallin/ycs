@@ -9,10 +9,12 @@ namespace Ycs;
 /// (no struct object); an item's parent stays unresolved, a root type's name or the id of the parent's item. Used by
 /// the update-manipulation utilities in <see cref="UpdateOperations"/>.
 /// </summary>
-internal sealed class LazyStructReader
+internal sealed class LazyStructReader<TDecoder>
+    where TDecoder : IUpdateDecoder
 {
     // Not readonly: Next() advances it in place.
     private EncodingUtils.StructCursor _cursor;
+    private TDecoder _decoder;
     private readonly bool _filterSkips;
 
     /// <param name="table">An empty table, the reader's own until the update is read.</param>
@@ -20,15 +22,20 @@ internal sealed class LazyStructReader
     /// The table holds the current struct only (it is <see cref="StagingTable.Truncate"/>d before each read), so what a
     /// caller needs of an earlier one it copies first.
     /// </remarks>
-    public LazyStructReader(IUpdateDecoder decoder, bool filterSkips, StagingTable table)
+    /// <param name="input">The input the decoder was made over; every <see cref="Next"/> is handed the same.</param>
+    public LazyStructReader(TDecoder decoder, ReadOnlySpan<byte> input, bool filterSkips, StagingTable table)
     {
-        _cursor = new EncodingUtils.StructCursor(decoder, staging: table);
+        _decoder = decoder;
+        _cursor = EncodingUtils.StructCursor.Begin(ref _decoder, input, table);
         _filterSkips = filterSkips;
         Table = table;
         Curr = -1;
 
-        Next();
+        Next(input);
     }
+
+    /// <summary>The decoder, positioned after the structs read so far: once <see cref="Curr"/> is -1, at the delete set.</summary>
+    public ref TDecoder Decoder => ref _decoder;
 
     public StagingTable Table { get; private set; }
 
@@ -63,7 +70,7 @@ internal sealed class LazyStructReader
     /// Advances to the next struct, skipping over 'Skip' structs when <c>filterSkips</c> was requested in the
     /// constructor. Returns whether there is one.
     /// </summary>
-    public bool Next()
+    public bool Next(ReadOnlySpan<byte> input)
     {
         do
         {
@@ -72,7 +79,7 @@ internal sealed class LazyStructReader
                 Table.Truncate();
             }
 
-            Curr = _cursor.NextStaged();
+            Curr = _cursor.NextStaged(ref _decoder, input);
             if (Curr >= 0)
             {
                 ref readonly var s = ref Table.At(Curr);

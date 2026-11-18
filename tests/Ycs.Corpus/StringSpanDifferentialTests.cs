@@ -133,8 +133,9 @@ public class StringSpanDifferentialTests
         try
         {
             IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader, 1 << 20) : new UpdateDecoderV1(reader, 1 << 20);
-            var cursor = new EncodingUtils.StructCursor(new Logging(decoder, span, log), new StagingTable());
-            while (cursor.NextStaged() >= 0)
+            var logging = new Logging(decoder, span, log);
+            var cursor = EncodingUtils.StructCursor.Begin(ref logging, bytes, new StagingTable());
+            while (cursor.NextStaged(ref logging, bytes) >= 0)
             {
             }
         }
@@ -150,6 +151,8 @@ public class StringSpanDifferentialTests
         return (log, failure, reader.Remaining);
     }
 
+    private delegate string ReadFunc(ReadOnlySpan<byte> input);
+
     /// <summary>Delegates to the decoder; a string is read with <see cref="IUpdateDecoder.ReadStringChars"/> or <see cref="IUpdateDecoder.ReadString"/> and logged, a failure with its position.</summary>
     private sealed class Logging(IUpdateDecoder inner, bool span, List<string> log) : IUpdateDecoder
     {
@@ -157,16 +160,16 @@ public class StringSpanDifferentialTests
 
         public long MaxStructs => inner.MaxStructs;
 
-        public string ReadString() => Logged(inner.ReadString, true);
+        public string ReadString(ReadOnlySpan<byte> input) => Logged(inner.ReadString, input, true);
 
         private string pending = "";
 
         // The reference reads the whole string here; the split path only the bound, and logs the characters in ReadStringChars.
-        public int ReadStringBound() => span ? Logged(() => new string(' ', inner.ReadStringBound()), false).Length : (pending = ReadString()).Length;
+        public int ReadStringBound(ReadOnlySpan<byte> input) => span ? Logged(i => new string(' ', inner.ReadStringBound(i)), input, false).Length : (pending = ReadString(input)).Length;
 
-        public int ReadStringExact() => span ? Logged(() => new string(' ', inner.ReadStringExact()), false).Length : pending.Length;
+        public int ReadStringExact(ReadOnlySpan<byte> input) => span ? Logged(i => new string(' ', inner.ReadStringExact(i)), input, false).Length : pending.Length;
 
-        public int ReadStringChars(Span<char> destination)
+        public int ReadStringChars(ReadOnlySpan<byte> input, Span<char> destination)
         {
             if (!span)
             {
@@ -176,17 +179,17 @@ public class StringSpanDifferentialTests
 
             var room = new char[destination.Length];
             var written = 0;
-            Logged(() => new string(room, 0, written = inner.ReadStringChars(room)), true);
+            Logged(i => new string(room, 0, written = inner.ReadStringChars(i, room)), input, true);
             room.AsSpan(0, written).CopyTo(destination);
             return written;
         }
 
         // A string is logged with its characters, a failure with its type, message and position.
-        private string Logged(Func<string> read, bool record)
+        private string Logged(ReadFunc read, ReadOnlySpan<byte> input, bool record)
         {
             try
             {
-                var value = read();
+                var value = read(input);
                 if (record)
                 {
                     log.Add("s:" + value);
@@ -203,30 +206,30 @@ public class StringSpanDifferentialTests
 
         public void ResetDsCurVal() => inner.ResetDsCurVal();
 
-        public long ReadDsClock() => inner.ReadDsClock();
+        public long ReadDsClock(ReadOnlySpan<byte> input) => inner.ReadDsClock(input);
 
-        public long ReadDsLength() => inner.ReadDsLength();
+        public long ReadDsLength(ReadOnlySpan<byte> input) => inner.ReadDsLength(input);
 
-        public ItemId ReadLeftId() => inner.ReadLeftId();
+        public ItemId ReadLeftId(ReadOnlySpan<byte> input) => inner.ReadLeftId(input);
 
-        public ItemId ReadRightId() => inner.ReadRightId();
+        public ItemId ReadRightId(ReadOnlySpan<byte> input) => inner.ReadRightId(input);
 
-        public long ReadClient() => inner.ReadClient();
+        public long ReadClient(ReadOnlySpan<byte> input) => inner.ReadClient(input);
 
-        public byte ReadInfo() => inner.ReadInfo();
+        public byte ReadInfo(ReadOnlySpan<byte> input) => inner.ReadInfo(input);
 
-        public bool ReadParentInfo() => inner.ReadParentInfo();
+        public bool ReadParentInfo(ReadOnlySpan<byte> input) => inner.ReadParentInfo(input);
 
-        public uint ReadTypeRef() => inner.ReadTypeRef();
+        public uint ReadTypeRef(ReadOnlySpan<byte> input) => inner.ReadTypeRef(input);
 
-        public int ReadLength() => inner.ReadLength();
+        public int ReadLength(ReadOnlySpan<byte> input) => inner.ReadLength(input);
 
-        public object ReadAny() => inner.ReadAny();
+        public object ReadAny(ReadOnlySpan<byte> input) => inner.ReadAny(input);
 
-        public byte[] ReadBuffer() => inner.ReadBuffer();
+        public byte[] ReadBuffer(ReadOnlySpan<byte> input) => inner.ReadBuffer(input);
 
-        public string ReadKey() => inner.ReadKey();
+        public string ReadKey(ReadOnlySpan<byte> input) => inner.ReadKey(input);
 
-        public object ReadJson() => inner.ReadJson();
+        public object ReadJson(ReadOnlySpan<byte> input) => inner.ReadJson(input);
     }
 }

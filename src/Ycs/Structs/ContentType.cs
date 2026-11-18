@@ -38,14 +38,15 @@ internal class ContentType : IContent
     void IContent.Write(IUpdateEncoder encoder, int offset) => throw StoreSide();
 
     /// <summary>Reads a type's reference and, for an XML element or hook, its node name; throws for a reference no type has.</summary>
-    internal static int ReadHeader(IUpdateDecoder decoder, out string? typeName)
+    internal static int ReadHeader<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, out string? typeName)
+        where TDecoder : IUpdateDecoder
     {
-        var typeRef = decoder.ReadTypeRef();
+        var typeRef = decoder.ReadTypeRef(input);
         typeName = null;
         switch (typeRef)
         {
             case YXmlElement.YXmlElementRefId or YXmlHook.YXmlHookRefId:
-                typeName = decoder.ReadKey();
+                typeName = decoder.ReadKey(input);
                 break;
             case YArray.YArrayRefId or YMap.YMapRefId or YText.YTextRefId or YXmlFragment.YXmlFragmentRefId or YXmlText.YXmlTextRefId:
                 break;

@@ -41,35 +41,14 @@ public static class YUpdate
             return updates[0].ToArray();
         }
 
-        var copies = new PooledCopy[updates.Length];
-        var segments = new ArraySegment<byte>[updates.Length];
-        var copied = 0;
-        try
-        {
-            for (; copied < updates.Length; copied++)
-            {
-                copies[copied] = new PooledCopy(updates[copied].Span);
-                segments[copied] = copies[copied].Segment;
-            }
-
-            return UpdateOperations.MergeUpdates(segments, v2, limits);
-        }
-        finally
-        {
-            for (var i = 0; i < copied; i++)
-            {
-                copies[i].Dispose();
-            }
-        }
+        return UpdateOperations.MergeUpdates(updates, v2, limits);
     }
 
     /// <summary>Extracts the part of <paramref name="update"/> that the peer with the encoded <paramref name="stateVector"/> lacks.</summary>
     public static byte[] Diff(ReadOnlySpan<byte> update, ReadOnlySpan<byte> stateVector, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
         var v2 = format.IsV2();
-        using var input = new PooledCopy(update);
-        using var vector = new PooledCopy(stateVector);
-        return UpdateOperations.DiffUpdate(input.Segment, vector.Segment, v2, limits!);
+        return UpdateOperations.DiffUpdate(update, stateVector, v2, limits);
     }
 
     /// <summary>
@@ -81,40 +60,35 @@ public static class YUpdate
     {
         var fromV2 = from.IsV2();
         var toV2 = to.IsV2();
-        using var input = new PooledCopy(update);
-        return UpdateOperations.ConvertUpdateFormat(input.Segment, fromV2, toV2, limits!);
+        return UpdateOperations.ConvertUpdateFormat(update, fromV2, toV2, limits);
     }
 
     /// <summary>The state vector an update implies, without applying it to a document (both formats encode a state vector alike).</summary>
     public static byte[] EncodeStateVector(ReadOnlySpan<byte> update, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
         var v2 = format.IsV2();
-        using var input = new PooledCopy(update);
-        return UpdateOperations.EncodeStateVectorFromUpdate(input.Segment, v2, limits!);
+        return UpdateOperations.EncodeStateVectorFromUpdate(update, v2, limits);
     }
 
     /// <summary>The clock range every client of an update covers.</summary>
     public static UpdateMeta ParseMeta(ReadOnlySpan<byte> update, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
         var v2 = format.IsV2();
-        using var input = new PooledCopy(update);
-        return UpdateOperations.ParseUpdateMeta(input.Segment, v2, limits!);
+        return UpdateOperations.ParseUpdateMeta(update, v2, limits);
     }
 
     /// <summary>The structs and the delete set of an update. Output is in proportion to the structs, which a v2 update describes in a few bytes.</summary>
     public static DecodedUpdate Decode(ReadOnlySpan<byte> update, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
         var v2 = format.IsV2();
-        using var input = new PooledCopy(update);
-        return UpdateOperations.DecodeUpdate(input.Segment, v2, limits!);
+        return UpdateOperations.DecodeUpdate(update, v2, limits);
     }
 
     /// <summary>The structs and the delete set of an update as plain text, for debugging.</summary>
     public static string Describe(ReadOnlySpan<byte> update, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
         var v2 = format.IsV2();
-        using var input = new PooledCopy(update);
-        return UpdateOperations.DescribeUpdate(input.Segment, v2, limits!);
+        return UpdateOperations.DescribeUpdate(update, v2, limits);
     }
 }
 

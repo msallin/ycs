@@ -90,9 +90,10 @@ internal class ContentDoc : IContent
         encoder.WriteAny(Opts);
     }
 
-    internal static ContentDoc Read(IUpdateDecoder decoder)
+    internal static ContentDoc Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
+        where TDecoder : IUpdateDecoder
     {
-        var guid = decoder.ReadString();
+        var guid = decoder.ReadString(input);
 
         // Yjs spreads the options into an object: any value but null (a TypeError) is accepted, and
         // only an object's keys can name an option.

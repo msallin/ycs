@@ -81,7 +81,8 @@ internal sealed class UpdateReader
     {
         _input.Reset(buffer, offset, count);
 
-        IUpdateDecoder decoder;
+        var input = buffer.AsSpan(offset, count);
+        _input.MaxDepth = maxDepth;
         if (v2)
         {
             if (_v2 == null)
@@ -93,22 +94,15 @@ internal sealed class UpdateReader
                 _v2.Reset(maxStructs);
             }
 
-            decoder = _v2;
+            var decoder = _v2;
+            EncodingUtils.ReadUpdate(ref decoder, input, _staging, _deleteSet, _clients, _spareDeleteLists);
         }
         else
         {
-            _v1 ??= new UpdateDecoderV1(_input, maxStructs);
-            _v1.MaxStructs = maxStructs;
-            decoder = _v1;
+            var decoder = _v1 ??= new UpdateDecoderV1(_input, maxStructs);
+            decoder.MaxStructs = maxStructs;
+            EncodingUtils.ReadUpdate(ref decoder, input, _staging, _deleteSet, _clients, _spareDeleteLists);
         }
-
-        _input.MaxDepth = maxDepth;
-        var cursor = new EncodingUtils.StructCursor(decoder, _staging, _clients);
-        while (cursor.NextStaged() >= 0)
-        {
-        }
-
-        DeleteSet.ReadInto(decoder, _deleteSet, _spareDeleteLists);
     }
 
     private void Release(int version)

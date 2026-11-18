@@ -21,8 +21,8 @@ public class StringSpanTests
 
     private static string ReadSplit(IUpdateDecoder decoder)
     {
-        var chars = new char[decoder.ReadStringBound()];
-        return new string(chars, 0, decoder.ReadStringChars(chars));
+        var chars = new char[decoder.ReadStringBound(default)];
+        return new string(chars, 0, decoder.ReadStringChars(default, chars));
     }
 
     private static byte[] VarString(params byte[] utf8) => [(byte)utf8.Length, .. utf8];
@@ -130,7 +130,7 @@ public class StringSpanTests
         {
             while (true)
             {
-                column.ReadString();
+                column.ReadString(default);
                 count++;
             }
         }
@@ -142,8 +142,8 @@ public class StringSpanTests
         var before = System.GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < count; i++)
         {
-            decoder.ReadStringBound();
-            decoder.ReadStringChars(buffer);
+            decoder.ReadStringBound(default);
+            decoder.ReadStringChars(default, buffer);
         }
 
         var allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
@@ -164,7 +164,7 @@ public class StringSpanTests
         {
             while (true)
             {
-                a.ReadString();
+                a.ReadString(default);
             }
         }
         catch (YUpdateException e)

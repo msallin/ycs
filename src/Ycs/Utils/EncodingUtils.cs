@@ -19,20 +19,21 @@ namespace Ycs;
 internal static class EncodingUtils
 {
     /// <summary>Reads the content of a format, embed, binary, JSON or document item, the kinds the table holds as objects.</summary>
-    private static IContent ReadColdContent(IUpdateDecoder decoder, byte info)
+    private static IContent ReadColdContent<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, byte info)
+        where TDecoder : IUpdateDecoder
     {
         switch (info & Bits.Bits5)
         {
             case (int)StagedKind.Json:
-                return ContentJson.Read(decoder);
+                return ContentJson.Read(ref decoder, input);
             case (int)StagedKind.Binary:
-                return ContentBinary.Read(decoder);
+                return ContentBinary.Read(ref decoder, input);
             case (int)StagedKind.Embed:
-                return ContentEmbed.Read(decoder);
+                return ContentEmbed.Read(ref decoder, input);
             case (int)StagedKind.Format:
-                return ContentFormat.Read(decoder);
+                return ContentFormat.Read(ref decoder, input);
             default:
-                return ContentDoc.Read(decoder);
+                return ContentDoc.Read(ref decoder, input);
         }
     }
 
@@ -289,7 +290,6 @@ internal static class EncodingUtils
     /// </summary>
     internal struct StructCursor
     {
-        private readonly IUpdateDecoder _decoder;
         private readonly long _sections;
         private readonly HashSet<long>? _clients;
         private StagingTable _staging;
@@ -305,12 +305,22 @@ internal static class EncodingUtils
         /// An empty table that takes the structs read: one client range per section, one staged struct per struct.
         /// The cursor only appends; the table's owner resets it.
         /// </param>
-        public StructCursor(IUpdateDecoder decoder, StagingTable staging, HashSet<long>? seenClients = null)
+        private StructCursor(StagingTable staging, long sections, HashSet<long>? clients)
         {
-            _decoder = decoder;
             _staging = staging;
-            _sections = decoder.Reader.ReadVarUint();
-            _clients = _sections > 1 ? seenClients ?? new HashSet<long>() : null;
+            _sections = sections;
+            _clients = clients;
+        }
+
+        /// <summary>
+        /// Reads the number of sections from <paramref name="decoder"/>, which is then read through only by this cursor until
+        /// <see cref="NextStaged"/> returns -1. <paramref name="input"/> is the input the decoder was made over.
+        /// </summary>
+        public static StructCursor Begin<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable staging, HashSet<long>? seenClients = null)
+            where TDecoder : IUpdateDecoder
+        {
+            var sections = decoder.Reader.ReadVarUint();
+            return new StructCursor(staging, sections, sections > 1 ? seenClients ?? new HashSet<long>() : null);
         }
 
         /// <summary>Stages the structs from here on into <paramref name="staging"/>, which has begun the open client's range.</summary>
@@ -321,7 +331,8 @@ internal static class EncodingUtils
         /// characters come from <see cref="IUpdateDecoder.ReadStringChars"/>, a Type's reference and name from
         /// <see cref="ContentType.ReadHeader"/>. Returns its index in the table, or -1 after the last.
         /// </summary>
-        public int NextStaged()
+        public int NextStaged<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
+            where TDecoder : IUpdateDecoder
         {
             while (_structsLeft == 0)
             {
@@ -331,29 +342,30 @@ internal static class EncodingUtils
                 }
 
                 _section++;
-                ReadSectionHeader();
+                ReadSectionHeader(ref decoder, input);
             }
 
             _structsLeft--;
-            var i = StageStruct(_decoder, _staging, _client, _clock, ref _values);
+            var i = StageStruct(ref decoder, input, _staging, _client, _clock, ref _values);
             _clock += _staging.At(i).Length;
             return i;
         }
 
-        private void ReadSectionHeader()
+        private void ReadSectionHeader<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
+            where TDecoder : IUpdateDecoder
         {
-            long numberOfStructs = _decoder.Reader.ReadVarUint();
-            var client = Limits.CheckClient(_decoder.ReadClient());
-            var clock = Limits.CheckClock(_decoder.Reader.ReadVarUint());
+            long numberOfStructs = decoder.Reader.ReadVarUint();
+            var client = Limits.CheckClient(decoder.ReadClient(input));
+            var clock = Limits.CheckClock(decoder.Reader.ReadVarUint());
 
             if (_clients != null && !_clients.Add(client))
             {
                 throw new YUpdateException($"The update lists client {client} more than once.");
             }
 
-            if (numberOfStructs > _decoder.MaxStructs - _structCount)
+            if (numberOfStructs > decoder.MaxStructs - _structCount)
             {
-                throw new YUpdateException($"The update holds more than {_decoder.MaxStructs} structs (UpdateLimits.MaxStructsPerUpdate).");
+                throw new YUpdateException($"The update holds more than {decoder.MaxStructs} structs (UpdateLimits.MaxStructsPerUpdate).");
             }
 
             _structCount += numberOfStructs;
@@ -368,15 +380,31 @@ internal static class EncodingUtils
         }
     }
 
+    /// <summary>
+    /// Reads a whole update: its structs into <paramref name="table"/> (as <see cref="StructCursor"/> does) and then its
+    /// delete set into the empty <paramref name="ds"/> (as <see cref="DeleteSet.ReadInto"/> does).
+    /// </summary>
+    internal static void ReadUpdate<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable table, DeleteSet ds, HashSet<long>? seenClients, Stack<List<DeleteSet.DeleteItem>>? spareLists)
+        where TDecoder : IUpdateDecoder
+    {
+        var cursor = StructCursor.Begin(ref decoder, input, table, seenClients);
+        while (cursor.NextStaged(ref decoder, input) >= 0)
+        {
+        }
+
+        DeleteSet.ReadInto(ref decoder, input, ds, spareLists);
+    }
+
     // The struct is added once it is read whole, when its length is known.
-    private static int StageStruct(IUpdateDecoder decoder, StagingTable table, long client, long clock, ref object?[]? values)
+    private static int StageStruct<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable table, long client, long clock, ref object?[]? values)
+        where TDecoder : IUpdateDecoder
     {
         var id = new ItemId(client, clock);
-        var info = decoder.ReadInfo();
+        var info = decoder.ReadInfo(input);
         switch (info & Bits.Bits5)
         {
             case (int)StagedKind.GC:
-                var gcLength = decoder.ReadLength();
+                var gcLength = decoder.ReadLength(input);
                 Limits.CheckRange(clock, gcLength);
                 return table.Add(StagedKind.GC, gcLength);
             case (int)StagedKind.Skip:
@@ -386,43 +414,43 @@ internal static class EncodingUtils
                 return table.Add(StagedKind.Skip, (int)skipLength);
         }
 
-        var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ItemId?)CheckEarlier(decoder.ReadLeftId(), id) : null;
-        var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ItemId?)CheckEarlier(decoder.ReadRightId(), id) : null;
+        var leftOrigin = (info & Bit.Bit8) == Bit.Bit8 ? (ItemId?)CheckEarlier(decoder.ReadLeftId(input), id) : null;
+        var rightOrigin = (info & Bit.Bit7) == Bit.Bit7 ? (ItemId?)CheckEarlier(decoder.ReadRightId(input), id) : null;
 
         string? parentName = null;
         ItemId? parentId = null;
         string? parentSub = null;
         if ((info & (Bit.Bit7 | Bit.Bit8)) == 0)
         {
-            if (decoder.ReadParentInfo())
+            if (decoder.ReadParentInfo(input))
             {
-                parentName = decoder.ReadString();
+                parentName = decoder.ReadString(input);
             }
             else
             {
-                parentId = CheckEarlier(decoder.ReadLeftId(), id);
+                parentId = CheckEarlier(decoder.ReadLeftId(input), id);
             }
 
-            parentSub = (info & Bit.Bit6) == Bit.Bit6 ? decoder.ReadString() : null;
+            parentSub = (info & Bit.Bit6) == Bit.Bit6 ? decoder.ReadString(input) : null;
         }
 
         int i;
         switch (info & Bits.Bits5)
         {
             case 1:
-                var deleted = decoder.ReadLength();
+                var deleted = decoder.ReadLength(input);
                 Limits.CheckRange(clock, deleted);
                 i = table.Add(StagedKind.Deleted, deleted, leftOrigin, rightOrigin);
                 break;
             case 4:
                 // The bound is the room the string may need; where it would grow the buffer, the exact length is.
-                var bound = decoder.ReadStringBound();
-                var textLength = decoder.ReadStringChars(table.CharRoom(bound <= table.CharsFree ? bound : decoder.ReadStringExact()));
+                var bound = decoder.ReadStringBound(input);
+                var textLength = decoder.ReadStringChars(input, table.CharRoom(bound <= table.CharsFree ? bound : decoder.ReadStringExact(input)));
                 Limits.CheckRange(clock, textLength);
                 i = table.Add(StagedKind.String, textLength, leftOrigin, rightOrigin);
                 break;
             case 8:
-                var count = decoder.ReadLength();
+                var count = decoder.ReadLength(input);
                 values ??= new object?[16];
                 for (var v = 0; v < count; v++)
                 {
@@ -431,7 +459,7 @@ internal static class EncodingUtils
                         Array.Resize(ref values, v * 2);
                     }
 
-                    values[v] = decoder.ReadAny();
+                    values[v] = decoder.ReadAny(input);
                 }
 
                 Limits.CheckRange(clock, count);
@@ -440,13 +468,13 @@ internal static class EncodingUtils
                 Array.Clear(values, 0, count);
                 break;
             case 7:
-                var typeRef = ContentType.ReadHeader(decoder, out var typeName);
+                var typeRef = ContentType.ReadHeader(ref decoder, input, out var typeName);
                 Limits.CheckRange(clock, 1);
                 i = table.Add(StagedKind.Type, 1, leftOrigin, rightOrigin);
                 table.SetType(i, typeRef, typeName);
                 break;
             case 2 or 3 or 5 or 6 or 9:
-                var cold = ReadColdContent(decoder, info);
+                var cold = ReadColdContent(ref decoder, input, info);
                 Limits.CheckRange(clock, cold.Length);
                 i = table.Add((StagedKind)(info & Bits.Bits5), cold.Length, leftOrigin, rightOrigin);
                 table.SetCold(i, cold);
@@ -566,7 +594,8 @@ internal static class EncodingUtils
         }
     }
 
-    public static IDictionary<long, long> ReadStateVector(IDSDecoder decoder)
+    public static IDictionary<long, long> ReadStateVector<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
+        where TDecoder : IDSDecoder
     {
         var ssLength = decoder.Reader.ReadVarUint();
 
@@ -588,7 +617,8 @@ internal static class EncodingUtils
 
     public static IDictionary<long, long> DecodeStateVector(Lib0Reader input)
     {
-        return ReadStateVector(new DSDecoderV2(input));
+        var decoder = new DSDecoderV2(input);
+        return ReadStateVector(ref decoder, default);
     }
 
     /// <summary>

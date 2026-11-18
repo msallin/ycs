@@ -595,10 +595,11 @@ internal class DeleteSet
     /// Reads a delete set. Every range is checked against the clock range; empty ranges, which
     /// delete nothing, are dropped.
     /// </summary>
-    public static DeleteSet Read(IDSDecoder decoder)
+    public static DeleteSet Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
+        where TDecoder : IDSDecoder
     {
         var ds = new DeleteSet();
-        ReadInto(decoder, ds, spareLists: null);
+        ReadInto(ref decoder, input, ds, spareLists: null);
         return ds;
     }
 
@@ -606,7 +607,8 @@ internal class DeleteSet
     /// <see cref="Read"/> into the empty <paramref name="ds"/>, taking the per-client lists from
     /// <paramref name="spareLists"/> while it has any (on an exception, the lists taken are in <paramref name="ds"/>).
     /// </summary>
-    public static void ReadInto(IDSDecoder decoder, DeleteSet ds, Stack<List<DeleteItem>>? spareLists)
+    public static void ReadInto<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, DeleteSet ds, Stack<List<DeleteItem>>? spareLists)
+        where TDecoder : IDSDecoder
     {
         Debug.Assert(ds.Clients.Count == 0);
         var numClients = decoder.Reader.ReadVarUint();
@@ -638,8 +640,8 @@ internal class DeleteSet
 
                 for (long j = 0; j < numberOfDeletes; j++)
                 {
-                    var clock = decoder.ReadDsClock();
-                    var length = decoder.ReadDsLength();
+                    var clock = decoder.ReadDsClock(input);
+                    var length = decoder.ReadDsLength(input);
                     if (length == 0)
                     {
                         Limits.CheckClock(clock);

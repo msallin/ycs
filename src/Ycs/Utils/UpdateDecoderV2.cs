@@ -18,13 +18,13 @@ internal class DSDecoderV2 : IDSDecoder
     }
 
     // At most 2^32 per step and checked by the caller after each range, so the sum cannot overflow.
-    public long ReadDsClock()
+    public long ReadDsClock(ReadOnlySpan<byte> input)
     {
         _dsCurVal += Reader.ReadVarUint();
         return _dsCurVal;
     }
 
-    public long ReadDsLength()
+    public long ReadDsLength(ReadOnlySpan<byte> input)
     {
         var diff = Reader.ReadVarUint() + 1L;
         _dsCurVal += diff;
@@ -134,30 +134,30 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
     }
 
 
-    public ItemId ReadLeftId() => new ItemId((long)_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
+    public ItemId ReadLeftId(ReadOnlySpan<byte> input) => new ItemId((long)_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
 
-    public ItemId ReadRightId() => new ItemId((long)_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
+    public ItemId ReadRightId(ReadOnlySpan<byte> input) => new ItemId((long)_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
 
     /// <summary>
     /// Read the next client Id.
     /// </summary>
-    public long ReadClient() => (long)_clientDecoder.Read();
+    public long ReadClient(ReadOnlySpan<byte> input) => (long)_clientDecoder.Read();
 
-    public byte ReadInfo() => _infoDecoder.Read();
+    public byte ReadInfo(ReadOnlySpan<byte> input) => _infoDecoder.Read();
 
-    public string ReadString() => _stringDecoder.Read();
+    public string ReadString(ReadOnlySpan<byte> input) => _stringDecoder.Read();
 
-    public int ReadStringBound() => _stringDecoder.BeginRead();
+    public int ReadStringBound(ReadOnlySpan<byte> input) => _stringDecoder.BeginRead();
 
-    public int ReadStringExact() => _stringDecoder.SegmentLength;
+    public int ReadStringExact(ReadOnlySpan<byte> input) => _stringDecoder.SegmentLength;
 
-    public int ReadStringChars(Span<char> destination) => _stringDecoder.EndRead(destination);
+    public int ReadStringChars(ReadOnlySpan<byte> input, Span<char> destination) => _stringDecoder.EndRead(destination);
 
-    public bool ReadParentInfo() => _parentInfoDecoder.Read() == 1;
+    public bool ReadParentInfo(ReadOnlySpan<byte> input) => _parentInfoDecoder.Read() == 1;
 
-    public uint ReadTypeRef() => (uint)_typeRefDecoder.Read();
+    public uint ReadTypeRef(ReadOnlySpan<byte> input) => (uint)_typeRefDecoder.Read();
 
-    public int ReadLength()
+    public int ReadLength(ReadOnlySpan<byte> input)
     {
         var value = _lengthDecoder.Read();
         if (value > Limits.MaxClock)
@@ -168,11 +168,11 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         return (int)value;
     }
 
-    public object? ReadAny() => Reader.ReadAny();
+    public object? ReadAny(ReadOnlySpan<byte> input) => Reader.ReadAny();
 
-    public byte[] ReadBuffer() => Reader.ReadVarUint8Array();
+    public byte[] ReadBuffer(ReadOnlySpan<byte> input) => Reader.ReadVarUint8Array();
 
-    public string ReadKey()
+    public string ReadKey(ReadOnlySpan<byte> input)
     {
         // As in Yjs: a known index returns a cached key, any higher one reads the next new key.
         var keyClock = _keyClockDecoder.Read();
@@ -191,5 +191,5 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         return key;
     }
 
-    public object? ReadJson() => Reader.ReadAny();
+    public object? ReadJson(ReadOnlySpan<byte> input) => Reader.ReadAny();
 }
