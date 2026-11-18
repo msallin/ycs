@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Text;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -363,6 +364,35 @@ public class YTextChunksTests
         });
 
         Assert.AreEqual("abcd,tail", string.Join(",", seen));
+    }
+
+    [TestMethod]
+    public void WriteTo_TextWriter_WritesTheText()
+    {
+        var text = Mixed();
+        var writer = new StringWriter();
+
+        text.WriteTo(writer);
+
+        Assert.AreEqual(text.ToString(), writer.ToString());
+    }
+
+    [TestMethod]
+    public void WriteTo_TextWriterOfAnEmptyText_WritesNothing()
+    {
+        var writer = new StringWriter();
+
+        new YDoc().GetText("t").WriteTo(writer);
+
+        Assert.AreEqual(string.Empty, writer.ToString());
+    }
+
+    [TestMethod]
+    public void WriteTo_NullTextWriter_Throws()
+    {
+        var text = new YDoc().GetText("t");
+
+        Assert.Throws<ArgumentNullException>(() => text.WriteTo((TextWriter)null));
     }
 
     /// <summary>"abcd" of client 1, "wxyz" of client 2 and "tail" of client 3, in this order, as three items.</summary>

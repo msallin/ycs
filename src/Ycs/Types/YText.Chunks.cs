@@ -182,4 +182,20 @@ public partial class YText
         /// <summary>This enumerator, for <c>foreach</c>.</summary>
         public readonly ChunkEnumerator GetEnumerator() => this;
     }
+
+    /// <summary>
+    /// Writes the text, as <see cref="ToString()"/> returns it, to <paramref name="writer"/>, one chunk (<see cref="Chunks()"/>)
+    /// at a time, without building a string of it. If the writer's <c>Write</c> edits the text, each chunk is written as the
+    /// text is when it is read: a run deleted meanwhile writes nothing, one split or merged writes its current text from where the
+    /// walk stopped.
+    /// </summary>
+    public void WriteTo(TextWriter writer)
+    {
+        ArgumentNullException.ThrowIfNull(writer);
+
+        foreach (var chunk in Chunks())
+        {
+            writer.Write(chunk);
+        }
+    }
 }
