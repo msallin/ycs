@@ -77,10 +77,10 @@ internal static class UpdateOperations
             var next = new List<byte[]>((updates.Count + GroupSize - 1) / GroupSize);
             for (var i = 0; i < updates.Count; i += GroupSize)
             {
-                var group = new List<ArraySegment<byte>>(GroupSize);
-                for (var j = i; j < Math.Min(i + GroupSize, updates.Count); j++)
+                var group = new ArraySegment<byte>[Math.Min(GroupSize, updates.Count - i)];
+                for (var j = 0; j < group.Length; j++)
                 {
-                    group.Add(updates[j]);
+                    group[j] = updates[i + j];
                 }
 
                 next.Add(MergeUpdatesCore(group, v2: true, maxStructs: long.MaxValue, maxDepth: int.MaxValue, out var written));
@@ -96,10 +96,10 @@ internal static class UpdateOperations
     }
 
     /// <param name="written">How many structs the result holds; -1 when the single update is returned as it is.</param>
-    private static byte[] MergeUpdatesCore(IList<ArraySegment<byte>> updates, bool v2, long maxStructs, int maxDepth, out long written)
+    private static byte[] MergeUpdatesCore(ReadOnlySpan<ArraySegment<byte>> updates, bool v2, long maxStructs, int maxDepth, out long written)
     {
         written = -1;
-        if (updates.Count == 1)
+        if (updates.Length == 1)
         {
             return updates[0].Array!;
         }
@@ -109,45 +109,45 @@ internal static class UpdateOperations
             : MergeCore<UpdateDecoderV1>(updates, maxStructs, maxDepth, out written);
     }
 
-    private static byte[] MergeCore<TDecoder>(IList<ArraySegment<byte>> updates, long maxStructs, int maxDepth, out long written)
+    private static byte[] MergeCore<TDecoder>(ReadOnlySpan<ArraySegment<byte>> updates, long maxStructs, int maxDepth, out long written)
         where TDecoder : IUpdateDecoder
     {
         written = -1;
         var v2 = typeof(TDecoder) == typeof(UpdateDecoderV2);
 
-        // All the inputs, which stay to read their delete sets; the list MergeStructs works on loses an input once it is drained.
-        var inputs = new List<MergeInput<TDecoder>>(updates.Count);
-        var lazyStructDecoders = new List<MergeInput<TDecoder>>(updates.Count);
-        var tables = new List<StagingTable>(updates.Count + 1);
+        // Every reader, which stays to read its delete set; the list MergeStructs works on loses a reader once it is drained.
+        var readers = new List<LazyStructReader<TDecoder>>(updates.Length);
+        var lazyStructDecoders = new List<LazyStructReader<TDecoder>>(updates.Length);
+        var tables = new List<StagingTable>(updates.Length + 1);
         IUpdateEncoder updateEncoder = v2 ? UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
         try
         {
-            foreach (var update in updates)
+            for (var i = 0; i < updates.Length; i++)
             {
+                var update = updates[i];
                 var reader = new Lib0Reader(update.Array!, update.Offset, update.Count) { MaxDepth = maxDepth };
                 var decoder = v2
                     ? (TDecoder)(IUpdateDecoder)new UpdateDecoderV2(reader, maxStructs)
                     : (TDecoder)(IUpdateDecoder)new UpdateDecoderV1(reader, maxStructs);
                 var table = StagingTable.Rent();
                 tables.Add(table);
-                var bytes = new ReadOnlyMemory<byte>(update.Array!, update.Offset, update.Count);
-                var input = new MergeInput<TDecoder>(bytes, new LazyStructReader<TDecoder>(decoder, bytes.Span, filterSkips: true, table));
-                inputs.Add(input);
-                lazyStructDecoders.Add(input);
+                var lazy = new LazyStructReader<TDecoder>(decoder, update, filterSkips: true, table) { Source = i };
+                readers.Add(lazy);
+                lazyStructDecoders.Add(lazy);
             }
 
             var pending = StagingTable.Rent();
             tables.Add(pending);
             var writer = new LazyStructWriter(updateEncoder);
-            MergeStructs(lazyStructDecoders, writer, pending);
+            MergeStructs(lazyStructDecoders, updates, writer, pending);
             written = writer.TotalWritten;
 
             // Every decoder above was drained (Curr < 0) before the loop could exit, so
             // each one's stream is now positioned right at the start of its delete set.
-            var deleteSets = new List<DeleteSet>(inputs.Count);
-            foreach (var input in inputs)
+            var deleteSets = new List<DeleteSet>(readers.Count);
+            foreach (var lazy in readers)
             {
-                deleteSets.Add(DeleteSet.Read(ref input.Reader.Decoder, input.Bytes.Span));
+                deleteSets.Add(DeleteSet.Read(ref lazy.Decoder, updates[lazy.Source]));
             }
 
             new DeleteSet(deleteSets).Write(updateEncoder);
@@ -161,17 +161,6 @@ internal static class UpdateOperations
                 StagingTable.Return(table);
             }
         }
-    }
-
-    /// <summary>One input of a merge: its bytes, which its reader was made over and reads in <see cref="Next"/>, and the reader.</summary>
-    private readonly struct MergeInput<TDecoder>(ReadOnlyMemory<byte> bytes, LazyStructReader<TDecoder> reader)
-        where TDecoder : IUpdateDecoder
-    {
-        public ReadOnlyMemory<byte> Bytes { get; } = bytes;
-
-        public LazyStructReader<TDecoder> Reader { get; } = reader;
-
-        public bool Next() => Reader.Next(Bytes.Span);
     }
 
     private static void ReturnEncoder(IUpdateEncoder encoder)
@@ -253,7 +242,7 @@ internal static class UpdateOperations
     private static bool SameShape(StagedKind a, StagedKind b) =>
         a == b || a != StagedKind.GC && a != StagedKind.Skip && b != StagedKind.GC && b != StagedKind.Skip;
 
-    private static void MergeStructs<TDecoder>(List<MergeInput<TDecoder>> lazyStructDecoders, LazyStructWriter lazyStructEncoder, StagingTable pendingTable)
+    private static void MergeStructs<TDecoder>(List<LazyStructReader<TDecoder>> lazyStructDecoders, ReadOnlySpan<ArraySegment<byte>> inputs, LazyStructWriter lazyStructEncoder, StagingTable pendingTable)
         where TDecoder : IUpdateDecoder
     {
         var currWrite = new PendingStruct(lazyStructEncoder, pendingTable);
@@ -264,11 +253,9 @@ internal static class UpdateOperations
         while (true)
         {
             // Write higher clients first - sort by clientID & clock and remove decoders without content.
-            lazyStructDecoders.RemoveAll(static dec => dec.Reader.Curr < 0);
-            StableSort.Sort(lazyStructDecoders, static (input1, input2) =>
+            lazyStructDecoders.RemoveAll(static dec => dec.Curr < 0);
+            StableSort.Sort(lazyStructDecoders, static (dec1, dec2) =>
             {
-                var dec1 = input1.Reader;
-                var dec2 = input2.Reader;
                 if (dec1.Client == dec2.Client)
                 {
                     var clockCompare = dec1.Clock.CompareTo(dec2.Clock);
@@ -289,8 +276,7 @@ internal static class UpdateOperations
                 break;
             }
 
-            var currInput = lazyStructDecoders[0];
-            var currDecoder = currInput.Reader;
+            var currDecoder = lazyStructDecoders[0];
 
             // Write from currDecoder until the next operation is from another client or if
             // filler-struct, then we need to reorder the decoders and find the next operation to write.
@@ -306,7 +292,7 @@ internal static class UpdateOperations
                        currDecoder.Clock + currDecoder.Length <= currWrite.End &&
                        currDecoder.Client >= currWrite.Client)
                 {
-                    currInput.Next();
+                    currDecoder.Next(inputs[currDecoder.Source]);
                     iterated = true;
                 }
 
@@ -321,7 +307,7 @@ internal static class UpdateOperations
                 {
                     currWrite.Write();
                     currWrite.Set(currDecoder, 0);
-                    currInput.Next();
+                    currDecoder.Next(inputs[currDecoder.Source]);
                 }
                 else
                 {
@@ -371,7 +357,7 @@ internal static class UpdateOperations
                         {
                             currWrite.Write();
                             currWrite.Set(currDecoder, cut);
-                            currInput.Next();
+                            currDecoder.Next(inputs[currDecoder.Source]);
                         }
                     }
                 }
@@ -379,7 +365,7 @@ internal static class UpdateOperations
             else
             {
                 currWrite.Set(currDecoder, 0);
-                currInput.Next();
+                currDecoder.Next(inputs[currDecoder.Source]);
             }
 
             for (;
@@ -387,7 +373,7 @@ internal static class UpdateOperations
                  currDecoder.Client == firstClient &&
                  currDecoder.Clock == currWrite.End &&
                  currDecoder.Kind != StagedKind.Skip;
-                 currInput.Next())
+                 currDecoder.Next(inputs[currDecoder.Source]))
             {
                 currWrite.Write();
                 currWrite.Set(currDecoder, 0);
@@ -449,7 +435,9 @@ internal static class UpdateOperations
     /// </summary>
     internal static byte[] MergeWithPending(byte[] state, StructStore store, IDictionary<long, long> targetStateVector, bool v2)
     {
-        var updates = new List<ArraySegment<byte>>(3) { state };
+        var updates = new ArraySegment<byte>[3];
+        updates[0] = state;
+        var count = 1;
         if (store.PendingDsCount != 0)
         {
             var encoder = v2 ? (IUpdateEncoder)UpdateEncoderV2.Rent() : UpdateEncoderV1.Rent();
@@ -457,7 +445,7 @@ internal static class UpdateOperations
             {
                 encoder.RestWriter.WriteVarUint(0);
                 store.PendingDs.ToDeleteSet().Write(encoder);
-                updates.Add(encoder.ToArray());
+                updates[count++] = encoder.ToArray();
             }
             finally
             {
@@ -474,7 +462,7 @@ internal static class UpdateOperations
                 // Its values were read under the limits of the updates that brought them.
                 var decoder = new UpdateDecoderV2(new Lib0Reader(pending) { MaxDepth = int.MaxValue }, store.Pending.Structs);
                 DiffUpdateCore(decoder, pending, targetStateVector, encoder);
-                updates.Add(encoder.ToArray());
+                updates[count++] = encoder.ToArray();
             }
             finally
             {
@@ -482,7 +470,7 @@ internal static class UpdateOperations
             }
         }
 
-        return MergeUpdatesCore(updates, v2, maxStructs: long.MaxValue, maxDepth: int.MaxValue, out _);
+        return MergeUpdatesCore(updates.AsSpan(0, count), v2, maxStructs: long.MaxValue, maxDepth: int.MaxValue, out _);
     }
 
     private static void DiffUpdateCore<TDecoder>(TDecoder decoder, ReadOnlySpan<byte> update, IDictionary<long, long> state, IUpdateEncoder encoder)

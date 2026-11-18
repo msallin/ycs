@@ -39,6 +39,9 @@ internal sealed class LazyStructReader<TDecoder>
 
     public StagingTable Table { get; private set; }
 
+    /// <summary>Which input of its caller this reader reads (a merge's); the reader itself does not use it.</summary>
+    public int Source { get; init; }
+
     /// <summary>The index in <see cref="Table"/> of the struct last read by <see cref="Next"/>, or -1 once the update is exhausted.</summary>
     public int Curr { get; private set; }
 
