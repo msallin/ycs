@@ -451,18 +451,18 @@ public partial class YText
             return _string;
         }
 
-        // One walk over the items into a pooled buffer (Length is enough room), then one copy.
-        string result;
-        var buffer = ArrayPool<char>.Shared.Rent(Length);
-        try
+        // Length also counts the embeds, which write no character: one walk counts the characters, then they are written
+        // straight into the string.
+        var count = 0;
+        for (var n = _start; !n.IsNull; n = n.Right.AsItem)
         {
-            var written = CopyTo(buffer);
-            result = written == 0 ? string.Empty : new string(buffer, 0, written);
+            if (!n.Deleted && n.Countable && n.Kind == SlotKind.String)
+            {
+                count += n.Length;
+            }
         }
-        finally
-        {
-            ArrayPool<char>.Shared.Return(buffer);
-        }
+
+        var result = count == 0 ? string.Empty : string.Create(count, this, static (span, text) => text.CopyTo(span));
 
         if (store != null)
         {

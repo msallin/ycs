@@ -140,7 +140,7 @@ setting is Yjs' `set`), `TryGetValue(key, out value)` and `TryGetValue(key, snap
 
 `YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `Append(string, attributes?)`,
 `InsertEmbed(index, YValue, attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
-`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `ToRuns(snapshot?, previous?, computeYChange?)` (the delta's runs without their characters: a `TextRun(Length, Attributes, Embed)` each, `Length` in the index space of `Text.Length`, `Embed` null for text; no allocation by the text's size), `RemoveNonText()`, `ToString()`, `ToString(snapshot)`, `Substring(start, length)`
+`ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `ToRuns(snapshot?, previous?, computeYChange?)` (the delta's runs without their characters: a `TextRun(Length, Attributes, Embed)` each, `Length` in the index space of `YText.Length`, `Embed` null for text; no allocation by the text's size), `RemoveNonText()`, `ToString()`, `ToString(snapshot)`, `Substring(start, length)`
 (indexed as `Length` and `Insert` are: an embed in the range counts one and adds no character),
 `CopyTo(Span<char>)` (returns the characters written; an `ArgumentException` when the span is shorter than the text, and
 `Length` is always enough), `WriteTo(IBufferWriter<char>)`, the text's own attributes (`GetAttribute` is `YValue.Null` when
