@@ -18,13 +18,13 @@ Measured:
 
 * Held memory is 49-64% of the object layout's on the six workloads of the comparison, and on documents of fewer than
   about 20 structs as much as it or more (2.2); allocation is 38-87% lower on most editing workloads
-  ([Compare](../bench/Ycs.Compare/README.md), "Step 8 and 9 against the object layout"). A load allocates no struct
+  ([Compare](../bench/Ycs.Compare/README.md), "Where ycs is slower now"). A load allocates no struct
   object (`apply-updates` 11.9 MiB against 59.3).
 * The run-head index takes `array-delete-random` from 57 s to 0.9 s and `text-append-1txn-observed` (100,000
-  characters, one transaction) from 49 s to 0.8 s (Compare, "After layout steps 1 and 2").
+  characters, one transaction) from 49 s to 0.8 s (Compare, "Why").
 * The costs: typing and observed appends are slower than on objects (`trace-replay` +19%, `text-append` +26%; the
-  gaps and what was tried: Compare, "Step 8 and 9 against the object layout"); the leaf order costs 7-10% on
-  `apply-state` ("The leaf order").
+  gaps and what was tried: Compare, "Where ycs is slower now"); the leaf order costs 7-10% on
+  `apply-state` (Compare, "Why").
 
 ## 1. How the code is organised
 
@@ -88,7 +88,7 @@ are global ints.
   descent), bounded by the run's last leaf and, for a text, the next leaf with a live format. A lookup is O(128 + log
   leaves + leaves/64). The tree over the leaves' sums keeps typing into an observed text in one transaction
   logarithmic; the has-live-format bit stops the walk right of a text at a leaf with one.
-* **Why 128**: measured against 64 and 256 ([Compare](../bench/Ycs.Compare/README.md), "The leaf order"). The leaf order
+* **Why 128**: measured against 64 and 256 ([Compare](../bench/Ycs.Compare/README.md), "Tried and dropped"). The leaf order
   also spares the shift of thousands of later structs at every split and merge; a flat order would make a delete 2.2-2.9
   times slower ([Layout](../bench/Ycs.Layout/README.md), "Editing").
 * **Checks**: the recount covers the directory; `Ycs.Tests` runs also with leaves of 2 and 4, the corpus with leaves of
@@ -559,14 +559,14 @@ members that expose a struct are:
 * **The leaf order's cost where nothing splits**: `apply-state-v1` +7%, `apply-state-v2` +9%, `concurrent-20` +10% on
   the object layout; seven variants (the cursor not rewritten when unchanged, a plain binary search in the leaf, no
   pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined, a flat form
-  below one leaf) gave nothing beyond 2% ([Compare](../bench/Ycs.Compare/README.md), "The leaf order").
+  below one leaf) gave nothing beyond 2% ([Compare](../bench/Ycs.Compare/README.md), "Tried and dropped").
 * **The remaining gaps against the object layout**, from the clean round on a dedicated machine
-  ([Compare](../bench/Ycs.Compare/README.md), "Final round"): `trace-replay` +20%, `encode-v1` +12 to 19%,
-  `text-append-1txn-observed` +13%, `array-push-1txn` and `map-set-same` +10 to +11%, `text-append` +8%. The reads are
+  ([Compare](../bench/Ycs.Compare/README.md), "Where ycs is slower now"): `trace-replay` +25%, `encode-v1` +19%,
+  `text-append-1txn-observed` +15%, `array-push-1txn` and `map-set-same` +13 to +16%, `text-append` +10%. The reads are
   closed: `read-array` and `read-map` were slow in `YValue.FromStored` (a call whose result the caller reloaded
-  through a store-forwarding stall), not in the slab, and now take less than with objects ("Reading an array and a map"; on the dedicated runner `read-array` 0.53 and
-  `read-map` 0.91 of the object layout's time).
+  through a store-forwarding stall), not in the slab, and now take less than with objects (Compare, "Why"; on the dedicated runner `read-array` 0.53 and
+  `read-map` 0.96 of the object layout's time).
   The editing gaps are spread over the transaction with no phase above 10%; the encode gap is spread over the write of
-  the structs, with no single cost in it, and is left: about 0.06 ms per encode of a 289 KB state, invisible in a join
+  the structs, with no single cost in it, and is left: about 0.13 ms per encode of a 289 KB state, invisible in a join
   or a save. A v1 write path that bypasses `IUpdateEncoder` would close it at the cost of a second encoder; worth it
   only for a server that spends real time encoding.

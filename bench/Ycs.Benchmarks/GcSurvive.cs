@@ -9,7 +9,7 @@ namespace Ycs.Benchmarks;
 /// (11,000 by default, about the trace's state; much larger ones trigger collections while they load) into five
 /// documents, drops them, and counts those still alive after a gen0, a gen1 and a gen2 collection. From 10,625 structs
 /// the decoded list's array is on the large object heap, which only a gen2 collection frees; uncleared, it kept the
-/// five alive until then (bench/Ycs.Compare/README.md, "The leaf order").
+/// five alive until then (bench/Ycs.Compare/README.md, "Why").
 /// </summary>
 internal static class GcSurvive
 {

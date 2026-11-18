@@ -17,7 +17,7 @@ namespace Ycs;
 internal sealed partial class ClientStructs
 {
     /// <summary>
-    /// The capacity of a leaf: 128 positions (bench/Ycs.Compare/README.md, "The leaf order", measured 64, 128 and 256).
+    /// The capacity of a leaf: 128 positions (bench/Ycs.Compare/README.md, "Tried and dropped": measured 64, 128 and 256).
     /// </summary>
     internal const int LeafCapacity = 128;
 

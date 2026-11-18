@@ -209,8 +209,8 @@ the type table (the object layout names clients and parents by reference), and t
 page list and one 16-character page (the object layout keeps the string in the content object). The pooled transaction, 1.1 KB
 in either layout, is the largest single cost of a one-insert document; it is the transaction reuse that the hot paths rely on, so it stays.
 
-The subdocument case (`Ycs.Benchmarks limits`, 131,072 subdocuments in one update, `bench/Ycs.Compare/results/2026-11-17-8-14/limits-branch.txt`)
-is the same fixed cost multiplied: 284.4 MiB allocated and 240.8 kept (8.12) became 178.4 and 134.8 (the object layout: 180.8 and 156.3).
+The subdocument case (`Ycs.Benchmarks limits`, 131,072 subdocuments in one update, `bench/Ycs.Compare/results/2026-11-18-e794d65/benchmarks-limits.txt`)
+is the same fixed cost multiplied: 284.4 MiB allocated and 240.8 kept (before the fixed costs were cut) became 173.4 and 138.8 (the object layout: 180.8 and 156.3).
 
 ## Editing (2026-11-16)
 

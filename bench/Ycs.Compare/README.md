@@ -2,1096 +2,248 @@
 
 A benchmark of ycs (this repository, pure C#) against [YDotNet](https://github.com/y-crdt/ydotnet) 0.7.0, the
 .NET binding of yrs 0.26 (the Rust port of Yjs, called through P/Invoke). Same workloads, same inputs, same machine;
-every result is checked before it counts. First run on 2026-11-15; the latest on 2026-11-17 ("Final round" below).
+every result is checked before it counts. The current results are those of 2026-11-18 at e794d65, in
+[`results/2026-11-18-e794d65/`](results/2026-11-18-e794d65/). Older rounds are in git history.
 
 ```bash
-bench/Ycs.Compare/run.sh            # everything: about 40 minutes; results in results/<UTC date>/
+bench/Ycs.Compare/run.sh            # everything: about 90 minutes; results in results/<UTC date>/
 PASSES=1 RUNS=3 bench/Ycs.Compare/run.sh /tmp/quick   # a quicker look
 dotnet run -c Release --project bench/Ycs.Compare -- list   # the workloads and hostile cases
+bench/run-round.sh <out> [<baseline commit>]   # every bench of the repository, in sequence, as CI's bench.yml does
+BASE=<built base> python3 bench/Ycs.Compare/ab.py 4 6 <workloads>   # the ycs side of two builds, interleaved
 ```
 
 `run.sh` fetches the automerge-paper trace with `../Ycs.Benchmarks/get-trace.sh` (900 KB, not committed; CC BY 4.0,
 [josephg/editing-traces](https://github.com/josephg/editing-traces), pure ASCII) and checks its SHA-256, builds in
-Release, runs the suite, then `aot/measure.sh` and `wasm/probe.sh`. The raw results (`results.json`, every run of
-every process, with the load average) and the rendered tables are in [`results/2026-11-15/`](results/2026-11-15/).
+Release, runs the suite, then `aot/measure.sh` and `wasm/probe.sh`. `results.json` holds every run of every process
+with the load average; `tables.md` is the rendered form, with the hostile updates. `ab.py` compares the ycs side of
+workloads for two builds built from separate trees (how the changes below were measured);
+`COMPARE_ALLOC_TYPES=1` on a child prints its allocations by type to stderr. `run-round.sh` builds the baseline
+(default 044bb73, the last commit with items as objects) from `git archive` and writes `ab-<commit>.txt`.
 
-`ab.py` runs the ycs side of workloads for two builds interleaved (how the commits of `perf-r1` were measured);
-`COMPARE_ALLOC_TYPES=1` on a child prints its allocations by type (allocation ticks) to stderr.
-
-The project is in `Ycs.sln`, so CI builds it and it cannot stop compiling unnoticed; CI does not run it. It is the
-only place YDotNet (`YDotNet` and `YDotNet.Native`, exactly `[0.7.0]`) is referenced: neither `src`, the tests nor
-`bench/Ycs.Benchmarks` depends on a native library.
-
-The decoders as structs over the input span, `ApplyUpdate` reading in place (2026-11-18): allocation and time equal
-within the noise of a shared machine, [`results/2026-11-18-span/`](results/2026-11-18-span/).
-
-## Reading an array and a map (2026-11-18)
-
-`read-array` was 2.7 times and `read-map` 44 % slower than with items as objects, `encode-v1` 19 % (the final round above).
-The state of the three on the machine of this section (8 logical cores, shared with other work; load average 0.8 to
-1.3 at the start of each A/B), `ab.py 4 6`, [`results/2026-11-18-read-encode/ab.txt`](results/2026-11-18-read-encode/ab.txt):
-
-| workload | 044bb73 (objects) | 9219a1d (before) | after |
-| --- | ---: | ---: | ---: |
-| `read-array` | 5.0 ms | 14.7 ms | 2.8 ms |
-| `read-map` | 24.7 ms (min 19.9, noisy) | 27.1 ms | 14.9 ms |
-| `encode-v1` | 4.9 ms | 5.5 ms | 5.5 ms |
-| `trace-replay`, `apply-state-v1/ycs`, `text-append`, `array-push` | | | unchanged (within 2 %) |
-
-What was slow: not the slab. A scratch loop that only enumerated the array took 3.5 ns an element; reading the value
-cost 9 ns more. `YValue.FromStored` is a type switch (null, bool, string, int, double, ...) that the JIT did not inline;
-it returned its 24 bytes through memory in three stores and the caller read them back as one 16-byte load, which waits
-for the stores to retire. The same cast of an array of ready `YValue`s took 1.2 ns. Three changes, one commit: the
-int, string and double cases of `FromStored` come first and are inlined into the reader (the other kinds are a call);
-the step of `YArray`'s enumerator over a run of values is inlined; and `Current` no longer copies the whole walk state
-(`readonly` on a getter of a mutable struct field makes a defensive copy of the field). `YMap`'s enumerator got the
-first of them. The YValue enumerator also skips the copy of a stored byte array, which `YValue` makes on every read.
-
-`encode-v1` is unchanged. Its 10 encodes spend about 3.5 ms in the structs' write (a header of three interface calls,
-13 ns a struct; the string content, 14 ns on average), 0.9 ms in the delete set, 0.3 ms in the result's array (a large
-object allocation) and the rest in garbage collections the large array triggers. Tried and not kept, each measured on
-the write alone in a scratch loop (3.5 ms; noise 0.1): both ids of a header written with one check of the buffer, a
-string up to 42 characters encoded in one pass instead of count-then-encode, `in` parameters for the header's ids, a
-delete-set walk that reads `Clock` and does not build an id (0.88 to 0.83 ms). The remaining gap to the object layout
-(0.6 ms in 10 encodes, 12 %) is not in one place.
-
-On the dedicated runner (the round of the next section, rerun at 2f523a6 with the change; load average 0.2 at its start
-and 1.0 to 1.2 while it measured; everything in [`results/2026-11-18-runner/`](results/2026-11-18-runner/)), `ab.py 4 6`
-against 044bb73:
-
-| workload | 044bb73 (objects) | 7d994f4 (2026-11-17) | 2f523a6 | 2f523a6 / objects |
-| --- | ---: | ---: | ---: | ---: |
-| `read-array` | 7.6 ms | 20.7 ms | 4.0 ms | 0.53 |
-| `read-map` | 28.5 ms | 40.0 ms | 26.0 ms | 0.91 |
-| `encode-v1` | 7.2 ms | 8.2 ms | 8.6 ms | 1.19 |
-
-Against YDotNet in the same round, `read-array` is 25.3 times faster (was 4.8) and `read-map` 15.6 times (was 9.8). The
-other workloads of the round are within 5 % of the round of 2026-11-17 (`encode-v1` +5 % with its code unchanged: the noise
-between two rounds).
-
-## Final round (2026-11-17, a dedicated runner)
-
-The whole of `bench/run-round.sh` at 7d994f4 on a machine that ran nothing else (a self-hosted GitHub Actions runner,
-workflow `bench.yml`): AMD EPYC-Genoa, 4 logical cores, 16 GiB, Ubuntu 24.04, kernel 6.8, .NET SDK 11.0.100, Node
-v24.22.3. The load average was 1.0 to 1.8 while the benchmarks ran (one benchmark process busy on a core, nothing
-else) and 2.8 at the start of the comparison (the build that precedes it). Everything is in
-[`results/2026-11-17-final/`](results/2026-11-17-final/): `tables.md` (the full tables, the hostile updates included),
-`results.json`, the A/B lines (`ab-044bb73.txt`), the `Ycs.Benchmarks` outputs (`benchmarks-*.txt`), `machine.txt`
-and `round.log` (the load at the start and end of each step). Every result passed its checks; the hostile cases are as
-before (ycs rejects all 16 malformed ones with the document unchanged; YDotNet applies 5 of them and aborts on one). Native
-AOT: the sample publishes with no warning, 2.8 MB (YDotNet 4.3 MB, its native library 2.3 MB of it, 3 trim warnings); YDotNet does not run
-on browser-wasm (`wasm.txt`).
-
-The machine is slower per core than the one of the earlier sections, so its milliseconds are not comparable with
-theirs; the ratios are.
-
-### ycs against YDotNet
-
-Median ms per run (min–max; ± the spread of the per-pass medians), 3 passes of 5 timed runs, each in its own process.
-
-| workload | ycs | YDotNet | faster | first run ycs / YDotNet | checks |
-| --- | ---: | ---: | --- | ---: | --- |
-| `text-append` | 27.6 (27.1–28.6, ±2%) | 3582 (3546–3713, ±2%) | ycs 129.9× | 316 / 3634 | equal, v1 bytes identical |
-| `text-append-utf8` | 27.6 (27.1–28.1, ±1%) | 1851 (1818–1899, ±2%) | ycs 67.1× | 320 / 1927 | equal, v1 bytes identical |
-| `text-append-1txn` | 15.3 (15.1–15.7, ±2%) | 26459 (25801–27026, ±2%) | ycs 1729.5× | 171 / 26459 | equal, v1 bytes identical |
-| `text-append-1txn-25k` | 3.9 (3.8–5.0, ±1%) | 1414 (1394–1471, ±2%) | ycs 367.1× | 72.0 / 1458 | equal, v1 bytes identical |
-| `text-append-1txn-observed` | 227 (220–253, ±1%) | 26474 (26112–27579, ±4%) | ycs 116.5× | 800 / 26474 | equal, v1 bytes identical |
-| `text-append-1txn-observed-200k` | 451 (445–459, ±1%) | 124528 (124333–133461, ±7%) | ycs 276.1× | 1036 / 124528 | equal, v1 bytes identical |
-| `text-append-1txn-observed-400k` | 952 (941–979, ±1%) | 520778 (520751–552002, ±6%) | ycs 546.8× | 1569 / 520778 | equal, v1 bytes identical |
-| `text-append-1txn-observed-25k` | 54.1 (53.7–56.1, ±2%) | 1441 (1417–1487, ±2%) | ycs 26.7× | 474 / 1453 | equal, v1 bytes identical |
-| `txn-empty` | 7.6 (7.5–8.0, ±1%) | 13.0 (12.2–14.6, ±10%) | ycs 1.7× | 56.2 / 18.8 | equal, v1 bytes identical |
-| `text-random` | 37.2 (36.3–38.9, ±3%) | 1778 (1759–1819, ±1%) | ycs 47.8× | 438 / 1808 | equal, v1 bytes identical |
-| `text-random-100k` | 1324 (1256–1358, ±5%) | 168610 (163551–183516, ±9%) | ycs 127.4× | 1324 / 168610 | equal, v1 bytes identical |
-| `trace-replay` | 350 (341–374, ±3%) | 12139 (11885–12530, ±2%) | ycs 34.7× | 1255 / 11830 | equal, v1 bytes identical |
-| `concurrent-20` | 91.3 (89.4–95.0, ±1%) | 79.4 (78.5–81.4, ±1%) | YDotNet 1.2× | 582 / 100 | equal, v1 bytes differ |
-| `many-clients-200` | 1.9 (1.9–2.1, ±4%) | 2.3 (2.2–2.6, ±2%) | ycs 1.2× | 18.4 / 3.1 | equal, v1 bytes differ |
-| `many-clients-1000` | 7.5 (7.3–10.2, ±2%) | 24.5 (24.0–37.6, ±2%) | ycs 3.3× | 52.1 / 26.1 | equal, v1 bytes differ |
-| `apply-state-v1/ycs` | 75.6 (72.4–78.3, ±3%) | 48.8 (47.9–54.9, ±3%) | YDotNet 1.6× | 471 / 58.4 | equal, v1 bytes identical |
-| `apply-state-v1/yrs` | 76.3 (73.4–78.1, ±2%) | 49.0 (48.4–53.0, ±1%) | YDotNet 1.6× | 445 / 58.0 | equal, v1 bytes identical |
-| `apply-state-v2/ycs` | 77.1 (75.1–82.4, ±1%) | 51.2 (49.6–52.9, ±3%) | YDotNet 1.5× | 530 / 64.4 | equal, v1 bytes identical |
-| `apply-state-v2/yrs` | 76.4 (75.1–79.0, ±2%) | 50.5 (49.5–52.4, ±1%) | YDotNet 1.5× | 442 / 61.2 | equal, v1 bytes identical |
-| `apply-state-x100/ycs` | 839 (781–977, ±0%) | 752 (724–833, ±2%) | YDotNet 1.1× | 2014 / 946 | equal, v1 bytes identical |
-| `apply-updates/ycs` | 270 (267–290, ±1%) | 370 (362–382, ±1%) | ycs 1.4× | 996 / 387 | equal, v1 bytes identical |
-| `apply-updates/yrs` | 279 (271–295, ±5%) | 369 (363–424, ±2%) | ycs 1.3× | 1011 / 383 | equal, v1 bytes identical |
-| `apply-updates-1txn/yrs` | 172 (164–189, ±2%) | 1770 (1756–1810, ±2%) | ycs 10.3× | 789 / 1826 | equal, v1 bytes identical |
-| `encode-v1` | 8.2 (8.0–8.8, ±1%) | 8.9 (8.7–9.0, ±1%) | ycs 1.1× | 74.3 / 10.4 | equal, v1 bytes identical |
-| `encode-v2` | 9.9 (9.7–10.4, ±3%) | 10.0 (9.7–10.3, ±1%) | ycs 1.0× | 76.7 / 11.3 | equal, v1 bytes identical |
-| `encode-sv` | 0.1 (0.1–0.1, ±4%) | 0.3 (0.2–0.3, ±3%) | ycs 3.0× | 3.6 / 1.1 | equal, v1 bytes identical |
-| `encode-diff` | 4.9 (4.7–5.0, ±3%) | 4.6 (4.5–5.0, ±5%) | YDotNet 1.0× | 52.0 / 5.8 | equal, v1 bytes identical |
-| `map-set-distinct` | 40.1 (36.0–50.4, ±4%) | 144 (136–149, ±7%) | ycs 3.6× | 420 / 215 | equal, v1 bytes identical |
-| `map-set-distinct-1txn` | 29.2 (26.7–44.8, ±8%) | 115 (109–131, ±2%) | ycs 3.9× | 273 / 202 | equal, v1 bytes identical |
-| `map-set-same` | 65.1 (63.9–68.2, ±1%) | 132 (131–151, ±8%) | ycs 2.0× | 626 / 187 | equal, v1 bytes identical |
-| `array-push` | 25.4 (24.4–26.9, ±1%) | 115 (112–121, ±4%) | ycs 4.5× | 326 / 196 | equal, v1 bytes identical |
-| `array-push-1txn` | 12.6 (11.6–14.3, ±6%) | 70664 (70144–71260, ±1%) | ycs 5605.3× | 121 / 70664 | equal, v1 bytes identical |
-| `array-push-1txn-20k` | 2.5 (2.4–2.6, ±2%) | 2203 (2138–2409, ±2%) | ycs 866.1× | 48.6 / 2238 | equal, v1 bytes identical |
-| `array-insert-random` | 191 (175–215, ±12%) | 21050 (19266–29483, ±5%) | ycs 110.1× | 762 / 20554 | equal, v1 bytes identical |
-| `array-delete-random` | 180 (167–211, ±6%) | 25925 (24798–28681, ±11%) | ycs 144.0× | 699 / 25925 | equal, v1 bytes identical |
-| `read-text` | 0.2 (0.2–0.3, ±6%) | 46.3 (45.3–47.9, ±2%) | ycs 194.0× | 5.8 / 52.8 | equal, v1 bytes identical |
-| `read-array` | 20.7 (20.4–22.1, ±2%) | 98.2 (97.0–103, ±1%) | ycs 4.8× | 40.2 / 182 | equal, v1 bytes identical |
-| `read-map` | 40.1 (39.5–40.8, ±1%) | 395 (382–405, ±2%) | ycs 9.8× | 212 / 777 | equal, v1 bytes identical |
-| `undo-type` | 30.3 (29.1–34.3, ±6%) | 161 (160–206, ±1%) | ycs 5.3× | 181 / 182 | equal, v1 bytes identical |
-| `undo-all` | 43.5 (41.6–45.0, ±2%) | 344 (318–377, ±4%) | ycs 7.9× | 191 / 338 | equal, v1 bytes identical |
-| `redo-all` | 47.6 (46.4–49.0, ±0%) | 80.1 (77.8–85.0, ±2%) | ycs 1.7× | 194 / 85.6 | equal, v1 bytes identical |
-| `observe-count` | 54.9 (54.0–60.1, ±4%) | 3607 (3558–3752, ±2%) | ycs 65.8× | 583 / 3660 | equal, v1 bytes identical |
-| `observe-delta` | 92.3 (90.8–101, ±8%) | 5417 (5376–5619, ±1%) | ycs 58.7× | 765 / 5527 | equal, v1 bytes identical |
-
-### Against the object layout
-
-044bb73 (the last commit with items as objects) against 7d994f4, built from separate trees, `ab.py 4 6` (4 passes of 6
-runs, interleaved). On this machine a difference under about 3 % is noise (the passes' medians agree within that on
-most lines). Allocation and held memory are deterministic.
-
-| workload | 044bb73 ms | 7d994f4 ms | change | alloc MiB 044bb73 / 7d994f4 | held MiB 044bb73 / 7d994f4 |
-| --- | ---: | ---: | ---: | --- | --- |
-| `trace-replay` | 291.2 | 348.6 | +20 % | 43.04 / 24.86 | 3.0 / 1.9 |
-| `text-random` | 38.3 | 36.8 | -4 % | 3.74 / 1.68 | 5.3 / 3.2 |
-| `text-random-100k` | 1756.9 | 1348.2 | -23 % | 18.59 / 7.87 | 27.1 / 16.3 |
-| `text-append` | 25.5 | 27.6 | +8 % | 0.20 / 0.57 | 1.3 / 1.5 |
-| `array-insert-random` | 261.3 | 180.3 | -31 % | 16.93 / 5.41 | 18.9 / 10.4 |
-| `array-delete-random` | 284.2 | 181.0 | -36 % | 32.78 / 4.20 | 20.1 / 11.6 |
-| `array-push-1txn` | 11.3 | 12.5 | +11 % | 10.39 / 4.28 | 9.4 / 10.4 |
-| `concurrent-20` | 89.7 | 92.0 | +3 % | 28.55 / 14.24 | 29.1 / 14.2 |
-| `apply-state-v1/ycs` | 72.5 | 75.0 | +3 % | 33.14 / 38.08 | 4.5 / 2.7 |
-| `apply-state-v2/ycs` | 74.2 | 76.3 | +3 % | 35.14 / 40.08 | 4.4 / 2.8 |
-| `apply-updates/ycs` | 270.4 | 275.0 | +2 % | 59.31 / 11.95 | 18.6 / 17.4 |
-| `encode-v1` | 6.9 | 8.2 | +19 % | 2.76 / 2.76 | 3.2 / 1.9 |
-| `text-append-1txn-observed-25k` | 49.6 | 54.0 | +9 % | 4.71 / 2.11 | 0.6 / 0.7 |
-| `text-append-1txn-observed` | 195.6 | 220.5 | +13 % | 18.77 / 8.30 | 2.3 / 2.4 |
-| `map-set-distinct` | 58.7 | 39.8 | -32 % | 36.55 / 22.57 | 38.9 / 24.9 |
-| `map-set-distinct-1txn` | 45.2 | 32.4 | -28 % | 39.25 / 25.28 | 38.9 / 24.9 |
-| `map-set-same` | 59.6 | 65.5 | +10 % | 28.99 / 6.85 | 0.0 / 0.0 |
-| `array-push` | 27.2 | 25.2 | -7 % | 10.39 / 4.34 | 9.4 / 10.9 |
-| `read-array` | 7.6 | 20.7 | +172 % | 0.00 / 0.00 | 4.3 / 4.8 |
-| `read-map` | 27.7 | 40.0 | +44 % | 0.00 / 0.00 | 34.1 / 20.1 |
-
-What remains slower than the object layout, now measured cleanly: `read-array` (2.7×; an element read goes through the
-slab and the value arena instead of one array index), `read-map` (+44 %, more than the +0 to +6 % the development
-machine showed in 8.13), `trace-replay` (+20 %), `encode-v1` (+19 %), `text-append-1txn-observed` (+9 to +13 %),
-`array-push-1txn`, `map-set-same` (+10 to +11 %) and `text-append` (+8 %). Everything that splits or searches is faster
-(random edits -23 to -36 %, map inserts -28 to -32 %), and every workload allocates less or the same except the state
-loads (+5 MiB, the arenas' growth) and `text-append` (+0.4 MiB). The open items are in the design document,
-[section 5](../../docs/design-item-layout.md#5-open-items).
+CI builds the project (it is in `Ycs.sln`) and does not run it. It is the only place YDotNet is referenced: neither
+`src`, the tests nor `bench/Ycs.Benchmarks` depends on a native library.
 
 ## Method
 
-* **One process per workload, library and pass.** The driver (`suite`) runs each workload as a child process for
-  ycs and then for YDotNet, three passes, alternating which library goes first. A child does 3 warm-up runs (the
-  first is reported as "first run", i.e. cold JIT) and 5 timed runs, each on a fresh document built by an untimed
-  setup, after a forced, compacting full GC. A workload marked heavy (a minute or more on one side) has one timed
-  run and no warm-up. Release build, workstation non-concurrent GC, TieredPGO on, same thread.
-* **Three warm-ups, not one.** With one warm-up ycs was still reaching tier-1 code in the timed runs
-  (text-append: 160, 149, 44, 22, 24 ms; [`results/2026-11-15-one-warmup/`](results/2026-11-15-one-warmup/) keeps
-  that first suite run). YDotNet's work is native and barely changes. Three still left workloads that call their hot
-  methods a few times per run (the encodes) before tier-1 code: from the run "After perf-r1" on, a child warms up
-  until its last 3 runs are within 10% of each other (at least 3 runs and 2 s, at most 200 runs or 30 s).
-* **Same inputs.** Every input comes from SplitMix64 with a fixed seed (`Inputs.cs`), generated by the same code in
-  every process; the fingerprint `inputs` in each result proves they were the same. The apply workloads read updates
-  the driver wrote once (the trace replayed on each library); both libraries apply both libraries' bytes.
-* **Checks (results that fail them are "not counted").** After the last run, each child writes its content and
-  its v1 state. The driver requires: both libraries' content equal; equal to a plain model (a string, list or
-  dictionary replay) where one exists; and each library's state decoded by *both* libraries to the same content
-  (four decodes). It also records whether the two v1 encodings are byte-identical (they are everywhere except after
-  the concurrent merge, where the content still agrees). Every workload passed all checks in all three passes,
-  except `array-push-1txn` on ycs, which was killed (below).
-* **Wall time:** `Stopwatch` around the body only. Tables: median of the 15 timed runs, min–max, and ± the largest
-  deviation of a pass median from the median of the pass medians (the spread between suite runs).
-* **Allocations:** `GC.GetTotalAllocatedBytes(precise: true)` across the body (all threads). Managed only: yrs
-  allocates through `malloc`, which is not counted here.
+* **One process per workload, library and pass.** The driver runs each workload as a child process for ycs and then for
+  YDotNet, three passes, alternating which library goes first. A child warms up until its last 3 runs are within 10 %
+  of each other (at least 3 runs and 2 s, at most 200 runs or 30 s; the first run is reported as "first run", the cold
+  JIT), then makes 5 timed runs, each on a fresh document built by an untimed setup, after a forced compacting full
+  GC. A heavy workload (a minute or more on one side) has one timed run and no warm-up. Release build, workstation
+  non-concurrent GC, TieredPGO on, same thread.
+* **Same inputs.** Every input comes from SplitMix64 with a fixed seed (`Inputs.cs`); the fingerprint `inputs` in each
+  result proves they were the same. The apply workloads read updates the driver wrote once; both libraries apply both
+  libraries' bytes.
+* **Checks (a result that fails them is "not counted").** Both libraries' content is equal; equal to a plain model
+  (a string, list or dictionary replay) where one exists; and each library's state decoded by both libraries gives the
+  same content. The driver records whether the two v1 encodings are byte-identical (they are everywhere except after
+  the concurrent merge, where the content still agrees).
+* **Wall time:** `Stopwatch` around the body only; the median of the 15 timed runs.
+* **Allocations:** `GC.GetTotalAllocatedBytes(precise: true)` across the body. Managed only: yrs allocates through
+  `malloc`, so the allocation columns of the two libraries are not comparable.
 * **Memory held by the finished document:** managed `GC.GetTotalMemory(true)` plus the C heap in use (glibc
-  `mallinfo2`: `uordblks + hblkhd`), each as the difference between before the last run's setup and after its body,
-  with the document still alive. yrs uses the system allocator, so `mallinfo2` counts its live bytes exactly; the
-  resident set would not (freed pages stay mapped after the earlier runs). The error is about ±1 MiB (allocator
-  bookkeeping, runtime allocations, a median can even come out negative); the figure includes what the workload's
-  setup keeps alive (e.g. the updates to apply), which is the same for both libraries.
-* **Idiomatic use.** ycs: implicit transactions per call, `Transact` to group, `UpdateLimits.Unlimited` for a
-  stored (trusted) state, default limits for peers' updates. YDotNet, as its README and tests use it: a
-  `WriteTransaction` per change, disposed (which commits); a `ReadTransaction` per read; root types fetched before
-  any transaction; `Input`s disposed. Where batching is the idiomatic fast path it is measured too, labelled
-  `-1txn`. Integers are written with `Input.Double` on YDotNet: that is what yrs encodes as a Yjs number, as ycs
-  does a `long` (`Input.Long` writes a JavaScript bigint, see below); with it both libraries write the same bytes.
-* **Machine:** AMD EPYC-Genoa, 8 logical cores, 32 GB, Ubuntu 26.04 (kernel 7.0), .NET 11.0.0, a shared sandbox:
-  other agents built and tested on it at the same time (load average 1.6 to 4.7 during the run, recorded per
-  process in `results.json`). Ratios below 1.5× are within what that noise can move; the ycs spreads above 50% are
-  passes that ran under load.
-
-## Results (2026-11-15, three passes)
-
-Machine: AMD EPYC-Genoa Processor, 8 logical cores, 32859788 kB RAM, Ubuntu 26.04 LTS, kernel 7.0.0.43, .NET 11.0.0, YDotNet 0.7.0+c14ed5174ba69959ff7ba22a256bec3e455be8c7. Load average at start: 1.89 2.09 2.19 3/715 2991688.
-
-Time: median of all timed runs in ms (min–max of the runs; ± the spread of the per-pass medians around their median); which is faster, by the ratio of the medians; the median over the passes of the first (cold, not yet JIT-optimized) run in each process.
-
-| workload | ycs | YDotNet | faster | first run ycs / YDotNet | checks |
-| --- | ---: | ---: | --- | ---: | --- |
-| `text-append` | 25.0 (22.3–67.4, ±164%) | 3081 (2967–3197, ±1%) | ycs 123.2× | 252 / 3046 | equal, v1 bytes identical |
-| `text-append-utf8` | 22.2 (21.3–52.1, ±72%) | 1563 (1482–1767, ±5%) | ycs 70.3× | 236 / 1585 | equal, v1 bytes identical |
-| `text-append-1txn` | 58053 (53458–60796, ±8%) | 18154 (17775–18471, ±2%) | YDotNet 3.2× | 58053 / 18154 | equal, v1 bytes identical |
-| `text-append-1txn-25k` | 3319 (3084–3470, ±5%) | 1084 (1029–1112, ±4%) | YDotNet 3.1× | 3716 / 1070 | equal, v1 bytes identical |
-| `txn-empty` | 30.2 (29.7–33.7, ±7%) | 13.8 (13.3–14.2, ±4%) | YDotNet 2.2× | 43.3 / 18.0 | equal, v1 bytes identical |
-| `text-random` | 25.9 (22.9–80.4, ±196%) | 1512 (1417–1626, ±2%) | ycs 58.4× | 225 / 1514 | equal, v1 bytes identical |
-| `text-random-100k` | 1892 (1517–2276, ±20%) | 175337 (146416–202685, ±16%) | ycs 92.7× | 1892 / 175337 | equal, v1 bytes identical |
-| `trace-replay` | 260 (249–284, ±6%) | 8053 (7293–8783, ±7%) | ycs 31.0× | 731 / 7832 | equal, v1 bytes identical |
-| `concurrent-20` | 68.5 (61.3–94.8, ±2%) | 65.8 (60.5–68.5, ±6%) | YDotNet 1.0× | 430 / 81.0 | equal, v1 bytes differ |
-| `apply-state-v1/ycs` | 70.4 (62.3–143, ±17%) | 38.8 (38.2–42.0, ±7%) | YDotNet 1.8× | 415 / 46.3 | equal, v1 bytes identical |
-| `apply-state-v1/yrs` | 70.2 (63.7–146, ±7%) | 39.9 (37.3–57.0, ±13%) | YDotNet 1.8× | 401 / 50.3 | equal, v1 bytes identical |
-| `apply-state-v2/ycs` | 72.9 (67.1–107, ±6%) | 40.3 (38.9–43.1, ±6%) | YDotNet 1.8× | 380 / 49.7 | equal, v1 bytes identical |
-| `apply-state-v2/yrs` | 71.0 (68.2–110, ±3%) | 40.6 (39.7–43.3, ±5%) | YDotNet 1.7× | 388 / 50.7 | equal, v1 bytes identical |
-| `apply-updates/ycs` | 237 (228–265, ±4%) | 261 (244–305, ±6%) | ycs 1.1× | 1038 / 265 | equal, v1 bytes identical |
-| `apply-updates/yrs` | 234 (225–319, ±9%) | 256 (242–262, ±0%) | ycs 1.1× | 1057 / 258 | equal, v1 bytes identical |
-| `apply-updates-1txn/yrs` | 136 (126–148, ±5%) | 1164 (1121–1245, ±8%) | ycs 8.6× | 844 / 1200 | equal, v1 bytes identical |
-| `encode-v1` | 45.6 (12.4–57.5, ±8%) | 6.3 (6.1–6.9, ±5%) | YDotNet 7.2× | 44.2 / 7.5 | equal, v1 bytes identical |
-| `encode-v2` | 23.4 (13.6–56.6, ±48%) | 7.7 (7.1–10.4, ±7%) | YDotNet 3.1× | 44.9 / 9.0 | equal, v1 bytes identical |
-| `encode-sv` | 0.3 (0.2–0.3, ±9%) | 0.2 (0.2–0.3, ±7%) | YDotNet 1.1× | 4.0 / 1.2 | equal, v1 bytes identical |
-| `encode-diff` | 16.8 (15.1–29.0, ±17%) | 3.3 (3.2–3.6, ±5%) | YDotNet 5.1× | 32.5 / 4.4 | equal, v1 bytes identical |
-| `map-set-distinct` | 48.7 (41.0–58.0, ±7%) | 125 (107–187, ±10%) | ycs 2.6× | 283 / 185 | equal, v1 bytes identical |
-| `map-set-distinct-1txn` | 36.5 (27.5–123, ±13%) | 106 (90.8–141, ±11%) | ycs 2.9× | 157 / 187 | equal, v1 bytes identical |
-| `map-set-same` | 50.3 (39.9–67.1, ±17%) | 103 (95.5–109, ±7%) | ycs 2.1× | 293 / 128 | equal, v1 bytes identical |
-| `array-push` | 40.7 (35.9–47.0, ±11%) | 92.5 (80.8–106, ±12%) | ycs 2.3× | 299 / 136 | equal, v1 bytes identical |
-| `array-push-1txn` | **killed at 8229 MiB resident (limit 8192 MiB) after 36.1 s** | 50769 (47708–57764, ±14%) | not counted | - / 50769 | a run produced no content |
-| `array-push-1txn-20k` | 1164 (967–1437, ±5%) | 1641 (1561–1736, ±4%) | ycs 1.4× | 2114 / 1619 | equal, v1 bytes identical |
-| `array-insert-random` | 198 (178–410, ±81%) | 18023 (13758–33397, ±27%) | ycs 91.2× | 552 / 20544 | equal, v1 bytes identical |
-| `array-delete-random` | 62220 (60720–66908, ±8%) | 25511 (24529–31255, ±23%) | YDotNet 2.4× | 62220 / 25511 | equal, v1 bytes identical |
-| `read-text` | 0.3 (0.2–0.5, ±32%) | 41.9 (38.6–55.1, ±8%) | ycs 136.7× | 4.0 / 47.1 | equal, v1 bytes identical |
-| `read-array` | 32.2 (4.5–41.5, ±86%) | 65.3 (62.6–74.9, ±6%) | ycs 2.0× | 36.4 / 116 | equal, v1 bytes identical |
-| `read-map` | 16.5 (16.0–22.5, ±2%) | 341 (334–359, ±5%) | ycs 20.6× | 112 / 666 | equal, v1 bytes identical |
-| `undo-type` | 51.7 (46.9–97.1, ±25%) | 134 (132–166, ±2%) | ycs 2.6× | 104 / 144 | equal, v1 bytes identical |
-| `undo-all` | 30.5 (26.9–39.6, ±22%) | 206 (196–242, ±3%) | ycs 6.7× | 109 / 202 | equal, v1 bytes identical |
-| `redo-all` | 75.7 (69.6–92.2, ±7%) | 52.1 (50.1–55.1, ±3%) | YDotNet 1.5× | 168 / 55.4 | equal, v1 bytes identical |
-| `observe-count` | 28.1 (27.1–129, ±114%) | 3069 (2954–3371, ±4%) | ycs 109.0× | 279 / 3123 | equal, v1 bytes identical |
-| `observe-delta` | 48.9 (45.4–57.2, ±12%) | 4619 (4502–4813, ±3%) | ycs 94.4× | 337 / 4556 | equal, v1 bytes identical |
-
-Memory: MiB allocated on the managed heap per timed run (median; YDotNet's native allocations are not in it), MiB held by the finished document after a full GC (managed + native C heap; ±1 MiB is noise), and the bytes of the final state as each library encodes it.
-
-| workload | alloc ycs | alloc YDotNet | held ycs (managed + native) | held YDotNet (managed + native) | state v1 ycs / yrs | state v2 ycs / yrs |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `text-append` | 19.3 | 11.4 | 1.3 + 0.0 = 1.3 | 0.2 + 0.4 = 0.6 | 100,018 / 100,018 | 100,033 / 100,033 |
-| `text-append-utf8` | 19.3 | 11.4 | 1.3 + 0.0 = 1.3 | 0.2 + 0.3 = 0.5 | 100,018 / 100,018 | 100,033 / 100,033 |
-| `text-append-1txn` | 21.7 | 8.2 | 4.3 + 1.5 = 5.7 | 1.8 + 2.6 = 4.3 | 100,018 / 100,018 | 100,033 / 100,033 |
-| `text-append-1txn-25k` | 5.4 | 1.9 | 0.9 + 1.1 = 2.0 | 0.3 + 0.7 = 0.9 | 25,018 / 25,018 | 25,033 / 25,033 |
-| `txn-empty` | 0.0 | 3.8 | 0.0 + 0.0 = 0.0 | 0.0 + 0.0 = 0.0 | 2 / 2 | 13 / 13 |
-| `text-random` | 4.3 | 2.2 | 5.6 + 0.0 = 5.7 | 0.4 + 4.0 = 4.4 | 298,994 / 298,994 | 111,571 / 111,571 |
-| `text-random-100k` | 21.1 | 12.0 | 28.6 + 1.6 = 30.2 | 3.3 + 19.2 = 22.5 | 1,605,864 / 1,605,864 | 646,240 / 646,240 |
-| `trace-replay` | 84.8 | 28.5 | 3.0 + 0.0 = 3.0 | -15.8 + 2.3 = -13.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `concurrent-20` | 31.5 | 0.1 | 30.5 + 0.0 = 30.5 | 0.1 + 25.3 = 25.4 | 69,168 / 69,168 | 58,101 / 58,101 |
-| `apply-state-v1/ycs` | 39.5 | 0.0 | 4.6 + 0.0 = 4.7 | 0.5 + 2.2 = 2.7 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-state-v1/yrs` | 39.5 | 0.0 | 4.6 + 0.0 = 4.7 | 0.5 + 2.2 = 2.7 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-state-v2/ycs` | 41.5 | 0.0 | 4.5 + 0.0 = 4.5 | 0.4 + 2.2 = 2.6 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-state-v2/yrs` | 41.5 | 0.0 | 4.5 + 0.0 = 4.5 | 0.4 + 2.2 = 2.6 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-updates/ycs` | 67.2 | 9.9 | 18.6 + 0.0 = 18.6 | 14.8 + 2.2 = 17.0 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-updates/yrs` | 67.2 | 9.9 | 18.6 + 0.0 = 18.6 | 14.8 + 2.2 = 17.0 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-updates-1txn/yrs` | 52.0 | 0.0 | 20.8 + 0.0 = 20.8 | 14.8 + 6.2 = 21.0 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `encode-v1` | 2.8 | 2.8 | 3.4 + 0.0 = 3.4 | 0.2 + 2.2 = 2.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `encode-v2` | 1.5 | 1.5 | 4.0 + -0.0 = 4.0 | 0.2 + 2.2 = 2.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `encode-sv` | 0.0 | 0.1 | 4.4 + 0.0 = 4.4 | 0.2 + 2.2 = 2.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `encode-diff` | 1.4 | 1.4 | 3.9 + 0.0 = 3.9 | 0.2 + 2.2 = 2.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `map-set-distinct` | 52.8 | 21.4 | 40.5 + 0.0 = 40.5 | 2.9 + 28.0 = 30.9 | 1,980,644 / 1,980,644 | 1,680,665 / 1,680,665 |
-| `map-set-distinct-1txn` | 41.8 | 17.6 | 40.5 + 0.0 = 40.5 | 2.9 + 28.0 = 30.9 | 1,980,644 / 1,980,644 | 1,680,665 / 1,680,665 |
-| `map-set-same` | 53.4 | 21.4 | 0.0 + 0.0 = 0.0 | 0.0 + 0.0 = 0.0 | 43 / 43 | 52 / 52 |
-| `array-push` | 47.0 | 35.9 | 9.4 + 0.0 = 9.5 | 5.2 + 3.0 = 8.2 | 391,763 / 391,763 | 391,774 / 391,774 |
-| `array-push-1txn` | | | | | | |
-| `array-push-1txn-20k` | 1535.9 | 6.4 | 1.8 + 1.2 = 3.0 | 0.7 + 0.1 = 0.9 | 71,763 / 71,763 | 71,774 / 71,774 |
-| `array-insert-random` | 23.5 | 17.9 | 19.7 + 0.0 = 19.7 | 2.6 + 15.5 = 18.1 | 920,413 / 920,413 | 449,411 / 449,411 |
-| `array-delete-random` | 38.3 | 5.5 | 20.6 + 3.2 = 23.8 | 2.8 + 12.1 = 14.9 | 734,672 / 734,672 | 432,303 / 432,303 |
-| `read-text` | 0.2 | 20.0 | 4.3 + 0.0 = 4.3 | 0.5 + 2.2 = 2.7 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `read-array` | 0.0 | 106.8 | 4.3 + 0.0 = 4.3 | 0.0 + 3.0 = 3.0 | 391,763 / 391,763 | 391,774 / 391,774 |
-| `read-map` | 0.0 | 175.5 | 35.7 + 0.0 = 35.7 | 0.0 + 28.0 = 28.0 | 1,980,644 / 1,980,644 | 1,680,665 / 1,680,665 |
-| `undo-type` | 21.5 | 2.3 | 11.7 + 0.0 = 11.7 | 0.3 + 5.3 = 5.6 | 20,018 / 20,018 | 20,033 / 20,033 |
-| `undo-all` | 30.3 | 0.0 | 11.8 + 0.0 = 11.8 | 0.2 + 7.6 = 7.7 | 20,027 / 20,027 | 20,042 / 20,042 |
-| `redo-all` | 36.1 | 0.0 | 21.4 + 0.0 = 21.4 | 0.3 + 15.3 = 15.6 | 490,475 / 490,475 | 40,073 / 40,073 |
-| `observe-count` | 39.1 | 57.2 | 1.5 + 0.0 = 1.5 | 0.5 + 1.0 = 1.5 | 100,018 / 100,018 | 100,033 / 100,033 |
-| `observe-delta` | 84.9 | 130.5 | 1.5 + 0.0 = 1.5 | 0.5 + 0.2 = 0.7 | 100,018 / 100,018 | 100,033 / 100,033 |
-
-Malformed and hostile updates, each applied in a child process per library (30 s and 4 GiB resident limit): the outcome, whether the document is still readable and encodable afterwards, whether its state is unchanged, the time, and the child's peak resident set.
-
-| case | bytes | ycs | YDotNet |
-| --- | ---: | --- | --- |
-| `alloc-struct-count` | 6 | rejected: YUpdateException; unchanged; 4 ms, 265 MiB | rejected: EndOfStream; unchanged; 12 ms, 267 MiB |
-| `alloc-struct-count-below-heap-limit` | 5 | rejected: YUpdateException; unchanged; 3 ms, 265 MiB | rejected: EndOfStream; unchanged; 8 ms, 267 MiB |
-| `alloc-any-length` | 11 | rejected: YUpdateException; unchanged; 4 ms, 265 MiB | rejected: EndOfStream; unchanged; 7 ms, 267 MiB |
-| `alloc-json-length` | 12 | rejected: YUpdateException; unchanged; 4 ms, 265 MiB | rejected: EndOfStream; unchanged; 7 ms, 267 MiB |
-| `nonatomic-truncated-delete-set` | 35 | rejected: YUpdateException; unchanged; 6 ms, 265 MiB | rejected: EndOfStream; unchanged; 11 ms, 267 MiB |
-| `nonatomic-truncated-v2` (v2) | 26 | rejected: YUpdateException; unchanged; 20 ms, 266 MiB | rejected: EndOfStream; unchanged; 8 ms, 267 MiB |
-| `nonatomic-malformed-delete-set` | 12 | rejected: YUpdateException; unchanged; 16 ms, 265 MiB | rejected: EndOfStream; unchanged; 11 ms, 267 MiB |
-| `nonatomic-negative-delete-length` | 13 | rejected: YUpdateException; unchanged; 18 ms, 271 MiB | applied; readable; 10 ms, 267 MiB |
-| `nonatomic-find-index-out-of-range` | 54 | rejected: YUpdateException; unchanged; 6 ms, 265 MiB | **crash: died with signal 6 (SIGABRT): thread '<unnamed>' (3015792) panicked at yrs/src/block_store.rs:53:30:** |
-| `nonatomic-zero-length-struct` | 10 | rejected: YUpdateException; unchanged; 4 ms, 265 MiB | rejected: EndOfStream; unchanged; 7 ms, 267 MiB |
-| `nonatomic-find-index-unexpected` | 11 | rejected: YUpdateException; unchanged; 5 ms, 265 MiB | applied; readable; 10 ms, 267 MiB |
-| `nonatomic-clean-end-unexpected` (v2) | 68 | rejected: YUpdateException; unchanged; 6 ms, 265 MiB | rejected: EndOfStream; unchanged; 12 ms, 267 MiB |
-| `nonatomic-any-splice-out-of-range` (v2) | 141 | rejected: YUpdateException; unchanged; 8 ms, 265 MiB | applied; readable; 10 ms, 267 MiB |
-| `truncated-state` | 507 | rejected: YUpdateException; unchanged; 5 ms, 265 MiB | rejected: EndOfStream; unchanged; 11 ms, 267 MiB |
-| `gc-bomb-pending-2M` (v2) | 24 | rejected: YUpdateException; unchanged; 5 ms, 265 MiB | applied; readable; 58 ms, 329 MiB |
-| `deleted-items-524288` (v2) | 42 | rejected: YUpdateException; unchanged; 6 ms, 265 MiB | applied; readable; 190 ms, 377 MiB |
-| `conflict-2000` | 10,006 | applied; readable; 118 ms, 267 MiB | applied; readable; 214 ms, 268 MiB |
-
-What a workload does is in `Catalog.cs` (`list` prints it). Numbers: N = 100,000 unless stated.
-
-### Reading
-
-**ycs is faster at everything a single editor does keystroke by keystroke**, by one to two orders of magnitude:
-typing at the end 25 ms against 3.1 s for 100,000 keystrokes (0.25 µs against 31 µs each), at random places 26 ms
-against 1.5 s (20,000) and 1.9 s against 175 s (100,000), the automerge-paper trace 0.26 s against 8 s, observers
-(ycs' event cost is lost in the noise; YDotNet's text observer adds little, but reading each event's delta adds
-about 15 µs per event), undo (6.7×), random array inserts (91×), reading a map (21×) and a text (ycs keeps the
-string, 0.3 ms for 100 reads; YDotNet copies 100 KB of UTF-8 across the boundary each time, 0.4 ms per read). Maps
-and array pushes: 2–3×.
-
-What explains YDotNet's side, measured, not profiled (`perf` is not permitted in the sandbox):
-* A transaction itself is cheap (`txn-empty`: 0.14 µs, half of ycs' 0.3 µs), so the per-keystroke cost is the
-  edit. Locating an index in yrs is a walk over its blocks, and inside a block of a UTF-16 document an offset has to
-  be converted from UTF-8 by scanning the string: typing at the end is quadratic (25k / 50k / 100k keystrokes:
-  0.25 / 0.83 / 3.0 s in a probe), `DocEncoding.Utf8` halves it (`text-append-utf8`, but UTF-8 indexes are not
-  Yjs-compatible for non-ASCII text), and random inserts, which leave 100,000 separate blocks, are 175 s. ycs uses
-  Yjs' search markers, which yrs 0.26 does not have.
-* Every call crosses P/Invoke and marshals: strings to UTF-8, `Input`s, `Output`s back (read-map allocates
-  175 MiB for 10 iterations of 100,000 entries; ycs allocates nothing).
-
-**YDotNet is faster at bulk, whole-document work**: loading a stored state 1.8× (39 against 70 ms for 10 loads),
-encoding a state 3–7× (v1: 0.6 against 4.6 ms per encode), a diff against a state vector 5×, redo 1.5×, and it
-allocates much less managed memory there (its work and memory are native). Applying the 260k keystroke updates
-one by one is even (ycs 1.1×); in one transaction yrs is 8.6× slower (1.2 s against 0.14 s). The concurrent
-merge of 20 clients is even (66 against 69 ms), though ycs' cold first run is 430 ms.
-
-**Both have quadratic paths, ycs has the worse ones in two places:**
-* 100,000 one-character inserts in **one transaction**: ycs 58 s, YDotNet 18 s (25,000: 3.3 s against 1.1 s:
-  quadratic on both). In ycs it is `YArrayBase.FindMarker` (63% of samples): after finding the closest marker it
-  walks left "until p can't be merged with left", and inside one transaction every keystroke is a new item
-  contiguous with the previous one, not merged until the transaction ends, so each insert walks back over all of
-  them. Yjs' `findMarker` has the same loop.
-* 100,000 array **pushes in one transaction**: ycs exceeded the 8 GiB resident limit and was killed after
-  21–36 s (YDotNet: 51 s); 20,000 take ycs 1.2 s and **1.5 GiB of allocations** (YDotNet 1.6 s, 6 MiB). Two causes,
-  from a sampling profile (`dotnet-trace`): `PushGenerics` walks from the start to the end for every push (no marker
-  is created by pushes), and at the end of the transaction `DeleteSet.TryToMergeWithLefts` merges the run from
-  right to left, so `ContentAny.MergeWith` copies the accumulated list into each left neighbour: O(n²) copying.
-* 50,000 single **deletes at random places** of a 100,000-element array (one item to begin with): ycs 62 s,
-  YDotNet 26 s. Again `FindMarker` (69%): the pieces split off one item are contiguous by clock, so the leftward
-  walk crosses all of them, deleted or not.
-
-### Optimization candidates in ycs (not changed here; perf-r1 did 1 to 3 and part of 5, see below)
-
-1. `YArrayBase.FindMarker`'s leftward walk over "mergeable" neighbours (it tests only client and clock, not
-   whether the neighbours can merge, e.g. deleted against not deleted): bound it, or test real mergeability. It is
-   the hot spot of `text-append-1txn` and `array-delete-random`, and markers do not change any output.
-2. Merging at transaction end (`DeleteSet.TryToMergeWithLefts` with `ContentAny`/`ContentString.MergeWith`): merge
-   a run into its leftmost item in one pass instead of copying the accumulated content leftwards step by step.
-3. `PushGenerics`: start from the last item (keep a tail pointer or a marker at the end) instead of walking.
-4. The concurrent merge (`concurrent-20`, profile): `List<T>.Insert` into a client's struct list (37% of
-   samples) and `ResolveConflict`'s item sets hashed by identity (18%).
-5. Loading a state (`apply-state`): `StructStore.FindIndexSS`, 27% of samples; and encoding, 3–7× behind yrs (not
-   profiled cleanly: the forced GCs between runs make the finalizer thread trim `ArrayPool`s, which shows up in a
-   sampling profile).
-
-## After perf-r1 (2026-11-15, ycs only)
-
-The same suite on branch `perf-r1` after its review (the merge of a run in one pass, pushes from the last pushed
-item, runs extended in place where nothing observes the type, smaller items, fewer allocations per change and per
-load; with the review's fixes: the marker lookup walks back over runs as Yjs' does again, a run is split back into
-Yjs' items before a garbage collection filter, a snapshot read, a marker moved off a deleted item, and not extended
-in a transaction an observer started). The numbers of the version the review refused (f857189,
-`results/2026-11-15-perf-r1/`) are superseded: that code differed from Yjs. ycs was run again, three passes, with the
-new warm-up (until the last 3 runs are within 10%, at least 3 runs and 2 s: a median of 40 warm-up runs per
-process, 4 to 200), so this table's encode and small workloads are steady-state numbers, unlike the 2026-11-15 table
-above; **YDotNet was not**, except four control workloads, so its other numbers are the 2026-11-15 ones, marked
-*(carried)*, and the checks compared ycs' content and states with what YDotNet wrote then (`--carry-yrs`, see
-`run.sh`). Machine drift, from the controls (median, 2026-11-15 then now): `text-append` 3081 / 3118 ms,
-`map-set-distinct` 125 / 119 ms, `apply-state-v1/ycs` 38.8 / 39.3 ms, `encode-v1` 6.3 / 6.4 ms: within 5%. Load
-average 2.6 to 11.6 during the ycs runs (median 6.1). Every workload passed every check.
-
-Run 2026-11-15 17:56 UTC: 3 passes, each workload in its own process per library and pass, warm-up runs until the last 3 are within 10% of each other (at least 3 runs and 2 s, at most 200 runs or 30 s), then 5 timed runs per process (a heavy workload: 1 run, no warm-up); inputs B0C9A1DE44B7103F.
-
-Machine: AMD EPYC-Genoa Processor, 8 logical cores, 32859788 kB RAM, Ubuntu 26.04 LTS, kernel 7.0.0.43, .NET 11.0.0, YDotNet 0.7.0+c14ed5174ba69959ff7ba22a256bec3e455be8c7. Load average at start: 6.26 5.00 4.80 2/1947 3523459.
-
-YDotNet was not run again except for `text-append`, `map-set-distinct`, `apply-state-v1/ycs`, `encode-v1`: its other measurements, marked (carried), and the content and states the checks read are those of results/2026-11-15.
-
-Time: median of all timed runs in ms (min–max of the runs; ± the spread of the per-pass medians around their median); which is faster, by the ratio of the medians; the median over the passes of the first (cold, not yet JIT-optimized) run in each process.
-
-| workload | ycs | YDotNet | faster | first run ycs / YDotNet | checks |
-| --- | ---: | ---: | --- | ---: | --- |
-| `text-append` | 17.7 (16.8–18.1, ±5%) | 3118 (2981–3328, ±4%) | ycs 176.6× | 191 / 3212 | equal, v1 bytes identical |
-| `text-append-utf8` | 18.1 (16.9–59.0, ±156%) | 1563 (1482–1767, ±5%) (carried) | ycs 86.2× | 202 / 1585 | equal, v1 bytes identical |
-| `text-append-1txn` | 6.0 (5.5–10.2, ±7%) | 18154 (17775–18471, ±2%) (carried) | ycs 3014.6× | 81.3 / 18154 | equal, v1 bytes identical |
-| `text-append-1txn-25k` | 1.5 (1.4–1.8, ±4%) | 1084 (1029–1112, ±4%) (carried) | ycs 699.9× | 40.4 / 1070 | equal, v1 bytes identical |
-| `txn-empty` | 5.4 (5.3–5.9, ±7%) | 13.8 (13.3–14.2, ±4%) (carried) | ycs 2.5× | 50.0 / 18.0 | equal, v1 bytes identical |
-| `text-random` | 25.1 (23.1–29.9, ±8%) | 1512 (1417–1626, ±2%) (carried) | ycs 60.3× | 230 / 1514 | equal, v1 bytes identical |
-| `text-random-100k` | 1400 (1084–2257, ±61%) | 175337 (146416–202685, ±16%) (carried) | ycs 125.2× | 1400 / 175337 | equal, v1 bytes identical |
-| `trace-replay` | 252 (227–367, ±32%) | 8053 (7293–8783, ±7%) (carried) | ycs 32.0× | 636 / 7832 | equal, v1 bytes identical |
-| `concurrent-20` | 61.1 (58.2–78.7, ±2%) | 65.8 (60.5–68.5, ±6%) (carried) | ycs 1.1× | 385 / 81.0 | equal, v1 bytes differ |
-| `apply-state-v1/ycs` | 59.2 (45.8–73.3, ±2%) | 39.3 (38.0–53.3, ±9%) | YDotNet 1.5× | 365 / 47.8 | equal, v1 bytes identical |
-| `apply-state-v1/yrs` | 56.8 (45.9–58.0, ±1%) | 39.9 (37.3–57.0, ±13%) (carried) | YDotNet 1.4× | 354 / 50.3 | equal, v1 bytes identical |
-| `apply-state-v2/ycs` | 53.7 (49.9–70.4, ±3%) | 40.3 (38.9–43.1, ±6%) (carried) | YDotNet 1.3× | 321 / 49.7 | equal, v1 bytes identical |
-| `apply-state-v2/yrs` | 53.0 (49.6–60.5, ±2%) | 40.6 (39.7–43.3, ±5%) (carried) | YDotNet 1.3× | 350 / 50.7 | equal, v1 bytes identical |
-| `apply-updates/ycs` | 244 (239–274, ±8%) | 261 (244–305, ±6%) (carried) | ycs 1.1× | 1031 / 265 | equal, v1 bytes identical |
-| `apply-updates/yrs` | 246 (242–266, ±1%) | 256 (242–262, ±0%) (carried) | ycs 1.0× | 1050 / 258 | equal, v1 bytes identical |
-| `apply-updates-1txn/yrs` | 139 (132–154, ±8%) | 1164 (1121–1245, ±8%) (carried) | ycs 8.4× | 771 / 1200 | equal, v1 bytes identical |
-| `encode-v1` | 4.8 (4.6–4.9, ±3%) | 6.4 (6.1–6.8, ±0%) | ycs 1.3× | 47.0 / 7.1 | equal, v1 bytes identical |
-| `encode-v2` | 6.4 (6.3–6.9, ±4%) | 7.7 (7.1–10.4, ±7%) (carried) | ycs 1.2× | 45.3 / 9.0 | equal, v1 bytes identical |
-| `encode-sv` | 0.1 (0.1–0.1, ±12%) | 0.2 (0.2–0.3, ±7%) (carried) | ycs 3.3× | 4.0 / 1.2 | equal, v1 bytes identical |
-| `encode-diff` | 2.7 (2.6–2.9, ±3%) | 3.3 (3.2–3.6, ±5%) (carried) | ycs 1.2× | 30.3 / 4.4 | equal, v1 bytes identical |
-| `map-set-distinct` | 38.7 (34.4–44.8, ±3%) | 119 (109–151, ±7%) | ycs 3.1× | 227 / 179 | equal, v1 bytes identical |
-| `map-set-distinct-1txn` | 32.5 (25.4–48.2, ±5%) | 106 (90.8–141, ±11%) (carried) | ycs 3.3× | 155 / 187 | equal, v1 bytes identical |
-| `map-set-same` | 35.2 (31.1–36.6, ±12%) | 103 (95.5–109, ±7%) (carried) | ycs 2.9× | 299 / 128 | equal, v1 bytes identical |
-| `array-push` | 19.0 (18.0–25.1, ±4%) | 92.5 (80.8–106, ±12%) (carried) | ycs 4.9× | 173 / 136 | equal, v1 bytes identical |
-| `array-push-1txn` | 7.5 (6.8–12.1, ±2%) | 50769 (47708–57764, ±14%) (carried) | ycs 6805.9× | 59.4 / 50769 | equal, v1 bytes identical |
-| `array-push-1txn-20k` | 1.4 (1.3–1.5, ±5%) | 1641 (1561–1736, ±4%) (carried) | ycs 1178.3× | 21.8 / 1619 | equal, v1 bytes identical |
-| `array-insert-random` | 167 (128–301, ±62%) | 18023 (13758–33397, ±27%) (carried) | ycs 107.8× | 512 / 20544 | equal, v1 bytes identical |
-| `array-delete-random` | 62173 (53768–63053, ±14%) | 25511 (24529–31255, ±23%) (carried) | YDotNet 2.4× | 62173 / 25511 | equal, v1 bytes identical |
-| `read-text` | 0.4 (0.2–0.5, ±34%) | 41.9 (38.6–55.1, ±8%) (carried) | ycs 104.0× | 4.5 / 47.1 | equal, v1 bytes identical |
-| `read-array` | 4.7 (4.6–5.7, ±2%) | 65.3 (62.6–74.9, ±6%) (carried) | ycs 13.9× | 35.3 / 116 | equal, v1 bytes identical |
-| `read-map` | 14.8 (14.4–16.8, ±4%) | 341 (334–359, ±5%) (carried) | ycs 23.0× | 122 / 666 | equal, v1 bytes identical |
-| `undo-type` | 21.9 (20.7–30.8, ±4%) | 134 (132–166, ±2%) (carried) | ycs 6.1× | 117 / 144 | equal, v1 bytes identical |
-| `undo-all` | 34.1 (27.6–44.3, ±20%) | 206 (196–242, ±3%) (carried) | ycs 6.0× | 122 / 202 | equal, v1 bytes identical |
-| `redo-all` | 76.0 (69.3–79.8, ±7%) | 52.1 (50.1–55.1, ±3%) (carried) | YDotNet 1.5× | 186 / 55.4 | equal, v1 bytes identical |
-| `observe-count` | 36.8 (30.1–41.9, ±14%) | 3069 (2954–3371, ±4%) (carried) | ycs 83.3× | 309 / 3123 | equal, v1 bytes identical |
-| `observe-delta` | 56.5 (50.4–66.9, ±19%) | 4619 (4502–4813, ±3%) (carried) | ycs 81.8× | 347 / 4556 | equal, v1 bytes identical |
-
-Memory: MiB allocated on the managed heap per timed run (median; YDotNet's native allocations are not in it), MiB held by the finished document after a full GC (managed + native C heap; ±1 MiB is noise), and the bytes of the final state as each library encodes it.
-
-| workload | alloc ycs | alloc YDotNet | held ycs (managed + native) | held YDotNet (managed + native) | state v1 ycs / yrs | state v2 ycs / yrs |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| `text-append` | 0.2 | 11.4 | 1.3 + 0.0 = 1.3 | 0.2 + 0.4 = 0.6 | 100,018 / 100,018 | 100,033 / 100,033 |
-| `text-append-utf8` | 0.2 | 11.4 | 1.3 + 0.0 = 1.3 | 0.2 + 0.3 = 0.5 | 100,018 / 100,018 | 100,033 / 100,033 |
-| `text-append-1txn` | 0.2 | 8.2 | 2.1 + 0.0 = 2.1 | 1.8 + 2.6 = 4.3 | 100,018 / 100,018 | 100,033 / 100,033 |
-| `text-append-1txn-25k` | 0.1 | 1.9 | 0.5 + 0.0 = 0.5 | 0.3 + 0.7 = 0.9 | 25,018 / 25,018 | 25,033 / 25,033 |
-| `txn-empty` | 0.0 | 3.8 | 0.0 + 0.0 = 0.0 | 0.0 + 0.0 = 0.0 | 2 / 2 | 13 / 13 |
-| `text-random` | 3.9 | 2.2 | 5.2 + 0.0 = 5.2 | 0.4 + 4.0 = 4.4 | 298,994 / 298,994 | 111,571 / 111,571 |
-| `text-random-100k` | 18.8 | 12.0 | 26.3 + 2.0 = 28.4 | 3.3 + 19.2 = 22.5 | 1,605,864 / 1,605,864 | 646,240 / 646,240 |
-| `trace-replay` | 42.8 | 28.5 | 2.8 + 0.0 = 2.8 | -15.8 + 2.3 = -13.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `concurrent-20` | 26.4 | 0.1 | 26.9 + 0.0 = 26.9 | 0.1 + 25.3 = 25.4 | 69,168 / 69,168 | 58,101 / 58,101 |
-| `apply-state-v1/ycs` | 32.0 | 0.0 | 4.4 + 0.0 = 4.4 | 0.5 + 2.2 = 2.7 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-state-v1/yrs` | 32.0 | 0.0 | 4.4 + 0.0 = 4.4 | 0.5 + 2.2 = 2.7 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-state-v2/ycs` | 34.0 | 0.0 | 4.3 + 0.0 = 4.3 | 0.4 + 2.2 = 2.6 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-state-v2/yrs` | 34.0 | 0.0 | 4.3 + 0.0 = 4.3 | 0.4 + 2.2 = 2.6 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-updates/ycs` | 54.8 | 9.9 | 18.3 + 0.0 = 18.3 | 14.8 + 2.2 = 17.0 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-updates/yrs` | 54.8 | 9.9 | 18.3 + 0.0 = 18.3 | 14.8 + 2.2 = 17.0 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `apply-updates-1txn/yrs` | 47.7 | 0.0 | 20.3 + 0.0 = 20.3 | 14.8 + 6.2 = 21.0 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `encode-v1` | 2.8 | 2.8 | 3.1 + 0.0 = 3.1 | 0.2 + 2.2 = 2.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `encode-v2` | 1.5 | 1.5 | 3.8 + 0.0 = 3.8 | 0.2 + 2.2 = 2.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `encode-sv` | 0.0 | 0.1 | 4.1 + 0.0 = 4.1 | 0.2 + 2.2 = 2.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `encode-diff` | 1.4 | 1.4 | 3.6 + 0.0 = 3.6 | 0.2 + 2.2 = 2.4 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `map-set-distinct` | 36.8 | 21.3 | 38.2 + 0.0 = 38.2 | 2.9 + 28.0 = 30.9 | 1,980,644 / 1,980,644 | 1,680,665 / 1,680,665 |
-| `map-set-distinct-1txn` | 39.5 | 17.6 | 38.2 + 0.0 = 38.2 | 2.9 + 28.0 = 30.9 | 1,980,644 / 1,980,644 | 1,680,665 / 1,680,665 |
-| `map-set-same` | 29.0 | 21.4 | 0.0 + 0.0 = 0.0 | 0.0 + 0.0 = 0.0 | 43 / 43 | 52 / 52 |
-| `array-push` | 10.4 | 35.9 | 9.4 + 0.0 = 9.4 | 5.2 + 3.0 = 8.2 | 391,763 / 391,763 | 391,774 / 391,774 |
-| `array-push-1txn` | 10.4 | 32.9 | 9.4 + 0.0 = 9.4 | 5.2 + 4.9 = 10.0 | 391,763 / 391,763 | 391,774 / 391,774 |
-| `array-push-1txn-20k` | 2.2 | 6.4 | 1.7 + 0.0 = 1.7 | 0.7 + 0.1 = 0.9 | 71,763 / 71,763 | 71,774 / 71,774 |
-| `array-insert-random` | 17.0 | 17.9 | 18.6 + 1.0 = 19.5 | 2.6 + 15.5 = 18.1 | 920,413 / 920,413 | 449,411 / 449,411 |
-| `array-delete-random` | 32.4 | 5.5 | 19.4 + 3.3 = 22.8 | 2.8 + 12.1 = 14.9 | 734,672 / 734,672 | 432,303 / 432,303 |
-| `read-text` | 0.2 | 20.0 | 4.1 + 0.0 = 4.1 | 0.5 + 2.2 = 2.7 | 289,132 / 289,132 | 159,927 / 159,927 |
-| `read-array` | 0.0 | 106.8 | 4.3 + 0.0 = 4.3 | 0.0 + 3.0 = 3.0 | 391,763 / 391,763 | 391,774 / 391,774 |
-| `read-map` | 0.0 | 175.5 | 33.4 + 0.0 = 33.4 | 0.0 + 28.0 = 28.0 | 1,980,644 / 1,980,644 | 1,680,665 / 1,680,665 |
-| `undo-type` | 21.3 | 2.3 | 12.0 + 0.0 = 12.0 | 0.3 + 5.3 = 5.6 | 20,018 / 20,018 | 20,033 / 20,033 |
-| `undo-all` | 30.1 | 0.0 | 12.1 + 0.0 = 12.1 | 0.2 + 7.6 = 7.7 | 20,027 / 20,027 | 20,042 / 20,042 |
-| `redo-all` | 35.5 | 0.0 | 20.8 + 0.0 = 20.8 | 0.3 + 15.3 = 15.6 | 490,475 / 490,475 | 40,073 / 40,073 |
-| `observe-count` | 36.8 | 57.2 | 1.5 + 0.0 = 1.5 | 0.5 + 1.0 = 1.5 | 100,018 / 100,018 | 100,033 / 100,033 |
-| `observe-delta` | 82.6 | 130.5 | 1.5 + 0.0 = 1.5 | 0.5 + 0.2 = 0.7 | 100,018 / 100,018 | 100,033 / 100,033 |
-
-### What the speed-ups are worth, before and after the fixes
-
-The ycs child of each build (the same harness, with the new warm-up), interleaved, 2 processes x 10 timed runs each,
-load 2 to 10: 38fcba1 (before the branch), f857189 (the refused version) and the branch now. A heavy workload on
-38fcba1: one run.
-
-| workload | 38fcba1 | f857189 (refused) | now |
-| --- | ---: | ---: | ---: |
-| `text-append` (100,000 keystrokes, one transaction each) | 20.9 ms, 19.28 MiB (202 B/keystroke) | 16.5 ms, 0.20 MiB | 16.5–19.0 ms, 0.20 MiB (2 B/keystroke) |
-| `text-append-1txn` | 58,075 ms, 21.70 MiB | 5.4 ms, 0.20 MiB | 5.9 ms, 0.20 MiB |
-| `text-append-1txn-25k` | 3,333 ms, 5.43 MiB | 1.5 ms, 0.07 MiB | 1.5 ms, 0.07 MiB |
-| `array-push` | 35.5 ms, 47.01 MiB | 18.7 ms, 10.39 MiB | 18.1–18.6 ms, 10.39 MiB |
-| `array-push-1txn` | killed at 8 GiB | 7.1 ms, 10.39 MiB | 7.0–7.6 ms, 10.39 MiB |
-| `array-push-1txn-20k` | 1,157 ms, 1,536 MiB | 1.4 ms, 2.18 MiB | 1.3 ms, 2.18 MiB |
-| `array-delete-random` | 53,926 ms, 38.3 MiB | 924 ms, 32.4 MiB | 64,889 ms, 32.4 MiB |
-| `trace-replay` | 262 ms, 84.84 MiB | 220 ms, 42.85 MiB | 232–233 ms, 42.85 MiB |
-| `observe-count` (observed: no extension) | 28.6 ms, 39.11 MiB | 31.2 ms, 36.83 MiB | 34.3–34.7 ms, 36.83 MiB |
-| `undo-type` (observed) | 19.7 ms, 21.46 MiB | 21.7 ms, 21.30 MiB | 19.9–22.7 ms, 21.30 MiB |
-
-(Where "now" has a range, it is the medians of the two A/B runs, against 38fcba1 and against f857189.)
-
-* **Kept:** typing and pushing allocate nearly nothing where nothing observes the type (202 -> 2 bytes per
-  keystroke), batched typing and pushing are linear (`text-append-1txn` 58 s -> 6 ms, `array-push-1txn` from killed
-  to 7 ms), the trace replays 10% faster with half the allocations, loading allocates 20% less (README.md of the
-  repository: the trace benchmark), and encoding is ahead of YDotNet once warm (`encode-v1` 4.8 ms per 10 encodes,
-  YDotNet 6.4).
-* **Lost against the refused version:** `array-delete-random` is back to 38fcba1's quadratic time (about 60 s; it
-  was 0.9 s): random single deletes split the array's one item into pieces that continue each other by clock, and
-  Yjs' marker lookup walks back over all of them on every lookup, so the marker ends at the start of the chain. That
-  walk decides where an edit lands when Yjs' markers are stale, so it stays; a cheaper exact walk would also need
-  the visible length between the chain's start and the item, which every delete changes. Typing in one transaction
-  into a type someone observes is quadratic again for the same reason (as in Yjs and on 38fcba1; an unobserved type
-  extends one item, which the walk crosses at once). `text-append`, `trace-replay` and `observe-count` are a few
-  percent slower than the refused version (the walk, and the checks before an insert), within this machine's noise
-  for `text-append`.
-* **How much code gets the fast path:** a run is extended only where nothing observes the type (no handler on it,
-  no deep handler on it or an ancestor, no transaction handler on the document, no UndoManager on the document):
-  documents edited by a program (an import, a server applying its own edits, a bulk transform) and types nobody
-  renders. An editor binding observes the type it shows, and an UndoManager observes the whole document; those
-  make Yjs' items, merged at the end of the transaction, as before the branch. Remote updates are never extended.
-
-### Optimization candidates after perf-r1
-
-1. **A compact item layout.** An item is 128 bytes plus its content (`bench/Ycs.Benchmarks sizes`: a character
-   held as its own item 186 B, an array element 258 B, a map entry 272 B, a deleted element about 170 B; a text
-   item's ContentString is 40 B, a ContentAny 24 B plus a List and an array, 64 B). An array-of-structs layout per
-   client (ids, lengths, links as indexes, content in a side table) could hold a loaded document in about a third
-   of the memory and remove most of loading's allocations (items are 40% of them); expected 1.5-2x on
-   `apply-state` and `apply-updates`. A redesign of the struct store, not done here.
-2. **Searching the struct store by a clock array.** `FindIndexSS` is still a large part of loading a state: a binary
-   search over item objects for every origin of every struct. A parallel array of start clocks per client would make
-   it cache-friendly; expected 15-20% on `apply-state`. Needs the store to keep the array with every insert and split.
-3. **The marker walk over a client's chain** (`array-delete-random`): exact only if it ends where Yjs' ends, with
-   Yjs' index; an index of the chains with their visible lengths (a Fenwick tree per chain, kept with every split,
-   merge, insert and delete) could do it in O(log n). Large and subtle; only for documents that one client split
-   into many pieces.
-4. **ContentAny without List** (an array and a count): 32 B less per array element and map entry.
-5. **The delta of a text without formats**: three attribute dictionaries per event delta (`observe-delta`). A text
-   does not know reliably that it never held formats (a root that received formats before `GetText` was asked
-   for does not record it, as in Yjs), so this needs another signal.
-
-## After layout steps 1 and 2 (2026-11-15, ycs only)
-
-Steps 1 and 2 of [`docs/design-item-layout.md`](../../docs/design-item-layout.md), on today's objects (branch
-`layout-s12`): each client's structs keep their start clocks in an array beside them (`FindIndexSS` searches it), and a
-run-head index (a flag byte per position: a break of Yjs' marker walk-left, visible, a live format; the visible length
-per block of 512 positions) lets the marker walks and the walks from the marker to the index jump within one client's
-chain of pieces, ending where Yjs' loops end. The ycs child of 53a35de and of the branch, interleaved with `ab.py`, 4
-processes x 10 timed runs each (the two heavy workloads: 3 processes; 53a35de runs them as heavy, one cold run per
-process, the branch with warm-ups and 5 runs, since ycs now takes about a second: `LightOnYcs`), load 1.3 to 3.8.
-**YDotNet was not run again**: its figures are the 2026-11-15 ones, *(carried)*. Medians of all timed runs; memory held
-is managed + native as above (the native part is noise here).
-
-| workload | 53a35de | layout-s12 | change | alloc 53a35de / s12 (MiB) | held 53a35de / s12 (MiB) | YDotNet (carried) |
-| --- | ---: | ---: | --- | ---: | ---: | ---: |
-| `array-delete-random` | 57,169 ms (cold) | 896 ms (cold first run 1,048) | 64× | 32.4 / 33.6 | 19.4 / 19.8 | 25,511 ms |
-| `text-append-1txn-observed` (new) | 48,888 ms (cold) | 790 ms | 62× | 19.0 / 21.2 | 4.0 / 4.4 | not run |
-| `text-append-1txn-observed-25k` (new) | 2,811 ms | 96 ms | 29× | 4.8 / 5.3 | 0.8 / 1.1 | not run |
-| `apply-state-v1/ycs` | 56.7 ms | 50.2 ms | -11% | 32.0 / 33.0 | 4.4 / 4.5 | 39.3 ms |
-| `apply-state-v2/ycs` | 54.8 ms | 52.7 ms | -4% | 34.0 / 35.0 | 4.3 / 4.4 | 40.3 ms |
-| `apply-updates/ycs` | 259.0 ms | 308.8 ms | +19% | 54.8 / 55.1 | 18.3 / 18.5 | 261 ms |
-| `concurrent-20` | 64.6 ms | 66.5 ms | +3% | 26.4 / 27.6 | 26.9 / 28.1 | 65.8 ms |
-| `trace-replay` | 247.1 ms | 284.2 ms | +15% | 42.9 / 43.1 | 2.8 / 2.9 | 8,053 ms |
-| `text-random` | 25.4 ms | 27.0 ms | +6% (noise) | 3.9 / 4.4 | 5.2 / 5.5 | 1,512 ms |
-| `array-insert-random` | 189.1 ms | 163.7 ms | noise (120-340 / 138-266) | 17.0 / 18.2 | 18.6 / 19.1 | 18,023 ms |
-| `text-random-100k` | 1,573 ms | 1,553 ms | noise (1,073-2,083 / 1,278-2,041) | 18.8 / 21.1 | 26.3 / 27.5 | 175,337 ms |
-| `map-set-distinct` | 38.2 ms | 42.1 ms | +10% (noise: 34-92 / 34-55) | 36.8 / 39.0 | 38.2 / 39.3 | 119 ms |
-| `text-append` (control) | 17.3 ms | 17.7 ms | +2% | 0.20 / 0.20 | 1.3 / 1.3 | 3,118 ms |
-
-* **Won:** the two quadratic cases of the marker walk. `array-delete-random` goes from about a minute to under a second
-  (YDotNet: 26 s): the walks over the 50,000 pieces of one client's chain (the walk right and left in `findMarker`, and
-  `Delete`'s walk from the marker) are now jumps; what remains is the splits (`ContentAny.Splice` copies the values
-  after the split point) and the shift of the client's struct list. Typing 100,000 characters in one transaction into
-  an observed text (an editor binding, an UndoManager: Yjs' items, merged at the end) goes from 49 s to 0.8 s.
-  Finding a struct by clock reads the start array: loading a state is 4-11% faster.
-* **Lost:** `apply-updates` (+19%) and `trace-replay` (+15%), which split and merge in the middle of the trace's
-  11,000-struct list for every edit. Most of it is step 1, the start-clock array and the list class: with the index's
-  maintenance off (no flags, block sums or `Refresh`, the starts kept) the review measured +11% and +15% against
-  53a35de; the index is at most 4 points of it. A split or a merge shifts 17 bytes per later struct instead of 8 (the
-  start clock and the flag byte beside the reference); the design's B+tree order (step 7: leaves of 128 positions) is
-  what removes that shift.
-* **Memory:** the index costs 9 bytes per struct (8 for the start, 1 for the flags, 8 per 512 for the block sums and 4 per 512 for the break counts),
-  plus the arrays' doubling slack, and a client's list object is a little larger than a `List`: held memory grows by
-  0.5 MiB (`array-insert-random`, 50,000 structs) to 1.2 MiB (`concurrent-20`, 128,560 structs over 20 documents;
-  `text-random-100k`, 100,000 structs), about 4% of what those documents hold.
-
-### Break counts per block (2026-11-15, ycs only)
-
-The walk left through the index searched the flag bytes before the position for the last break, and the walk right
-those after it for the next one, both to the run's ends: typing into an observed text in one transaction stayed
-quadratic in the run. Each block of 512 positions now counts its breaks, so the searches scan one block's bytes on
-each side and skip the blocks without a break. `ab.py`, b7f02f3 and the commit, the observed workloads 2 processes x 3
-timed runs each (`text-append-1txn-observed-200k` and `-400k` are new: the same typing stream, longer), the two others
-4 x 6, interleaved, load 0.9 to 2.0 (`results/2026-11-15-break-counts/`):
-
-| workload | b7f02f3 | break counts | change |
-| --- | ---: | ---: | --- |
-| `text-append-1txn-observed-25k` | 96 ms (above) | 73 ms | |
-| `text-append-1txn-observed` | 751 ms | 379 ms | 2.0x |
-| `text-append-1txn-observed-200k` | 2,517 ms | 993 ms | 2.5x |
-| `text-append-1txn-observed-400k` | 8,836 ms | 2,666 ms | 3.3x |
-| `apply-updates/ycs` | 286.0 ms | 289.7 ms | +1.3% (pass medians 284-291 / 284-294: noise) |
-| `trace-replay` | 276.0 ms | 279.5 ms | +1.3% (pass medians 273-280 / 272-284: noise) |
-
-* What stays is the sums: a lookup ends at the run's head, so it adds the block sums from there and up to a block of
-  positions on each side (`VisibleBetween`, the walk right's jumps), O(512 + n/512) per lookup; blocks of 4,096
-  positions make it slower (9.3 s for 400,000 characters). A tree of the sums (the design's B+tree order) removes it.
-* A split or a merge also moves the break counts of the later blocks, in the loop that moves their sums.
-
-### The leaf order (2026-11-16, ycs only)
-
-Step 3 of [`docs/design-item-layout.md`](../../docs/design-item-layout.md) (section 1.3): a client's structs, starts and
-run-head flags in leaves of at most 128 positions, each with its visible sum and break and format counts, and from two
-leaves on a directory (first starts, first positions, has-break and has-format bits per leaf, a Fenwick tree of the
-leaf sums). A split shifts one leaf instead of the rest of the list; the walks jump whole leaves through the tree. The
-ycs child of c9f673a (`modernize`) and of the branch (42f0687), interleaved with `ab.py`, load 0.9 to 1.4
-(`results/2026-11-15-leaf-order/`): `fast.txt` 4 processes x 6 timed runs, `heavy.txt` 2 x 3, `against-53a35de.txt`
-4 x 6.
-
-| workload | c9f673a | leaf order | change | alloc (MiB) | held (MiB) |
-| --- | ---: | ---: | --- | ---: | ---: |
-| `apply-updates/ycs` | 314.3 ms | 233.7 ms | -26% | 55.1 / 59.3 | 18.5 / 18.6 |
-| `trace-replay` | 300.9 ms | 214.1 ms | -29% | 43.1 / 43.0 | 2.9 / 3.0 |
-| `apply-updates/ycs`, against 53a35de | 260.1 ms | 233.4 ms | -10% | 54.8 / 59.3 | 18.3 / 18.6 |
-| `trace-replay`, against 53a35de | 253.2 ms | 212.6 ms | -16% | 42.9 / 43.0 | 2.8 / 3.0 |
-| `array-delete-random` | 824.5 ms | 330.0 ms | 2.5x | 33.6 / 32.8 | 19.8 / 20.1 |
-| `text-append-1txn-observed-25k` | 75.0 ms | 33.1 ms | 2.3x | 5.3 / 4.7 | 1.1 / 0.6 |
-| `text-append-1txn-observed` (100k) | 396.5 ms | 143.1 ms | 2.8x | 21.3 / 18.8 | 4.4 / 2.3 |
-| `text-append-1txn-observed-200k` | 1,014.6 ms | 283.0 ms | 3.6x | 42.5 / 37.5 | 8.7 / 4.5 |
-| `text-append-1txn-observed-400k` | 3,341.0 ms | 602.9 ms | 5.5x | 84.9 / 75.0 | 17.4 / 8.9 |
-| `apply-state-v1/ycs` | 54.4 ms | 65.7 ms | +21% | 33.0 / 33.1 | 4.5 / 4.5 |
-| `apply-state-v2/ycs` | 56.0 ms | 61.4 ms | +10% | 35.0 / 35.1 | 4.4 / 4.4 |
-| `concurrent-20` | 66.5 ms | 75.0 ms | +13% | 27.6 / 28.3 | 28.1 / 29.1 |
-| `map-set-distinct` | 47.3 ms | 51.9 ms | +10% (runs 38-69 / 45-75) | 39.0 / 36.6 | 39.3 / 38.9 |
-| `text-random` | 28.6 ms | 31.0 ms | +8% (runs 24-56 / 28-58) | 4.4 / 3.7 | 5.5 / 5.3 |
-| `array-insert-random` | 199.2 ms | 384.8 ms | noise: again 319.4 / 335.6 (`array-insert-random-again.txt`, runs 141-415 / 254-473) | 18.2 / 16.9 | 19.1 / 18.9 |
-| `text-random-100k` | 2,180.9 ms | 2,238.4 ms | +3% (noise) | 21.1 / 18.6 | 27.5 / 27.1 |
-
-* **Won:** the shift. Each split moves at most 127 positions of its leaf and adds 1 to the later leaves' first
-  positions; `apply-updates` and `trace-replay` are now below 53a35de, before steps 1 and 2. Typing into an observed
-  text in one transaction is close to linear (25k to 400k characters: 16 times the characters, 18 times the time; it
-  was 45): a lookup finds the run's head through the bit words and sums the leaves through the tree.
-* **Memory:** held memory is the same within 1 MiB, and halved for the observed typing (no doubling slack of one
-  array of 400,000 positions; the last leaf fills before the next comes). `apply-updates` allocates 4.3 MiB more: a
-  leaf that splits allocates a new one of 128 positions (2.2 KB) and a merge of leaves drops one.
-* **Lost, and explained:** `apply-state-v1` +21 %, `apply-state-v2` +10 %, `concurrent-20` +13 % in the table above.
-  Not the directory search, tree rebuilds, leaf splits or the cursor (counted per struct of a state load: 2.7 lookups
-  by clock, 9 by position, 99.5 % of those served by the cursor; no tree rebuild, no split).
-  * `apply-state-v1`, two thirds of it: a garbage collection. `UpdateReader.Release` dropped a decoded list of more
-    than 1,024 structs without clearing it; from 10,625 structs its array is on the large object heap, where a dead
-    array counts as live until a gen2 collection, so it kept every struct of the loaded document, and the document,
-    alive through gen0 and gen1 collections. c9f673a's two arrays of 10,971 entries per list are on that heap too:
-    their allocations trigger gen2 collections and no gen0 collection runs in the benchmark. The leaves are small, so
-    the gen0 budget is reached instead, and that collection promoted the dead documents of the earlier loads (13.6 MiB,
-    about 9 ms). The reader now clears every list it drops (`results/2026-11-16-reader-clear/`, `ab.py 4 6`):
-    five dropped documents of 11,000 structs alive after a gen0 collection 5 before, 0 after
-    (`bench/Ycs.Benchmarks -- gcsurvive`; c9f673a: 5, where its own flat arrays do the same).
-
-    | workload | c9f673a | 4f5eedb | with the reader clearing | against c9f673a | against 4f5eedb |
-    | --- | ---: | ---: | ---: | ---: | ---: |
-    | `apply-state-v1/ycs` | 50.3 ms | 61.8 ms | 53.7 / 54.0 ms | +7 % | -13 % |
-    | `apply-state-v2/ycs` | 52.2 ms | 58.1 ms | 56.8 / 57.2 ms | +9 % | -2 % (noise) |
-    | `concurrent-20` | 62.8 ms | 70.2 ms | 68.8 / 70.4 ms | +10 % | 0 % |
-
-  * What remains (`apply-state-v1` +7 %, `apply-state-v2` +9 %, `concurrent-20` +10 % against c9f673a): the list's
-    operations cost a few nanoseconds more each. No collection runs in `concurrent-20`'s body; per call (a
-    `Stopwatch` around each public operation in both builds, review of step 3) `FindIndex` costs 8 to 12 ns more
-    (480,000 calls per run), with a hint 10 to 14, `Add` 9 to 15, `Refresh` 7 to 9, the indexer 1; `InsertSplit` is
-    22 to 27 ns faster. Half of it is there with a single leaf of any size (+3 to +5 % on `concurrent-20`: every
-    operation goes through the leaf object), the rest is the two-level lookup (+8.5 to +11 % with leaves of 128).
-    No cheap fix found in six variants (the cursor not rewritten when unchanged, a plain binary search in the leaf,
-    no pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined):
-    none beyond 2 %. Recorded among the open items of the design. It is the price of the leaf object and the two-level
-    lookup, against -26 % and -29 % on the workloads that split.
-* **A flat form below one leaf: no gain, not kept** (2026-11-16, `results/2026-11-16-leaf-flat/`, `ab.py 4 6`, load 1.1
-  to 8.4 on a shared machine). The candidate recorded in the design's open items: while a client has no directory (at most 128 structs),
-  the structs, starts and flags without the leaf object. Prototyped for the operations that matter (the indexer, both
-  `FindIndex`, `Add`, `Refresh` read the one leaf's arrays cached in the list; `prototype.patch`) and measured against
-  9e182ef:
-
-  | workload | 9e182ef | prototype | change |
-  | --- | ---: | ---: | --- |
-  | `apply-state-v1/ycs` | 52.4 ms | 52.5 ms | 0 % |
-  | `apply-state-v2/ycs` | 55.4 ms | 55.1 ms | -1 % |
-  | `concurrent-20` | 67.6 ms | 68.1 ms | +1 % |
-  | `apply-updates/ycs` | 219.1 ms | 222.7 ms | +2 % (runs 216-266 / 220-241) |
-  | `trace-replay` | 204.2 ms | 203.6 ms | 0 % |
-  | `array-delete-random` | 195.0 / 197.5 ms | 202.6 / 207.6 ms | +4 / +5 % (runs 166-237 / 180-258: noise) |
-  | `text-append-1txn-observed` | 129.2 / 134.1 ms | 134.5 / 134.7 ms | +4 / 0 % |
-
-  The flat form cannot reach these workloads: their clients hold far more than 128 structs (the trace's one client
-  about 11,000, `concurrent-20`'s twenty each several hundred; inferred from the unchanged times, not counted), so
-  they keep their leaves and the two-level lookup. The upper bound, with every client one flat leaf (`LeafCapacity`
-  1 << 20 in both builds, no directory anywhere): `apply-state-v1` 50.0 to 49.3 ms (-1.4 %), `apply-state-v2` 52.4 to
-  50.8 ms (-3.1 %), `concurrent-20` 63.5 to 62.7 ms (-1.3 %). Even there the leaf object's extra load is not what costs; where the "half with a single leaf" goes was not found (not
-  proven: the flags, counts and sums that a flat form keeps are the candidates). Below the 3 points of the three workloads
-  that the change had to recover, so the code is not committed. Going back from leaves to the flat form when merges
-  leave one leaf is what the directory's removal already does (`RemoveLeaf`).
-* **The pivot among the leaves** (42f0687, a first guess from the clocks as Yjs' `findIndexSS` makes) bought nothing:
-  without it `concurrent-20` 71.4 / 69.8 ms, `apply-state-v1` 53.2 / 53.1, `apply-state-v2` 58.8 / 58.7,
-  `apply-updates` 225.8 / 219.6, `trace-replay` 199.0 / 198.2 (`results/2026-11-16-no-leaf-pivot/`, `ab.py 4 6`); the
-  cursor is what counts. The leaves are searched by a plain binary search now; the search within a leaf keeps Yjs'
-  pivot (without it 10 points worse, review of step 3).
-* **Capacity** (`capacity-128-vs-64.txt`, `capacity-128-vs-256.txt`; 3 x 6 for the first two rows, 2 x 3 for the
-  others): 128 is best or within noise on the split-heavy workloads and clearly best on `array-delete-random`; 64 is
-  faster on the observed typing, 256 slower.
-
-| workload | 64 | 128 | 256 |
-| --- | ---: | ---: | ---: |
-| `apply-updates/ycs` | 241.3 ms | 235.8 / 234.9 ms | 237.6 ms |
-| `trace-replay` | 219.8 ms | 216.4 / 213.4 ms | 211.3 ms |
-| `array-delete-random` | 371.4 ms | 307.1 / 255.4 ms | 318.6 ms |
-| `text-append-1txn-observed-400k` | 493.9 ms | 597.5 / 552.4 ms | 802.0 ms |
-| `text-random-100k` | 2,563.8 ms | 2,670.1 / 1,406.6 ms (noise) | 1,411.2 ms |
-
-### ItemRef (2026-11-16, ycs only)
-
-Steps 4a and 4b of [`docs/design-item-layout.md`](../../docs/design-item-layout.md) (section 1.4): the library holds the
-structs of the store through `ItemRef`, a struct around today's object. The ycs child of c263413 (`modernize`) and of
-the branch, interleaved with `ab.py` (`results/2026-11-16-itemref/`, whose README names each file). The machine was
-shared with other work (load averages from 2 to 90); each row is from the quietest run of it: the first four from
-`final-4x6.txt` (load 4 to 6), `concurrent-20`, `map-set-distinct` and `text-random-100k` from
-`final-rest-6x6-loaded.txt` (load 10 to 14), the rest from `final-quiet-6x6.txt` (load 2 to 8).
-
-| workload | c263413 | ItemRef (2e96e1f) | change | alloc (MiB) | held (MiB) |
-| --- | ---: | ---: | --- | ---: | ---: |
-| `apply-updates/ycs` | 220.3 ms | 222.6 ms | +1 % | 59.31 / 59.31 | 18.6 / 18.6 |
-| `trace-replay` | 198.6 ms | 202.1 ms | +2 % | 43.04 / 43.04 | 3.0 / 3.0 |
-| `apply-state-v1/ycs` | 51.8 ms | 52.2 ms | +1 % | 33.14 / 33.14 | 4.5 / 4.5 |
-| `apply-state-v2/ycs` | 56.9 ms | 57.9 ms | +2 % | 35.14 / 35.14 | 4.4 / 4.4 |
-| `array-delete-random` | 165.7 ms | 169.8 ms | +2 % (pass medians 159-183 / 163-184) | 32.78 / 32.78 | 20.1 / 20.1 |
-| `array-insert-random` | 138.7 ms | 137.2 ms | -1 % | 16.93 / 16.93 | 18.9 / 18.9 |
-| `text-random` | 25.9 ms | 24.5 ms | -5 % (noise) | 3.74 / 3.74 | 5.3 / 5.3 |
-| `text-random-100k` | 768.7 ms | 772.7 ms | +1 % | 18.59 / 18.59 | 27.1 / 27.1 |
-| `concurrent-20` | 68.0 ms | 67.4 ms | -1 % | 28.31 / 28.31 | 29.1 / 29.1 |
-| `map-set-distinct` | 40.0 ms | 41.6 ms | +4 % (pass medians 38-44 / 39-47) | 36.55 / 36.55 | 38.9 / 38.9 |
-| `text-append-1txn-observed-25k` | 29.8 ms | 31.9 ms | **+7 %** (pass medians 29.0-31.1 / 30.8-33.2) | 4.71 / 4.71 | 0.6 / 0.6 |
-| `text-append-1txn-observed` (100k) | 124.3 ms | 130.9 ms | **+5 %** | 18.77 / 18.77 | 2.3 / 2.3 |
-| `text-append-1txn-observed-200k` | 268.3 ms | 271.2 ms | +1 % | 37.52 / 37.52 | 4.5 / 4.5 |
-| `text-append-1txn-observed-400k` | 535.4 ms | 549.9 ms | +3 % | 75.03 / 75.03 | 8.9 / 8.9 |
-
-* **Allocations and held memory are the same to the byte** in every workload: no `ItemRef` is boxed (also checked
-  statically: `ItemRefBoxingTests` reads every method body of the library).
-* **What it cost, and what took it back.** The first build of the layer (`first-4x6.txt`, 0515e7f) cost the observed
-  typing 8 to 14 % and `trace-replay` 5 %, at equal allocations. Three causes, found in the JIT's output and by
-  experiment:
-  * The JIT's inlining budget: `Integrate` and the walks read more `ItemRef` members than it inlines by its own
-    heuristics, so `get_Left`, `get_Right` and others became calls (12 calls of `get_Left` in `IntegrateItem`). The
-    accessors are `AggressiveInlining` now (observed 100k: +14 % to 0 % in that run).
-  * The cast. Every member of an item reads through `(Item)_struct`, and `Item` is not sealed (the public API says
-    `class Item`), so the cast tests null and then the method table on every read where the object field needed none.
-    With an unchecked reinterpretation in place of the cast (an experiment; `Unsafe` is banned), `trace-replay` was 6 %
-    faster than the base: the casts were all of its cost. A type test (`_struct as Item`) walks faster than the cast
-    and is what the members use now; with an exact-type check (`GetType() == typeof(Item)`) or a test with an
-    out-of-line cast for the failing case, the observed typing was 20 % slower, not faster.
-  * The marker walk's steps. In one transaction of 25,000 inserts into an observed text the marker walk takes up to 32
-    literal steps per insert, and each step tests the type of a reference the JIT has just tested (`AsItem`): with the
-    walk on an `Item` variable, as before, the observed typing was +3 % instead of +9 % (an experiment). Moving the
-    walk's index jumps out of line made it slower (they are inlined, as before). Assigning the walk's two variables
-    one by one instead of as a tuple, and reading a text position's item once per step, helped a little.
-* **What remains**: the observed typing in one transaction, +7 % at 25,000 characters and +5 % at 100,000 (2 ms and
-  6 ms), within noise at 200,000 and 400,000; the rest within noise. Not boxing and not a copy: one type test per
-  member read on a reference freshly read from a neighbour. The slab of step 7 replaces the test by an index into an
-  array of slots; until then, the marker walk on the object (the experiment above) is the known way to remove the
-  rest.
-
-### The slab, performance pass (layout 7.7, 2026-11-17, ycs only)
-
-Base `modernize` efa8a8e (ItemRef = slab + handle, holders keep handles) against `layout-7-7`, built into separate
-folders and run interleaved by `ab.py` (4 rounds of 6 runs, `ab.py 4 6 <cases>`; `results/2026-11-17-slab-perf/ab-4x6.txt`).
-The machine was quiet: load average 1.1 to 1.4 during the run (AMD EPYC-Genoa, 8 logical cores, .NET 11.0.0). Allocation
-and held memory are identical in every case. `map-set-distinct` failed in both builds (a fixture bug, fixed: "`map-set-distinct` (fixture check)" below), so it has no row.
-
-| workload | base ms | 7.7 ms | change |
-| --- | ---: | ---: | ---: |
-| `trace-replay` | 254.8 | 234.6 | -7.9 % |
-| `text-random` | 29.6 | 26.4 | -10.8 % |
-| `text-random-100k` | 844.5 | 781.2 | -7.5 % |
-| `array-delete-random` | 187.8 | 170.1 | -9.4 % |
-| `array-insert-random` | 141.6 | 133.7 | -5.6 % |
-| `concurrent-20` | 74.6 | 68.5 | -8.2 % |
-| `apply-state-v1/ycs` | 58.9 | 53.9 | -8.5 % |
-| `apply-state-v2/ycs` | 61.5 | 56.7 | -7.8 % |
-| `apply-updates/ycs` | 267.4 | 242.7 | -9.2 % |
-| `text-append-1txn-observed-25k` | 48.6 | 45.4 | -6.6 % |
-| `text-append-1txn-observed` | 196.4 | 156.2 | -20.5 % |
-
-What was kept, with what each change did where it was measured alone (the same A/B, 3 to 4 rounds of 5 runs):
-
-* `NewItem` fills the slot through one `ref Slot` taken after `Allocate`, with the client, origin and parent indexes
-  worked out before it; `ClientTable.GetOrAdd` remembers the last client. `IntegrateItem` reads the neighbours by handle
-  (one `ref readonly Slot` at a time) instead of an `ItemRef` accessor per field, `YType` keeps the slab
-  (`_start`, `_item`, the map items and the push hint no longer go through `Doc.Store.Slab`): together within noise on
-  `trace-replay` (255.0 against 250.8) and `concurrent-20` (74.9 against 72.4).
-* The marker walk (`YArrayBase.Walk`), `ItemTextListPosition.Forward`/`FindNextPosition` and `DeleteText` read a slot once per
-  step and test the kind from `Info` instead of loading and type-testing the content object: `text-random-100k`
-  820.9 against 771.6, `text-random` 29.0 against 26.3, `array-delete-random` 189.5 against 175.8.
-* The store finds a client's list by the client's index in the slab's table (`_structsByIndex`) in `AddStruct`,
-  `Refresh`, `TryFindPosition` and `NoteRunExtended`: no hash of the client per struct. `ResolveConflict` compares the
-  origins by index and clock on the slots, `SplitItem` copies the slot's fields instead of rebuilding an `ID` and a
-  new item, `CanMergeItemWith` and `CanExtendRun` read both slots once, `YArrayBase.Insert`/`Delete`, `RelativePosition.FromIndex`
-  and `AbsolutePosition` read a slot once per step: the rest of the table above.
-* Budgets (`tests/Ycs.Budgets`, three runs each, load 0.3 to 2.5, µs per operation, base then 7.7): bytes per operation are
-  unchanged everywhere but +88 B on the two big transactions (the client index array), so no byte budget was lowered;
-  `text.insert-formatted-char-100k` 240.6 to 179.9 µs (its ceiling lowered from 2500 to 2000), `array.push-100k-in-one-transaction`
-  16 778 to 14 798, `text.type-100k-in-one-transaction` 15 313 to 13 410, `array.delete-random-100k` 4.1 to 3.6,
-  `position.absolute-from-relative-deep-100k` 245.5 to 237.5, the rest within 3 %.
-
-Tried and not kept:
-
-* **Field order of the slot** (clock, length, client, links, info and parent in the first 32 bytes, the origins and the
-  payload after): `trace-replay` 238.5 against 236.2, `text-random-100k` 760.6 against 772.4, `concurrent-20` 69.0 against 69.2,
-  `array-delete-random` 168.1 against 174.1: nothing beyond the noise. The array's elements start 16 bytes after its address,
-  but the address is only 8-byte aligned, so which slots straddle a cache line is the array's luck, not the field order's.
-* **Bounds checks** (`DOTNET_JitDisasm=Walk`, FullOpts): a slot read is two checks, the page number against `_slotPages` and the
-  index against the page. The second cannot be proved away without `Unsafe`/`MemoryMarshal` (a page's length is data), so the
-  hot loops keep them; the gain of this pass is in reading each slot once, which removes most of them per step.
-* A profile with `perf` was not possible (`perf_event_paranoid` is 4 here), and no sampling profiler could be run; the changes were found by reading the hot methods and measured by A/B.
-
-### Step 7 against the object layout (2026-11-17, ycs only)
-
-`modernize` 044bb73 (the last commit before the slab: items are objects, the leaf order holds them) against 5464252 (the
-slab, content still objects, after the 7.7 pass), each built from its own tree, run interleaved by `ab.py 4 6`
-(`results/2026-11-17-step7/ab-4x6.txt`). Machine: AMD EPYC-Genoa, 8 logical cores, .NET 11.0.0. **Not quiet**: another agent
-built and tested at the same time, load average 2.2 to 3.0 on the lines (3.0 at the start, 1.7 to 2.4 at the end), so
-differences under about 10 % are inside the noise. Held memory and allocation are deterministic and do not depend on it.
-
-| workload | base ms | step 7 ms | change | alloc MiB | held MiB (base / step 7) |
-| --- | ---: | ---: | ---: | --- | --- |
-| `trace-replay` | 200.1 | 233.5 | +17 % | 43.0 / 34.8 | 3.0 / 2.3 (-23 %) |
-| `text-random` | 24.4 | 26.8 | +10 % | 3.7 / 2.5 | 5.3 / 4.0 (-25 %) |
-| `text-random-100k` | 842.9 | 865.0 | +3 % | 18.6 / 12.2 | 27.1 / 20.7 (-24 %) |
-| `text-append` | 16.5 | 19.5 | +18 % | 0.20 / 0.21 | 1.3 / 1.3 |
-| `array-insert-random` | 141.8 | 129.4 | -9 % | 16.9 / 10.7 | 18.9 / 15.7 (-17 %) |
-| `array-delete-random` | 183.3 | 180.5 | -2 % | 32.8 / 26.3 | 20.1 / 16.7 (-17 %) |
-| `array-push-1txn` | 6.6 | 7.2 | +9 % | 10.4 / 4.3 | 9.4 / 9.4 |
-| `concurrent-20` | 69.6 | 68.6 | -1 % | 28.6 / 32.5 | 29.1 / 21.7 (-25 %) |
-| `apply-state-v1/ycs` | 51.8 | 53.9 | +4 % | 33.1 / 37.8 | 4.5 / 3.3 (-27 %) |
-| `apply-state-v2/ycs` | 56.4 | 57.5 | +2 % | 35.1 / 39.8 | 4.4 / 3.4 (-23 %) |
-| `apply-updates/ycs` | 221.5 | 240.2 | +8 % | 59.3 / 51.5 | 18.6 / 17.8 (-4 %) |
-| `encode-v1` | 4.8 | 6.1 | +27 % | 2.8 / 2.8 | 3.2 / 2.5 |
-| `text-append-1txn-observed-25k` | 31.7 | 45.4 | +43 % | 4.7 / 3.2 | 0.6 / 0.7 |
-| `map-set-distinct` | 41.1 | 39.4 | -4 % | 36.6 / 30.9 | 38.9 / 33.2 (-15 %) |
-| `map-set-distinct-1txn` | 31.0 | 31.8 | +3 % | 39.3 / 33.6 | 38.9 / 33.2 (-15 %) |
-| `map-set-same` | 46.4 | 58.7 | +27 % | 29.0 / 16.0 | 0.0 / 0.0 |
-
-Reading: step 7 holds 15 to 27 % less on the workloads that keep many structs (the content object is still there, so
-this is the item object's 128 bytes becoming a 64-byte slot, not the model's 35-45 %: that needs step 8), allocates 15-60 %
-less on the editing workloads, and costs time: typing workloads and the observed one-transaction append are slower than the
-object layout (+10 to +43 %), the random-position array and map workloads equal or faster. The 7.7 pass (above) took back
-6 to 20 % of what the slab first cost; what remains is the slot read by index against a field read of an object the JIT
-keeps in a register. `apply-state-x100/ycs` and `many-clients-200` are not in 044bb73's bench: step 7 alone, 702.7 ms, 324.9
-MiB held (load 2.4).
-
-### `map-set-distinct` (fixture check)
-
-It failed its check at `YcsCases.cs:335` on the base and the branch alike: `Convert.ToInt64(kv.Value)` threw
-`InvalidCastException` since the map's values are `YValue` (the API break of 8b64428), so no ycs map case produced content.
-It was a fixture bug, not the library: the check now reads `kv.Value.GetInt64()` (also in the hostile reader). With it,
-`map-set-distinct` 38.1 / 36.1 / 38.2 ms (three passes, yrs 97 to 101), `-1txn` 25 to 29 ms (yrs 63 to 76), `map-set-same`
-56 to 58 ms (yrs 95 to 98); content equal to the model and to yrs in every check.
-
-## Not measured yet
-
-Three workloads were added after the last suite run and have no results yet. They cover two cases of
-[crdt-benchmarks](https://github.com/dmonad/crdt-benchmarks) that the suite lacked. They are not a port of it: its
-published tables are JavaScript on other machines and cannot be compared with these.
-
-* `many-clients-200`, `many-clients-1000` (B3: many clients): a hub holding a 1,000-character text applies the
-  offline edits of 200 or 1,000 clients (10 each, generated like `concurrent-20`'s), one diff per client and
-  transaction, as a server does when they come back online. Their documents and diffs are set up untimed.
-* `apply-state-x100/ycs` (B4x100: a large document): the prepare step replays the trace 100 times into one ycs
-  document, each repetition after the text of the ones before, and writes its v1 state (`trace-x100.ycs.v1`);
-  the workload loads it once into an empty document. It should add about half a minute to the prepare step (100 × `trace-replay`'s 0.26 s; not measured).
+  `mallinfo2`), with the document alive. The error is about 1 MiB; the figure includes what the workload's setup keeps
+  alive (the updates to apply), the same for both libraries.
+* **Idiomatic use.** ycs: implicit transactions per call, `Transact` to group, `UpdateLimits.Unlimited` for a stored
+  (trusted) state, default limits for peers' updates. YDotNet, as its README uses it: a `WriteTransaction` per change, a
+  `ReadTransaction` per read, root types fetched before any transaction, `Input`s disposed. Where batching is the
+  idiomatic fast path it is measured too, labelled `-1txn`. Integers are written with `Input.Double` on YDotNet, which
+  is what yrs encodes as a Yjs number; with it both libraries write the same bytes.
+* **Machine of the current round:** a dedicated runner (AMD EPYC-Genoa, 4 logical cores, 16 GiB, Ubuntu 24.04, kernel
+  6.8, .NET 11.0.0, Node v24.22.3) that ran nothing else; load about 1 while it measured (one benchmark process on a
+  core). Between two rounds a difference under about 3 % is noise. Allocation and held memory are deterministic.
+
+## ycs against YDotNet
+
+Median ms per run, 3 passes of 5 timed runs. "Held" is the managed plus native heap after the run, in MiB. The ranges,
+the first runs, the allocations and the state sizes are in `tables.md`. Every result passed its checks.
+
+| workload | ycs ms | YDotNet ms | faster | held MiB ycs / YDotNet |
+| --- | ---: | ---: | --- | ---: |
+| `text-append` | 27.8 | 3561 | ycs 128.0x | 0.6 / 0.6 |
+| `text-append-utf8` | 28.1 | 1812 | ycs 64.4x | 0.6 / 0.5 |
+| `text-append-1txn` | 18.1 | 25563 | ycs 1416.1x | 1.4 / 4.1 |
+| `text-append-1txn-25k` | 4.6 | 1422 | ycs 306.4x | 0.4 / 0.9 |
+| `text-append-1txn-observed` | 224 | 25522 | ycs 114.0x | 1.9 / 3.6 |
+| `text-append-1txn-observed-200k` | 457 | 119278 | ycs 260.7x | 4.5 / 6.9 |
+| `text-append-1txn-observed-400k` | 967 | 503642 | ycs 520.8x | 8.1 / 13.6 |
+| `text-append-1txn-observed-25k` | 55.2 | 1424 | ycs 25.8x | 0.6 / 1.0 |
+| `txn-empty` | 7.8 | 12.1 | ycs 1.5x | 0.0 / 0.0 |
+| `text-random` | 38.6 | 1741 | ycs 45.1x | 3.1 / 4.4 |
+| `text-random-100k` | 1253 | 150269 | ycs 120.0x | 20.7 / 22.3 |
+| `trace-replay` | 356 | 11957 | ycs 33.6x | 1.6 / 2.6 |
+| `concurrent-20` | 92.1 | 79.4 | YDotNet 1.2x | 14.2 / 25.4 |
+| `many-clients-200` | 1.9 | 2.3 | ycs 1.2x | 0.5 / 0.6 |
+| `many-clients-1000` | 7.4 | 24.5 | ycs 3.3x | 2.1 / 2.2 |
+| `apply-state-v1/ycs` | 72.0 | 48.2 | YDotNet 1.5x | 2.9 / 2.7 |
+| `apply-state-v1/yrs` | 72.4 | 48.6 | YDotNet 1.5x | 2.9 / 2.7 |
+| `apply-state-v2/ycs` | 73.5 | 50.1 | YDotNet 1.5x | 2.8 / 2.6 |
+| `apply-state-v2/yrs` | 72.9 | 50.4 | YDotNet 1.4x | 2.8 / 2.6 |
+| `apply-state-x100/ycs` | 856 | 721 | YDotNet 1.2x | 255.7 / 279.2 |
+| `apply-updates/ycs` | 269 | 366 | ycs 1.4x | 17.2 / 15.8 |
+| `apply-updates/yrs` | 272 | 366 | ycs 1.3x | 17.2 / 15.8 |
+| `apply-updates-1txn/yrs` | 159 | 1774 | ycs 11.2x | 27.6 / 21.0 |
+| `encode-v1` | 8.3 | 8.7 | ycs 1.1x | 1.6 / 2.5 |
+| `encode-v2` | 10.4 | 10.1 | YDotNet 1.0x | 2.3 / 2.5 |
+| `encode-sv` | 0.1 | 0.2 | ycs 2.3x | 2.7 / 2.5 |
+| `encode-diff` | 4.8 | 4.6 | YDotNet 1.0x | 2.1 / 2.5 |
+| `map-set-distinct` | 38.6 | 142 | ycs 3.7x | 24.9 / 30.9 |
+| `map-set-distinct-1txn` | 29.0 | 116 | ycs 4.0x | 24.9 / 30.9 |
+| `map-set-same` | 66.3 | 139 | ycs 2.1x | 0.1 / 0.0 |
+| `array-push` | 26.1 | 114 | ycs 4.4x | 10.4 / 8.2 |
+| `array-push-1txn` | 13.1 | 67273 | ycs 5145.6x | 10.4 / 8.8 |
+| `array-push-1txn-20k` | 2.7 | 2192 | ycs 814.8x | 1.9 / 1.8 |
+| `array-insert-random` | 180 | 21125 | ycs 117.6x | 10.4 / 15.9 |
+| `array-delete-random` | 182 | 25350 | ycs 139.2x | 10.9 / 14.6 |
+| `read-text` | 0.3 | 48.0 | ycs 141.5x | 3.1 / 2.7 |
+| `read-array` | 3.9 | 96.9 | ycs 24.7x | 4.1 / 3.0 |
+| `read-map` | 25.8 | 396 | ycs 15.4x | 20.1 / 28.0 |
+| `undo-type` | 31.0 | 160 | ycs 5.2x | 11.5 / 5.6 |
+| `undo-all` | 42.1 | 340 | ycs 8.1x | 12.1 / 7.7 |
+| `redo-all` | 46.6 | 83.5 | ycs 1.8x | 17.4 / 14.8 |
+| `observe-count` | 56.5 | 3590 | ycs 63.6x | 1.2 / 1.5 |
+| `observe-delta` | 92.7 | 5368 | ycs 57.9x | 1.2 / 0.7 |
+
+**Native AOT** (`aot/measure.sh`, the same minimal program on each, linux-x64): ycs publishes with no trim or AOT
+warning, 2.8 MB; YDotNet 4.3 MB (its `libyrs.so` is 2.3 MB of it) with 3 trim warnings (IL2091). Self-contained
+trimmed: 21.1 MB against 22.6 MB. Framework-dependent: 0.5 MB against 2.4 MB.
+**Browser wasm** (`wasm/probe.sh`): YDotNet publishes, but no package ships a browser-wasm build of yrs, so the first
+call fails with `DllNotFoundException` ("yrs"). ycs runs there (`samples/Ycs.WasmSample`).
+
+## Where ycs is slower now
+
+### Against YDotNet
+
+Ratios are of the medians in the table above.
+
+| workload | ycs | YDotNet | ratio | cause |
+| --- | ---: | ---: | ---: | --- |
+| `apply-state-v1/ycs`, `apply-state-v2/ycs` (load a stored state, 10 times) | 72.0 / 73.5 ms | 48.2 / 50.1 ms | YDotNet 1.5x | ycs decodes into a staging table and then adopts each struct into the slab (38 MiB allocated per run); yrs does its work natively. The leaf order adds 7 to 10 % |
+| `apply-state-x100/ycs` (a state 100 times larger) | 856 ms | 721 ms | YDotNet 1.2x | the same, with the larger document |
+| `concurrent-20` (merge of 20 clients) | 92.1 ms | 79.4 ms | YDotNet 1.2x | the per-struct cost of a load, plus the leaf order's +10 %; ycs' first run is 484 ms against 100 ms (JIT) |
+| `encode-v2`, `encode-diff` | 10.4, 4.8 ms | 10.1, 4.6 ms | YDotNet 1.03, 1.04x | within the noise of the round |
+
+The state loads are the one place where YDotNet is clearly ahead. The loaded document holds about the same (2.9 MiB against 2.7). The loads' gap shrank from 1.8x (2026-11-15) to
+1.5x. The first run of every ycs workload is much slower than YDotNet's (JIT; `tables.md`, "first run"): a process
+that loads one state pays it once.
+
+Tried on the load: the leaf order's per-call cost (see "Tried and dropped"). Not done: pending structs as a staging
+table, 32-bit clocks (design document, section 5).
+
+### Against the object layout (044bb73)
+
+044bb73 is the last commit with items as objects. It is built from its own tree and run interleaved with this commit
+by `ab.py 4 6` (4 passes of 6 runs; `ab-044bb73.txt`). "Before" is 044bb73, "now" is e794d65. Under about 3 % is noise.
+Allocation and held memory are deterministic.
+
+| workload | before ms | now ms | change | alloc MiB before / now | held MiB before / now | cause, and whether it was left |
+| --- | ---: | ---: | ---: | --- | --- | --- |
+| `trace-replay` | 285.2 | 357.4 | +25 % | 43.04 / 24.86 | 3.0 / 1.6 | A delete walks 13 items in `DeleteText` and 36 in the formatting cleanup (Yjs' algorithm). Each step is a dependent load through two arrays (slab page table, then page); an object field was one load. Left: only a run index of deleted items would shorten the walk |
+| `text-append` | 25.0 | 27.6 | +10 % | 0.20 / 0.57 | 1.3 / 0.6 | A per-transaction cost spread over the transaction, the item and the run extension; no phase above 10 %. Left |
+| `text-append-1txn-observed` (100,000) | 206.5 | 236.6 | +15 % | 18.77 / 8.30 | 2.3 / 1.9 | The marker walk: each lookup crosses the run and each step reads a slot by index. Cut by 23 % on the way (scans of a leaf through its arrays, the walk left jumps after 8 steps); the rest is spread. Left |
+| `text-append-1txn-observed-25k` | 47.5 | 55.4 | +17 % | 4.71 / 2.11 | 0.6 / 0.6 | The same |
+| `map-set-same` | 57.3 | 66.6 | +16 % | 28.99 / 6.85 | 0.0 / 0.0 | Spread over the transaction, no single phase. Left |
+| `array-push-1txn` | 10.9 | 12.3 | +13 % | 10.39 / 4.28 | 9.4 / 10.4 | The same. Held memory is higher by the arena's 8 bytes per value and its doubling |
+| `encode-v1` | 7.0 | 8.3 | +19 % | 2.76 / 2.76 | 3.2 / 1.6 | Spread over the write of the structs, no single cost (about 0.13 ms per encode of a 289 KB state, 13 ns a struct). Accepted: invisible in a join or a save. A v1 write path that bypasses `IUpdateEncoder` would close it at the price of a second encoder |
+
+`apply-state-v1/ycs` (+4 %, 71.3 to 74.3 ms) and `apply-updates/ycs` (-2 %) are at the edge of the noise.
+
+What is not slower: random edits (`text-random-100k` -29 %, `array-insert-random` -34 %, `array-delete-random` -38 %),
+map inserts (`map-set-distinct` -34 %), `read-array` (7.5 to 4.0 ms) and `read-map` (27.5 to 26.4 ms). Allocation is lower
+on every editing workload and on `apply-updates` (59.3 to 11.9 MiB), and higher on the state loads (33 to 38 MiB, the
+staging table). Held memory is 36 to 51 % lower on the documents that keep many structs (`text-random-100k` 27.1 to 16.1 MiB,
+`map-set-distinct` 38.9 to 24.9, `concurrent-20` 29.1 to 14.2), higher on the array pushes. The open items are in the
+design document, [section 5](../../docs/design-item-layout.md#5-open-items).
+
+## Why: the main changes and what each bought
+
+Each was measured against the commit before it with `ab.py`; the numbers are those of the run that decided it.
+
+* **The first speed pass** (a run of typed characters or pushed values is one item until something observes the type;
+  pushes start from the last item; merges at the end of a transaction in one pass). Typing allocates 2 bytes a keystroke
+  instead of 202; `text-append-1txn` 58 s to 6 ms; `array-push-1txn` from killed at 8 GiB to 7 ms; the trace replays 10 %
+  faster with half the allocations; loading allocates 20 % less. Not gained: random deletes stayed quadratic (60 s) and
+  so did typing in one transaction into an observed type, because Yjs' marker walk crosses every piece.
+* **The item layout** ([design](../../docs/design-item-layout.md)): each struct is a 64-byte slot of one slab, linked by
+  32-bit handles; characters and values live in arenas; an update decodes into a staging table, so no `Item` object
+  exists. It replaced a 128-byte object per item plus its content object. Held memory is 49 to 64 % of the object layout's
+  on the six workloads of the model, allocation is down 38 to 87 % on most editing workloads, and `apply-updates` allocates
+  59.3 to 11.9 MiB. The price is the table above: reading a slot by index costs more than a field of an object the JIT keeps
+  in a register.
+* **The run-head index** (a flag byte per position and visible sums per block of 512, later per leaf): the marker walks of
+  Yjs jump within one client's chain of pieces and end where Yjs' loops end. `array-delete-random` from 57 s to 0.9 s,
+  `text-append-1txn-observed` (one transaction, 100,000 characters) from 49 s to 0.8 s. Counting breaks per block made the
+  observed typing 2 to 3x faster again.
+* **The leaf order** (a client's structs in leaves of at most 128 positions, a directory of leaf sums over them): a split
+  shifts one leaf instead of the rest of the list. `apply-updates` -26 %, `trace-replay` -29 %, observed typing linear
+  in the characters (400,000 characters in 600 ms, 5.5x faster), held memory halved for it. It costs `apply-state` 7 to
+  10 % and `concurrent-20` 10 %. Capacity 128 is best on the split-heavy workloads.
+* **`ItemRef`**, a struct around the item (later around the slab handle), so the library can change how a struct is held
+  without touching its callers. No allocation. The first build cost the observed typing 8 to 14 %: the JIT's inlining
+  budget (the accessors are `AggressiveInlining` now) and a cast on every member read (a type test is faster).
+* **The decoders as structs over the input span.** `ApplyUpdate` reads the input in place and the decoders hold no
+  buffer of their own, so a string is decoded once, straight into the staging table. Time and allocation equal, within
+  the noise of a shared machine; the point is that a load makes no copy of the update.
+* **The large-text work.** `YText.Chunks` and `WriteTo` read a text as spans without a copy; `ToString` writes the
+  characters straight into the string and a split that changes no character keeps the cached one; a run longer than the
+  largest page gets a page of exactly its length, so typing at the end of a large text copies it O(log n) times; a large
+  string is encoded into a buffer sized to it, not to three bytes a character; a compaction frees a moved large run's
+  page at once.
+* **Reading arrays and maps.** `read-array` was 2.7 times slower than on objects. The slab was not the cause: the
+  value conversion `YValue.FromStored` returned its 24 bytes through memory and the caller's next read stalled on the store
+  forwarding. The int, string and double cases are inlined into the readers now, the array enumerator's step is inlined,
+  and `Current` no longer copies the walk state. `read-array` 14.7 to 2.8 ms (8 cores), `read-map` 27.1 to 14.9.
+* **The fixed cost of a small document** (bytes per document, `bench/Ycs.Layout/README.md`): the page tables, the change
+  log, the delete set, the handler holder and the first pages are made at first use. A one-insert document is 3.3 KB.
+
+## Tried and dropped, or not done
+
+* **One warm-up** (the first suite run): ycs was still reaching tier-1 code in the timed runs (`text-append` 160, 149, 44,
+  22, 24 ms). Three were not enough for the encodes; a child warms up until stable now.
+* **A flat form below one leaf** (no leaf object while a client has at most 128 structs): 0 to 3 % on the three workloads
+  it had to help, because their clients hold far more structs. Not committed.
+* **A pivot among the leaves** (Yjs' guess from the clocks): nothing; the cursor decides. Six other variants of the
+  leaf's search and cursor (no cursor rewrite when unchanged, a 32-bit division, the indexer's test inlined, ...): none
+  beyond 2 %. The leaf order's cost on loads stays.
+* **Leaf capacity 64 or 256**: 64 is faster on the observed typing, 256 slower on it and on `array-delete-random`; 128 kept.
+  Blocks of 4,096 positions for the run sums: slower (9.3 s for 400,000 characters).
+* **Field order of the slot**: nothing beyond the noise. The array's start is only 8-byte aligned, so which slots straddle
+  a cache line is luck.
+* **Removing the slab's bounds checks**: needs `Unsafe` or `MemoryMarshal` (banned). Reading each slot once per step took
+  most of them away.
+* **An unchecked cast in `ItemRef`**: `Unsafe` is banned. An exact-type check made the observed typing 20 % slower.
+* **Encode micro-variants** (one buffer check for both ids of a header, a short string in one pass, `in` parameters, a
+  delete-set walk without building an id): none measurable.
+* **Smaller edits to the walks** (a memo of the last changed type, one slot read in `MarkDeleted` and `ExtendRun`, a lower
+  literal-walk limit, `Transaction` getters inlined): under 3 %, or worse on another workload.
+* **Not done**: a Fenwick tree over positions and a full B+tree (the leaf sums are as fast; two levels hold a million
+  structs), generation counters in Release, a separate small-document representation, a struct of arrays for the slot,
+  pooled item objects (design document, section 4); the delta of a text without formats (`observe-delta` builds three
+  attribute dictionaries per event delta: a text cannot reliably know it never held a format); 32-bit clocks, pending
+  structs as a staging table, reuse of type-table indexes (section 5).
 
 ## Not compared
 
-* XML types and formatting attributes, subdocuments, snapshots and relative/sticky positions: both have them, but
-  not with the same shapes of API; left out to keep the suite to what both express the same way.
-* v2 state vectors (YDotNet exposes only `StateVectorV1`) and update merging without a document (yrs has
-  `merge_updates`, YDotNet does not expose it).
-* Native allocations of yrs per operation (only what it holds afterwards is measured).
+* XML types and formatting attributes, subdocuments, snapshots and relative positions: both have them, but not with
+  the same shapes of API.
+* v2 state vectors and update merging without a document (YDotNet exposes neither); native allocations of yrs.
 
 ## Not speed
 
-* **Native AOT** (`aot/measure.sh`, the same minimal program on each, linux-x64, sizes without symbol files):
-  ycs 2.35 MB, no trim or AOT warning; YDotNet 4.29 MB (2.03 MB executable + 2.26 MB `libyrs.so`), publishes and
-  runs, but with 3 trim/AOT warnings (IL2091, `Marshal.PtrToStructure<T>` in `MemoryReader`). Self-contained
-  trimmed: 20.9 MB against 22.6 MB (same 3 warnings); framework-dependent: 0.28 MB against 2.45 MB.
-* **Blazor WebAssembly / browser-wasm** (`wasm/probe.sh`): YDotNet publishes (with the IL2104 trim warning), but
-  no package ships a browser-wasm build of yrs, so the first call fails: `DllNotFoundException` ("yrs") from
-  `Doc.CreateDoc`, exit 1 in Node. Making it work would take compiling yrs for `wasm32-unknown-emscripten` with a
-  Rust toolchain and linking it into the runtime with the wasm-tools workload (native relink); YDotNet also passes
-  managed delegates to native code as callbacks, which browser-wasm supports only for
-  `[UnmanagedCallersOnly]` methods, so it may need more than a native build. Not attempted. ycs runs there
-  (`samples/Ycs.WasmSample`).
-* **Platforms** of YDotNet.Native 0.7.0: linux x64/arm64/arm (glibc and musl), osx x64/arm64, win x64/arm64. Not:
-  win-x86, browser-wasm, Android, iOS, FreeBSD. The packages target net10.0.
-* **Hostile input** (the table above; the cases come from `tests/Ycs.Fuzz`): ycs rejects all 16 malformed or
-  over-limit updates with `YUpdateException` and leaves the document unchanged. YDotNet rejects 10 with an error
-  code (always `EndOfStream`), applies 6 (3 malformed updates ycs rejects, of which
-  `nonatomic-any-splice-out-of-range` changes the document; and the 3 valid ones), and **one aborts the process**: a Rust panic in
-  `yrs/src/block_store.rs:53` (`nonatomic-find-index-out-of-range`, 54 bytes) is not caught at the FFI boundary,
-  so no .NET exception handler can save the process: a server applying peers' updates with YDotNet can be killed
-  by one message. yrs has no limits to set: the valid but large `deleted-items-524288` (42 bytes, a 4×-over-limit
-  state) and the `gc-bomb` (2^21 pending structs in 24 bytes) are accepted; ycs rejects both at its default
-  `UpdateLimits` (an application raises them for trusted input). The peak resident sets include the inputs every
-  child generates (about 265 MiB).
-  Beyond the table, ycs rejects a crafted update that Yjs 13.6.32 accepts, because a document that applied it and
-  a client that joins it disagree for good (`docs/api.md`, "Atomicity"): a struct that waits for structs the document
-  lacks while it already has a struct under the same id (found by a sync server's tests; no honest client writes one).
-  An item whose right origin precedes its origin is accepted, as in Yjs (a check was tried and dropped: `docs/findings-server.md`, 4).
+* **Hostile input** (`tables.md`; the cases come from `tests/Ycs.Fuzz`): ycs rejects all 16 malformed or over-limit
+  updates with `YUpdateException` and leaves the document unchanged. YDotNet rejects 10, applies 6 (3 malformed ones,
+  one of which changes the document, and 3 valid ones) and **one aborts the process**: a Rust panic in
+  `yrs/src/block_store.rs:53` is not caught at the FFI boundary, so a server applying peers' updates can be killed by
+  one 54-byte message. yrs has no limits: it accepts a 42-byte update that expands to 524,288 deleted items and a
+  24-byte one with 2^21 pending structs; ycs rejects both at its default `UpdateLimits`.
 * **API differences that matter:** YDotNet needs a transaction object for every call and throws if a root type is
-  fetched while one is open; its `Input`/`Output` resources have finalizers. **Number types do not round-trip:**
-  `Input.Long` is written as a bigint (a Yjs peer reads a JavaScript `bigint`, ycs a `BigInteger`), and a Yjs or ycs
-  integer is read by YDotNet as a `Double`; use `Input.Double` for Yjs numbers. Indexes are `uint`, UTF-16 by
-  default (`DocEncoding.Utf16`), as Yjs.
-* **Interop:** every state either library wrote decoded in the other to the same content, in every workload both finished (35 of 36; ycs did not finish `array-push-1txn`).
-
-### The Any values (layout 8.8, 2026-11-17, ycs only)
-
-Base `modernize` b0e9c80 (the value arena shadows each Any content object) against `layout-8-8` (the arena is the only
-holder), interleaved by `ab.py 3 5` (`results/2026-11-17-layout-8-8/ab-3x5.txt`; load 1 to 2, 8 logical cores). `COMPARE_ALLOC_TYPES=1`
-on the new build shows no `ContentAny` and no `List<object>` (`alloc-types.txt`).
-
-| workload | base ms | 8.8 ms | alloc MiB base / 8.8 | held MiB base / 8.8 |
-| --- | ---: | ---: | ---: | ---: |
-| `map-set-distinct` | 37.9 | 32.4 | 31.7 / 22.6 | 34.0 / 24.9 |
-| `map-set-distinct-1txn` | 22.8 | 18.4 | 34.5 / 25.3 | 34.0 / 24.9 |
-| `map-set-same` | 61.1 | 55.8 | 15.2 / 6.8 | 0 / 0 |
-| `array-push` | 23.6 | 21.1 | 6.3 / 4.3 | 10.9 / 9.9 |
-| `array-push-1txn` | 10.4 | 7.3 | 6.3 / 4.3 | 10.4 / 9.4 |
-| `array-insert-random` | 132.9 | 127.2 | 11.1 / 5.4 | 16.1 / 10.4 |
-| `array-delete-random` | 160.7 | 145.5 | 25.1 / 4.2 | 17.7 / 11.6 |
-| `read-map` | 28.1 | 25.8 | 0 / 0 | 29.2 / 20.1 |
-| `read-array` | 18.4 | 20.1 | 0 / 7.6 | 5.8 / 4.8 |
-| `undo-type`, `undo-all`, `redo-all`, `observe-count`, `observe-delta` (text) | | | equal | equal |
-
-`read-array` is the one cost: `StoredContent` of an Any item is a copy of its range (the enumeration survives the
-structs merging or leaving, and a compaction moves the range), 8 B per value, transient.
-
-### The decoded objects (layout 9.6, 2026-11-17, ycs only)
-
-Base `modernize` 0b68786 (an update is read into a staging table and, beside it, into `Item`, `GC`, `Skip` and content
-objects) against `layout-9-6` (the table only). One child process per workload and build, 3 timed runs, trace
-`automerge-paper` (`results/2026-11-17-layout-9-6/alloc-types.txt`, `COMPARE_ALLOC_TYPES=1`: no `Item`, `GC`, `Skip`,
-`ContentString`, `ContentAny` or `ContentDeleted` on the new build; load average about 2, a shared machine).
-
-| workload | base ms | 9.6 ms | alloc MiB base / 9.6 | held MiB base / 9.6 |
-| --- | ---: | ---: | ---: | ---: |
-| `apply-state-v1/ycs` (10 loads of the final state) | 67.2 | 57.3 | 57.6 / 38.2 | 2.7 / 2.7 |
-| `apply-updates/ycs` (259,778 updates, one transaction each) | 243.4 | 228.3 | 38.6 / 12.0 | 17.4 / 17.4 |
-
-### Step 8 and 9 against the object layout (layout 8.13, 2026-11-17, ycs only)
-
-`modernize` 044bb73 (items as objects) against the branch, after the slab (7), the arenas (8.x) and the removal of the decoded
-objects (9.x), built from separate trees and run interleaved by `ab.py 4 6` (`results/2026-11-17-8-13/`). The machine was
-shared: load average 0.75 at the start of the final run and 1.7 to 4.0 on its lines (1.2 to 4.8 in the run without any
-change), so a difference under about 5 % is inside the noise; the in-process comparisons below ran at load 0.7 to 1.5 where
-noted. Allocation and held memory are deterministic.
-
-| workload | 044bb73 ms | branch ms | change | alloc MiB 044bb73 / branch | held MiB 044bb73 / branch |
-| --- | ---: | ---: | ---: | --- | --- |
-| `trace-replay` | 202.0 | 240.5 | +19 % | 43.04 / 24.86 | 3.0 / 1.9 |
-| `text-random` | 24.6 | 25.4 | +3 % | 3.74 / 1.68 | 5.3 / 3.2 |
-| `text-random-100k` | 905.0 | 758.3 | -16 % | 18.59 / 7.87 | 27.1 / 16.3 |
-| `text-append` | 16.6 | 20.9 | +26 % | 0.20 / 0.51 | 1.3 / 1.5 |
-| `array-insert-random` | 134.8 | 122.0 | -9 % | 16.93 / 5.41 | 18.9 / 10.4 |
-| `array-delete-random` | 176.7 | 123.8 | -30 % | 32.78 / 4.20 | 20.1 / 11.6 |
-| `array-push-1txn` | 6.8 | 7.5 | +10 % | 10.39 / 4.27 | 9.4 / 10.4 |
-| `concurrent-20` | 68.2 | 68.2 | +0 % | 28.55 / 14.32 | 29.1 / 14.3 |
-| `apply-state-v1/ycs` | 53.1 | 56.3 | +6 % | 33.14 / 38.07 | 4.5 / 2.7 |
-| `apply-state-v2/ycs` | 54.8 | 55.7 | +2 % | 35.14 / 40.08 | 4.4 / 2.8 |
-| `apply-updates/ycs` | 223.3 | 228.6 | +2 % | 59.31 / 11.94 | 18.6 / 17.4 |
-| `encode-v1` | 5.0 | 5.5 | +10 % | 2.76 / 2.76 | 3.2 / 1.9 |
-| `text-append-1txn-observed-25k` | 30.7 | 37.4 | +22 % | 4.71 / 2.11 | 0.6 / 0.7 |
-| `text-append-1txn-observed` | 138.4 | 142.3 | +3 % | 18.77 / 8.30 | 2.3 / 2.4 |
-| `map-set-distinct` | 40.8 | 31.4 | -23 % | 36.55 / 22.57 | 38.9 / 24.9 |
-| `map-set-distinct-1txn` | 31.9 | 18.5 | -42 % | 39.25 / 25.28 | 38.9 / 24.9 |
-| `map-set-same` | 48.4 | 55.5 | +15 % | 28.99 / 6.84 | 0.0 / 0.0 |
-| `array-push` | 18.2 | 19.7 | +8 % | 10.39 / 4.33 | 9.4 / 10.9 |
-| `read-array` | 5.0 | 19.0 | +280 % | 0.00 / 0.00 | 4.3 / 4.8 |
-| `read-map` | 25.8 | 27.2 | +5 % | 0.00 / 0.00 | 34.1 / 20.1 |
-
-Before any change (359f0a3 against 044bb73, `ab-4x6-before.txt`): `text-append-1txn-observed-25k` +52 %, `-observed` +40 %,
-`encode-v1` +24 %, `trace-replay` +21 %, `text-append` +20 %, `map-set-same` +18 %, `read-array` x4, the rest as in the step 7
-table. Allocation is lower on every editing workload and `apply-updates`, higher on `apply-state-*` (the staging table);
-held memory is 25 to 40 % lower on the text and map workloads, 10 to 15 % higher on the array pushes (8 bytes per value in the
-arena, with the run's doubling).
-
-What was kept, each measured alone against the commit before it (`ab.py 4 6` where a file is named, else the in-process
-harness: the typing loops timed with `Stopwatch` in one process, 30 to 45 repetitions, the build before against the build
-after, alternated):
-
-* **`WriteItem` reads the slot once** (`encode-v1`): the clients, origins, parent and key come off one `ref readonly Slot`, and the
-  kind is switched on once (it was read through about ten accessors and tested four times). 6.0 to 5.6 ms (-6.7 %,
-  `ab-4x6-write-and-read-array.txt`).
-* **`read-array`** (the +7.6 MiB of 8.8): `EnumerateRaw` copies an Any run so that the values stay readable when the struct merges
-  away or a compaction moves the range; the copy is a rented array now (`ArrayPool<object>`, returned by the enumerator's `finally`)
-  instead of a fresh 800 kB array on the large object heap per 100,000-value run. 0 B allocated (was 7.63 MiB), 20.6 to 18.5 ms
-  (-10 %). The 044bb73 time (5.0 ms) is not reached: since the `YValue` API an element is also converted (`YValue.FromStored`) through
-  two nested iterators, which is the API's cost, not the layout's.
-* **The marker walk of observed typing** (`text-append-1txn-observed-25k`, `-observed`, `array-delete-random`): the cost was found
-  by timing the phases of `YText.InsertInTransaction` (an instrumented build, not kept): 42 of 52 ms of 25,000 inserts were
-  `FindPosition`. In one observed transaction every insert is an item of its own, all in one run; the marker sits on the run's head,
-  so each lookup walks right over the whole run (a jump through the run-head index after 32 steps), then walks left back to the
-  head (another jump after 32 steps), and each jump scans positions of up to two 128-position leaves one `ValueAt` at a time.
-  Two changes: `ClientStructs.SeekRight`/`SeekLeft` scan a leaf through its flags and starts arrays, taken once (about -8 %), and
-  the walk to the left jumps to the run head after 8 steps instead of 32 (every step of that walk stays in a run, so the jump always
-  gains; about -15 % more; random typing unchanged). Together, against 359f0a3: `text-append-1txn-observed-25k` 46.9 to 36.9 ms
-  (-21 %), `-observed` 187.4 to 144.5 (-23 %), `array-delete-random` 156.7 to 133.2 (-15 %), the rest equal
-  (`ab-4x6-marker-walk.txt`, load 1.3 to 1.6).
-
-Tried and not kept (each in the in-process harness, load 0.7 to 4, kept when it gained at least 3 % on its workload):
-
-* `MarkDeleted(Transaction)` from one slot read (`map-set-same` 53.4 against 54.2 ms); `ExtendRun`/`CanExtendRun` from one slot read
-  (`text-append`, mid-document typing 11.1 to 11.5 against 11.4 to 12.0 ms: noise).
-* `Transaction.Doc`, `Local` and `DeleteSet` made inlinable (a `throw` in the getter kept the JIT from inlining them into
-  `CanExtendRun`, found with `DOTNET_JitDisasm`; with a throw helper they inline and `GetState` with them): no change in any workload.
-* A memo of the last list change in `AddChangedTypeToTransaction` (typing records the same type per insert): -3 % on the observed
-  typing, nothing on `text-append`.
-* `NewItem` and `SplitItem` without the `SetKey(handle, null)` and the `Parent` to table-index round trip: `text-random` 26.8
-  against 25.9 ms. The simplified `TryToMergeWithLefts` (the redundant `Deleted` and `IsSameKind` tests before `CanMergeWith`):
-  nothing, the merge pass of 25,000 observed items is 1.2 of 46 ms.
-* The same run probe in the walk to the right: 36.8 to 39.7 against 37.1 to 39.0 ms without it. A lower `LiteralWalkSteps` for all
-  walks: observed 47 to 32 ms but `text-random` 27 to 34 ms (a lookup that finds no run to jump costs about 25 steps).
-* `Right.AsItem`/`Left.AsItem` as one accessor (one slot read for the neighbour test): `trace-replay`'s delete calls 86.8 against 88.3 ms.
-
-What remains of the step 7 table, and why: `trace-replay` is +19 %. Its 77,463 delete calls take 66 ms on 044bb73 and 87 ms on the
-branch in the harness (the inserts 83 and 94 ms, the rest 73 and 78); counters show each delete passes 12.9 items in
-`DeleteText`'s loop and 36 in `CleanupFormattingGap`'s walk over the deleted items around it (Yjs' algorithm). Each step is a
-dependent load through two arrays (`_slotPages`, then the page) where the object layout had one, and a read-once accessor does
-not change that; only a run index of deleted items would. `text-append` (+26 %) and mid-document typing (+30 %) are per-transaction
-costs spread over the transaction, the item and the run extension, with no single phase above 10 %. `map-set-same` +15 %,
-`array-push` +8 %, `array-push-1txn` +10 %: the same.
-
-### Step 8 and 9: allocation and held memory (layout 8.12, 2026-11-17, ycs only)
-
-The memory half of the 8.13 table once more, after the last change (12e5ea7), for every workload both builds have: `modernize`
-044bb73 (items as objects, built from `git archive 044bb73` into a folder of its own) against the branch, `ab.py 2 3`
-(`results/2026-11-17-8-12/`). **The timings in that file are not from a quiet machine** (load average 4 to 15: other agents built
-and tested at the same time) and are not reported here; a clean timing round comes later. Allocation per run and held memory are
-deterministic and equal those of the 8.13 table where the workloads overlap. Held memory is the managed heap after a compacting
-collection, inputs included, so a document that holds little shows the inputs' size.
-
-| workload | alloc MiB 044bb73 / branch | held MiB 044bb73 / branch | held |
-| --- | --- | --- | ---: |
-| `trace-replay` | 43.04 / 24.86 | 3.0 / 1.9 | -37 % |
-| `text-random` | 3.74 / 1.68 | 5.3 / 3.2 | -40 % |
-| `text-random-100k` | 18.59 / 7.87 | 27.1 / 16.3 | -40 % |
-| `text-append` | 0.20 / 0.51 | 1.3 / 1.5 | +15 % |
-| `text-append-1txn` | 0.20 / 0.50 | 2.1 / 2.1 | +0 % |
-| `text-append-1txn-observed-25k` | 4.71 / 2.11 | 0.6 / 0.7 | +17 % |
-| `text-append-1txn-observed` | 18.77 / 8.30 | 2.3 / 2.4 | +4 % |
-| `array-insert-random` | 16.93 / 5.41 | 18.9 / 10.4 | -45 % |
-| `array-delete-random` | 32.78 / 4.20 | 20.1 / 11.6 | -42 % |
-| `array-push` | 10.39 / 4.33 | 9.4 / 10.9 | +16 % |
-| `array-push-1txn` | 10.39 / 4.27 | 9.4 / 10.4 | +11 % |
-| `concurrent-20` | 28.55 / 14.32 | 29.1 / 14.3 | -51 % |
-| `map-set-distinct` | 36.55 / 22.57 | 38.9 / 24.9 | -36 % |
-| `map-set-distinct-1txn` | 39.25 / 25.28 | 38.9 / 24.9 | -36 % |
-| `map-set-same` | 28.99 / 6.84 | 0.0 / 0.0 | |
-| `apply-state-v1/ycs` (10 loads) | 33.14 / 38.07 | 4.5 / 2.7 | -40 % |
-| `apply-state-v2/ycs` (10 loads) | 35.14 / 40.07 | 4.4 / 2.8 | -36 % |
-| `apply-updates/ycs` | 59.31 / 11.94 | 18.6 / 17.4 | -6 % |
-| `encode-v1` | 2.76 / 2.76 | 3.2 / 1.9 | -41 % |
-| `encode-v2` | 1.53 / 1.53 | 3.9 / 2.1 | -46 % |
-| `encode-diff` | 1.39 / 1.39 | 3.7 / 1.9 | -49 % |
-| `read-text` | 0.20 / 0.20 | 4.2 / 2.3 | -45 % |
-| `read-array` | 0.00 / 0.00 | 4.3 / 4.8 | +12 % |
-| `read-map` | 0.00 / 0.00 | 34.1 / 20.1 | -41 % |
-| `undo-type` | 21.30 / 18.16 | 12.0 / 12.1 | +1 % |
-| `undo-all` | 30.14 / 26.44 | 12.1 / 12.2 | +1 % |
-| `redo-all` | 35.55 / 32.71 | 21.3 / 17.9 | -16 % |
-| `observe-count` | 36.83 / 17.72 | 1.5 / 1.7 | +13 % |
-| `observe-delta` | 94.81 / 74.18 | 1.5 / 1.7 | +13 % |
-
-`many-clients-200` and `apply-state-x100/ycs` are not in 044bb73's bench: on the branch 2.89 MiB allocated and 0.6 MiB held, and
-479.74 MiB allocated and 253.0 MiB held. Reading: the six workloads of the layout model (`text-random-100k`, `trace-replay`,
-`concurrent-20`, `map-set-distinct`, `array-insert-random`, `array-delete-random`) hold 49 to 64 % of what the object layout held
-(the model: 35 to 45 % with 52-byte slots); every editing workload and `apply-updates` allocates less except `text-append`
-(0.20 to 0.51 MiB, a per-transaction cost spread over the transaction, the item and the run extension, 8.13) and the ten loads
-of `apply-state-*` (the staging table); what grew in held memory is the array pushes (8 bytes a value in the arena, with the
-run's doubling) and, by 0.1 to 0.2 MiB, `text-append`, `observe-*` and the observed appends (not examined). `bench/Ycs.Layout small`,
-rerun on the built layout, is in `bench/Ycs.Layout/README.md`.
+  fetched while one is open; its `Input` and `Output` have finalizers. Number types do not round-trip: `Input.Long`
+  is written as a bigint, and a Yjs or ycs integer is read by YDotNet as a `Double`; use `Input.Double`.
+* **Platforms** of YDotNet.Native 0.7.0: linux, osx and win on x64 and arm64; not browser-wasm, Android or iOS.
 
 ## Pinned versions
 
 `YDotNet` 0.7.0 and `YDotNet.Native` 0.7.0 (which pulls `YDotNet.Native.Linux`, `.MacOS`, `.Win32` 0.7.0), source
 commit c14ed517 of y-crdt/ydotnet, built from yrs `release-v0.26`. 0.7.0 was published on 2026-11-10; the previous
-release, 0.6.0, is from February 2026. `dotnet-trace` 10.0.750501 was used for the profiles, installed into a
-scratch folder, not referenced.
+release, 0.6.0, is from February 2026.

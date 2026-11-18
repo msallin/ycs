@@ -65,7 +65,7 @@ as in Yjs.
 
 The automerge-paper editing trace (260k edits), `bench/Ycs.Benchmarks`, median of 5 runs. The times are those of 2026-11-15
 (measured before the slab and the arenas; not repeated since, a clean timing round is still to come); the allocations are
-those of 2026-11-17 (the current layout, 3 runs; `bench/Ycs.Compare/results/2026-11-17-8-12/benchmarks-trace.txt`):
+those of 2026-11-18 (the current layout; `bench/Ycs.Compare/results/2026-11-18-e794d65/benchmarks-trace.txt`):
 
 | Operation | Time | Allocated |
 | --- | --- | --- |

@@ -201,7 +201,7 @@ internal readonly partial struct ItemRef : IEquatable<ItemRef>
     }
 
     // The members of an item. Every accessor is inlined: Integrate and the walks read dozens of them, beyond the
-    // JIT's inlining budget, and a call per read cost the walks up to 15 % (bench/Ycs.Compare/README.md, "ItemRef").
+    // JIT's inlining budget, and a call per read cost the walks up to 15 % (bench/Ycs.Compare/README.md, "Why").
     // A GC struct's slot holds no links, origins, parent, content or key: they read as none.
 
     public ItemRef Left
