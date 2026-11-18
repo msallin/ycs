@@ -3,7 +3,7 @@ namespace Ycs;
 /// <summary>
 /// Decodes an update (its structs by client into a <see cref="StagingTable"/>, and its delete set) into objects that are
 /// reused from one update to the next on the same thread: the key list of the v2 decoder, the staging table and the
-/// delete set. The checks are those of <see cref="EncodingUtils.StructCursor"/> and
+/// delete set. The decoders themselves are locals of the read. The checks are those of <see cref="EncodingUtils.StructCursor"/> and
 /// <see cref="DeleteSet.Read"/>.
 /// <br/>
 /// <see cref="Read"/> hands out a <see cref="Lease"/>; disposing it clears the delete set's lists and the staging table
@@ -35,8 +35,6 @@ internal sealed class UpdateReader
     private readonly DeleteSet _deleteSet = new();
     private readonly StagingTable _staging = new();
     private readonly Stack<List<DeleteSet.DeleteItem>> _spareDeleteLists = new();
-    private UpdateDecoderV1 _v1;
-    private UpdateDecoderV2 _v2;
     private int _version;
 
     /// <summary>
@@ -80,13 +78,13 @@ internal sealed class UpdateReader
     {
         if (v2)
         {
-            _v2 = new UpdateDecoderV2(update, maxStructs, maxDepth, _keys);
-            EncodingUtils.ReadUpdate(ref _v2, update, _staging, _deleteSet, _clients, _spareDeleteLists);
+            var v2Decoder = new UpdateDecoderV2(update, maxStructs, maxDepth, _keys);
+            EncodingUtils.ReadUpdate(ref v2Decoder, update, _staging, _deleteSet, _clients, _spareDeleteLists);
         }
         else
         {
-            _v1 = new UpdateDecoderV1(update, maxStructs, maxDepth);
-            EncodingUtils.ReadUpdate(ref _v1, update, _staging, _deleteSet, _clients, _spareDeleteLists);
+            var v1Decoder = new UpdateDecoderV1(update, maxStructs, maxDepth);
+            EncodingUtils.ReadUpdate(ref v1Decoder, update, _staging, _deleteSet, _clients, _spareDeleteLists);
         }
     }
 
@@ -108,7 +106,6 @@ internal sealed class UpdateReader
         _deleteSet.Clients.Clear();
         _clients.Clear();
         _staging.Reset();
-        _v2 = default;
         _keys.Clear();
         if (t_free == null)
         {
