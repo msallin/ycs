@@ -27,8 +27,8 @@ internal sealed partial class StructStore
     }
 
     /// <summary>
-    /// Counts the structs added and split. Every change to the content of a type adds a struct, splits
-    /// one (which can rewrite characters: a split surrogate pair) or deletes, and a delete of countable
+    /// Counts the structs added and the splits that rewrite characters (a split surrogate pair). Every change to the
+    /// content of a type adds a struct, splits one that way or deletes, and a delete of countable
     /// content lowers the type's <see cref="YType.Length"/>: so while this and the length are
     /// unchanged, so is the content (<see cref="YText.ToString"/> caches on it).
     /// </summary>
@@ -217,7 +217,12 @@ internal sealed partial class StructStore
 
     private ItemRef SplitItem(Transaction transaction, ItemRef item, int diff)
     {
-        Version++;
+        if (item.Kind == SlotKind.String && char.IsHighSurrogate(item.Chars[diff - 1]))
+        {
+            // The cut pair becomes two replacement characters: the only split that changes a text.
+            Version++;
+        }
+
         MaySplitMapValues |= item.ParentSub != null && !item.Deleted;
         return item.SplitItem(transaction, diff);
     }

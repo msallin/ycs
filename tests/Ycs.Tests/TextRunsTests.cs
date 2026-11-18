@@ -190,4 +190,27 @@ public class TextRunsTests
 
         Assert.AreEqual("zabc", text.ToString());
     }
+
+    [TestMethod]
+    public void ToString_AfterSnapshotReadsThatSplitItems_ReturnsTheSameInstance()
+    {
+        var doc = NewDoc();
+        var text = doc.GetText();
+        text.Insert(0, "hello brave world");
+        var previous = doc.CreateSnapshot();
+        text.Insert(6, "X");
+        text.Remove(10, 3);
+        var current = doc.CreateSnapshot();
+        var first = text.ToString();
+
+        text.ToRuns(current, previous);
+        text.ToDelta(previous);
+        text.ToDelta(current, previous);
+
+        Assert.AreSame(first, text.ToString());
+
+        text.Remove(0, 1);
+
+        Assert.AreEqual(first[1..], text.ToString());
+    }
 }
