@@ -97,6 +97,9 @@ internal sealed class StagingTable
     private Dictionary<long, int> _clientIndex = [];
     private int _count;
     private int _charsUsed;
+
+    // The end of the furthest room CharRoom handed out since the last Reset: a decode that stages less, or fails, still wrote into it.
+    private int _charsDirty;
     private int _valuesUsed;
     private int _refsUsed;
     private int _clientCount;
@@ -283,6 +286,7 @@ internal sealed class StagingTable
     public Span<char> CharRoom(int length)
     {
         Ensure(ref _chars, _charsUsed, length);
+        _charsDirty = Math.Max(_charsDirty, _charsUsed + length);
         return _chars.AsSpan(_charsUsed, length);
     }
 
@@ -380,6 +384,8 @@ internal sealed class StagingTable
         Poison();
         Array.Clear(_values, 0, _valuesUsed);
         Array.Clear(_refs, 0, _refsUsed);
+        _chars.AsSpan(0, Math.Max(_charsDirty, _charsUsed)).Clear();
+        _charsDirty = 0;
         _count = 0;
         _charsUsed = 0;
         _valuesUsed = 0;

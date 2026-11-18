@@ -86,4 +86,18 @@ public class PooledBufferClearingTests
 
         Assert.IsFalse(holds);
     }
+
+    [TestMethod]
+    public void StagingTableReturn_AfterRoomWasWritten_KeepsNoCharacters()
+    {
+        var table = StagingTable.Rent();
+        Secret.AsSpan().CopyTo(table.CharRoom(Secret.Length));
+        StagingTable.Return(table);
+
+        var again = StagingTable.Rent();
+        var room = again.CharRoom(Secret.Length).ToArray();
+        StagingTable.Return(again);
+
+        Assert.IsFalse(room.Any(c => c != '\0'));
+    }
 }

@@ -308,7 +308,7 @@ public class StagingTableTests
     }
 
     [TestMethod]
-    public void Reset_RefKeptAcrossIt_ReadsPoisonInDebugAndTheOldValueInRelease()
+    public void Reset_RefKeptAcrossIt_ReadsPoisonInDebugAndNoCharactersInRelease()
     {
         var table = new StagingTable();
         table.BeginClient(1, 0);
@@ -324,7 +324,7 @@ public class StagingTableTests
         Assert.AreEqual('\uDEAD', chars[0]);
 #else
         Assert.AreEqual(2, kept.Length);
-        Assert.AreEqual('q', chars[0]);
+        Assert.AreEqual('\0', chars[0]);
 #endif
     }
 
