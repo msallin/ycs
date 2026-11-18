@@ -653,9 +653,12 @@ static class Ycs.YUpdate
     static byte[] Diff(System.ReadOnlySpan<byte> update, System.ReadOnlySpan<byte> stateVector, UpdateFormat format = 0, UpdateLimits? limits = null)
     static byte[] EncodeStateVector(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
     static byte[] Merge(System.Collections.Generic.IEnumerable<System.ReadOnlyMemory<byte>> updates, UpdateFormat format = 0, UpdateLimits? limits = null)
-    static byte[] Merge(System.Collections.Generic.IEnumerable<byte[]> updates, UpdateFormat format = 0, UpdateLimits? limits = null)
     static byte[] Merge(System.ReadOnlySpan<System.ReadOnlyMemory<byte>> updates, UpdateFormat format = 0, UpdateLimits? limits = null)
     static string Describe(System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static void Convert(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update, UpdateFormat from, UpdateFormat to, UpdateLimits? limits = null)
+    static void Diff(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update, System.ReadOnlySpan<byte> stateVector, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static void EncodeStateVector(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update, UpdateFormat format = 0, UpdateLimits? limits = null)
+    static void Merge(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<System.ReadOnlyMemory<byte>> updates, UpdateFormat format = 0, UpdateLimits? limits = null)
 sealed class Ycs.YUpdateException : System.FormatException
     YUpdateException()
     YUpdateException(string message)

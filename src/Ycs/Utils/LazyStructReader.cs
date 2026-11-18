@@ -23,7 +23,7 @@ internal sealed class LazyStructReader<TDecoder>
     /// caller needs of an earlier one it copies first.
     /// </remarks>
     /// <param name="input">The input the decoder was made over; every <see cref="Next"/> is handed the same.</param>
-    public LazyStructReader(TDecoder decoder, ReadOnlySpan<byte> input, bool filterSkips, StagingTable table)
+    public LazyStructReader(in TDecoder decoder, ReadOnlySpan<byte> input, bool filterSkips, StagingTable table)
     {
         _decoder = decoder;
         _cursor = EncodingUtils.StructCursor.Begin(ref _decoder, input, table);

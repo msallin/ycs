@@ -9,8 +9,9 @@ namespace Ycs;
 /// formats, reading the state vector or the clock ranges, decoding and describing (Yjs' <c>src/utils/updates.js</c>).
 /// Every method reads its input once, bounded by <paramref name="limits"/>
 /// (<see cref="UpdateLimits.Default"/> when null; <see cref="UpdateLimits.MaxStructsPerUpdate"/> bounds each input), and
-/// throws <see cref="YUpdateException"/> for input that is malformed or beyond a limit. The decoders read arrays, so a
-/// span input is copied into a buffer of the shared array pool for the call: no allocation beyond the pool's.
+/// throws <see cref="YUpdateException"/> for input that is malformed or beyond a limit. The input is read in place and
+/// nothing keeps it after the call. A form that takes an <see cref="IBufferWriter{T}"/> writes it only after the whole input
+/// was read, so a malformed input throws with nothing written, and the writer may share memory with the input.
 /// </summary>
 public static class YUpdate
 {
@@ -19,13 +20,6 @@ public static class YUpdate
     {
         ArgumentNullException.ThrowIfNull(updates);
         return Merge(updates.ToArray(), format, limits);
-    }
-
-    /// <inheritdoc cref="Merge(ReadOnlySpan{ReadOnlyMemory{byte}}, UpdateFormat, UpdateLimits)"/>
-    public static byte[] Merge(IEnumerable<byte[]> updates, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
-    {
-        ArgumentNullException.ThrowIfNull(updates);
-        return Merge(updates.Select(static u => (ReadOnlyMemory<byte>)u).ToArray(), format, limits);
     }
 
     /// <summary>
@@ -44,11 +38,25 @@ public static class YUpdate
         return UpdateOperations.MergeUpdates(updates, v2, limits);
     }
 
+    /// <summary>Merges updates into one, written to <paramref name="destination"/>; as <see cref="Merge(ReadOnlySpan{ReadOnlyMemory{byte}}, UpdateFormat, UpdateLimits)"/> otherwise.</summary>
+    public static void Merge(IBufferWriter<byte> destination, ReadOnlySpan<ReadOnlyMemory<byte>> updates, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        UpdateOperations.MergeUpdates(destination, updates, format.IsV2(), limits);
+    }
+
     /// <summary>Extracts the part of <paramref name="update"/> that the peer with the encoded <paramref name="stateVector"/> lacks.</summary>
     public static byte[] Diff(ReadOnlySpan<byte> update, ReadOnlySpan<byte> stateVector, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
         var v2 = format.IsV2();
         return UpdateOperations.DiffUpdate(update, stateVector, v2, limits);
+    }
+
+    /// <summary>Extracts the part of <paramref name="update"/> that <paramref name="stateVector"/> lacks, written to <paramref name="destination"/>.</summary>
+    public static void Diff(IBufferWriter<byte> destination, ReadOnlySpan<byte> update, ReadOnlySpan<byte> stateVector, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        UpdateOperations.DiffUpdate(destination, update, stateVector, format.IsV2(), limits);
     }
 
     /// <summary>
@@ -63,11 +71,25 @@ public static class YUpdate
         return UpdateOperations.ConvertUpdateFormat(update, fromV2, toV2, limits);
     }
 
+    /// <summary>Re-encodes an update in another format, written to <paramref name="destination"/>; as <see cref="Convert(ReadOnlySpan{byte}, UpdateFormat, UpdateFormat, UpdateLimits)"/> otherwise.</summary>
+    public static void Convert(IBufferWriter<byte> destination, ReadOnlySpan<byte> update, UpdateFormat from, UpdateFormat to, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        UpdateOperations.ConvertUpdateFormat(destination, update, from.IsV2(), to.IsV2(), limits);
+    }
+
     /// <summary>The state vector an update implies, without applying it to a document (both formats encode a state vector alike).</summary>
     public static byte[] EncodeStateVector(ReadOnlySpan<byte> update, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
         var v2 = format.IsV2();
         return UpdateOperations.EncodeStateVectorFromUpdate(update, v2, limits);
+    }
+
+    /// <summary>The state vector an update implies, written to <paramref name="destination"/>.</summary>
+    public static void EncodeStateVector(IBufferWriter<byte> destination, ReadOnlySpan<byte> update, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(destination);
+        UpdateOperations.EncodeStateVectorFromUpdate(destination, update, format.IsV2(), limits);
     }
 
     /// <summary>The clock range every client of an update covers.</summary>
