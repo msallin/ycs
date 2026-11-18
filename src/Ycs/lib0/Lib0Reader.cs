@@ -229,6 +229,25 @@ internal sealed class Lib0Reader
         return length;
     }
 
+    /// <summary>The characters of the string <see cref="BeginVarString"/> consumed; invalid UTF-8 is rejected as in <see cref="ReadVarString"/>.</summary>
+    public int PendingStringLength()
+    {
+        var bytes = PendingString;
+        if (Ascii.IsValid(bytes))
+        {
+            return bytes.Length;
+        }
+
+        try
+        {
+            return StrictUtf8.GetCharCount(bytes);
+        }
+        catch (DecoderFallbackException)
+        {
+            throw InvalidUtf8();
+        }
+    }
+
     /// <summary>
     /// Decodes the string <see cref="BeginVarString"/> consumed into <paramref name="destination"/>, which holds at
     /// least that many characters, and returns the characters written. Invalid UTF-8 is rejected as in <see cref="ReadVarString"/>.

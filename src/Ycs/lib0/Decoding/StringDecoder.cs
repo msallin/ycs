@@ -82,6 +82,9 @@ internal sealed class StringDecoder : IDecoder<string>
         return _segmentLength;
     }
 
+    /// <summary>The length <see cref="BeginRead"/> returned last.</summary>
+    public int SegmentLength => _segmentLength;
+
     /// <summary>Writes the value <see cref="BeginRead"/> consumed into <paramref name="destination"/>, which holds at least its length, and returns the length.</summary>
     public int EndRead(Span<char> destination)
     {

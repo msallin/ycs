@@ -415,7 +415,9 @@ internal static class EncodingUtils
                 i = table.Add(StagedKind.Deleted, deleted, leftOrigin, rightOrigin);
                 break;
             case 4:
-                var textLength = decoder.ReadStringChars(table.CharRoom(decoder.ReadStringBound()));
+                // The bound is the room the string may need; where it would grow the buffer, the exact length is.
+                var bound = decoder.ReadStringBound();
+                var textLength = decoder.ReadStringChars(table.CharRoom(bound <= table.CharsFree ? bound : decoder.ReadStringExact()));
                 Limits.CheckRange(clock, textLength);
                 i = table.Add(StagedKind.String, textLength, leftOrigin, rightOrigin);
                 break;

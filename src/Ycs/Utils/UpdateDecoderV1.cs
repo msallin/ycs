@@ -46,6 +46,8 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
 
     public int ReadStringBound() => Reader.BeginVarString();
 
+    public int ReadStringExact() => Reader.PendingStringLength();
+
     public int ReadStringChars(Span<char> destination) => Reader.EndVarString(destination);
 
     public bool ReadParentInfo() => Reader.ReadVarUint() == 1;

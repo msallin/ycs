@@ -164,6 +164,8 @@ public class StringSpanDifferentialTests
         // The reference reads the whole string here; the split path only the bound, and logs the characters in ReadStringChars.
         public int ReadStringBound() => span ? Logged(() => new string(' ', inner.ReadStringBound()), false).Length : (pending = ReadString()).Length;
 
+        public int ReadStringExact() => span ? Logged(() => new string(' ', inner.ReadStringExact()), false).Length : pending.Length;
+
         public int ReadStringChars(Span<char> destination)
         {
             if (!span)

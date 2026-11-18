@@ -273,6 +273,9 @@ internal sealed class StagingTable
 
     public string? ParentSub(int i) => At(i).ParentSub < 0 ? null : (string)_refs[At(i).ParentSub]!;
 
+    /// <summary>The characters the buffer holds beyond the staged ones.</summary>
+    public int CharsFree => _chars.Length - _charsUsed;
+
     /// <summary>
     /// Room for <paramref name="length"/> characters after the ones staged, valid until the next <c>Add*</c>: a String
     /// struct added next, of at most that length, owns the front of it.
