@@ -13,7 +13,7 @@ and no reflection, so it runs under Native AOT and in WebAssembly.
   13.6.32 and 13.6.33, and against Yjs 14 (`@y/y`) on the wire.
 - **Also:** undo and redo, snapshots, relative positions, and merging, diffing and converting updates without a document.
 - **Untrusted input:** a malformed or hostile update throws `YUpdateException` and leaves the document unchanged; what one
-  update may cost is bounded by `UpdateLimits`.
+  update may cost is bounded by `UpdateLimits`. Input spans are read in place and not kept.
 - **Runtime:** .NET 11, Native AOT and trimming without warnings, Blazor WebAssembly. A document is not thread-safe, as
   in Yjs: use one lock or one channel per document.
 

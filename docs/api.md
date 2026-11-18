@@ -285,15 +285,18 @@ it is no transaction either), and a lambda that only throws, with no `return`, w
 ## Encoding and updates
 
 `enum UpdateFormat { V1, V2 }` picks the encoding wherever bytes go in or out; v1 is the default (what every y-protocols
-provider sends), v2 is denser. Inputs are spans, and a method that decodes an input needs an array internally, so it
-copies the span into a buffer of the shared array pool for the call: no allocation beyond the pool's. A byte array
-converts to a span implicitly.
+provider sends), v2 is denser. Inputs are spans, read in place: a method that decodes an input
+keeps no reference to it after the call, so the caller may reuse or return the buffer at once. A byte array converts to a
+span implicitly. A `ReadOnlySequence<byte>` of one segment is read in place; one of several segments is copied once into
+a buffer of the shared array pool, which is cleared before it goes back. A method that takes an `IBufferWriter<byte>`
+writes to it only after it has read the whole input, so it writes nothing when it throws, and the writer may be backed
+by the memory of the input.
 
 | On | Members |
 | --- | --- |
-| `YDoc` | `ApplyUpdate(update, origin = null, limits = null)` and `ApplyUpdate(update, format, origin = null, limits = null)`, and `TryApplyUpdate` (the same two, returning false for a malformed update); each also takes a `byte[]`, which is read in place instead of copied, or a `byte[]` with `offset` and `count` (`ApplyUpdate(bytes, offset, count, origin = null, limits = null)`, also with a `format` after `count`; `ArgumentOutOfRangeException` for a range outside the array), for a message that holds a header before the update; the format has its own overload, so `ApplyUpdate(bytes, UpdateFormat.V2)` cannot be taken for an origin; `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
-| `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>`, an `IEnumerable<ReadOnlyMemory<byte>>` or an `IEnumerable<byte[]>` (a `List<byte[]>` log), `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)`, `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client; clocks count the positions of the id space, not structs, so a struct of a run covers several), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
-| `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)`, `Snapshot.Empty`; equality is `Equals`, `==` and `!=` (a decoded snapshot equals the one it was encoded from) |
+| `YDoc` | `ApplyUpdate(update, origin = null, limits = null)` and `ApplyUpdate(update, format, origin = null, limits = null)`, and `TryApplyUpdate` (the same two, returning false for a malformed update); the format has its own overload, so `ApplyUpdate(bytes, UpdateFormat.V2)` cannot be taken for an origin; `EncodeStateAsUpdate(stateVector = default, format = V1)` returning `byte[]`, or with an `IBufferWriter<byte>` first; `EncodeStateVector()` (the same bytes for both formats), also into an `IBufferWriter<byte>`; `CreateSnapshot`, `CreateDocFromSnapshot` |
+| `YUpdate` | works on update bytes, no document needed: `Merge(updates, format, limits)` over a `ReadOnlySpan<ReadOnlyMemory<byte>>` or an `IEnumerable<ReadOnlyMemory<byte>>`, `Diff(update, stateVector, ...)`, `Convert(update, from, to, ...)`, `EncodeStateVector(update, ...)` (each also with an `IBufferWriter<byte> destination` first, as `Merge`), `ParseMeta` (an `UpdateMeta`: `From` and `To` clocks of every client; clocks count the positions of the id space, not structs, so a struct of a run covers several), `Decode` (a `DecodedUpdate`, see [Item views and decoded structs](#item-views-and-decoded-structs)), `Describe` (text, for debugging) |
+| `Snapshot` | `Encode(format)`, `Encode(buffer, format)` (built in an array first), `Decode(bytes, format)`, `ContainsUpdate(update, format, limits)` (bounded by `limits`, `MaxDepth` included), `Snapshot.Empty`; equality is `Equals`, `==` and `!=` (a decoded snapshot equals the one it was encoded from) |
 | `SyncProtocol` | `WriteSyncStep2` and `ReadSyncMessage` take a `format` (both ends must agree); `ReadSyncMessage(message, reply, doc, origin = null)` and `ReadSyncMessage(message, reply, doc, format, origin = null)` as `ApplyUpdate`; `CreateUpdateMessage(update)` returns the whole sync update message in one array |
 
 `Merge` of a single update returns a copy of it, unchecked, as Yjs returns it.
@@ -374,7 +377,7 @@ ChangedParentTypes, Origin)` (`Operation` is an `UndoOperation`, `Undo` or `Redo
 - `WriteUpdate(destination, update)`: one update; `CreateUpdateMessage(update)`: the message type, the sync type and the update in one new array, for a fan-out that sends the same bytes to many peers.
 
 `ReadSyncMessage(message, reply, doc, origin = null)` (or `ReadSyncMessage(message, reply, doc, format, origin = null)`) handles one whole message (a `ReadOnlySpan<byte>` or a
-`ReadOnlySequence<byte>`; bytes after it are ignored) and returns a `SyncReadResult(Type, Replied)`. A step 1 appends the answer, a step 2, to
+`ReadOnlySequence<byte>`, copied once into a pooled buffer when it has several segments; bytes after it are ignored) and returns a `SyncReadResult(Type, Replied)`. A step 1 appends the answer, a step 2, to
 `reply`; a step 2 or an update is applied to `doc` with `origin` and writes nothing. A truncated message, an unknown
 type, or an update that is malformed or beyond a limit throws `YUpdateException`, with the document as it was. Both ends
 must agree on `format`.

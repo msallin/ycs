@@ -27,6 +27,11 @@ normally. The document raises `YDoc.PendingDropped` (a `PendingDrop`: the number
 server can log it and resync the peers it handed the waiting structs to. Only when structs of the update itself waited
 for the dropped ones is the update cut short (`PartlyApplied`).
 
+Every one of these reads its input span in place and keeps no reference to it after the call, so a receive buffer may
+be reused or returned at once. A `ReadOnlySequence<byte>` of several segments (`ReadSyncMessage`) is copied once into a
+pooled buffer that is cleared on return. A form that takes an `IBufferWriter<byte>` (`YUpdate.Merge`, `Diff`, `Convert`,
+`EncodeStateVector`, `EncodeStateAsUpdate`) writes only after the whole input is read: when it throws, nothing was written.
+
 `TryApplyUpdate` returns false instead of throwing, for a malformed update and for one applied in part.
 
 `ApplyUpdate` decodes and checks the whole update before it changes the document, so a rejected update leaves it
