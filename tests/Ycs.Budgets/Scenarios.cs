@@ -271,7 +271,83 @@ internal static class Scenarios
             doc.ApplyUpdate(other.EncodeStateAsUpdate(new byte[] { 1, 3, 1 }));
             return _ => doc.EncodeStateAsUpdate();
         }),
+
+        .. UpdateScenarios(UpdateFormat.V1, "v1"),
+        .. UpdateScenarios(UpdateFormat.V2, "v2"),
     ];
+
+    /// <summary>
+    /// The operations on encoded updates, which read and write them without a document: merge of ten large updates and
+    /// of two states, diff, convert, the state vector and the metadata of an update of a 100,000-character text.
+    /// </summary>
+    private static IEnumerable<Scenario> UpdateScenarios(UpdateFormat format, string tag)
+    {
+        var other = format == UpdateFormat.V1 ? UpdateFormat.V2 : UpdateFormat.V1;
+        yield return new($"update.merge-10-large-{tag}", 30, () =>
+        {
+            var inputs = Enumerable.Range(0, 10)
+                .Select(c => (ReadOnlyMemory<byte>)InFormat(TypedDoc(10 + c, 8000, 100 + c).EncodeStateAsUpdate(), format))
+                .ToArray();
+            return _ => YUpdate.Merge(inputs, format);
+        });
+
+        yield return new($"update.merge-two-states-100k-20k-{tag}", 30, () =>
+        {
+            var inputs = new[]
+            {
+                (ReadOnlyMemory<byte>)InFormat(TypedDoc(1, TextLength, 42).EncodeStateAsUpdate(), format),
+                InFormat(TypedDoc(2, 20_000, 9).EncodeStateAsUpdate(), format),
+            };
+            return _ => YUpdate.Merge(inputs, format);
+        });
+
+        yield return new($"update.diff-100k-{tag}", 30, () =>
+        {
+            var state = InFormat(TypedDoc(1, TextLength, 42).EncodeStateAsUpdate(), format);
+            byte[] stateVector = [1, 1, 100];
+            return _ => YUpdate.Diff(state, stateVector, format);
+        });
+
+        yield return new($"update.convert-100k-{tag}", 30, () =>
+        {
+            var state = InFormat(TypedDoc(1, TextLength, 42).EncodeStateAsUpdate(), format);
+            return _ => YUpdate.Convert(state, format, other);
+        });
+
+        yield return new($"update.encode-state-vector-100k-{tag}", 30, () =>
+        {
+            var state = InFormat(TypedDoc(1, TextLength, 42).EncodeStateAsUpdate(), format);
+            return _ => YUpdate.EncodeStateVector(state, format);
+        });
+
+        yield return new($"update.parse-meta-100k-{tag}", 30, () =>
+        {
+            var state = InFormat(TypedDoc(1, TextLength, 42).EncodeStateAsUpdate(), format);
+            return _ => YUpdate.ParseMeta(state, format);
+        });
+    }
+
+    private static byte[] InFormat(byte[] v1, UpdateFormat format) =>
+        format == UpdateFormat.V1 ? v1 : YUpdate.Convert(v1, UpdateFormat.V1, format);
+
+    private static YDoc TypedDoc(int clientId, int length, int seed)
+    {
+        var doc = new YDoc(new YDocOptions { ClientId = clientId });
+        var text = doc.GetText("t");
+        var random = new Random(seed);
+        const string alphabet = "abcdefghijklmnopqrstuvwxyz ,.";
+        while (text.Length < length)
+        {
+            var run = new string(Enumerable.Range(0, 1 + random.Next(16)).Select(_ => alphabet[random.Next(alphabet.Length)]).ToArray());
+            text.Insert(random.Next(text.Length + 1), run);
+            if (random.Next(8) == 0 && text.Length > 10)
+            {
+                text.Remove(random.Next(text.Length - 5), 1 + random.Next(4));
+            }
+        }
+
+        return doc;
+    }
 
     /// <summary>
     /// A 100 000-character text typed the way people type: short runs at scattered positions, some

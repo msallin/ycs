@@ -35,6 +35,19 @@ internal static class Budgets
         ["array.enumerate-100k"] = new(256, 20000),                   // 0 B, 2 ms (the struct enumerator; the copy of the run comes from the array pool)
         ["array.delete-random-100k"] = new(216, 52),                 // 183 B, 3 µs (the marker walks cross the pieces split off the item through the run-head index; Yjs' loops walk them; a split moves no content object: the right part's range is the left's offset plus the cut)
         ["doc.encode-state-with-pending-100k"] = new(814352, 80000),  // 708 KB, 6.5 ms (the state merged with what is pending, as Yjs does)
+        // The operations on encoded updates, read and written without a document (decoders rewritten in place: these must not grow).
+        ["update.merge-10-large-v1"] = new(333312, 80000),          // 289.8 KB, 7.8 ms
+        ["update.merge-two-states-100k-20k-v1"] = new(523296, 90000),          // 455.0 KB, 8.9 ms
+        ["update.diff-100k-v1"] = new(406056, 50000),          // 353.1 KB, 3.7 ms
+        ["update.convert-100k-v1"] = new(301928, 50000),          // 262.5 KB, 4.1 ms
+        ["update.encode-state-vector-100k-v1"] = new(760, 40000),          // 656 B, 3.4 ms
+        ["update.parse-meta-100k-v1"] = new(936, 40000),          // 808 B, 2.4 ms
+        ["update.merge-10-large-v2"] = new(268208, 80000),          // 233.2 KB, 3.9 ms
+        ["update.merge-two-states-100k-20k-v2"] = new(403488, 80000),          // 350.9 KB, 7.2 ms
+        ["update.diff-100k-v2"] = new(303088, 150000),          // 263.6 KB, 4.1 ms (14 ms in an earlier run)
+        ["update.convert-100k-v2"] = new(407416, 50000),          // 354.3 KB, 3.6 ms
+        ["update.encode-state-vector-100k-v2"] = new(1928, 40000),          // 1 672 B, 2.5 ms
+        ["update.parse-meta-100k-v2"] = new(2104, 40000),          // 1 824 B, 2.4 ms
     };
 }
 
