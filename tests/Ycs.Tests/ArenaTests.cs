@@ -101,7 +101,7 @@ public class ArenaTests
     }
 
     [TestMethod]
-    public void Append_RunLongerThanAPage_GetsAPageOfItsOwnTwiceItsLength()
+    public void Append_RunLongerThanAPage_GetsAPageOfItsOwnExactlyItsLength()
     {
         var arena = new Arena<char>(2, 4);
         var small = arena.Append(Text(1));
@@ -109,26 +109,47 @@ public class ArenaTests
         var big = arena.Append(Text(10));
         var after = arena.Append(Text(1));
 
-        Assert.AreEqual((20, 0), (arena.PageCapacity(Arena<char>.PageOf(big)), arena.TailCount));
+        Assert.AreEqual((10, 0), (arena.PageCapacity(Arena<char>.PageOf(big)), arena.TailCount));
         Assert.AreEqual(0, Arena<char>.PageOf(after) - Arena<char>.PageOf(small)); // the write page is the small one still
         Assert.IsTrue(arena.Slice(big, 10).SequenceEqual(Text(10)));
         AssertSound(arena, (small, 1), (big, 10), (after, 1));
     }
 
     [TestMethod]
-    public void Extend_RunInItsOwnPage_GrowsInPlaceUntilTheSlackIsUsedThenMovesToAPageTwiceAsLong()
+    public void Extend_RunInItsOwnPage_MovesToAPageTwiceAsLongThenGrowsInPlace()
     {
         var arena = new Arena<char>(2, 4);
         var big = arena.Append(Text(10));
 
-        var inPlace = arena.Extend(big, 10, Text(10, 'k'));
-        var moved = arena.Extend(inPlace, 20, Text(1, 'z'));
+        var moved = arena.Extend(big, 10, Text(10, 'k'));
+        var inPlace = arena.Extend(moved, 20, Text(1, 'z'));
 
-        Assert.AreEqual(big, inPlace);
-        Assert.AreEqual(42, arena.PageCapacity(Arena<char>.PageOf(moved)));
-        Assert.AreEqual((20L, 1L, 0), (arena.Dead, arena.Live - 20, arena.TailCount));
+        Assert.AreNotEqual(big, moved);
+        Assert.AreEqual(moved, inPlace);
+        Assert.AreEqual(40, arena.PageCapacity(Arena<char>.PageOf(moved)));
+        Assert.AreEqual((10L, 0), (arena.Dead, arena.TailCount));
         Assert.IsTrue(arena.Slice(moved, 21).SequenceEqual(Text(10).Concat(Text(10, 'k')).Append('z').ToArray()));
         AssertSound(arena, (moved, 21));
+    }
+
+    [TestMethod]
+    public void Extend_TypingAtTheEndOfALargeRun_CopiesItOnlyWhenItsPageIsFull()
+    {
+        var arena = new Arena<char>(2, 4);
+        var offset = arena.Append(Text(100));
+        var length = 100;
+        var moves = 0;
+
+        for (var i = 0; i < 1000; i++)
+        {
+            var next = arena.Extend(offset, length++, Text(1, 'k'));
+            moves += next != offset ? 1 : 0;
+            offset = next;
+        }
+
+        Assert.AreEqual((4, 1100, 1100L), (moves, length, arena.Live));
+        Assert.IsTrue(arena.Slice(offset, length).EndsWith(new string('k', 1000)));
+        AssertSound(arena, (offset, length));
     }
 
     [TestMethod]

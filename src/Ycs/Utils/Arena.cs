@@ -424,12 +424,13 @@ internal sealed class Arena<T>
     {
         if (length > _max)
         {
-            if (length > MaxArrayLength / 2)
+            if (length > (slack ? MaxArrayLength / 2 : MaxArrayLength))
             {
                 throw new InvalidOperationException("The run would outgrow the largest array; nothing was changed.");
             }
 
-            var number = Open(length * 2);
+            // Elements past Used are never read, and the run fills [0, length) at once: an unzeroed array is sound for values.
+            var number = Open(slack ? length * 2 : length, uninitialized: true);
             _pages[number]!.Used = length;
             return (long)number << 32;
         }
@@ -460,7 +461,7 @@ internal sealed class Arena<T>
     // Pages a compaction is about to free do not count: it sizes the pages it opens by the ones that remain.
     private long NextSize() => Math.Min(_max, (long)_first << Math.Min(PageCount - _freeing, 30));
 
-    private int Open(int size)
+    private int Open(int size, bool uninitialized = false)
     {
         var number = _released is { Count: > 0 } ? _released.Pop() : _pageCount;
         if (number == _pageCount)
@@ -473,7 +474,7 @@ internal sealed class Arena<T>
             _pageCount++;
         }
 
-        _pages[number] = new Page(new T[size]);
+        _pages[number] = new Page(uninitialized && !RuntimeHelpers.IsReferenceOrContainsReferences<T>() ? GC.AllocateUninitializedArray<T>(size) : new T[size]);
         return number;
     }
 

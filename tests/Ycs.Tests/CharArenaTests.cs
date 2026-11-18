@@ -256,7 +256,7 @@ public class CharArenaTests
     }
 
     [TestMethod]
-    public void Insert_RunLongerThanAPage_GetsAPageOfItsOwnAndExtendsInIt()
+    public void Insert_RunLongerThanAPage_GetsAPageOfItsOwnThatIsOutgrownOnceThenExtendsInIt()
     {
         var doc = new YDoc(new YDocOptions { ClientId = 1 });
         var text = doc.GetText("t");
@@ -264,9 +264,11 @@ public class CharArenaTests
         var first = Payload(doc, At(doc, 1, 0));
 
         text.Insert(40_000, "bc");
+        var moved = Payload(doc, At(doc, 1, 0));
+        text.Insert(40_002, "de");
 
         var item = At(doc, 1, 0);
-        Assert.AreEqual((40_002, first, 40_002L, 0L), (item.Length, Payload(doc, item), doc.Store.Slab.Chars.Live, doc.Store.Slab.Chars.Dead));
+        Assert.AreEqual((40_004, true, moved, 40_004L, 40_000L), (item.Length, moved != first, Payload(doc, item), doc.Store.Slab.Chars.Live, doc.Store.Slab.Chars.Dead));
     }
 
     [TestMethod]
