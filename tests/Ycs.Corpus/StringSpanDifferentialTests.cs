@@ -3,7 +3,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Ycs.Corpus;
 
 /// <summary>
-/// <see cref="IUpdateDecoder.ReadStringSpan"/> against <see cref="IUpdateDecoder.ReadString"/>: two decoders over
+/// <see cref="IUpdateDecoder.ReadStringChars"/> against <see cref="IUpdateDecoder.ReadString"/>: two decoders over
 /// the same bytes read in lock step, and every string and every failure must agree.
 /// </summary>
 [TestClass]
@@ -150,7 +150,7 @@ public class StringSpanDifferentialTests
         return (log, failure, reader.Remaining);
     }
 
-    /// <summary>Delegates to the decoder; a string is read with <see cref="IUpdateDecoder.ReadStringSpan"/> or <see cref="IUpdateDecoder.ReadString"/> and logged, a failure with its position.</summary>
+    /// <summary>Delegates to the decoder; a string is read with <see cref="IUpdateDecoder.ReadStringChars"/> or <see cref="IUpdateDecoder.ReadString"/> and logged, a failure with its position.</summary>
     private sealed class Logging(IUpdateDecoder inner, bool span, List<string> log) : IUpdateDecoder
     {
         public Lib0Reader Reader => inner.Reader;
@@ -161,7 +161,7 @@ public class StringSpanDifferentialTests
         {
             try
             {
-                var value = span ? inner.ReadStringSpan().ToString() : inner.ReadString();
+                var value = span ? ReadSplit() : inner.ReadString();
                 log.Add("s:" + value);
                 return value;
             }
@@ -172,7 +172,18 @@ public class StringSpanDifferentialTests
             }
         }
 
-        public ReadOnlySpan<char> ReadStringSpan() => ReadString();
+        private string pending = "";
+
+        public int ReadStringLength() => (pending = ReadString()).Length;
+
+        public void ReadStringChars(Span<char> destination) => pending.CopyTo(destination);
+
+        private string ReadSplit()
+        {
+            var chars = new char[inner.ReadStringLength()];
+            inner.ReadStringChars(chars);
+            return new string(chars);
+        }
 
         public void ResetDsCurVal() => inner.ResetDsCurVal();
 

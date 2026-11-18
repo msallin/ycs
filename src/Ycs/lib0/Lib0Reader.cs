@@ -205,36 +205,47 @@ internal sealed class Lib0Reader
         }
     }
 
+    private int _stringStart;
+    private int _stringLength;
+
+    /// <summary>The bytes of the string <see cref="BeginVarString"/> read last; valid until the reader is reset.</summary>
+    public ReadOnlySpan<byte> PendingString => _buffer.AsSpan(_stringStart, _stringLength);
+
     /// <summary>
-    /// <see cref="ReadVarString"/> into <paramref name="buffer"/>, which grows when too small; the result
-    /// is a prefix of it. Same position and same exceptions as <see cref="ReadVarString"/>.
+    /// First half of <see cref="ReadVarString"/>: consumes the string, validates it (same position, same exceptions)
+    /// and returns its length in UTF-16 units; <see cref="EndVarString"/> then writes the characters.
     /// </summary>
-    public ReadOnlySpan<char> ReadVarStringSpan(ref char[] buffer)
+    public int BeginVarString()
     {
         var length = ReadVarLength();
+        _stringStart = _pos;
+        _stringLength = 0;
         if (length == 0)
         {
-            return default;
+            return 0;
         }
 
         var bytes = ReadBytes(length);
-
-        // UTF-16 code units never outnumber the UTF-8 bytes.
-        if (buffer.Length < length)
-        {
-            buffer = new char[Math.Max(length, buffer.Length * 2)];
-        }
-
+        _stringStart = _pos - length;
+        _stringLength = length;
         try
         {
-            var count = StrictUtf8.GetChars(bytes, buffer);
-            return buffer.AsSpan(0, count);
+            return StrictUtf8.GetCharCount(bytes);
         }
         catch (DecoderFallbackException)
         {
             throw new YUpdateException("A string is not valid UTF-8.");
         }
     }
+
+    /// <summary>Writes the string <see cref="BeginVarString"/> validated into <paramref name="destination"/>, which holds exactly its characters.</summary>
+    public void EndVarString(Span<char> destination) => StrictUtf8.GetChars(PendingString, destination);
+
+    /// <summary>Writes <paramref name="length"/> bytes of <see cref="PendingString"/> from <paramref name="start"/>, which are whole characters, into <paramref name="destination"/>.</summary>
+    public void DecodePending(int start, int length, Span<char> destination) => StrictUtf8.GetChars(PendingString.Slice(start, length), destination);
+
+    /// <summary>The characters of <see cref="PendingString"/> from byte <paramref name="byteOffset"/> on.</summary>
+    public string PendingStringFrom(int byteOffset) => StrictUtf8.GetString(PendingString[byteOffset..]);
 
     /// <summary>Length-prefixed byte array (lib0 <c>readVarUint8Array</c>), as a span over the input.</summary>
     public ReadOnlySpan<byte> ReadVarUint8ArraySpan() => ReadBytes(ReadVarLength());

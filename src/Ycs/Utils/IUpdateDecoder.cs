@@ -21,11 +21,14 @@ internal interface IUpdateDecoder : IDSDecoder
     string ReadString();
 
     /// <summary>
-    /// <see cref="ReadString"/> without the allocation: the same characters, the same exceptions at the same
-    /// position. The span is valid until the next call on this decoder (any read, <c>ReadString</c> included) and
-    /// must be copied before; it is never kept past the decoder's lease.
+    /// First half of <see cref="ReadString"/> without the allocation: consumes the string, validates it (the same
+    /// exceptions at the same position) and returns its length in UTF-16 units. <see cref="ReadStringChars"/> must
+    /// follow before any other read on this decoder.
     /// </summary>
-    ReadOnlySpan<char> ReadStringSpan();
+    int ReadStringLength();
+
+    /// <summary>Writes the string <see cref="ReadStringLength"/> consumed into <paramref name="destination"/>, which holds exactly its length.</summary>
+    void ReadStringChars(Span<char> destination);
     bool ReadParentInfo();
     uint ReadTypeRef();
     int ReadLength();

@@ -318,7 +318,7 @@ internal static class EncodingUtils
 
         /// <summary>
         /// The next struct, read from the decoder into the table and checked as the cursor's summary says: a String's
-        /// characters come from <see cref="IUpdateDecoder.ReadStringSpan"/>, a Type's reference and name from
+        /// characters come from <see cref="IUpdateDecoder.ReadStringChars"/>, a Type's reference and name from
         /// <see cref="ContentType.ReadHeader"/>. Returns its index in the table, or -1 after the last.
         /// </summary>
         public int NextStaged()
@@ -415,10 +415,10 @@ internal static class EncodingUtils
                 i = table.Add(StagedKind.Deleted, deleted, leftOrigin, rightOrigin);
                 break;
             case 4:
-                var text = decoder.ReadStringSpan();
-                Limits.CheckRange(clock, text.Length);
-                i = table.Add(StagedKind.String, text.Length, leftOrigin, rightOrigin);
-                text.CopyTo(table.Chars(i));
+                var textLength = decoder.ReadStringLength();
+                Limits.CheckRange(clock, textLength);
+                i = table.Add(StagedKind.String, textLength, leftOrigin, rightOrigin);
+                decoder.ReadStringChars(table.Chars(i));
                 break;
             case 8:
                 var count = decoder.ReadLength();

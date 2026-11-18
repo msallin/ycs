@@ -8,6 +8,25 @@ namespace Ycs;
 [TestClass]
 public class StringSpanTests
 {
+    private static string ReadSplit(Lib0Reader reader, ref char[] chars)
+    {
+        var length = reader.BeginVarString();
+        if (chars.Length < length)
+        {
+            chars = new char[length];
+        }
+
+        reader.EndVarString(chars.AsSpan(0, length));
+        return new string(chars, 0, length);
+    }
+
+    private static string ReadSplit(IUpdateDecoder decoder)
+    {
+        var chars = new char[decoder.ReadStringLength()];
+        decoder.ReadStringChars(chars);
+        return new string(chars);
+    }
+
     private static byte[] VarString(params byte[] utf8) => [(byte)utf8.Length, .. utf8];
 
     [TestMethod]
@@ -20,38 +39,38 @@ public class StringSpanTests
     [DataRow(new byte[] { 0x80 }, DisplayName = "lone continuation")]
     [DataRow(new byte[] { 0xF5, 0x80, 0x80, 0x80 }, DisplayName = "above U+10FFFF")]
     [DataRow(new byte[] { 0xFF }, DisplayName = "invalid byte")]
-    public void ReadVarStringSpan_InvalidUtf8_ThrowsLikeReadVarString(byte[] utf8)
+    public void BeginVarString_InvalidUtf8_ThrowsLikeReadVarString(byte[] utf8)
     {
         var input = VarString(utf8);
         var chars = Array.Empty<char>();
 
         var expected = Assert.Throws<YUpdateException>(() => new Lib0Reader(input).ReadVarString());
         var reader = new Lib0Reader(input);
-        var actual = Assert.Throws<YUpdateException>(() => reader.ReadVarStringSpan(ref chars));
+        var actual = Assert.Throws<YUpdateException>(() => ReadSplit(reader, ref chars));
 
         Assert.AreEqual((expected.Message, 0), (actual.Message, reader.Remaining));
     }
 
     [TestMethod]
-    public void ReadVarStringSpan_TruncatedLength_ThrowsLikeReadVarString()
+    public void BeginVarString_TruncatedLength_ThrowsLikeReadVarString()
     {
         byte[] input = [5, (byte)'a', (byte)'b'];
         var chars = Array.Empty<char>();
 
         var expected = Assert.Throws<YUpdateException>(() => new Lib0Reader(input).ReadVarString());
-        var actual = Assert.Throws<YUpdateException>(() => new Lib0Reader(input).ReadVarStringSpan(ref chars));
+        var actual = Assert.Throws<YUpdateException>(() => ReadSplit(new Lib0Reader(input), ref chars));
 
         Assert.AreEqual(expected.Message, actual.Message);
     }
 
     [TestMethod]
-    public void ReadVarStringSpan_HugeLength_ThrowsLikeReadVarString()
+    public void BeginVarString_HugeLength_ThrowsLikeReadVarString()
     {
         byte[] input = [0xFF, 0xFF, 0xFF, 0xFF, 0x0F, 1];
         var chars = Array.Empty<char>();
 
         var expected = Assert.Throws<YUpdateException>(() => new Lib0Reader(input).ReadVarString());
-        var actual = Assert.Throws<YUpdateException>(() => new Lib0Reader(input).ReadVarStringSpan(ref chars));
+        var actual = Assert.Throws<YUpdateException>(() => ReadSplit(new Lib0Reader(input), ref chars));
 
         Assert.AreEqual(expected.Message, actual.Message);
     }
@@ -60,33 +79,35 @@ public class StringSpanTests
     [DataRow("")]
     [DataRow("abc")]
     [DataRow("héllo € \U0001F600 ﻿")]
-    public void ReadVarStringSpan_ValidString_EqualsReadVarString(string value)
+    public void BeginVarString_ValidString_EqualsReadVarString(string value)
     {
         var utf8 = Encoding.UTF8.GetBytes(value);
         var input = new byte[] { (byte)utf8.Length }.Concat(utf8).ToArray();
         var chars = Array.Empty<char>();
 
-        var actual = new Lib0Reader(input).ReadVarStringSpan(ref chars).ToString();
+        var actual = ReadSplit(new Lib0Reader(input), ref chars);
 
         Assert.AreEqual(new Lib0Reader(input).ReadVarString(), actual);
     }
 
     [TestMethod]
-    public void ReadVarStringSpan_ManyStrings_AllocatesNothingPerString()
+    public void BeginVarString_ManyStrings_AllocatesNothingPerString()
     {
         var utf8 = Encoding.UTF8.GetBytes("a string of some length € \U0001F600");
         var one = new byte[] { (byte)utf8.Length }.Concat(utf8).ToArray();
         var input = Enumerable.Range(0, 1000).SelectMany(_ => one).ToArray();
         var reader = new Lib0Reader(input);
-        var chars = Array.Empty<char>();
-        reader.ReadVarStringSpan(ref chars);
+        var chars = new char[64];
+        reader.BeginVarString();
         reader.Reset(input, 0, input.Length);
 
         var before = System.GC.GetAllocatedBytesForCurrentThread();
         var total = 0;
         for (var i = 0; i < 1000; i++)
         {
-            total += reader.ReadVarStringSpan(ref chars).Length;
+            var length = reader.BeginVarString();
+            reader.EndVarString(chars.AsSpan(0, length));
+            total += length;
         }
 
         var allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
@@ -95,7 +116,7 @@ public class StringSpanTests
     }
 
     [TestMethod]
-    public void ReadStringSpan_V2ManyStrings_AllocatesNothingPerString()
+    public void ReadStringChars_V2ManyStrings_AllocatesNothingPerString()
     {
         var doc = new YDoc();
         var text = doc.GetText("t");
@@ -120,10 +141,12 @@ public class StringSpanTests
         {
         }
 
+        var buffer = new char[64];
         var before = System.GC.GetAllocatedBytesForCurrentThread();
         for (var i = 0; i < count; i++)
         {
-            decoder.ReadStringSpan();
+            var length = decoder.ReadStringLength();
+            decoder.ReadStringChars(buffer.AsSpan(0, length));
         }
 
         var allocated = System.GC.GetAllocatedBytesForCurrentThread() - before;
@@ -132,7 +155,7 @@ public class StringSpanTests
     }
 
     [TestMethod]
-    public void ReadStringSpan_V2LongerThanColumn_ThrowsLikeReadString()
+    public void ReadStringChars_V2LongerThanColumn_ThrowsLikeReadString()
     {
         var doc = new YDoc();
         doc.GetText("t").Insert(0, "abc");
@@ -157,7 +180,7 @@ public class StringSpanTests
         {
             while (true)
             {
-                b.ReadStringSpan();
+                ReadSplit(b);
             }
         }
         catch (YUpdateException e)
@@ -166,5 +189,52 @@ public class StringSpanTests
         }
 
         Assert.AreEqual(expected.Message, actual.Message);
+    }
+
+    [TestMethod]
+    [DataRow("a", "bc", "d", DisplayName = "ascii")]
+    [DataRow("h\u00e9", "\u20ac", "x\U0001F600", "", "y", DisplayName = "multi-byte and a pair")]
+    [DataRow("q\uD83D", "\uDE00z", "\U0001F600\U0001F601", DisplayName = "a length inside a pair")]
+    [DataRow("\uD83D", "\uDE00\uD83D", "\uDE01", DisplayName = "every length inside a pair")]
+    public void StringDecoder_SeveralValues_ReadAsWritten(params string[] values)
+    {
+        var encoder = new StringEncoder();
+        foreach (var value in values)
+        {
+            encoder.Write(value);
+        }
+
+        var column = encoder.ToArray();
+        var split = new StringDecoder(new Lib0Reader(column));
+        var whole = new StringDecoder(new Lib0Reader(column));
+        var viaSplit = values.Select(_ =>
+        {
+            var chars = new char[split.BeginRead()];
+            split.EndRead(chars);
+            return new string(chars);
+        }).ToArray();
+
+        CollectionAssert.AreEqual(values, viaSplit);
+        CollectionAssert.AreEqual(values, values.Select(_ => whole.Read()).ToArray());
+    }
+
+    [TestMethod]
+    public void ReadStringChars_V1AndV2WithTextItems_StageTheText()
+    {
+        var doc = new YDoc();
+        var text = doc.GetText("t");
+        text.Insert(0, "ascii");
+        text.Insert(5, " h\u00e9llo \u20ac");
+        text.Insert(0, "\U0001F600 pair ");
+        var expected = text.ToString();
+
+        foreach (var v2 in new[] { false, true })
+        {
+            var update = EncodingUtils.EncodeStateAsUpdate(doc.Store, default, v2);
+            var other = new YDoc();
+            other.ApplyUpdate(update, v2 ? UpdateFormat.V2 : UpdateFormat.V1);
+
+            Assert.AreEqual(expected, other.GetText("t").ToString());
+        }
     }
 }

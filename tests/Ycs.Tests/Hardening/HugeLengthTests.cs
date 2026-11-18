@@ -27,13 +27,12 @@ public class HugeLengthTests
         Assert.ThrowsExactly<YUpdateException>(() => new Lib0Reader(Hex(Huge)).ReadVarString());
 
     [TestMethod]
-    public void ReadVarStringSpan_HugeLength_IsRejected()
+    public void BeginVarString_HugeLength_IsRejected()
     {
         var reader = new Lib0Reader(Hex(Huge));
-        var chars = new char[1];
         try
         {
-            reader.ReadVarStringSpan(ref chars);
+            reader.BeginVarString();
             Assert.Fail("no exception");
         }
         catch (YUpdateException)
