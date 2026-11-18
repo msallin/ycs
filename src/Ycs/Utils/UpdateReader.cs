@@ -2,8 +2,8 @@ namespace Ycs;
 
 /// <summary>
 /// Decodes an update (its structs by client into a <see cref="StagingTable"/>, and its delete set) into objects that are
-/// reused from one update to the next on the same thread: the reader, the v1 and v2 decoders with their column
-/// readers, the staging table and the delete set. The checks are those of <see cref="EncodingUtils.StructCursor"/> and
+/// reused from one update to the next on the same thread: the key list of the v2 decoder, the staging table and the
+/// delete set. The checks are those of <see cref="EncodingUtils.StructCursor"/> and
 /// <see cref="DeleteSet.Read"/>.
 /// <br/>
 /// <see cref="Read"/> hands out a <see cref="Lease"/>; disposing it clears the delete set's lists and the staging table
@@ -30,23 +30,22 @@ internal sealed class UpdateReader
     [ThreadStatic]
     private static int t_constructed;
 
-    private readonly Lib0Reader _input = new();
+    private readonly List<string> _keys = new();
     private readonly HashSet<long> _clients = new();
     private readonly DeleteSet _deleteSet = new();
     private readonly StagingTable _staging = new();
     private readonly Stack<List<DeleteSet.DeleteItem>> _spareDeleteLists = new();
-    private UpdateDecoderV1? _v1;
-    private UpdateDecoderV2? _v2;
+    private UpdateDecoderV1 _v1;
+    private UpdateDecoderV2 _v2;
     private int _version;
 
     /// <summary>
-    /// Decodes <paramref name="count"/> bytes of <paramref name="buffer"/> from <paramref name="offset"/>.
-    /// Nothing decoded refers to the buffer after the lease is disposed. Malformed input throws (as the
+    /// Decodes <paramref name="update"/> in place. Nothing decoded refers to it, not even during the lease. Malformed input throws (as the
     /// decoders do; the caller wraps it in a <see cref="YUpdateException"/>), and the reader is released.
     /// </summary>
     /// <param name="maxStructs">The most structs the update may hold (<see cref="UpdateLimits.MaxStructsPerUpdate"/>).</param>
     /// <param name="maxDepth">How deeply values may be nested (<see cref="UpdateLimits.MaxDepth"/>).</param>
-    public static Lease Read(byte[] buffer, int offset, int count, bool v2, long maxStructs, int maxDepth = UpdateLimits.DefaultMaxDepth)
+    public static Lease Read(ReadOnlySpan<byte> update, bool v2, long maxStructs, int maxDepth = UpdateLimits.DefaultMaxDepth)
     {
         var reader = t_free;
         t_free = t_spare;
@@ -60,7 +59,7 @@ internal sealed class UpdateReader
         var version = reader._version;
         try
         {
-            reader.ReadCore(buffer, offset, count, v2, maxStructs, maxDepth);
+            reader.ReadCore(update, v2, maxStructs, maxDepth);
         }
         catch
         {
@@ -77,31 +76,17 @@ internal sealed class UpdateReader
     /// <summary>How many readers this thread constructed (for tests).</summary>
     internal static int ConstructedOnCurrentThread => t_constructed;
 
-    private void ReadCore(byte[] buffer, int offset, int count, bool v2, long maxStructs, int maxDepth)
+    private void ReadCore(ReadOnlySpan<byte> update, bool v2, long maxStructs, int maxDepth)
     {
-        _input.Reset(buffer, offset, count);
-
-        var input = buffer.AsSpan(offset, count);
-        _input.MaxDepth = maxDepth;
         if (v2)
         {
-            if (_v2 == null)
-            {
-                _v2 = new UpdateDecoderV2(_input, maxStructs);
-            }
-            else
-            {
-                _v2.Reset(maxStructs);
-            }
-
-            var decoder = _v2;
-            EncodingUtils.ReadUpdate(ref decoder, input, _staging, _deleteSet, _clients, _spareDeleteLists);
+            _v2 = new UpdateDecoderV2(update, maxStructs, maxDepth, _keys);
+            EncodingUtils.ReadUpdate(ref _v2, update, _staging, _deleteSet, _clients, _spareDeleteLists);
         }
         else
         {
-            var decoder = _v1 ??= new UpdateDecoderV1(_input, maxStructs);
-            decoder.MaxStructs = maxStructs;
-            EncodingUtils.ReadUpdate(ref decoder, input, _staging, _deleteSet, _clients, _spareDeleteLists);
+            _v1 = new UpdateDecoderV1(update, maxStructs, maxDepth);
+            EncodingUtils.ReadUpdate(ref _v1, update, _staging, _deleteSet, _clients, _spareDeleteLists);
         }
     }
 
@@ -123,8 +108,8 @@ internal sealed class UpdateReader
         _deleteSet.Clients.Clear();
         _clients.Clear();
         _staging.Reset();
-        _input.Clear();
-        _v2?.Clear();
+        _v2 = default;
+        _keys.Clear();
         if (t_free == null)
         {
             t_free = this;

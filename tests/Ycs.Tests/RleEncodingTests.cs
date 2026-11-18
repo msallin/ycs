@@ -7,22 +7,24 @@ namespace Ycs;
 [TestClass]
 public class RleEncodingTests
 {
+    private delegate T ReadNext<T>(ReadOnlySpan<byte> input);
+
     [TestMethod]
     public void TestRleEncoder()
     {
-        TestEncoder(new RleEncoder(), s => new RleDecoder(s));
+        TestEncoder(new RleEncoder(), s => new RleDecoder(s).Read);
     }
 
     [TestMethod]
     public void TestRleIntDiffEncoder()
     {
-        TestEncoder(new RleIntDiffEncoder(0), s => new RleIntDiffDecoder(s, 0));
+        TestEncoder(new RleIntDiffEncoder(0), s => new RleIntDiffDecoder(s, 0).Read);
     }
 
     [TestMethod]
     public void TestIntDiffOptRleEncoder()
     {
-        TestEncoder(new IntDiffOptRleEncoder(), s => new IntDiffOptRleDecoder(s));
+        TestEncoder(new IntDiffOptRleEncoder(), s => new IntDiffOptRleDecoder(s).Read);
     }
 
     /// <summary>
@@ -56,11 +58,10 @@ public class RleEncodingTests
             CollectionAssert.AreEqual(values, ReadLikeLib0(data, values.Length),
                 $"lib0 would read [{string.Join(", ", values)}] back differently");
 
-            var stream = new Lib0Reader(data);
-            var decoder = new IntDiffOptRleDecoder(stream);
+            var decoder = new IntDiffOptRleDecoder(new Lib0Reader(0, data.Length));
             foreach (var value in values)
             {
-                Assert.AreEqual(value, decoder.Read());
+                Assert.AreEqual(value, decoder.Read(data));
             }
         }
     }
@@ -77,15 +78,15 @@ public class RleEncodingTests
         long diff = 0;
         uint remaining = 0;
 
-        var stream = new Lib0Reader(encoded);
+        var stream = new Lib0Reader(0, encoded.Length);
         for (int i = 0; i < count; i++)
         {
             if (remaining == 0)
             {
-                var payload = stream.ReadVarInt().Value;
+                var payload = stream.ReadVarInt(encoded).Value;
                 var hasCount = (payload & 0x1) != 0;
                 diff = payload >= 0 ? payload >> 1 : -((-payload + 1) >> 1);
-                remaining = hasCount ? stream.ReadVarUint() + 2 : 1;
+                remaining = hasCount ? stream.ReadVarUint(encoded) + 2 : 1;
             }
 
             state += diff;
@@ -99,8 +100,8 @@ public class RleEncodingTests
     [TestMethod]
     public void TestIntDiffEncoder()
     {
-        TestEncoder(new IntDiffEncoder(0), s => new IntDiffDecoder(s, 0));
-        TestEncoder(new IntDiffEncoder(42), s => new IntDiffDecoder(s, 42));
+        TestEncoder(new IntDiffEncoder(0), s => new IntDiffDecoder(s, 0).Read);
+        TestEncoder(new IntDiffEncoder(42), s => new IntDiffDecoder(s, 42).Read);
     }
 
     [TestMethod]
@@ -118,12 +119,11 @@ public class RleEncodingTests
         }
 
         var data = encoder.ToArray();
-        var stream = new Lib0Reader(data);
-        var decoder = new StringDecoder(stream);
+        var decoder = new StringDecoder(data, new Lib0Reader(0, data.Length));
 
         for (int i = 0; i < words.Count; i++)
         {
-            Assert.AreEqual(words[i], decoder.Read());
+            Assert.AreEqual(words[i], decoder.Read(data));
         }
     }
 
@@ -139,18 +139,16 @@ public class RleEncodingTests
         }
 
         var data = encoder.ToArray();
-        var stream = new Lib0Reader(data);
-        var decoder = new StringDecoder(stream);
+        var decoder = new StringDecoder(data, new Lib0Reader(0, data.Length));
 
         for (int i = 0; i < n; i++)
         {
-            Assert.AreEqual(string.Empty, decoder.Read());
+            Assert.AreEqual(string.Empty, decoder.Read(data));
         }
     }
 
-    private static void TestEncoder<TEncoder, TDecoder>(TEncoder encoder, Func<Lib0Reader, TDecoder> createDecoder, int n = 100)
+    private static void TestEncoder<TEncoder>(TEncoder encoder, Func<Lib0Reader, ReadNext<long>> createDecoder, int n = 100)
         where TEncoder : IEncoder<long>
-        where TDecoder : IDecoder<long>
     {
         for (int i = -n; i < n; i++)
         {
@@ -164,24 +162,22 @@ public class RleEncodingTests
         }
 
         var data = encoder.GetWrittenSpan().ToArray();
-        var stream = new Lib0Reader(data);
-        var decoder = createDecoder(stream);
+        var read = createDecoder(new Lib0Reader(0, data.Length));
 
         for (int i = -n; i < n; i++)
         {
-            Assert.AreEqual(i, decoder.Read());
+            Assert.AreEqual(i, read(data));
 
             // Read additional 'i' times.
             for (int j = 0; j < i; j++)
             {
-                Assert.AreEqual(i, decoder.Read());
+                Assert.AreEqual(i, read(data));
             }
         }
     }
 
-    private static void TestEncoder<TEncoder, TDecoder>(TEncoder encoder, Func<Lib0Reader, TDecoder> createDecoder, byte n = 100)
+    private static void TestEncoder<TEncoder>(TEncoder encoder, Func<Lib0Reader, ReadNext<byte>> createDecoder, byte n = 100)
         where TEncoder : IEncoder<byte>
-        where TDecoder : IDecoder<byte>
     {
         for (byte i = 0; i < n; i++)
         {
@@ -195,17 +191,16 @@ public class RleEncodingTests
         }
 
         var data = encoder.GetWrittenSpan().ToArray();
-        var stream = new Lib0Reader(data);
-        var decoder = createDecoder(stream);
+        var read = createDecoder(new Lib0Reader(0, data.Length));
 
         for (byte i = 0; i < n; i++)
         {
-            Assert.AreEqual(i, decoder.Read());
+            Assert.AreEqual(i, read(data));
 
             // Read additional 'i' times.
             for (byte j = 0; j < i; j++)
             {
-                Assert.AreEqual(i, decoder.Read());
+                Assert.AreEqual(i, read(data));
             }
         }
     }

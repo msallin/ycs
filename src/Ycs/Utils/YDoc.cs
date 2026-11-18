@@ -165,7 +165,7 @@ public sealed partial class YDoc
         UpdateReader.Lease update;
         try
         {
-            update = UpdateReader.Read(buffer, offset, count, v2, limits.MaxStructsPerUpdate, limits.MaxDepth);
+            update = UpdateReader.Read(buffer.AsSpan(offset, count), v2, limits.MaxStructsPerUpdate, limits.MaxDepth);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {

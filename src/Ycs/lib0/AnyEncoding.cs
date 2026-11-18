@@ -216,28 +216,28 @@ internal static class AnyEncoding
     }
 
     /// <summary>Reads a value as lib0's <c>readAny</c>, nested at most <see cref="Lib0Reader.MaxDepth"/> levels.</summary>
-    public static object? ReadAny(this Lib0Reader reader) => ReadAny(reader, reader.ReadByte(), 0);
+    public static object? ReadAny(this ref Lib0Reader reader, ReadOnlySpan<byte> input) => ReadAny(ref reader, input, reader.ReadByte(input), 0);
 
     /// <summary>
-    /// Reads a value as <see cref="ReadAny(Lib0Reader)"/> does, but a member of an object that is
+    /// Reads a value as <see cref="ReadAny(ref Lib0Reader, ReadOnlySpan{byte})"/> does, but a member of an object that is
     /// <c>undefined</c> (not null) is read as <see cref="JsValue.Undefined"/>: where Yjs destructures
     /// the object, such a member counts as absent.
     /// </summary>
-    public static object? ReadAnyMarkingUndefined(this Lib0Reader reader)
+    public static object? ReadAnyMarkingUndefined(this ref Lib0Reader reader, ReadOnlySpan<byte> input)
     {
-        var type = reader.ReadByte();
+        var type = reader.ReadByte(input);
         if (type != 118)
         {
-            return ReadAny(reader, type, 0);
+            return ReadAny(ref reader, input, type, 0);
         }
 
-        var len = reader.ReadVarUint();
+        var len = reader.ReadVarUint(input);
         var obj = new FrozenMap(Limits.Capacity(len, reader.Remaining / 2));
         for (long i = 0; i < len; i++)
         {
-            var key = reader.ReadVarString();
-            var memberType = reader.ReadByte();
-            var member = memberType == 127 ? JsValue.Undefined : ReadAny(reader, memberType, 1);
+            var key = reader.ReadVarString(input);
+            var memberType = reader.ReadByte(input);
+            var member = memberType == 127 ? JsValue.Undefined : ReadAny(ref reader, input, memberType, 1);
             obj.Set(key, member);
             if (member is FrozenList or FrozenMap)
             {
@@ -249,18 +249,18 @@ internal static class AnyEncoding
     }
 
     /// <summary>Reads a value of <paramref name="type"/> that is nested <paramref name="depth"/> levels deep already.</summary>
-    private static object? ReadAny(Lib0Reader reader, byte type, int depth)
+    private static object? ReadAny(ref Lib0Reader reader, ReadOnlySpan<byte> input, byte type, int depth)
     {
         var maxDepth = reader.MaxDepth;
         CheckDepth(depth, maxDepth);
         if (type is not (117 or 118))
         {
-            return ReadScalar(reader, type);
+            return ReadScalar(ref reader, input, type);
         }
 
         // Each open list or object with the number of its elements still to read.
         var open = new List<(object Container, long Remaining)>();
-        var root = OpenContainer(reader, type, open);
+        var root = OpenContainer(ref reader, input, type, open);
         while (open.Count > 0)
         {
             var (container, remaining) = open[^1];
@@ -277,10 +277,10 @@ internal static class AnyEncoding
 
             open[^1] = (container, remaining - 1);
             var obj = container as FrozenMap;
-            var key = obj != null ? reader.ReadVarString() : null;
-            var childType = reader.ReadByte();
+            var key = obj != null ? reader.ReadVarString(input) : null;
+            var childType = reader.ReadByte(input);
             CheckDepth(depth + open.Count, maxDepth);
-            var child = childType is 117 or 118 ? OpenContainer(reader, childType, open) : ReadScalar(reader, childType);
+            var child = childType is 117 or 118 ? OpenContainer(ref reader, input, childType, open) : ReadScalar(ref reader, input, childType);
             if (obj != null)
             {
                 obj.Set(key!, child);
@@ -318,9 +318,9 @@ internal static class AnyEncoding
         }
     }
 
-    private static object OpenContainer(Lib0Reader reader, byte type, List<(object Container, long Remaining)> open)
+    private static object OpenContainer(ref Lib0Reader reader, ReadOnlySpan<byte> input, byte type, List<(object Container, long Remaining)> open)
     {
-        var len = reader.ReadVarUint();
+        var len = reader.ReadVarUint(input);
         object container = type == 117
             ? new FrozenList(Limits.Capacity(len, reader.Remaining))
             : new FrozenMap(Limits.Capacity(len, reader.Remaining / 2));
@@ -328,25 +328,25 @@ internal static class AnyEncoding
         return container;
     }
 
-    private static object? ReadScalar(Lib0Reader reader, byte type)
+    private static object? ReadScalar(ref Lib0Reader reader, ReadOnlySpan<byte> input, byte type)
     {
         switch (type)
         {
             case 119: // String
-                return reader.ReadVarString();
+                return reader.ReadVarString(input);
             case 120: // boolean true
                 return true;
             case 121: // boolean false
                 return false;
             case 122: // BigInt
-                return new BigInteger(reader.ReadBigInt64());
+                return new BigInteger(reader.ReadBigInt64(input));
             case 123: // Float64
-                return reader.ReadFloat64();
+                return reader.ReadFloat64(input);
             case 124: // Float32, widened: JavaScript has a single number type.
-                return (double)reader.ReadFloat32();
+                return (double)reader.ReadFloat32(input);
             case 125: // integer: Yjs only writes 31-bit integers this way, which fit an int.
                 {
-                    var (value, sign) = reader.ReadVarInt();
+                    var (value, sign) = reader.ReadVarInt(input);
                     if (value == 0 && sign < 0)
                     {
                         return -0.0;
@@ -358,7 +358,7 @@ internal static class AnyEncoding
             case 127: // undefined
                 return null;
             case 116: // Uint8Array
-                return reader.ReadVarUint8Array();
+                return reader.ReadVarUint8Array(input);
             default:
                 throw new YUpdateException($"Unknown 'any' type: {type}.");
         }

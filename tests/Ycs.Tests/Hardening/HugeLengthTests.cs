@@ -23,16 +23,21 @@ public class HugeLengthTests
     }
 
     [TestMethod]
-    public void ReadVarString_HugeLength_IsRejected() =>
-        Assert.ThrowsExactly<YUpdateException>(() => new Lib0Reader(Hex(Huge)).ReadVarString());
+    public void ReadVarString_HugeLength_IsRejected()
+    {
+        var bytes = Hex(Huge);
+        var reader = new Lib0Reader(0, bytes.Length);
+        Assert.ThrowsExactly<YUpdateException>(() => reader.ReadVarString(bytes));
+    }
 
     [TestMethod]
     public void BeginVarString_HugeLength_IsRejected()
     {
-        var reader = new Lib0Reader(Hex(Huge));
+        var bytes = Hex(Huge);
+        var reader = new Lib0Reader(0, bytes.Length);
         try
         {
-            reader.BeginVarString();
+            reader.BeginVarString(bytes);
             Assert.Fail("no exception");
         }
         catch (YUpdateException)
@@ -41,12 +46,20 @@ public class HugeLengthTests
     }
 
     [TestMethod]
-    public void ReadVarUint8Array_HugeLength_IsRejected() =>
-        Assert.ThrowsExactly<YUpdateException>(() => new Lib0Reader(Hex(Huge)).ReadVarUint8Array());
+    public void ReadVarUint8Array_HugeLength_IsRejected()
+    {
+        var bytes = Hex(Huge);
+        var reader = new Lib0Reader(0, bytes.Length);
+        Assert.ThrowsExactly<YUpdateException>(() => reader.ReadVarUint8Array(bytes));
+    }
 
     [TestMethod]
-    public void ReadVarUint8ArrayInto_HugeLength_IsRejected() =>
-        Assert.ThrowsExactly<YUpdateException>(() => new Lib0Reader(Hex(Huge)).ReadVarUint8ArrayAsReader());
+    public void ReadVarUint8ArrayInto_HugeLength_IsRejected()
+    {
+        var bytes = Hex(Huge);
+        var reader = new Lib0Reader(0, bytes.Length);
+        Assert.ThrowsExactly<YUpdateException>(() => reader.ReadVarUint8ArrayAsReader(bytes));
+    }
 
     [TestMethod]
     public void ApplyUpdate_HugeStringLength_IsRejectedAndDocUnchanged() =>
@@ -62,8 +75,9 @@ public class HugeLengthTests
         // 117 = array, 118 = object, 116 = Uint8Array, 119 = string.
         foreach (var type in new[] { "75", "76", "74", "77" })
         {
-            var reader = new Lib0Reader(Hex(type + " " + Huge));
-            Assert.ThrowsExactly<YUpdateException>(() => reader.ReadAny(), type);
+            var bytes = Hex(type + " " + Huge);
+            var reader = new Lib0Reader(0, bytes.Length);
+            Assert.ThrowsExactly<YUpdateException>(() => reader.ReadAny(bytes), type);
         }
     }
 
@@ -86,8 +100,9 @@ public class HugeLengthTests
     public void StringDecoderRead_HugeLengthInColumn_IsRejected()
     {
         // An empty string column, then one length of 2^32 - 1.
-        var decoder = new StringDecoder(new Lib0Reader(Hex("00 BF FF FF FF 1F")));
+        var bytes = Hex("00 BF FF FF FF 1F");
+        var decoder = new StringDecoder(bytes, new Lib0Reader(0, bytes.Length));
 
-        Assert.ThrowsExactly<YUpdateException>(() => decoder.Read());
+        Assert.ThrowsExactly<YUpdateException>(() => decoder.Read(bytes));
     }
 }

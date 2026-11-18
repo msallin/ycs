@@ -550,7 +550,9 @@ public class HardeningTests
     {
         var writer = new Lib0Writer();
         writer.WriteVarInt(1L << 40);
-        Assert.ThrowsExactly<YUpdateException>(() => new UintOptRleDecoder(new Lib0Reader(writer.ToArray())).Read());
+        var bytes = writer.ToArray();
+        var decoder = new UintOptRleDecoder(new Lib0Reader(0, bytes.Length));
+        Assert.ThrowsExactly<YUpdateException>(() => decoder.Read(bytes));
     }
 
     [TestMethod]
@@ -559,10 +561,11 @@ public class HardeningTests
         var writer = new Lib0Writer();
         writer.WriteVarInt(-3);
         writer.WriteVarUint(uint.MaxValue);
-        var decoder = new UintOptRleDecoder(new Lib0Reader(writer.ToArray()));
+        var bytes = writer.ToArray();
+        var decoder = new UintOptRleDecoder(new Lib0Reader(0, bytes.Length));
         for (var i = 0; i < 10; i++)
         {
-            Assert.AreEqual(3u, decoder.Read());
+            Assert.AreEqual(3u, decoder.Read(bytes));
         }
     }
 
@@ -572,11 +575,12 @@ public class HardeningTests
         var writer = new Lib0Writer();
         writer.WriteVarInt(((1L << 51) << 1) | 1); // diff 2^51, with a count
         writer.WriteVarUint(10);
-        var decoder = new IntDiffOptRleDecoder(new Lib0Reader(writer.ToArray()));
-        decoder.Read();
-        decoder.Read();
-        decoder.Read();
-        Assert.ThrowsExactly<YUpdateException>(() => decoder.Read());
+        var bytes = writer.ToArray();
+        var decoder = new IntDiffOptRleDecoder(new Lib0Reader(0, bytes.Length));
+        decoder.Read(bytes);
+        decoder.Read(bytes);
+        decoder.Read(bytes);
+        Assert.ThrowsExactly<YUpdateException>(() => decoder.Read(bytes));
     }
 
     [TestMethod]
@@ -593,8 +597,9 @@ public class HardeningTests
             writer.WriteVarUint8Array(i == 4 ? new byte[] { 0 } : ReadOnlySpan<byte>.Empty);
         }
 
-        var decoder = new UpdateDecoderV2(new Lib0Reader(writer.ToArray()), long.MaxValue);
-        Assert.ThrowsExactly<YUpdateException>(() => decoder.ReadKey(default));
+        var bytes = writer.ToArray();
+        var decoder = new UpdateDecoderV2(bytes, long.MaxValue, int.MaxValue, []);
+        Assert.ThrowsExactly<YUpdateException>(() => decoder.ReadKey(bytes));
     }
 
     [TestMethod]

@@ -179,11 +179,12 @@ public class CodecReuseTests
         encoder.Write("a\uD83D");
         encoder.Write("\uDE00b");
 
-        var decoder = new StringDecoder(new Lib0Reader(encoder.ToArray()));
+        var bytes = encoder.ToArray();
+        var decoder = new StringDecoder(bytes, new Lib0Reader(0, bytes.Length));
 
         CollectionAssert.AreEqual(Encoding.UTF8.GetBytes("a😀b"), encoder.GetUtf8().ToArray());
-        Assert.AreEqual("a\uD83D", decoder.Read());
-        Assert.AreEqual("\uDE00b", decoder.Read());
+        Assert.AreEqual("a\uD83D", decoder.Read(bytes));
+        Assert.AreEqual("\uDE00b", decoder.Read(bytes));
     }
 
     [TestMethod]
@@ -335,12 +336,12 @@ public class CodecReuseTests
 
         var reused = Allocated(() =>
         {
-            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, long.MaxValue);
+            using var lease = UpdateReader.Read(update, v2: true, long.MaxValue);
         });
         var fresh = Allocated(() =>
         {
-            var decoder = new UpdateDecoderV2(new Lib0Reader(update), long.MaxValue);
-            ReadStructs(decoder, update);
+            var decoder = new UpdateDecoderV2(update, long.MaxValue, UpdateLimits.DefaultMaxDepth, []);
+            ReadStructs(ref decoder, update);
             DeleteSet.Read(ref decoder, update);
         });
 
@@ -353,10 +354,11 @@ public class CodecReuseTests
     {
         var update = SampleDoc(1).EncodeStateAsUpdate();
 
-        Assert.ThrowsExactly<YUpdateException>(() => UpdateReader.Read(update, 0, update.Length - 3, v2: false, long.MaxValue));
-        using var lease = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
+        Assert.ThrowsExactly<YUpdateException>(() => UpdateReader.Read(update.AsSpan(0, update.Length - 3), v2: false, long.MaxValue));
+        using var lease = UpdateReader.Read(update, v2: false, long.MaxValue);
 
-        Assert.AreEqual(Describe(ReadStructs(new UpdateDecoderV1(new Lib0Reader(update), long.MaxValue), update)), Describe(lease.Staging));
+        var decoder = new UpdateDecoderV1(update, long.MaxValue, UpdateLimits.DefaultMaxDepth);
+        Assert.AreEqual(Describe(ReadStructs(ref decoder, update)), Describe(lease.Staging));
     }
 
     [TestMethod]
@@ -365,9 +367,9 @@ public class CodecReuseTests
         var first = SampleDoc(1).EncodeStateAsUpdate();
         var second = SampleDoc(2).EncodeStateAsUpdate();
 
-        using var outer = UpdateReader.Read(first, 0, first.Length, v2: false, long.MaxValue);
+        using var outer = UpdateReader.Read(first, v2: false, long.MaxValue);
         var expected = Describe(outer.Staging);
-        using (var inner = UpdateReader.Read(second, 0, second.Length, v2: false, long.MaxValue))
+        using (var inner = UpdateReader.Read(second, v2: false, long.MaxValue))
         {
             Assert.AreNotEqual(expected, Describe(inner.Staging));
         }
@@ -390,8 +392,8 @@ public class CodecReuseTests
 
         void Round()
         {
-            var outer = UpdateReader.Read(first, 0, first.Length, v2: false, long.MaxValue);
-            var inner = UpdateReader.Read(second, 0, second.Length, v2: false, long.MaxValue);
+            var outer = UpdateReader.Read(first, v2: false, long.MaxValue);
+            var inner = UpdateReader.Read(second, v2: false, long.MaxValue);
             inner.Dispose();
             outer.Dispose();
         }
@@ -401,9 +403,9 @@ public class CodecReuseTests
     public void UpdateReader_LeaseDisposedTwice_StaysReleased()
     {
         var update = SampleDoc(1).EncodeStateAsUpdate();
-        var lease = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
+        var lease = UpdateReader.Read(update, v2: false, long.MaxValue);
         lease.Dispose();
-        using var next = UpdateReader.Read(update, 0, update.Length, v2: false, long.MaxValue);
+        using var next = UpdateReader.Read(update, v2: false, long.MaxValue);
 
         lease.Dispose();
 
@@ -557,12 +559,13 @@ public class CodecReuseTests
 
             var fresh = Outcome(() =>
             {
-                IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue);
-                return Describe(ReadStructs(decoder, bytes)) + " | " + Describe(DeleteSet.Read(ref decoder, bytes));
+                return v2
+                    ? ReadBoth(new UpdateDecoderV2(bytes, long.MaxValue, UpdateLimits.DefaultMaxDepth, []), bytes)
+                    : ReadBoth(new UpdateDecoderV1(bytes, long.MaxValue, UpdateLimits.DefaultMaxDepth), bytes);
             });
             var reused = Outcome(() =>
             {
-                using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2, long.MaxValue);
+                using var lease = UpdateReader.Read(bytes, v2, long.MaxValue);
                 return Describe(lease.Staging) + " | " + Describe(lease.DeleteSet);
             });
 
@@ -696,8 +699,12 @@ public class CodecReuseTests
         return (System.GC.GetAllocatedBytesForCurrentThread() - before) / 100;
     }
 
-    private static StagingTable ReadStructs<TDecoder>(TDecoder decoder, byte[] input)
-        where TDecoder : IUpdateDecoder
+    private static string ReadBoth<TDecoder>(TDecoder decoder, byte[] input)
+        where TDecoder : struct, IUpdateDecoder =>
+        Describe(ReadStructs(ref decoder, input)) + " | " + Describe(DeleteSet.Read(ref decoder, input));
+
+    private static StagingTable ReadStructs<TDecoder>(ref TDecoder decoder, byte[] input)
+        where TDecoder : struct, IUpdateDecoder
     {
         var table = new StagingTable();
         var cursor = EncodingUtils.StructCursor.Begin(ref decoder, input, table);

@@ -6,64 +6,61 @@ namespace Ycs;
 /// Decoder for <see cref="StringEncoder"/> (lib0 <c>StringDecoder</c>). The lengths count UTF-16 code units. An
 /// all-ASCII column stays bytes and a value is widened from them; any other column is decoded to a string once.
 /// </summary>
-internal sealed class StringDecoder : IDecoder<string>
+internal struct StringDecoder
 {
-    private readonly UintOptRleDecoder _lengthDecoder;
+    private UintOptRleDecoder _lengthDecoder;
     private int _unitsLeft;
     private int _pos;
 
-    // The column as a string unless it is all ASCII (then its bytes are Input.PendingString, one unit each).
-    private string? _value;
+    // The reader as BeginVarString left it: the column's string is its pending string (all ASCII: one unit a byte).
+    private readonly Lib0Reader _column;
+
+    // The column as a string unless it is all ASCII.
+    private readonly string? _value;
 
     // The value BeginRead returned: where it starts in the column and its length.
     private int _segmentStart;
     private int _segmentLength;
 
-    public StringDecoder(Lib0Reader input)
+    /// <summary>Reads the column's string, which starts at <paramref name="column"/>'s position in <paramref name="input"/>; the lengths follow it.</summary>
+    public StringDecoder(ReadOnlySpan<byte> input, Lib0Reader column)
     {
-        ArgumentNullException.ThrowIfNull(input);
-        _lengthDecoder = new UintOptRleDecoder(input);
-        Reset();
-    }
-
-    /// <summary>The column this decoder reads.</summary>
-    public Lib0Reader Input => _lengthDecoder.Input;
-
-    /// <summary>Starts over at the current position of <see cref="Input"/>: reads the string.</summary>
-    public void Reset()
-    {
-        _value = null;
         _pos = 0;
+        _segmentStart = 0;
         _segmentLength = 0;
-        _lengthDecoder.Reset();
-        _unitsLeft = Input.BeginVarString();
-        if (!Ascii.IsValid(Input.PendingString))
+        _value = null;
+        _unitsLeft = column.BeginVarString(input);
+        var pending = column.PendingString(input);
+        if (!Ascii.IsValid(pending))
         {
-            _value = Lib0Reader.DecodeUtf8(Input.PendingString);
+            _value = Lib0Reader.DecodeUtf8(pending);
             _unitsLeft = _value.Length;
         }
+
+        _column = column;
+        _lengthDecoder = new UintOptRleDecoder(column);
     }
 
-    /// <summary>Drops the decoded string and the reference to the input.</summary>
-    public void Clear()
+    public string Read(ReadOnlySpan<byte> input)
     {
-        _value = null;
-        Input.Clear();
-    }
+        var length = BeginRead(input);
+        if (length == 0)
+        {
+            return string.Empty;
+        }
 
-    public string Read()
-    {
-        var length = BeginRead();
-        return length == 0 ? string.Empty : string.Create(length, this, static (span, self) => self.EndRead(span));
+        return _value != null
+            ? _value.Substring(_segmentStart, length)
+            : Encoding.ASCII.GetString(_column.PendingString(input).Slice(_segmentStart, length));
     }
 
     /// <summary>
     /// Consumes the next value and returns its length in UTF-16 units; <see cref="EndRead"/> must follow before
     /// the next read. Throws when the value is longer than what is left of the column.
     /// </summary>
-    public int BeginRead()
+    public int BeginRead(ReadOnlySpan<byte> input)
     {
-        var length = _lengthDecoder.Read();
+        var length = _lengthDecoder.Read(input);
         _segmentLength = 0;
         if (length == 0)
         {
@@ -83,10 +80,10 @@ internal sealed class StringDecoder : IDecoder<string>
     }
 
     /// <summary>The length <see cref="BeginRead"/> returned last.</summary>
-    public int SegmentLength => _segmentLength;
+    public readonly int SegmentLength => _segmentLength;
 
     /// <summary>Writes the value <see cref="BeginRead"/> consumed into <paramref name="destination"/>, which holds at least its length, and returns the length.</summary>
-    public int EndRead(Span<char> destination)
+    public readonly int EndRead(ReadOnlySpan<byte> input, Span<char> destination)
     {
         if (_segmentLength == 0)
         {
@@ -99,7 +96,7 @@ internal sealed class StringDecoder : IDecoder<string>
         }
         else
         {
-            Widen(Input.PendingString.Slice(_segmentStart, _segmentLength), destination);
+            Widen(_column.PendingString(input).Slice(_segmentStart, _segmentLength), destination);
         }
 
         return _segmentLength;

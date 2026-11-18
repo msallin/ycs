@@ -15,10 +15,10 @@ public readonly record struct ItemId(long Client, long Clock)
         writer.WriteVarUint((ulong)Clock);
     }
 
-    internal static ItemId Read(Lib0Reader reader)
+    internal static ItemId Read(ref Lib0Reader reader, ReadOnlySpan<byte> input)
     {
-        var client = reader.ReadVarUint53();
-        var clock = reader.ReadVarUint();
+        var client = reader.ReadVarUint53(input);
+        var clock = reader.ReadVarUint(input);
         Debug.Assert(client >= 0 && clock >= 0);
         return new ItemId(client, clock);
     }

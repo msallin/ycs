@@ -1,11 +1,16 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Ycs;
 
 /// <summary>
-/// Every read is handed the input the decoder was made over. A decoder that holds its own buffer ignores it.
+/// A decoder holds offsets into the input and nothing else; every read is handed the input it was made over. The
+/// implementations are structs, passed by <c>ref</c>.
 /// </summary>
 internal interface IDSDecoder
 {
-    Lib0Reader Reader { get; }
+    /// <summary>The rest stream, by reference: reads through it advance the decoder.</summary>
+    [UnscopedRef]
+    ref Lib0Reader Reader { get; }
 
     void ResetDsCurVal();
     long ReadDsClock(ReadOnlySpan<byte> input);
@@ -14,6 +19,7 @@ internal interface IDSDecoder
 
 internal interface IUpdateDecoder : IDSDecoder
 {
+
     /// <summary>How many structs this update may hold at most (<see cref="UpdateLimits.MaxStructsPerUpdate"/>).</summary>
     long MaxStructs { get; }
 
@@ -46,4 +52,12 @@ internal interface IUpdateDecoder : IDSDecoder
     byte[] ReadBuffer(ReadOnlySpan<byte> input);
     string ReadKey(ReadOnlySpan<byte> input);
     object? ReadJson(ReadOnlySpan<byte> input);
+}
+
+/// <summary>A decoder a generic driver can make, as the merge makes one per input.</summary>
+internal interface IUpdateDecoder<TSelf> : IUpdateDecoder
+    where TSelf : IUpdateDecoder<TSelf>
+{
+    /// <summary>A decoder of <paramref name="update"/>, which every read is handed again.</summary>
+    static abstract TSelf Create(ReadOnlySpan<byte> update, long maxStructs, int maxDepth);
 }

@@ -1,28 +1,20 @@
 namespace Ycs;
 
 /// <seealso cref="IntDiffEncoder"/>
-internal class IntDiffDecoder : AbstractStreamDecoder<long>
+internal struct IntDiffDecoder
 {
-    private readonly long _start;
+    private Lib0Reader _reader;
     private long _state;
 
-    public IntDiffDecoder(Lib0Reader input, long start)
-        : base(input)
+    public IntDiffDecoder(Lib0Reader column, long start)
     {
-        _start = start;
+        _reader = column;
         _state = start;
     }
 
-    /// <inheritdoc/>
-    public override long Read()
+    public long Read(ReadOnlySpan<byte> input)
     {
-
-        _state += Reader.ReadVarInt().Value;
+        _state += _reader.ReadVarInt(input).Value;
         return _state;
-    }
-
-    public override void Reset()
-    {
-        _state = _start;
     }
 }

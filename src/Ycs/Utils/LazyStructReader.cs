@@ -10,7 +10,7 @@ namespace Ycs;
 /// the update-manipulation utilities in <see cref="UpdateOperations"/>.
 /// </summary>
 internal sealed class LazyStructReader<TDecoder>
-    where TDecoder : IUpdateDecoder
+    where TDecoder : struct, IUpdateDecoder
 {
     // Not readonly: Next() advances it in place.
     private EncodingUtils.StructCursor _cursor;

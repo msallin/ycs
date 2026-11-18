@@ -39,7 +39,7 @@ internal class ContentType : IContent
 
     /// <summary>Reads a type's reference and, for an XML element or hook, its node name; throws for a reference no type has.</summary>
     internal static int ReadHeader<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, out string? typeName)
-        where TDecoder : IUpdateDecoder
+        where TDecoder : struct, IUpdateDecoder
     {
         var typeRef = decoder.ReadTypeRef(input);
         typeName = null;

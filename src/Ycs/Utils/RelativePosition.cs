@@ -110,7 +110,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
 
     /// <summary>Reads the bytes of Yjs' <c>encodeRelativePosition</c>.</summary>
     /// <exception cref="YUpdateException">The bytes are truncated or name an unknown kind of position.</exception>
-    public static RelativePosition Decode(ReadOnlySpan<byte> encoded) => Read(new Lib0Reader(encoded.ToArray()));
+    public static RelativePosition Decode(ReadOnlySpan<byte> encoded) => Read(new Lib0Reader(0, encoded.Length), encoded);
 
     /// <summary>
     /// Writes Yjs' <c>relativePositionToJSON</c> object: <c>type</c>, <c>tname</c> and <c>item</c> only where set
@@ -290,31 +290,31 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
         writer.WriteVarInt((int)Assoc);
     }
 
-    internal static RelativePosition Read(Lib0Reader reader)
+    internal static RelativePosition Read(Lib0Reader reader, ReadOnlySpan<byte> input)
     {
         ItemId? itemId = null;
         ItemId? typeId = null;
         string? rootName = null;
 
-        switch (reader.ReadVarUint())
+        switch (reader.ReadVarUint(input))
         {
             case 0:
                 // Case 1: Found position somewhere in the linked list.
-                itemId = ItemId.Read(reader);
+                itemId = ItemId.Read(ref reader, input);
                 break;
             case 1:
                 // Case 2: Found position at the end of the list and type is stored in y.share.
-                rootName = reader.ReadVarString();
+                rootName = reader.ReadVarString(input);
                 break;
             case 2:
                 // Case 3: Found position at the end of the list and type is attached to an item.
-                typeId = ItemId.Read(reader);
+                typeId = ItemId.Read(ref reader, input);
                 break;
             default:
                 throw new YUpdateException("Unknown kind of relative position.");
         }
 
-        var assoc = reader.HasContent ? AssocOf(reader.ReadVarInt().Value) : Assoc.After;
+        var assoc = reader.HasContent ? AssocOf(reader.ReadVarInt(input).Value) : Assoc.After;
         return new RelativePosition(typeId, rootName, itemId, assoc);
     }
 

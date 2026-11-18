@@ -216,7 +216,7 @@ public sealed class PermanentUserData
     {
         try
         {
-            var decoder = new DSDecoderV1(new Lib0Reader(encoded));
+            var decoder = new DSDecoderV1(0, encoded.Length);
             return DeleteSet.Read(ref decoder, encoded);
         }
         catch (YUpdateException)

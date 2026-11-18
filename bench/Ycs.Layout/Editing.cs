@@ -163,7 +163,7 @@ internal static class Editing
         {
             // A table of its own per update: a lease's table is reset when it is disposed.
             var table = new StagingTable();
-            var decoder = new UpdateDecoderV1(new Lib0Reader(u) { MaxDepth = int.MaxValue }, long.MaxValue);
+            var decoder = new UpdateDecoderV1(u, long.MaxValue, int.MaxValue);
             var cursor = EncodingUtils.StructCursor.Begin(ref decoder, u, table);
             while (cursor.NextStaged(ref decoder, u) is >= 0 and var i)
             {
@@ -390,7 +390,7 @@ internal static class Editing
         var alloc = System.GC.GetAllocatedBytesForCurrentThread();
         foreach (var u in r.Updates)
         {
-            using var lease = UpdateReader.Read(u, 0, u.Length, v2: false, long.MaxValue, int.MaxValue);
+            using var lease = UpdateReader.Read(u, v2: false, long.MaxValue, int.MaxValue);
         }
 
         return System.GC.GetAllocatedBytesForCurrentThread() - alloc;

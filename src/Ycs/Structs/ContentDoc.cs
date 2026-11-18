@@ -91,13 +91,13 @@ internal class ContentDoc : IContent
     }
 
     internal static ContentDoc Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
-        where TDecoder : IUpdateDecoder
+        where TDecoder : struct, IUpdateDecoder
     {
         var guid = decoder.ReadString(input);
 
         // Yjs spreads the options into an object: any value but null (a TypeError) is accepted, and
         // only an object's keys can name an option.
-        var opts = decoder.Reader.ReadAnyMarkingUndefined() switch
+        var opts = decoder.Reader.ReadAnyMarkingUndefined(input) switch
         {
             null => throw new YUpdateException("A subdocument's options are null."),
             IDictionary<string, object> dict => dict,

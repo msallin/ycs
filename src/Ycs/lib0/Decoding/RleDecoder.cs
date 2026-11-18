@@ -3,29 +3,27 @@ using System.Diagnostics;
 namespace Ycs;
 
 /// <seealso cref="RleEncoder"/>
-internal class RleDecoder : AbstractStreamDecoder<byte>
+internal struct RleDecoder
 {
+    private Lib0Reader _reader;
     private byte _state;
     private long _count;
 
-    public RleDecoder(Lib0Reader input)
-        : base(input)
+    public RleDecoder(Lib0Reader column)
     {
-        // Do nothing.
+        _reader = column;
     }
 
-    /// <inheritdoc/>
-    public override byte Read()
+    public byte Read(ReadOnlySpan<byte> input)
     {
-
         if (_count == 0)
         {
-            _state = Reader.ReadByte();
+            _state = _reader.ReadByte(input);
 
-            if (HasContent)
+            if (_reader.HasContent)
             {
                 // See encoder implementation for the reason why this is incremented.
-                _count = Reader.ReadVarUint() + 1;
+                _count = _reader.ReadVarUint(input) + 1;
                 Debug.Assert(_count > 0);
             }
             else
@@ -37,11 +35,5 @@ internal class RleDecoder : AbstractStreamDecoder<byte>
 
         _count--;
         return _state;
-    }
-
-    public override void Reset()
-    {
-        _state = 0;
-        _count = 0;
     }
 }

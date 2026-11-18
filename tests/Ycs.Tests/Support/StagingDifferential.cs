@@ -100,11 +100,15 @@ internal static class StagingDifferential
     {
         try
         {
-            var reader = new Lib0Reader(input);
-            IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(reader, maxStructs) : new UpdateDecoderV1(reader, maxStructs);
-            var cursor = EncodingUtils.StructCursor.Begin(ref decoder, input, table, []);
-            while (cursor.NextStaged(ref decoder, input) >= 0)
+            if (v2)
             {
+                var decoder = new UpdateDecoderV2(input, maxStructs, UpdateLimits.DefaultMaxDepth, []);
+                ReadStructs(ref decoder, input, table);
+            }
+            else
+            {
+                var decoder = new UpdateDecoderV1(input, maxStructs, UpdateLimits.DefaultMaxDepth);
+                ReadStructs(ref decoder, input, table);
             }
 
             return null;
@@ -112,6 +116,15 @@ internal static class StagingDifferential
         catch (Exception e)
         {
             return $"{e.GetType().FullName}: {e.Message}";
+        }
+    }
+
+    private static void ReadStructs<TDecoder>(ref TDecoder decoder, byte[] input, StagingTable table)
+        where TDecoder : struct, IUpdateDecoder
+    {
+        var cursor = EncodingUtils.StructCursor.Begin(ref decoder, input, table, []);
+        while (cursor.NextStaged(ref decoder, input) >= 0)
+        {
         }
     }
 }

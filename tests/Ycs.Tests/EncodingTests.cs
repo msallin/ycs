@@ -49,28 +49,28 @@ public class EncodingTests
     [TestMethod]
     public void TestEncodeMax32BitUint()
     {
-        DoTestEncoding<uint>("Max 32bit uint", (w, v) => w.WriteVarUint(v), (r) => r.ReadVarUint(), Bits.Bits32);
+        DoTestEncoding<uint>("Max 32bit uint", (w, v) => w.WriteVarUint(v), (ref r, i) => r.ReadVarUint(i), Bits.Bits32);
     }
 
     [TestMethod]
     public void TestVarUintEncoding()
     {
-        DoTestEncoding<uint>("VarUint 1 byte", (w, v) => w.WriteVarUint(v), (r) => r.ReadVarUint(), 42);
-        DoTestEncoding<uint>("VarUint 2 bytes", (w, v) => w.WriteVarUint(v), (r) => r.ReadVarUint(), 1 << 9 | 3);
-        DoTestEncoding<uint>("VarUint 3 bytes", (w, v) => w.WriteVarUint(v), (r) => r.ReadVarUint(), 1 << 17 | 1 << 9 | 3);
-        DoTestEncoding<uint>("VarUint 4 bytes", (w, v) => w.WriteVarUint(v), (r) => r.ReadVarUint(), 1 << 25 | 1 << 17 | 1 << 9 | 3);
-        DoTestEncoding<uint>("VarUint of 2839012934", (w, v) => w.WriteVarUint(v), (r) => r.ReadVarUint(), 2_839_012_934);
+        DoTestEncoding<uint>("VarUint 1 byte", (w, v) => w.WriteVarUint(v), (ref r, i) => r.ReadVarUint(i), 42);
+        DoTestEncoding<uint>("VarUint 2 bytes", (w, v) => w.WriteVarUint(v), (ref r, i) => r.ReadVarUint(i), 1 << 9 | 3);
+        DoTestEncoding<uint>("VarUint 3 bytes", (w, v) => w.WriteVarUint(v), (ref r, i) => r.ReadVarUint(i), 1 << 17 | 1 << 9 | 3);
+        DoTestEncoding<uint>("VarUint 4 bytes", (w, v) => w.WriteVarUint(v), (ref r, i) => r.ReadVarUint(i), 1 << 25 | 1 << 17 | 1 << 9 | 3);
+        DoTestEncoding<uint>("VarUint of 2839012934", (w, v) => w.WriteVarUint(v), (ref r, i) => r.ReadVarUint(i), 2_839_012_934);
     }
 
     [TestMethod]
     public void TestVarIntEncoding()
     {
-        DoTestEncoding<long>("VarInt 1 byte", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, -42);
-        DoTestEncoding<long>("VarInt 2 bytes", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, -(1 << 9 | 3));
-        DoTestEncoding<long>("VarInt 3 bytes", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, -(1 << 17 | 1 << 9 | 3));
-        DoTestEncoding<long>("VarInt 4 bytes", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, -(1 << 25 | 1 << 17 | 1 << 9 | 3));
-        DoTestEncoding<long>("VarInt of -691529286", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, -691_529_286);
-        DoTestEncoding<long>("VarInt of 64 (-0)", (w, v) => w.WriteVarInt(v, negativeZero: true), (r) => r.ReadVarInt().Value, 0);
+        DoTestEncoding<long>("VarInt 1 byte", (w, v) => w.WriteVarInt(v), (ref r, i) => r.ReadVarInt(i).Value, -42);
+        DoTestEncoding<long>("VarInt 2 bytes", (w, v) => w.WriteVarInt(v), (ref r, i) => r.ReadVarInt(i).Value, -(1 << 9 | 3));
+        DoTestEncoding<long>("VarInt 3 bytes", (w, v) => w.WriteVarInt(v), (ref r, i) => r.ReadVarInt(i).Value, -(1 << 17 | 1 << 9 | 3));
+        DoTestEncoding<long>("VarInt 4 bytes", (w, v) => w.WriteVarInt(v), (ref r, i) => r.ReadVarInt(i).Value, -(1 << 25 | 1 << 17 | 1 << 9 | 3));
+        DoTestEncoding<long>("VarInt of -691529286", (w, v) => w.WriteVarInt(v), (ref r, i) => r.ReadVarInt(i).Value, -691_529_286);
+        DoTestEncoding<long>("VarInt of 64 (-0)", (w, v) => w.WriteVarInt(v, negativeZero: true), (ref r, i) => r.ReadVarInt(i).Value, 0);
     }
 
     /// <summary>
@@ -114,7 +114,9 @@ public class EncodingTests
         {
             var writer = new Lib0Writer();
             writer.WriteAny(value);
-            return new Lib0Reader(writer.ToArray()).ReadAny();
+            var bytes = writer.ToArray();
+            var reader = new Lib0Reader(0, bytes.Length);
+            return reader.ReadAny(bytes);
         }
 
         Assert.AreEqual(2, RoundTrip(2.0));
@@ -149,8 +151,8 @@ public class EncodingTests
         // '-0' should have the 7th bit set, i.e. == 64.
         CollectionAssert.AreEqual(new byte[] { 64 }, actual);
 
-        var inputStream = new Lib0Reader(actual);
-        var v = inputStream.ReadVarInt();
+        var inputStream = new Lib0Reader(0, actual.Length);
+        var v = inputStream.ReadVarInt(actual);
         Assert.AreEqual(0, v.Value);
         Assert.AreEqual(-1, v.Sign);
     }
@@ -163,7 +165,7 @@ public class EncodingTests
         for (int i = 0; i < 10; i++)
         {
             var n = rand.Next(0, (1 << 28) - 1);
-            DoTestEncoding<uint>($"VarUint of {n}", (w, v) => w.WriteVarUint(v), (r) => r.ReadVarUint(), (uint)n);
+            DoTestEncoding<uint>($"VarUint of {n}", (w, v) => w.WriteVarUint(v), (ref r, i) => r.ReadVarUint(i), (uint)n);
         }
     }
 
@@ -175,21 +177,23 @@ public class EncodingTests
         for (int i = 0; i < 10; i++)
         {
             var n = rand.Next(0, int.MaxValue);
-            DoTestEncoding<long>($"VarInt of {n}", (w, v) => w.WriteVarInt(v), (r) => r.ReadVarInt().Value, n);
+            DoTestEncoding<long>($"VarInt of {n}", (w, v) => w.WriteVarInt(v), (ref r, i) => r.ReadVarInt(i).Value, n);
         }
     }
 
     [TestMethod]
     public void TestStringEncoding()
     {
-        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (r) => r.ReadVarString(), "hello");
-        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (r) => r.ReadVarString(), string.Empty);
-        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (r) => r.ReadVarString(), "쾟");
-        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (r) => r.ReadVarString(), "龟"); // Surrogate length 3.
-        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (r) => r.ReadVarString(), "😝"); // Surrogate length 4.
+        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (ref r, i) => r.ReadVarString(i), "hello");
+        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (ref r, i) => r.ReadVarString(i), string.Empty);
+        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (ref r, i) => r.ReadVarString(i), "쾟");
+        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (ref r, i) => r.ReadVarString(i), "龟"); // Surrogate length 3.
+        DoTestEncoding<string>(string.Empty, (w, v) => w.WriteVarString(v), (ref r, i) => r.ReadVarString(i), "😝"); // Surrogate length 4.
     }
 
-    private static void DoTestEncoding<T>(string description, Action<Lib0Writer, T> write, Func<Lib0Reader, T> read, T val)
+    private delegate T ReadFunc<T>(ref Lib0Reader reader, ReadOnlySpan<byte> input);
+
+    private static void DoTestEncoding<T>(string description, Action<Lib0Writer, T> write, ReadFunc<T> read, T val)
     {
         byte[] encoded;
 
@@ -197,8 +201,8 @@ public class EncodingTests
         write(outputStream, val);
         encoded = outputStream.ToArray();
 
-        var inputStream = new Lib0Reader(encoded);
-        var decodedValue = read(inputStream);
+        var inputStream = new Lib0Reader(0, encoded.Length);
+        var decodedValue = read(ref inputStream, encoded);
         Assert.AreEqual(val, decodedValue, description);
     }
 }

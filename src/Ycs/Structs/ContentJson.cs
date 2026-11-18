@@ -77,7 +77,7 @@ internal class ContentJson : IContent
     }
 
     internal static ContentJson Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
-        where TDecoder : IUpdateDecoder
+        where TDecoder : struct, IUpdateDecoder
     {
         var len = decoder.ReadLength(input);
 

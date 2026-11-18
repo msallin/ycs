@@ -54,10 +54,10 @@ public class StructStagingTests
     {
         var first = DecodedStructTests.RichUpdates()[0];
         var second = DecodedStructTests.CorpusUpdates()[0];
-        using var outer = UpdateReader.Read(first, 0, first.Length, v2: false, Unlimited);
+        using var outer = UpdateReader.Read(first, v2: false, Unlimited);
         var outerCount = outer.Staging.Count;
 
-        using (var inner = UpdateReader.Read(second, 0, second.Length, v2: false, Unlimited))
+        using (var inner = UpdateReader.Read(second, v2: false, Unlimited))
         {
             Assert.AreNotSame(outer.Staging, inner.Staging);
         }
@@ -72,10 +72,10 @@ public class StructStagingTests
     {
         var first = DecodedStructTests.RichUpdates()[0];
         var second = DecodedStructTests.CorpusUpdates()[0];
-        var lease = UpdateReader.Read(first, 0, first.Length, v2: false, Unlimited);
+        var lease = UpdateReader.Read(first, v2: false, Unlimited);
         lease.Dispose();
 
-        using var next = UpdateReader.Read(second, 0, second.Length, v2: false, Unlimited);
+        using var next = UpdateReader.Read(second, v2: false, Unlimited);
 
         Assert.AreEqual((true, ReadTable(second).Count), (Throws(() => _ = lease.Staging), next.Staging.Count));
         StagingDifferential.AssertSame(ReadTable(second), next.Staging);
@@ -85,10 +85,10 @@ public class StructStagingTests
     public void Lease_MalformedUpdate_ReleasesTheReaderWithAnEmptyTable()
     {
         var bad = new byte[] { 1, 1, 7, 0, 1, 200 };
-        Assert.Throws<YUpdateException>(() => UpdateReader.Read(bad, 0, bad.Length, v2: false, Unlimited));
+        Assert.Throws<YUpdateException>(() => UpdateReader.Read(bad, v2: false, Unlimited));
         var good = DecodedStructTests.RichUpdates()[0];
 
-        using var lease = UpdateReader.Read(good, 0, good.Length, v2: false, Unlimited);
+        using var lease = UpdateReader.Read(good, v2: false, Unlimited);
 
         StagingDifferential.AssertSame(ReadTable(good), lease.Staging);
     }
@@ -106,7 +106,7 @@ public class StructStagingTests
 
         var gapped = YUpdate.Merge([updates[0], updates[2]], format: UpdateFormat.V2);
         var table = new StagingTable();
-        var decoder = new UpdateDecoderV2(new Lib0Reader(gapped), Unlimited);
+        var decoder = new UpdateDecoderV2(gapped, Unlimited, UpdateLimits.DefaultMaxDepth, []);
         var cursor = EncodingUtils.StructCursor.Begin(ref decoder, gapped, table);
         while (cursor.NextStaged(ref decoder, gapped) >= 0)
         {
@@ -132,7 +132,7 @@ public class StructStagingTests
     private static StagingTable ReadTable(byte[] update)
     {
         var table = new StagingTable();
-        var decoder = new UpdateDecoderV1(new Lib0Reader(update), Unlimited);
+        var decoder = new UpdateDecoderV1(update, Unlimited, UpdateLimits.DefaultMaxDepth);
         var cursor = EncodingUtils.StructCursor.Begin(ref decoder, update, table);
         while (cursor.NextStaged(ref decoder, update) >= 0)
         {

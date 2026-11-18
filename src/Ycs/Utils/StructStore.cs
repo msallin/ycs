@@ -462,7 +462,7 @@ internal sealed partial class StructStore
             Pending = null;
 
             // Their values were read under the limits of the updates that brought them.
-            using var lease = UpdateReader.Read(update, 0, update.Length, v2: true, count, maxDepth: int.MaxValue);
+            using var lease = UpdateReader.Read(update, v2: true, count, maxDepth: int.MaxValue);
             try
             {
                 ApplyUpdate(transaction, lease.Staging, lease.DeleteSet, limits, retrying: true);

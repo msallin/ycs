@@ -66,11 +66,17 @@ public class UpdateOperationsStagedTests
         var structs = Enumerable.Range(0, 1000).Select(k => (Action<IUpdateEncoder, ItemId>)((e, id) =>
             WriteDeleted(e, id, new ItemId(100 + k, 0), 1))).ToArray();
         var bytes = Update(v2, (1, 0, structs));
-        var reader = new LazyStructReader<IUpdateDecoder>(
-            v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue),
-            bytes,
-            filterSkips: false,
-            new StagingTable());
+        var (read, most) = v2
+            ? Stream(new UpdateDecoderV2(bytes, long.MaxValue, UpdateLimits.DefaultMaxDepth, []), bytes)
+            : Stream(new UpdateDecoderV1(bytes, long.MaxValue, UpdateLimits.DefaultMaxDepth), bytes);
+
+        Assert.AreEqual((1000, true), (read, most <= 70));
+    }
+
+    private static (int Read, int Most) Stream<TDecoder>(TDecoder decoder, byte[] bytes)
+        where TDecoder : struct, IUpdateDecoder
+    {
+        var reader = new LazyStructReader<TDecoder>(decoder, bytes, filterSkips: false, new StagingTable());
         var most = 0;
         var read = 0;
 
@@ -80,7 +86,7 @@ public class UpdateOperationsStagedTests
             read++;
         }
 
-        Assert.AreEqual((1000, true), (read, most <= 70));
+        return (read, most);
     }
 
     [TestMethod]

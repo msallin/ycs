@@ -20,7 +20,7 @@ internal static class EncodingUtils
 {
     /// <summary>Reads the content of a format, embed, binary, JSON or document item, the kinds the table holds as objects.</summary>
     private static IContent ReadColdContent<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, byte info)
-        where TDecoder : IUpdateDecoder
+        where TDecoder : struct, IUpdateDecoder
     {
         switch (info & Bits.Bits5)
         {
@@ -317,9 +317,9 @@ internal static class EncodingUtils
         /// <see cref="NextStaged"/> returns -1. <paramref name="input"/> is the input the decoder was made over.
         /// </summary>
         public static StructCursor Begin<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable staging, HashSet<long>? seenClients = null)
-            where TDecoder : IUpdateDecoder
+            where TDecoder : struct, IUpdateDecoder
         {
-            var sections = decoder.Reader.ReadVarUint();
+            var sections = decoder.Reader.ReadVarUint(input);
             return new StructCursor(staging, sections, sections > 1 ? seenClients ?? new HashSet<long>() : null);
         }
 
@@ -332,7 +332,7 @@ internal static class EncodingUtils
         /// <see cref="ContentType.ReadHeader"/>. Returns its index in the table, or -1 after the last.
         /// </summary>
         public int NextStaged<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
-            where TDecoder : IUpdateDecoder
+            where TDecoder : struct, IUpdateDecoder
         {
             while (_structsLeft == 0)
             {
@@ -352,11 +352,11 @@ internal static class EncodingUtils
         }
 
         private void ReadSectionHeader<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
-            where TDecoder : IUpdateDecoder
+            where TDecoder : struct, IUpdateDecoder
         {
-            long numberOfStructs = decoder.Reader.ReadVarUint();
+            long numberOfStructs = decoder.Reader.ReadVarUint(input);
             var client = Limits.CheckClient(decoder.ReadClient(input));
-            var clock = Limits.CheckClock(decoder.Reader.ReadVarUint());
+            var clock = Limits.CheckClock(decoder.Reader.ReadVarUint(input));
 
             if (_clients != null && !_clients.Add(client))
             {
@@ -385,7 +385,7 @@ internal static class EncodingUtils
     /// delete set into the empty <paramref name="ds"/> (as <see cref="DeleteSet.ReadInto"/> does).
     /// </summary>
     internal static void ReadUpdate<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable table, DeleteSet ds, HashSet<long>? seenClients, Stack<List<DeleteSet.DeleteItem>>? spareLists)
-        where TDecoder : IUpdateDecoder
+        where TDecoder : struct, IUpdateDecoder
     {
         var cursor = StructCursor.Begin(ref decoder, input, table, seenClients);
         while (cursor.NextStaged(ref decoder, input) >= 0)
@@ -397,7 +397,7 @@ internal static class EncodingUtils
 
     // The struct is added once it is read whole, when its length is known.
     private static int StageStruct<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable table, long client, long clock, ref object?[]? values)
-        where TDecoder : IUpdateDecoder
+        where TDecoder : struct, IUpdateDecoder
     {
         var id = new ItemId(client, clock);
         var info = decoder.ReadInfo(input);
@@ -409,7 +409,7 @@ internal static class EncodingUtils
                 return table.Add(StagedKind.GC, gcLength);
             case (int)StagedKind.Skip:
                 // A range of clocks this update has no data for (written by mergeUpdates).
-                var skipLength = decoder.Reader.ReadVarUint();
+                var skipLength = decoder.Reader.ReadVarUint(input);
                 Limits.CheckRange(clock, skipLength);
                 return table.Add(StagedKind.Skip, (int)skipLength);
         }
@@ -595,35 +595,35 @@ internal static class EncodingUtils
     }
 
     public static IDictionary<long, long> ReadStateVector<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
-        where TDecoder : IDSDecoder
+        where TDecoder : struct, IDSDecoder
     {
-        var ssLength = decoder.Reader.ReadVarUint();
+        var ssLength = decoder.Reader.ReadVarUint(input);
 
         // Each entry takes at least two bytes.
         var ss = new Dictionary<long, long>(Limits.Capacity(ssLength, decoder.Reader.Remaining / 2));
-        ReadStateVectorEntries(decoder.Reader, ssLength, ss);
+        ReadStateVectorEntries(ref decoder.Reader, input, ssLength, ss);
         return ss;
     }
 
-    private static void ReadStateVectorEntries(Lib0Reader reader, uint count, Dictionary<long, long> ss)
+    private static void ReadStateVectorEntries(ref Lib0Reader reader, ReadOnlySpan<byte> input, uint count, Dictionary<long, long> ss)
     {
         for (long i = 0; i < count; i++)
         {
-            var client = reader.ReadVarUint53();
-            var clock = Limits.CheckClock(reader.ReadVarUint());
+            var client = reader.ReadVarUint53(input);
+            var clock = Limits.CheckClock(reader.ReadVarUint(input));
             ss[client] = clock;
         }
     }
 
-    public static IDictionary<long, long> DecodeStateVector(Lib0Reader input)
+    public static IDictionary<long, long> DecodeStateVector(ReadOnlySpan<byte> input)
     {
-        var decoder = new DSDecoderV2(input);
-        return ReadStateVector(ref decoder, default);
+        var decoder = new DSDecoderV2(0, input.Length);
+        return ReadStateVector(ref decoder, input);
     }
 
     /// <summary>
     /// A state vector to encode against, decoded from a span into a dictionary reused on this thread
-    /// (with the reader and a pooled copy of the input), so encoding allocates nothing for it.
+    /// so encoding allocates nothing for it.
     /// </summary>
     private sealed class TargetStateVector
     {
@@ -631,7 +631,6 @@ internal static class EncodingUtils
         private static TargetStateVector? t_free;
 
         private readonly Dictionary<long, long> _stateVector = new();
-        private readonly Lib0Reader _reader = new();
 
         public static TargetStateVector Rent()
         {
@@ -648,24 +647,17 @@ internal static class EncodingUtils
                 return _stateVector;
             }
 
-            var buffer = BufferPool<byte>.Rent(encoded.Length);
             try
             {
-                encoded.CopyTo(buffer);
-                _reader.Reset(buffer, 0, encoded.Length);
-                var count = _reader.ReadVarUint();
-                _stateVector.EnsureCapacity(Limits.Capacity(count, _reader.Remaining / 2));
-                ReadStateVectorEntries(_reader, count, _stateVector);
+                var reader = new Lib0Reader(0, encoded.Length);
+                var count = reader.ReadVarUint(encoded);
+                _stateVector.EnsureCapacity(Limits.Capacity(count, reader.Remaining / 2));
+                ReadStateVectorEntries(ref reader, encoded, count, _stateVector);
                 return _stateVector;
             }
             catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
             {
                 throw YUpdateException.Wrap(e);
-            }
-            finally
-            {
-                _reader.Clear();
-                BufferPool<byte>.Return(buffer, encoded.Length);
             }
         }
 

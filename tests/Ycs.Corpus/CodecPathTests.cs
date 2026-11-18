@@ -66,22 +66,28 @@ public class CodecPathTests
             foreach (var update in c.Updates.Append(c.ExpectedState).Append(c.Merged))
             {
                 var bytes = update.Get(v2);
-                IUpdateDecoder decoder = v2 ? new UpdateDecoderV2(new Lib0Reader(bytes), long.MaxValue) : new UpdateDecoderV1(new Lib0Reader(bytes), long.MaxValue);
-                var fresh = new StagingTable();
-                var cursor = EncodingUtils.StructCursor.Begin(ref decoder, bytes, fresh);
-                while (cursor.NextStaged(ref decoder, bytes) >= 0)
-                {
-                }
+                var (expectedStructs, expectedDs) = v2
+                    ? ReadFresh(new UpdateDecoderV2(bytes, long.MaxValue, UpdateLimits.DefaultMaxDepth, []), bytes)
+                    : ReadFresh(new UpdateDecoderV1(bytes, long.MaxValue, UpdateLimits.DefaultMaxDepth), bytes);
 
-                var expectedStructs = Describe(fresh);
-                var expectedDs = Describe(DeleteSet.Read(ref decoder, bytes));
-
-                using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2, long.MaxValue);
+                using var lease = UpdateReader.Read(bytes, v2, long.MaxValue);
                 Assert.AreEqual(expectedStructs, Describe(lease.Staging));
                 Assert.AreEqual(expectedDs, Describe(lease.DeleteSet));
             }
         }
     });
+
+    private static (string Structs, string DeleteSet) ReadFresh<TDecoder>(TDecoder decoder, byte[] bytes)
+        where TDecoder : struct, IUpdateDecoder
+    {
+        var fresh = new StagingTable();
+        var cursor = EncodingUtils.StructCursor.Begin(ref decoder, bytes, fresh);
+        while (cursor.NextStaged(ref decoder, bytes) >= 0)
+        {
+        }
+
+        return (Describe(fresh), Describe(DeleteSet.Read(ref decoder, bytes)));
+    }
 
     /// <summary>Like <see cref="CorpusTests.Build"/>, through the reused reader and the store, as <see cref="YDoc"/> will.</summary>
     private static YDoc BuildWithReader(CorpusCase c, bool v2)
@@ -90,7 +96,7 @@ public class CodecPathTests
         foreach (var update in c.Updates)
         {
             var bytes = update.Get(v2);
-            using var lease = UpdateReader.Read(bytes, 0, bytes.Length, v2, long.MaxValue);
+            using var lease = UpdateReader.Read(bytes, v2, long.MaxValue);
             doc.Transact(tr =>
             {
                 tr.Local = false;

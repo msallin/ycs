@@ -1,16 +1,21 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Ycs;
 
-internal class DSDecoderV2 : IDSDecoder
+internal struct DSDecoderV2 : IDSDecoder
 {
+    private Lib0Reader _reader;
     private long _dsCurVal;
 
-    public DSDecoderV2(Lib0Reader input)
+    /// <summary>A decoder of the bytes from <paramref name="start"/> up to <paramref name="end"/> of the input.</summary>
+    public DSDecoderV2(int start, int end)
     {
-        ArgumentNullException.ThrowIfNull(input);
-        Reader = input;
+        _reader = new Lib0Reader(start, end);
+        _dsCurVal = 0;
     }
 
-    public Lib0Reader Reader { get; }
+    [UnscopedRef]
+    public ref Lib0Reader Reader => ref _reader;
 
     public void ResetDsCurVal()
     {
@@ -20,146 +25,119 @@ internal class DSDecoderV2 : IDSDecoder
     // At most 2^32 per step and checked by the caller after each range, so the sum cannot overflow.
     public long ReadDsClock(ReadOnlySpan<byte> input)
     {
-        _dsCurVal += Reader.ReadVarUint();
+        _dsCurVal += _reader.ReadVarUint(input);
         return _dsCurVal;
     }
 
     public long ReadDsLength(ReadOnlySpan<byte> input)
     {
-        var diff = Reader.ReadVarUint() + 1L;
+        var diff = _reader.ReadVarUint(input) + 1L;
         _dsCurVal += diff;
         return diff;
     }
 }
 
-internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
+internal struct UpdateDecoderV2 : IUpdateDecoder<UpdateDecoderV2>
 {
+    private Lib0Reader _reader;
+    private long _dsCurVal;
+    private IntDiffOptRleDecoder _keyClockDecoder;
+    private UintOptRleDecoder _clientDecoder;
+    private IntDiffOptRleDecoder _leftClockDecoder;
+    private IntDiffOptRleDecoder _rightClockDecoder;
+    private RleDecoder _infoDecoder;
+    private StringDecoder _stringDecoder;
+    private RleDecoder _parentInfoDecoder;
+    private UintOptRleDecoder _typeRefDecoder;
+    private UintOptRleDecoder _lengthDecoder;
+
     /// <summary>
     /// List of cached keys. If the keys[id] does not exist, we read a new key from
     /// the string encoder and push it to keys.
     /// </summary>
-    private readonly List<string> _keys = new();
-    private readonly IntDiffOptRleDecoder _keyClockDecoder;
-    private readonly UintOptRleDecoder _clientDecoder;
-    private readonly IntDiffOptRleDecoder _leftClockDecoder;
-    private readonly IntDiffOptRleDecoder _rightClockDecoder;
-    private readonly RleDecoder _infoDecoder;
-    // Made by the constructor's ReadColumns; Reset only refills it.
-    private StringDecoder _stringDecoder = null!;
-    private readonly RleDecoder _parentInfoDecoder;
-    private readonly UintOptRleDecoder _typeRefDecoder;
-    private readonly UintOptRleDecoder _lengthDecoder;
+    private readonly List<string> _keys;
 
-    /// <param name="input">The update.</param>
+    /// <param name="update">The update this decoder reads, which every read is handed again.</param>
     /// <param name="maxStructs">
     /// The most structs the update may hold (<see cref="UpdateLimits.MaxStructsPerUpdate"/>); for an
     /// update this library wrote (pending structs), what it counted when it wrote them.
     /// </param>
-    public UpdateDecoderV2(Lib0Reader input, long maxStructs)
-        : base(input)
+    /// <param name="maxDepth">How deeply the values may be nested (<see cref="UpdateLimits.MaxDepth"/>).</param>
+    /// <param name="keys">The empty list the keys read are cached in; the caller owns it, so a reused one allocates nothing.</param>
+    public UpdateDecoderV2(ReadOnlySpan<byte> update, long maxStructs, int maxDepth, List<string> keys)
     {
-        _keyClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
-        _clientDecoder = new UintOptRleDecoder(new Lib0Reader(), Limits.MaxClient);
-        _leftClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
-        _rightClockDecoder = new IntDiffOptRleDecoder(new Lib0Reader());
-        _infoDecoder = new RleDecoder(new Lib0Reader());
-        _parentInfoDecoder = new RleDecoder(new Lib0Reader());
-        _typeRefDecoder = new UintOptRleDecoder(new Lib0Reader());
-        _lengthDecoder = new UintOptRleDecoder(new Lib0Reader());
-        ReadColumns(maxStructs, createStringDecoder: true);
-    }
-
-    public long MaxStructs { get; private set; }
-
-    /// <summary>
-    /// Starts over on a new update: <see cref="DSDecoderV2.Reader"/> must have been pointed at it
-    /// (<see cref="Lib0Reader.Reset"/>). The column decoders and their readers are reused.
-    /// </summary>
-    public void Reset(long maxStructs)
-    {
-        ResetDsCurVal();
-        _keys.Clear();
-        ReadColumns(maxStructs, createStringDecoder: false);
-    }
-
-    /// <summary>Drops the references to the input and to the decoded strings.</summary>
-    public void Clear()
-    {
-        Reader.Clear();
-        _keys.Clear();
-        _keyClockDecoder.Input.Clear();
-        _clientDecoder.Input.Clear();
-        _leftClockDecoder.Input.Clear();
-        _rightClockDecoder.Input.Clear();
-        _infoDecoder.Input.Clear();
-        _stringDecoder.Clear();
-        _parentInfoDecoder.Input.Clear();
-        _typeRefDecoder.Input.Clear();
-        _lengthDecoder.Input.Clear();
-    }
-
-    private void ReadColumns(long maxStructs, bool createStringDecoder)
-    {
+        _reader = new Lib0Reader(0, update.Length, maxDepth);
+        _dsCurVal = 0;
         MaxStructs = maxStructs;
+        _keys = keys;
 
         // Read feature flag - currently unused.
-        Reader.ReadByte();
+        _reader.ReadByte(update);
 
-        // Each column is a reader over a slice of the same buffer; nothing is copied.
-        ReadColumn(_keyClockDecoder);
-        ReadColumn(_clientDecoder);
-        ReadColumn(_leftClockDecoder);
-        ReadColumn(_rightClockDecoder);
-        ReadColumn(_infoDecoder);
-
-        if (createStringDecoder)
-        {
-            _stringDecoder = new StringDecoder(Reader.ReadVarUint8ArrayAsReader());
-        }
-        else
-        {
-            Reader.ReadVarUint8ArrayInto(_stringDecoder.Input);
-            _stringDecoder.Reset();
-        }
-
-        ReadColumn(_parentInfoDecoder);
-        ReadColumn(_typeRefDecoder);
-        ReadColumn(_lengthDecoder);
+        // Each column is a reader over a slice of the same input; nothing is copied.
+        _keyClockDecoder = new IntDiffOptRleDecoder(_reader.ReadVarUint8ArrayAsReader(update));
+        _clientDecoder = new UintOptRleDecoder(_reader.ReadVarUint8ArrayAsReader(update), Limits.MaxClient);
+        _leftClockDecoder = new IntDiffOptRleDecoder(_reader.ReadVarUint8ArrayAsReader(update));
+        _rightClockDecoder = new IntDiffOptRleDecoder(_reader.ReadVarUint8ArrayAsReader(update));
+        _infoDecoder = new RleDecoder(_reader.ReadVarUint8ArrayAsReader(update));
+        _stringDecoder = new StringDecoder(update, _reader.ReadVarUint8ArrayAsReader(update));
+        _parentInfoDecoder = new RleDecoder(_reader.ReadVarUint8ArrayAsReader(update));
+        _typeRefDecoder = new UintOptRleDecoder(_reader.ReadVarUint8ArrayAsReader(update));
+        _lengthDecoder = new UintOptRleDecoder(_reader.ReadVarUint8ArrayAsReader(update));
     }
 
-    private void ReadColumn<T>(AbstractStreamDecoder<T> decoder)
+    public static UpdateDecoderV2 Create(ReadOnlySpan<byte> update, long maxStructs, int maxDepth) => new(update, maxStructs, maxDepth, []);
+
+    [UnscopedRef]
+    public ref Lib0Reader Reader => ref _reader;
+
+    public long MaxStructs { get; }
+
+    public void ResetDsCurVal()
     {
-        Reader.ReadVarUint8ArrayInto(decoder.Input);
-        decoder.Reset();
+        _dsCurVal = 0;
     }
 
+    // At most 2^32 per step and checked by the caller after each range, so the sum cannot overflow.
+    public long ReadDsClock(ReadOnlySpan<byte> input)
+    {
+        _dsCurVal += _reader.ReadVarUint(input);
+        return _dsCurVal;
+    }
 
-    public ItemId ReadLeftId(ReadOnlySpan<byte> input) => new ItemId((long)_clientDecoder.Read(), Limits.CheckClock(_leftClockDecoder.Read()));
+    public long ReadDsLength(ReadOnlySpan<byte> input)
+    {
+        var diff = _reader.ReadVarUint(input) + 1L;
+        _dsCurVal += diff;
+        return diff;
+    }
 
-    public ItemId ReadRightId(ReadOnlySpan<byte> input) => new ItemId((long)_clientDecoder.Read(), Limits.CheckClock(_rightClockDecoder.Read()));
+    public ItemId ReadLeftId(ReadOnlySpan<byte> input) => new ItemId((long)_clientDecoder.Read(input), Limits.CheckClock(_leftClockDecoder.Read(input)));
+
+    public ItemId ReadRightId(ReadOnlySpan<byte> input) => new ItemId((long)_clientDecoder.Read(input), Limits.CheckClock(_rightClockDecoder.Read(input)));
 
     /// <summary>
     /// Read the next client Id.
     /// </summary>
-    public long ReadClient(ReadOnlySpan<byte> input) => (long)_clientDecoder.Read();
+    public long ReadClient(ReadOnlySpan<byte> input) => (long)_clientDecoder.Read(input);
 
-    public byte ReadInfo(ReadOnlySpan<byte> input) => _infoDecoder.Read();
+    public byte ReadInfo(ReadOnlySpan<byte> input) => _infoDecoder.Read(input);
 
-    public string ReadString(ReadOnlySpan<byte> input) => _stringDecoder.Read();
+    public string ReadString(ReadOnlySpan<byte> input) => _stringDecoder.Read(input);
 
-    public int ReadStringBound(ReadOnlySpan<byte> input) => _stringDecoder.BeginRead();
+    public int ReadStringBound(ReadOnlySpan<byte> input) => _stringDecoder.BeginRead(input);
 
-    public int ReadStringExact(ReadOnlySpan<byte> input) => _stringDecoder.SegmentLength;
+    public readonly int ReadStringExact(ReadOnlySpan<byte> input) => _stringDecoder.SegmentLength;
 
-    public int ReadStringChars(ReadOnlySpan<byte> input, Span<char> destination) => _stringDecoder.EndRead(destination);
+    public readonly int ReadStringChars(ReadOnlySpan<byte> input, Span<char> destination) => _stringDecoder.EndRead(input, destination);
 
-    public bool ReadParentInfo(ReadOnlySpan<byte> input) => _parentInfoDecoder.Read() == 1;
+    public bool ReadParentInfo(ReadOnlySpan<byte> input) => _parentInfoDecoder.Read(input) == 1;
 
-    public uint ReadTypeRef(ReadOnlySpan<byte> input) => (uint)_typeRefDecoder.Read();
+    public uint ReadTypeRef(ReadOnlySpan<byte> input) => (uint)_typeRefDecoder.Read(input);
 
     public int ReadLength(ReadOnlySpan<byte> input)
     {
-        var value = _lengthDecoder.Read();
+        var value = _lengthDecoder.Read(input);
         if (value > Limits.MaxClock)
         {
             throw new YUpdateException("A length is out of range.");
@@ -168,14 +146,14 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
         return (int)value;
     }
 
-    public object? ReadAny(ReadOnlySpan<byte> input) => Reader.ReadAny();
+    public object? ReadAny(ReadOnlySpan<byte> input) => _reader.ReadAny(input);
 
-    public byte[] ReadBuffer(ReadOnlySpan<byte> input) => Reader.ReadVarUint8Array();
+    public byte[] ReadBuffer(ReadOnlySpan<byte> input) => _reader.ReadVarUint8Array(input);
 
     public string ReadKey(ReadOnlySpan<byte> input)
     {
         // As in Yjs: a known index returns a cached key, any higher one reads the next new key.
-        var keyClock = _keyClockDecoder.Read();
+        var keyClock = _keyClockDecoder.Read(input);
         if (keyClock < 0)
         {
             throw new YUpdateException("A key index is negative.");
@@ -186,10 +164,10 @@ internal sealed class UpdateDecoderV2 : DSDecoderV2, IUpdateDecoder
             return _keys[(int)keyClock];
         }
 
-        var key = _stringDecoder.Read();
+        var key = _stringDecoder.Read(input);
         _keys.Add(key);
         return key;
     }
 
-    public object? ReadJson(ReadOnlySpan<byte> input) => Reader.ReadAny();
+    public object? ReadJson(ReadOnlySpan<byte> input) => _reader.ReadAny(input);
 }

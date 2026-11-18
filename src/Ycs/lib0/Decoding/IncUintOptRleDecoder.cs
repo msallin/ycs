@@ -1,24 +1,22 @@
 namespace Ycs;
 
 /// <seealso cref="IncUintOptRleEncoder"/>
-internal class IncUintOptRleDecoder : AbstractStreamDecoder<uint>
+internal struct IncUintOptRleDecoder
 {
+    private Lib0Reader _reader;
     private uint _state;
     private ulong _count;
 
-    public IncUintOptRleDecoder(Lib0Reader input)
-        : base(input)
+    public IncUintOptRleDecoder(Lib0Reader column)
     {
-        // Do nothing.
+        _reader = column;
     }
 
-    /// <inheritdoc/>
-    public override uint Read()
+    public uint Read(ReadOnlySpan<byte> input)
     {
-
         if (_count == 0)
         {
-            var (value, sign) = Reader.ReadVarInt();
+            var (value, sign) = _reader.ReadVarInt(input);
 
             // If the sign is negative, we read the count too; otherwise. count is 1.
             bool isNegative = sign < 0;
@@ -29,16 +27,10 @@ internal class IncUintOptRleDecoder : AbstractStreamDecoder<uint>
             }
 
             _state = (uint)magnitude;
-            _count = isNegative ? Reader.ReadVarUint() + 2UL : 1;
+            _count = isNegative ? _reader.ReadVarUint(input) + 2UL : 1;
         }
 
         _count--;
         return unchecked(_state++);
-    }
-
-    public override void Reset()
-    {
-        _state = 0;
-        _count = 0;
     }
 }

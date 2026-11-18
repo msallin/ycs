@@ -596,7 +596,7 @@ internal class DeleteSet
     /// delete nothing, are dropped.
     /// </summary>
     public static DeleteSet Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
-        where TDecoder : IDSDecoder
+        where TDecoder : struct, IDSDecoder
     {
         var ds = new DeleteSet();
         ReadInto(ref decoder, input, ds, spareLists: null);
@@ -608,17 +608,17 @@ internal class DeleteSet
     /// <paramref name="spareLists"/> while it has any (on an exception, the lists taken are in <paramref name="ds"/>).
     /// </summary>
     public static void ReadInto<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, DeleteSet ds, Stack<List<DeleteItem>>? spareLists)
-        where TDecoder : IDSDecoder
+        where TDecoder : struct, IDSDecoder
     {
         Debug.Assert(ds.Clients.Count == 0);
-        var numClients = decoder.Reader.ReadVarUint();
+        var numClients = decoder.Reader.ReadVarUint(input);
 
         for (long i = 0; i < numClients; i++)
         {
             decoder.ResetDsCurVal();
 
-            var client = decoder.Reader.ReadVarUint53();
-            var numberOfDeletes = decoder.Reader.ReadVarUint();
+            var client = decoder.Reader.ReadVarUint53(input);
+            var numberOfDeletes = decoder.Reader.ReadVarUint(input);
 
             if (numberOfDeletes > 0)
             {

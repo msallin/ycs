@@ -1,62 +1,85 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace Ycs;
 
 /// <summary>
 /// Reader for the original ('v1') Yjs update format. See <see cref="DSEncoderV1"/>.
 /// </summary>
-internal class DSDecoderV1 : IDSDecoder
+internal struct DSDecoderV1 : IDSDecoder
 {
-    public DSDecoderV1(Lib0Reader input)
+    private Lib0Reader _reader;
+
+    /// <summary>A decoder of the bytes from <paramref name="start"/> up to <paramref name="end"/> of the input.</summary>
+    public DSDecoderV1(int start, int end)
     {
-        ArgumentNullException.ThrowIfNull(input);
-        Reader = input;
+        _reader = new Lib0Reader(start, end);
     }
 
-    public Lib0Reader Reader { get; }
+    [UnscopedRef]
+    public ref Lib0Reader Reader => ref _reader;
 
-    public void ResetDsCurVal()
+    public readonly void ResetDsCurVal()
     {
         // Nothing to do.
     }
 
-    public long ReadDsClock(ReadOnlySpan<byte> input) => Reader.ReadVarUint();
+    public long ReadDsClock(ReadOnlySpan<byte> input) => _reader.ReadVarUint(input);
 
-    public long ReadDsLength(ReadOnlySpan<byte> input) => Reader.ReadVarUint();
+    public long ReadDsLength(ReadOnlySpan<byte> input) => _reader.ReadVarUint(input);
 }
 
-internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
+internal struct UpdateDecoderV1 : IUpdateDecoder<UpdateDecoderV1>
 {
+    private Lib0Reader _reader;
+
+    /// <param name="update">The update this decoder reads, which every read is handed again.</param>
     /// <param name="maxStructs">The most structs the update may hold (<see cref="UpdateLimits.MaxStructsPerUpdate"/>).</param>
-    public UpdateDecoderV1(Lib0Reader input, long maxStructs)
-        : base(input)
+    /// <param name="maxDepth">How deeply the values may be nested (<see cref="UpdateLimits.MaxDepth"/>).</param>
+    public UpdateDecoderV1(ReadOnlySpan<byte> update, long maxStructs, int maxDepth)
     {
+        _reader = new Lib0Reader(0, update.Length, maxDepth);
         MaxStructs = maxStructs;
     }
 
-    public long MaxStructs { get; set; }
+    public static UpdateDecoderV1 Create(ReadOnlySpan<byte> update, long maxStructs, int maxDepth) => new(update, maxStructs, maxDepth);
 
-    public ItemId ReadLeftId(ReadOnlySpan<byte> input) => new ItemId(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
+    [UnscopedRef]
+    public ref Lib0Reader Reader => ref _reader;
 
-    public ItemId ReadRightId(ReadOnlySpan<byte> input) => new ItemId(Reader.ReadVarUint53(), Limits.CheckClock(Reader.ReadVarUint()));
+    public long MaxStructs { get; }
 
-    public long ReadClient(ReadOnlySpan<byte> input) => Reader.ReadVarUint53();
+    public readonly void ResetDsCurVal()
+    {
+        // Nothing to do.
+    }
 
-    public byte ReadInfo(ReadOnlySpan<byte> input) => Reader.ReadByte();
+    public long ReadDsClock(ReadOnlySpan<byte> input) => _reader.ReadVarUint(input);
 
-    public string ReadString(ReadOnlySpan<byte> input) => Reader.ReadVarString();
+    public long ReadDsLength(ReadOnlySpan<byte> input) => _reader.ReadVarUint(input);
 
-    public int ReadStringBound(ReadOnlySpan<byte> input) => Reader.BeginVarString();
+    public ItemId ReadLeftId(ReadOnlySpan<byte> input) => new ItemId(_reader.ReadVarUint53(input), Limits.CheckClock(_reader.ReadVarUint(input)));
 
-    public int ReadStringExact(ReadOnlySpan<byte> input) => Reader.PendingStringLength();
+    public ItemId ReadRightId(ReadOnlySpan<byte> input) => new ItemId(_reader.ReadVarUint53(input), Limits.CheckClock(_reader.ReadVarUint(input)));
 
-    public int ReadStringChars(ReadOnlySpan<byte> input, Span<char> destination) => Reader.EndVarString(destination);
+    public long ReadClient(ReadOnlySpan<byte> input) => _reader.ReadVarUint53(input);
 
-    public bool ReadParentInfo(ReadOnlySpan<byte> input) => Reader.ReadVarUint() == 1;
+    public byte ReadInfo(ReadOnlySpan<byte> input) => _reader.ReadByte(input);
 
-    public uint ReadTypeRef(ReadOnlySpan<byte> input) => Reader.ReadVarUint();
+    public string ReadString(ReadOnlySpan<byte> input) => _reader.ReadVarString(input);
+
+    public int ReadStringBound(ReadOnlySpan<byte> input) => _reader.BeginVarString(input);
+
+    public int ReadStringExact(ReadOnlySpan<byte> input) => _reader.PendingStringLength(input);
+
+    public int ReadStringChars(ReadOnlySpan<byte> input, Span<char> destination) => _reader.EndVarString(input, destination);
+
+    public bool ReadParentInfo(ReadOnlySpan<byte> input) => _reader.ReadVarUint(input) == 1;
+
+    public uint ReadTypeRef(ReadOnlySpan<byte> input) => _reader.ReadVarUint(input);
 
     public int ReadLength(ReadOnlySpan<byte> input)
     {
-        var value = Reader.ReadVarUint();
+        var value = _reader.ReadVarUint(input);
         if (value > Limits.MaxClock)
         {
             throw new YUpdateException("A length is out of range.");
@@ -65,13 +88,13 @@ internal sealed class UpdateDecoderV1 : DSDecoderV1, IUpdateDecoder
         return (int)value;
     }
 
-    public object? ReadAny(ReadOnlySpan<byte> input) => Reader.ReadAny();
+    public object? ReadAny(ReadOnlySpan<byte> input) => _reader.ReadAny(input);
 
-    public byte[] ReadBuffer(ReadOnlySpan<byte> input) => Reader.ReadVarUint8Array();
+    public byte[] ReadBuffer(ReadOnlySpan<byte> input) => _reader.ReadVarUint8Array(input);
 
-    public string ReadKey(ReadOnlySpan<byte> input) => Reader.ReadVarString();
+    public string ReadKey(ReadOnlySpan<byte> input) => _reader.ReadVarString(input);
 
     // Plain CLR values: the same content may be re-encoded with the v2 encoder,
     // which writes it through WriteAny.
-    public object? ReadJson(ReadOnlySpan<byte> input) => YJson.Parse(Reader.ReadVarUint8ArraySpan(), Reader.MaxDepth);
+    public object? ReadJson(ReadOnlySpan<byte> input) => YJson.Parse(_reader.ReadVarUint8ArraySpan(input), _reader.MaxDepth);
 }

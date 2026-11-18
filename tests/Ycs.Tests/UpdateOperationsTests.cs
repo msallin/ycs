@@ -461,8 +461,8 @@ public class UpdateOperationsTests
 
     private static void AssertStateVectorsEqual(byte[] a, byte[] b)
     {
-        var svA = EncodingUtils.DecodeStateVector(new Lib0Reader(a));
-        var svB = EncodingUtils.DecodeStateVector(new Lib0Reader(b));
+        var svA = EncodingUtils.DecodeStateVector(a);
+        var svB = EncodingUtils.DecodeStateVector(b);
 
         Assert.AreEqual(svA.Count, svB.Count, "State vectors have a different number of clients.");
         foreach (var kvp in svA)

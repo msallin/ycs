@@ -1,26 +1,24 @@
 namespace Ycs;
 
 /// <seealso cref="IntDiffOptRleEncoder"/>
-internal class IntDiffOptRleDecoder : AbstractStreamDecoder<long>
+internal struct IntDiffOptRleDecoder
 {
+    private Lib0Reader _reader;
 
     private long _state;
     private ulong _count;
     private long _diff;
 
-    public IntDiffOptRleDecoder(Lib0Reader input)
-        : base(input)
+    public IntDiffOptRleDecoder(Lib0Reader column)
     {
-        // Do nothing.
+        _reader = column;
     }
 
-    /// <inheritdoc/>
-    public override long Read()
+    public long Read(ReadOnlySpan<byte> input)
     {
-
         if (_count == 0)
         {
-            var diff = Reader.ReadVarInt().Value;
+            var diff = _reader.ReadVarInt(input).Value;
 
             // If the first bit is set, we read more data.
             bool hasCount = (diff & Bit.Bit1) > 0;
@@ -30,7 +28,7 @@ internal class IntDiffOptRleDecoder : AbstractStreamDecoder<long>
             // shift of the magnitude instead rounds towards zero, reading a negative run one short.
             _diff = diff >> 1;
 
-            _count = hasCount ? Reader.ReadVarUint() + 2UL : 1;
+            _count = hasCount ? _reader.ReadVarUint(input) + 2UL : 1;
         }
 
         // Both stay within ±2^53, so the sum cannot overflow; the result must stay there too.
@@ -42,12 +40,5 @@ internal class IntDiffOptRleDecoder : AbstractStreamDecoder<long>
 
         _count--;
         return _state;
-    }
-
-    public override void Reset()
-    {
-        _state = 0;
-        _count = 0;
-        _diff = 0;
     }
 }

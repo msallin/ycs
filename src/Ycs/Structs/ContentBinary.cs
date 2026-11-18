@@ -48,7 +48,7 @@ internal class ContentBinary : IContent
     }
 
     internal static ContentBinary Read<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
-        where TDecoder : IUpdateDecoder
+        where TDecoder : struct, IUpdateDecoder
     {
         var content = decoder.ReadBuffer(input);
         return new ContentBinary(content);
