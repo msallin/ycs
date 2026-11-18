@@ -217,6 +217,9 @@ Each was measured against the commit before it with `ab.py`; the numbers are tho
   delete-set walk without building an id): none measurable.
 * **Smaller edits to the walks** (a memo of the last changed type, one slot read in `MarkDeleted` and `ExtendRun`, a lower
   literal-walk limit, `Transaction` getters inlined): under 3 %, or worse on another workload.
+* **Update operations through the staging table** (merge, diff and convert decoding each input into a staging table
+  instead of streaming it): 7 to 20 times the memory (a merge with pending structs 707 KB to 5.4 MB). Dropped; the
+  operations stream struct by struct over the input span.
 * **Not done**: a Fenwick tree over positions and a full B+tree (the leaf sums are as fast; two levels hold a million
   structs), generation counters in Release, a separate small-document representation, a struct of arrays for the slot,
   pooled item objects (design document, section 4); the delta of a text without formats (`observe-delta` builds three

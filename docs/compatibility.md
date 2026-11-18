@@ -81,12 +81,13 @@ Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
 
 [YDotNet](https://github.com/y-crdt/ydotnet) is the .NET binding of yrs, the Rust port of Yjs. Both speak the same
 wire format. Measured on the same workloads ([`bench/Ycs.Compare`](https://github.com/msallin/ycs/blob/modernize/bench/Ycs.Compare/README.md),
-2026-11-15):
+2026-11-18):
 
 | | Ycs | YDotNet 0.7.0 |
 | --- | --- | --- |
-| Typing, keystroke by keystroke | 10 to 100 times faster (100,000 keystrokes at the end: 25 ms against 3.1 s) | |
-| Loading and encoding whole documents | | 1.8 to 7 times faster |
+| Typing, keystroke by keystroke | 30 to 130 times faster (100,000 keystrokes at the end: 28 ms against 3.6 s) | |
+| Loading a whole document | | 1.2 to 1.5 times faster |
+| Encoding a whole document | about even | about even |
 | Native library | none | `libyrs`, through P/Invoke |
 | Native AOT | 2.35 MB, no warning | 4.29 MB, 3 trim warnings |
 | Blazor WebAssembly | runs | no browser-wasm build of yrs |
