@@ -38,6 +38,10 @@ public sealed partial class Transaction
     private bool _local;
     private bool _ended;
 
+    // Set before the cleanup collects what the transaction deleted, whether or not the document collects garbage: from
+    // then on the text that events report as removed is no longer readable (YTextEvent.Removed).
+    private bool _contentReleased;
+
     // Set while the events of types skipped in the observer loop are built: their handlers had their turn.
     internal bool _buildingSkippedEvents;
 
@@ -146,6 +150,9 @@ public sealed partial class Transaction
         return _deleteSet ??= new DeleteSet();
     }
 
+    /// <summary>The deleted content of the transaction's events is gone or about to go: its observers and <c>AfterTransaction</c> handlers have run.</summary>
+    internal bool ContentReleased => _ended || _contentReleased;
+
     private static InvalidOperationException EndedException() => new(
         "This transaction has ended and its object is reused by the document. Read what you need from a " +
         "transaction, or the changes of an event (Changes, Keys, Delta, Adds, Deletes), in the callback or " +
@@ -156,6 +163,7 @@ public sealed partial class Transaction
     {
         Debug.Assert(_ended && _doc != null);
         _ended = false;
+        _contentReleased = false;
         _origin = origin;
         _local = local;
         var store = _doc.Store;
@@ -614,6 +622,7 @@ public sealed partial class Transaction
         // What follows is Yjs' 'finally' part.
         // Replace deleted items with ItemDeleted / GC.
         // This is where content is actually removed from the Yjs Doc.
+        transaction._contentReleased = true;
         if (doc.GarbageCollection)
         {
             ds?.TryGcDeleteSet(store, doc);

@@ -10,7 +10,7 @@ namespace Ycs;
 /// <summary>
 /// Event that describes the changes on a YText type.
 /// </summary>
-public sealed class YTextEvent : YEvent
+public sealed partial class YTextEvent : YEvent
 {
     private enum ChangeType
     {
