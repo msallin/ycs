@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Collections;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
@@ -148,5 +149,35 @@ public class SnapshotTests : YTestBase
 
         var docRestored1 = array1.Doc.CreateDocFromSnapshot(snap);
         CollectionAssert.AreEqual(new[] { "user1item1", "user2item1" }, docRestored1.GetArray("array").ToArray().Select(v => v.ToObject()).ToList());
+    }
+
+    [TestMethod]
+    [DataRow(UpdateFormat.V1)]
+    [DataRow(UpdateFormat.V2)]
+    public void Decode_InputOverwrittenAfterwards_ResultUnchanged(UpdateFormat format)
+    {
+        var doc = new YDoc(new YDocOptions { GarbageCollection = false });
+        doc.GetText("t").Insert(0, "abc");
+        doc.GetText("t").Remove(1, 1);
+        var snapshot = doc.CreateSnapshot();
+        var input = snapshot.Encode(format);
+
+        var decoded = Snapshot.Decode(input, format);
+        input.AsSpan().Fill(0xFF);
+
+        Assert.AreEqual(snapshot, decoded);
+    }
+
+    [TestMethod]
+    public void ContainsUpdate_NestingBeyondLoweredMaxDepth_ThrowsYUpdateException()
+    {
+        // One struct (client 5) holding a doc-less Any value nested ten levels deep.
+        var nested = string.Concat(Enumerable.Repeat("75 01 ", 10));
+        var update = Convert.FromHexString(("01 01 05 00 08 01 01 61 01 " + nested + "7E 00").Replace(" ", string.Empty, StringComparison.Ordinal));
+        var snapshot = new YDoc().CreateSnapshot();
+
+        var thrown = Assert.ThrowsExactly<YUpdateException>(() => snapshot.ContainsUpdate(update, limits: new UpdateLimits { MaxDepth = 3 }));
+        Assert.IsNotNull(thrown);
+        Assert.IsFalse(snapshot.ContainsUpdate(update));
     }
 }

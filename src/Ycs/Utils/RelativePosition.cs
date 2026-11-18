@@ -108,9 +108,13 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
         writer.CopyTo(destination);
     }
 
-    /// <summary>Reads the bytes of Yjs' <c>encodeRelativePosition</c>.</summary>
+    /// <summary>Reads the bytes of Yjs' <c>encodeRelativePosition</c>; the span is read in place and not kept.</summary>
     /// <exception cref="YUpdateException">The bytes are truncated or name an unknown kind of position.</exception>
-    public static RelativePosition Decode(ReadOnlySpan<byte> encoded) => Read(new Lib0Reader(0, encoded.Length), encoded);
+    public static RelativePosition Decode(ReadOnlySpan<byte> encoded)
+    {
+        var reader = new Lib0Reader(0, encoded.Length);
+        return Read(ref reader, encoded);
+    }
 
     /// <summary>
     /// Writes Yjs' <c>relativePositionToJSON</c> object: <c>type</c>, <c>tname</c> and <c>item</c> only where set
@@ -290,7 +294,7 @@ public readonly record struct RelativePosition(ItemId? TypeId, string? RootName,
         writer.WriteVarInt((int)Assoc);
     }
 
-    internal static RelativePosition Read(Lib0Reader reader, ReadOnlySpan<byte> input)
+    internal static RelativePosition Read(ref Lib0Reader reader, ReadOnlySpan<byte> input)
     {
         ItemId? itemId = null;
         ItemId? typeId = null;

@@ -216,19 +216,20 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
         destination.Write(Encode(format));
     }
 
-    /// <summary>Decodes a snapshot (Yjs' <c>decodeSnapshot</c>, <c>decodeSnapshotV2</c>); the span is copied into a pooled buffer for the call.</summary>
+    /// <summary>Decodes a snapshot (Yjs' <c>decodeSnapshot</c>, <c>decodeSnapshotV2</c>); the span is read in place and not kept.</summary>
     /// <exception cref="YUpdateException">The bytes are not a snapshot.</exception>
     public static Snapshot Decode(ReadOnlySpan<byte> bytes, UpdateFormat format = UpdateFormat.V1)
     {
-        var v2 = format.IsV2();
-        using var input = new PooledCopy(bytes);
-        var segment = input.Segment;
         try
         {
-            var span = segment.AsSpan();
-            return v2
-                ? Decode(new DSDecoderV2(0, span.Length), span)
-                : Decode(new DSDecoderV1(0, span.Length), span);
+            if (format.IsV2())
+            {
+                var decoder = new DSDecoderV2(0, bytes.Length);
+                return Decode(ref decoder, bytes);
+            }
+
+            var decoderV1 = new DSDecoderV1(0, bytes.Length);
+            return Decode(ref decoderV1, bytes);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {
@@ -236,7 +237,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
         }
     }
 
-    private static Snapshot Decode<TDecoder>(TDecoder decoder, ReadOnlySpan<byte> input)
+    private static Snapshot Decode<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input)
         where TDecoder : struct, IDSDecoder
     {
         var ds = DeleteSet.Read(ref decoder, input);
@@ -245,25 +246,21 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
 
     /// <summary>
     /// Yjs' <c>snapshotContainsUpdate</c>: whether the update in <paramref name="format"/> holds nothing beyond this
-    /// snapshot. The span is copied into a pooled buffer for the call.
+    /// snapshot. The span is read in place and not kept.
     /// </summary>
     public bool ContainsUpdate(ReadOnlySpan<byte> update, UpdateFormat format = UpdateFormat.V1, UpdateLimits? limits = null)
     {
-        var v2 = format.IsV2();
-        using var input = new PooledCopy(update);
-        var segment = input.Segment;
         try
         {
-            var bytes = segment.AsSpan();
-            var maxStructs = (limits ?? UpdateLimits.Default).MaxStructsPerUpdate;
-            if (v2)
+            limits ??= UpdateLimits.Default;
+            if (format.IsV2())
             {
-                var decoder = new UpdateDecoderV2(bytes, maxStructs, UpdateLimits.DefaultMaxDepth, new List<string>());
-                return ContainsUpdate(ref decoder, bytes);
+                var decoder = new UpdateDecoderV2(update, limits.MaxStructsPerUpdate, limits.MaxDepth, new List<string>());
+                return ContainsUpdate(ref decoder, update);
             }
 
-            var decoderV1 = new UpdateDecoderV1(bytes, maxStructs, UpdateLimits.DefaultMaxDepth);
-            return ContainsUpdate(ref decoderV1, bytes);
+            var decoderV1 = new UpdateDecoderV1(update, limits.MaxStructsPerUpdate, limits.MaxDepth);
+            return ContainsUpdate(ref decoderV1, update);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Ycs;
@@ -95,6 +96,25 @@ public class RelativePositionTests : YTestBase
         Assert.IsTrue(rposLeft.TryResolve(Users[0], out var posLeft));
         Assert.AreEqual(2, posRight.Index);
         Assert.AreEqual(1, posLeft.Index);
+    }
+
+    [TestMethod]
+    public void Decode_InputOverwrittenAfterwards_ResultUnchanged()
+    {
+        var doc = new YDoc();
+        var text = doc.GetText("root");
+        text.Insert(0, "abc");
+        var positions = new[] { RelativePosition.FromIndex(text, 1, Assoc.After), RelativePosition.FromIndex(text, 3, Assoc.Before) };
+
+        var survived = positions.Select(p =>
+        {
+            var input = p.Encode();
+            var decoded = RelativePosition.Decode(input);
+            input.AsSpan().Fill(0xFF);
+            return decoded.Equals(p);
+        }).ToArray();
+
+        CollectionAssert.AreEqual(new[] { true, true }, survived);
     }
 
     private static void CheckRelativePositions(YText yText)
