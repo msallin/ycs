@@ -285,6 +285,19 @@ readonly struct Ycs.SyncReadResult : System.IEquatable<SyncReadResult>
     static bool op_Equality(SyncReadResult left, SyncReadResult right)
     static bool op_Inequality(SyncReadResult left, SyncReadResult right)
     void Deconstruct(out SyncMessageType Type, out bool Replied)
+readonly struct Ycs.TextRun : System.IEquatable<TextRun>
+    TextRun(int Length, YAttributes? Attributes, YValue? Embed)
+    YAttributes? Attributes { get; init; }
+    YValue? Embed { get; init; }
+    bool Equals(TextRun other)
+    bool IsEmbed { get; }
+    int Length { get; init; }
+    override bool Equals(object obj)
+    override int GetHashCode()
+    override string ToString()
+    static bool op_Equality(TextRun left, TextRun right)
+    static bool op_Inequality(TextRun left, TextRun right)
+    void Deconstruct(out int Length, out YAttributes? Attributes, out YValue? Embed)
 sealed class Ycs.Transaction
     System.Collections.Generic.IDictionary<string, object?> Meta { get; }
     System.Collections.Generic.IReadOnlyDictionary<YType, System.Collections.Generic.IReadOnlyList<YEvent>> ChangedParentTypes { get; }
@@ -574,6 +587,7 @@ class Ycs.YText : YArrayBase
     System.Collections.Generic.IReadOnlyDictionary<string, YValue> GetAttributes(Snapshot? snapshot = null)
     System.Collections.Generic.IReadOnlyList<Delta> ToDelta()
     System.Collections.Generic.IReadOnlyList<Delta> ToDelta(Snapshot? snapshot, Snapshot? previous = null, System.Func<YChangeKind, ItemId, YChange>? computeYChange = null)
+    System.Collections.Generic.IReadOnlyList<TextRun> ToRuns(Snapshot? snapshot = null, Snapshot? previous = null, System.Func<YChangeKind, ItemId, YChange>? computeYChange = null)
     System.IDisposable Observe(System.Action<YTextEvent> handler)
     YText Clone()
     YText(string? text = null)
