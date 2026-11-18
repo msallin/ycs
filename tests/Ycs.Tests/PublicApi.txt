@@ -507,6 +507,8 @@ sealed class Ycs.YDoc
     bool ShouldLoad { get; }
     bool TryApplyUpdate(System.ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
     bool TryApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null)
+    bool TryApplyUpdate(byte[] update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    bool TryApplyUpdate(byte[] update, object? origin = null, UpdateLimits? limits = null)
     byte[] EncodeStateAsUpdate(System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     byte[] EncodeStateVector()
     event System.EventHandler<PendingDrop>? PendingDropped
@@ -525,6 +527,8 @@ sealed class Ycs.YDoc
     string? CollectionId { get; }
     void ApplyUpdate(System.ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
     void ApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null)
+    void ApplyUpdate(byte[] update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    void ApplyUpdate(byte[] update, object? origin = null, UpdateLimits? limits = null)
     void Destroy()
     void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     void EncodeStateVector(System.Buffers.IBufferWriter<byte> destination)

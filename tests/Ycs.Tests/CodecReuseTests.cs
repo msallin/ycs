@@ -16,6 +16,51 @@ namespace Ycs;
 public class CodecReuseTests
 {
     [TestMethod]
+    [DataRow(false)]
+    [DataRow(true)]
+    public void ApplyUpdate_ArrayOverloads_ApplyInPlaceLikeTheSpanOnes(bool v2)
+    {
+        var format = v2 ? UpdateFormat.V2 : UpdateFormat.V1;
+        var source = new YDoc();
+        source.GetText().Insert(0, "hello");
+        var update = source.EncodeStateAsUpdate(format: format);
+        var viaApply = new YDoc();
+        var viaTry = new YDoc();
+
+        viaApply.ApplyUpdate(update, format);
+        var applied = viaTry.TryApplyUpdate(update, format);
+        var rejected = viaTry.TryApplyUpdate(new byte[] { 1, 200 }, format);
+
+        Assert.AreEqual("hello|hello|True|False", $"{viaApply.GetText()}|{viaTry.GetText()}|{applied}|{rejected}");
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_ArrayOverloadsWithoutFormat_ApplyV1()
+    {
+        var source = new YDoc();
+        source.GetText().Insert(0, "v1");
+        var update = source.EncodeStateAsUpdate();
+        var first = new YDoc();
+        var second = new YDoc();
+
+        first.ApplyUpdate(update);
+        var applied = second.TryApplyUpdate(update);
+
+        Assert.AreEqual("v1|v1|True", $"{first.GetText()}|{second.GetText()}|{applied}");
+    }
+
+    [TestMethod]
+    public void ApplyUpdate_NullArray_Throws()
+    {
+        var doc = new YDoc();
+
+        Assert.ThrowsExactly<ArgumentNullException>(() => doc.ApplyUpdate((byte[])null!));
+        Assert.ThrowsExactly<ArgumentNullException>(() => doc.ApplyUpdate((byte[])null!, UpdateFormat.V2));
+        Assert.ThrowsExactly<ArgumentNullException>(() => doc.TryApplyUpdate((byte[])null!));
+        Assert.ThrowsExactly<ArgumentNullException>(() => doc.TryApplyUpdate((byte[])null!, UpdateFormat.V2));
+    }
+
+    [TestMethod]
     public void Lib0Writer_LargeUtf8WithSplitSurrogate_MatchesTheEncodingOfTheConcatenation()
     {
         var first = new string('a', 5000) + "\uD83D";

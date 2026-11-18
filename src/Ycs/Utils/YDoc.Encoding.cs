@@ -41,6 +41,41 @@ public sealed partial class YDoc
         TryApply(update, format.IsV2(), origin!, limits!);
 
     /// <summary>
+    /// <see cref="ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/> for an array: it is read in place, without the copy
+    /// that a span takes. Nothing keeps a reference to <paramref name="update"/> afterwards.
+    /// </summary>
+    public void ApplyUpdate(byte[] update, object? origin = null, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        ApplyUpdate(update, update.Length, false, origin!, limits!);
+    }
+
+    /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
+    /// <param name="format">The encoding of <paramref name="update"/>.</param>
+    public void ApplyUpdate(byte[] update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        ApplyUpdate(update, update.Length, format.IsV2(), origin!, limits!);
+    }
+
+    /// <summary>
+    /// <see cref="TryApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/> for an array, read in place like
+    /// <see cref="ApplyUpdate(byte[], object, UpdateLimits)"/>.
+    /// </summary>
+    public bool TryApplyUpdate(byte[] update, object? origin = null, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        return TryApply(update, update.Length, false, origin!, limits!);
+    }
+
+    /// <inheritdoc cref="TryApplyUpdate(byte[], object, UpdateLimits)"/>
+    public bool TryApplyUpdate(byte[] update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        return TryApply(update, update.Length, format.IsV2(), origin!, limits!);
+    }
+
+    /// <summary>
     /// Encodes the document as one update (Yjs' <c>Y.encodeStateAsUpdate</c>). With a remote state vector, only what the
     /// remote side is missing is written.
     /// </summary>

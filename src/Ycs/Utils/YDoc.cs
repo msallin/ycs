@@ -141,6 +141,19 @@ public sealed partial class YDoc
         }
     }
 
+    private bool TryApply(byte[] update, int count, bool v2, object? transactionOrigin, UpdateLimits? limits)
+    {
+        try
+        {
+            ApplyUpdate(update, count, v2, transactionOrigin, limits);
+            return true;
+        }
+        catch (YUpdateException)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Decodes the whole update (structs and delete set) before the document is touched, then applies
     /// it (<see cref="StructStore.ApplyUpdate"/>), which checks what depends on the document before it
