@@ -5,6 +5,13 @@ public abstract partial class YType
     public YDoc? Doc { get; private protected set; }
     public YType? Parent => ParentType;
 
+    /// <summary>
+    /// Grows by one at the end of every transaction that changed this type's own content, local or remote: an insert, a
+    /// delete, a format or a key set. A change inside a nested type counts on the nested type only. Reading it costs
+    /// nothing; read it under the document's lock, like every other member.
+    /// </summary>
+    public long Revision { get; internal set; }
+
     internal virtual int Length { get; set; }
 
     /// <summary>

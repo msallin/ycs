@@ -485,6 +485,10 @@ public sealed partial class Transaction
         {
             ds?.SortAndMergeDeleteSet();
             transaction._afterState.Set(store, store.ChangeCount);
+            foreach (var kvp in transaction._changed)
+            {
+                kvp.Key.Revision++;
+            }
 
             // An exception here skips every observer call, as in Yjs.
             doc.InvokeOnBeforeObserverCalls(transaction);

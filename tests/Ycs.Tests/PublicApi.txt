@@ -636,6 +636,7 @@ abstract class Ycs.YType
     System.IDisposable ObserveDeep(System.Action<System.Collections.Generic.IReadOnlyList<YEvent>, Transaction> handler)
     YDoc? Doc { get; }
     YType? Parent { get; }
+    long Revision { get; }
     string ToJsonString(System.Text.Json.JsonWriterOptions options = null)
     void WriteTo(System.Text.Json.Utf8JsonWriter writer)
 static class Ycs.YUpdate
