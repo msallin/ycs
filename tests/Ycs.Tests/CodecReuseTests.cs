@@ -16,6 +16,37 @@ namespace Ycs;
 public class CodecReuseTests
 {
     [TestMethod]
+    public void Lib0Writer_LargeUtf8WithSplitSurrogate_MatchesTheEncodingOfTheConcatenation()
+    {
+        var first = new string('a', 5000) + "\uD83D";
+        var second = "\uDE00" + new string('é', 3000);
+        var writer = new Lib0Writer(pooled: false);
+        var encoder = Encoding.UTF8.GetEncoder();
+
+        writer.WriteUtf8(encoder, first, flush: false);
+        writer.WriteUtf8(encoder, second, flush: false);
+        writer.WriteUtf8(encoder, ReadOnlySpan<char>.Empty, flush: true);
+
+        CollectionAssert.AreEqual(Encoding.UTF8.GetBytes(first + second), writer.WrittenSpan.ToArray());
+    }
+
+    [TestMethod]
+    public void Updated_TwoTransactions_HandOutTwoDistinctArrays()
+    {
+        var doc = new YDoc();
+        var updates = new List<ReadOnlyMemory<byte>>();
+        doc.Updated += (_, e) => updates.Add(e.Update);
+        doc.UpdatedV2 += (_, e) => updates.Add(e.Update);
+        var text = doc.GetText();
+
+        text.Insert(0, "first");
+        var kept = updates.Select(u => u.ToArray()).ToArray();
+        text.Insert(0, "second");
+
+        Assert.IsTrue(updates.Count == 4 && updates[0].Span.SequenceEqual(kept[0]) && updates[1].Span.SequenceEqual(kept[1]));
+    }
+
+    [TestMethod]
     public void Lib0Writer_PooledReset_ReturnsTheBuffer()
     {
         var before = BufferPool<byte>.OutstandingOnCurrentThread;

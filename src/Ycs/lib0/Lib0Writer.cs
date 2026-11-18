@@ -22,6 +22,9 @@ internal sealed class Lib0Writer
     private const int MaxRetainedCapacity = 64 * 1024;
 
     private const int MinPooledCapacity = 256;
+
+    // Up to this many chars the worst case is reserved without counting; the extra pass costs more than the slack.
+    private const int MaxCountedWorstCase = 1024;
     private const int MinDestinationChunk = 256;
 
     private readonly bool _pooled;
@@ -220,7 +223,9 @@ internal sealed class Lib0Writer
     /// </summary>
     public void WriteUtf8(Encoder encoder, ReadOnlySpan<char> chars, bool flush)
     {
-        var span = GetSpan(Encoding.UTF8.GetMaxByteCount(chars.Length));
+        // The worst case is three bytes per char: for a large string that would make the buffer jump to three times
+        // what it needs, so its exact size (the encoder's pending surrogate included) is counted instead.
+        var span = GetSpan(chars.Length > MaxCountedWorstCase ? encoder.GetByteCount(chars, flush) : Encoding.UTF8.GetMaxByteCount(chars.Length));
         encoder.Convert(chars, span, flush, out _, out var bytesUsed, out _);
         _length += bytesUsed;
     }

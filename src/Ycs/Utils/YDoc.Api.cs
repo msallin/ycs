@@ -177,6 +177,7 @@ public sealed partial class YDoc
     /// A handler that throws skips the later handlers, so they miss this update: whoever relied on them must
     /// resync (send the state, or a diff by state vector). Unlike Yjs, the document still finishes the cleanup and
     /// stays usable; the exception escapes from the outermost <c>Transact</c> or <c>ApplyUpdate</c> afterwards.
+    /// The handler owns <see cref="UpdateEventArgs.Update"/>: it is a new array for each event, never reused.
     /// </summary>
     public event EventHandler<UpdateEventArgs>? Updated
     {
@@ -191,7 +192,8 @@ public sealed partial class YDoc
     }
 
     /// <summary>
-    /// Like <see cref="Updated"/>, with the update in the v2 format: Yjs' <c>doc.on('updateV2')</c>.
+    /// Like <see cref="Updated"/>, with the update in the v2 format (Yjs' <c>doc.on('updateV2')</c>), and the same
+    /// ownership: the handler owns the array, which is not reused.
     /// </summary>
     public event EventHandler<UpdateEventArgs>? UpdatedV2
     {
