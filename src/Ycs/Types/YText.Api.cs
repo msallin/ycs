@@ -114,23 +114,87 @@ public partial class YText
         return ComputeDelta(snapshot, previous, computeYChange);
     }
 
+    /// <summary>
+    /// The runs of <see cref="ToDelta(Snapshot?, Snapshot?, Func{YChangeKind, ItemId, YChange}?)"/> without their characters: each run's length,
+    /// attributes and, for an embed, its value, split exactly as the delta splits them, and in time and memory
+    /// that do not depend on how many characters a run holds. With no snapshot the runs are those of <see cref="ToDelta()"/>.
+    /// The lengths add up to <see cref="Length"/> when no snapshot is given.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A snapshot is given and the text is not in a document yet.</exception>
+    public IReadOnlyList<TextRun> ToRuns(Snapshot? snapshot = null, Snapshot? previous = null, Func<YChangeKind, ItemId, YChange>? computeYChange = null)
+    {
+        if (snapshot == null && previous == null && Doc == null)
+        {
+            return Preview()?.ToRuns() ?? [];
+        }
+
+        var sink = new RunSink();
+        Walk(snapshot, previous, computeYChange, sink);
+        return sink.Runs;
+    }
+
+    private interface IRunSink
+    {
+        void Chars(ItemRef item);
+
+        void Text(int length, YAttributes? attributes);
+
+        void Embed(YValue value, YAttributes? attributes);
+    }
+
+    private sealed class RunSink : IRunSink
+    {
+        internal List<TextRun> Runs { get; } = [];
+
+        public void Chars(ItemRef item)
+        {
+        }
+
+        public void Text(int length, YAttributes? attributes) => Runs.Add(new TextRun(length, attributes, null));
+
+        public void Embed(YValue value, YAttributes? attributes) => Runs.Add(new TextRun(1, attributes, value));
+    }
+
+    private sealed class DeltaSink : IRunSink
+    {
+        internal List<Delta> Ops { get; } = [];
+
+        // Appending to a string is quadratic in the run's length.
+        private readonly StringBuilder _str = new();
+
+        public void Chars(ItemRef item) => _str.Append(item.Chars);
+
+        public void Text(int length, YAttributes? attributes)
+        {
+            Ops.Add(new Delta.Insert(_str.ToString()) { Attributes = attributes });
+            _str.Clear();
+        }
+
+        public void Embed(YValue value, YAttributes? attributes) => Ops.Add(new Delta.Insert(value) { Attributes = attributes });
+    }
+
     private List<Delta> ComputeDelta(Snapshot? snapshot, Snapshot? prevSnapshot, Func<YChangeKind, ItemId, YChange>? computeYChange)
     {
-        var ops = new List<Delta>();
+        var sink = new DeltaSink();
+        Walk(snapshot, prevSnapshot, computeYChange, sink);
+        return sink.Ops;
+    }
+
+    // The walk of ToDelta and ToRuns: the sink gets each visible string item's characters, then the run they end, and each embed.
+    private void Walk(Snapshot? snapshot, Snapshot? prevSnapshot, Func<YChangeKind, ItemId, YChange>? computeYChange, IRunSink sink)
+    {
         var currentAttributes = new Dictionary<string, object?>();
         var doc = Doc;
-        // Appending to a string is quadratic in the run's length.
-        var str = new StringBuilder();
+        var strLength = 0;
 
         var n = _start;
 
         void packStr()
         {
-            if (str.Length > 0)
+            if (strLength > 0)
             {
-                // Pack str with attributes to ops.
-                ops.Add(new Delta.Insert(str.ToString()) { Attributes = currentAttributes.Count > 0 ? AttributeValues(currentAttributes, skipNull: false) : null });
-                str.Clear();
+                sink.Text(strLength, currentAttributes.Count > 0 ? AttributeValues(currentAttributes, skipNull: false) : null);
+                strLength = 0;
             }
         }
 
@@ -172,12 +236,13 @@ public partial class YText
                                 currentAttributes.Remove(ChangeKey);
                             }
 
-                            str.Append(n.Chars);
+                            sink.Chars(n);
+                            strLength += n.Length;
                             break;
                         case SlotKind.Type:
                         case SlotKind.Embed:
                             packStr();
-                            ops.Add(new Delta.Insert(n.Embedded) { Attributes = currentAttributes.Count > 0 ? AttributeValues(currentAttributes, skipNull: false) : null });
+                            sink.Embed(n.Embedded, currentAttributes.Count > 0 ? AttributeValues(currentAttributes, skipNull: false) : null);
                             break;
                         case SlotKind.Format:
                             if (n.IsVisible(snapshot))
@@ -225,8 +290,6 @@ public partial class YText
         {
             computeDelta();
         }
-
-        return ops;
     }
 
     public void Insert(int index, string text, YAttributes? attributes = null)
