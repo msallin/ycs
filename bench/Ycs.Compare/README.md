@@ -22,6 +22,36 @@ The project is in `Ycs.sln`, so CI builds it and it cannot stop compiling unnoti
 only place YDotNet (`YDotNet` and `YDotNet.Native`, exactly `[0.7.0]`) is referenced: neither `src`, the tests nor
 `bench/Ycs.Benchmarks` depends on a native library.
 
+## Reading an array and a map (2026-11-18)
+
+`read-array` was 2.7 times and `read-map` 44 % slower than with items as objects, `encode-v1` 19 % (the final round above).
+The state of the three on the machine of this section (8 logical cores, shared with other work; load average 0.8 to
+1.3 at the start of each A/B), `ab.py 4 6`, [`results/2026-11-18-read-encode/ab.txt`](results/2026-11-18-read-encode/ab.txt):
+
+| workload | 044bb73 (objects) | 9219a1d (before) | after |
+| --- | ---: | ---: | ---: |
+| `read-array` | 5.0 ms | 14.7 ms | 2.8 ms |
+| `read-map` | 24.7 ms (min 19.9, noisy) | 27.1 ms | 14.9 ms |
+| `encode-v1` | 4.9 ms | 5.5 ms | 5.5 ms |
+| `trace-replay`, `apply-state-v1/ycs`, `text-append`, `array-push` | | | unchanged (within 2 %) |
+
+What was slow: not the slab. A scratch loop that only enumerated the array took 3.5 ns an element; reading the value
+cost 9 ns more. `YValue.FromStored` is a type switch (null, bool, string, int, double, ...) that the JIT did not inline;
+it returned its 24 bytes through memory in three stores and the caller read them back as one 16-byte load, which waits
+for the stores to retire. The same cast of an array of ready `YValue`s took 1.2 ns. Three changes, one commit: the
+int, string and double cases of `FromStored` come first and are inlined into the reader (the other kinds are a call);
+the step of `YArray`'s enumerator over a run of values is inlined; and `Current` no longer copies the whole walk state
+(`readonly` on a getter of a mutable struct field makes a defensive copy of the field). `YMap`'s enumerator got the
+first of them. The YValue enumerator also skips the copy of a stored byte array, which `YValue` makes on every read.
+
+`encode-v1` is unchanged. Its 10 encodes spend about 3.5 ms in the structs' write (a header of three interface calls,
+13 ns a struct; the string content, 14 ns on average), 0.9 ms in the delete set, 0.3 ms in the result's array (a large
+object allocation) and the rest in garbage collections the large array triggers. Tried and not kept, each measured on
+the write alone in a scratch loop (3.5 ms; noise 0.1): both ids of a header written with one check of the buffer, a
+string up to 42 characters encoded in one pass instead of count-then-encode, `in` parameters for the header's ids, a
+delete-set walk that reads `Clock` and does not build an id (0.88 to 0.83 ms). The remaining gap to the object layout
+(0.6 ms in 10 encodes, 12 %) is not in one place.
+
 ## Final round (2026-11-17, a dedicated runner)
 
 The whole of `bench/run-round.sh` at 7d994f4 on a machine that ran nothing else (a self-hosted GitHub Actions runner,

@@ -559,7 +559,9 @@ members that expose a struct are:
   pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined, a flat form
   below one leaf) gave nothing beyond 2% ([Compare](../bench/Ycs.Compare/README.md), "The leaf order").
 * **The remaining gaps against the object layout**, from the clean round on a dedicated machine
-  ([Compare](../bench/Ycs.Compare/README.md), "Final round"): `read-array` 2.7× (an element read goes through the slab
-  and the value arena), `read-map` +44%, `trace-replay` +20%, `encode-v1` +19%, `text-append-1txn-observed` +13%,
-  `array-push-1txn` and `map-set-same` +10 to +11%, `text-append` +8%. The editing gaps are spread over the transaction
-  with no phase above 10%; the read and encode paths have not been profiled on the built layout.
+  ([Compare](../bench/Ycs.Compare/README.md), "Final round"): `trace-replay` +20%, `encode-v1` +12 to 19%,
+  `text-append-1txn-observed` +13%, `array-push-1txn` and `map-set-same` +10 to +11%, `text-append` +8%. The reads are
+  closed: `read-array` and `read-map` were slow in `YValue.FromStored` (a call whose result the caller reloaded
+  through a store-forwarding stall), not in the slab, and now take less than with objects ("Reading an array and a map").
+  The editing gaps are spread over the transaction with no phase above 10%; the encode gap is spread over the write of
+  the structs, with no single cost in it.
