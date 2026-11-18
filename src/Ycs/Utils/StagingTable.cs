@@ -381,10 +381,10 @@ internal sealed class StagingTable
     /// </summary>
     public void Reset()
     {
-        Poison();
         Array.Clear(_values, 0, _valuesUsed);
         Array.Clear(_refs, 0, _refsUsed);
         _chars.AsSpan(0, Math.Max(_charsDirty, _charsUsed)).Clear();
+        Poison();
         _charsDirty = 0;
         _count = 0;
         _charsUsed = 0;
