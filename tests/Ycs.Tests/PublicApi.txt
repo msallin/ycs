@@ -606,6 +606,7 @@ class Ycs.YText : YArrayBase
     void Append(string text, YAttributes? attributes = null)
     void ApplyDelta(System.Collections.Generic.IEnumerable<Delta> delta, bool sanitize = true)
     void Format(int index, int length, YAttributes attributes)
+    void Insert(int index, System.ReadOnlyMemory<char> text, YAttributes? attributes = null)
     void Insert(int index, string text, YAttributes? attributes = null)
     void InsertEmbed(int index, YValue embed, YAttributes? attributes = null)
     void Remove(int index, int length)

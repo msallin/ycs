@@ -70,7 +70,14 @@ public partial class YText
                                 ins = insertStr.Substring(0, insertStr.Length - 1);
                             }
 
-                            if (ins is not string str || str.Length > 0)
+                            if (ins is string str)
+                            {
+                                if (str.Length > 0)
+                                {
+                                    InsertText(tr, ref curPos, str.AsSpan(), StoredAttributes(op.Attributes));
+                                }
+                            }
+                            else
                             {
                                 InsertText(tr, ref curPos, ins, StoredAttributes(op.Attributes));
                             }
@@ -292,10 +299,16 @@ public partial class YText
         }
     }
 
-    public void Insert(int index, string text, YAttributes? attributes = null)
+    public void Insert(int index, string text, YAttributes? attributes = null) => Insert(index, text.AsMemory(), attributes);
+
+    /// <summary>
+    /// Inserts <paramref name="text"/> at <paramref name="index"/> from the caller's memory, with no string in between: the
+    /// characters are copied once, into the document. In a text that is not in a document yet the operation keeps its own copy.
+    /// </summary>
+    public void Insert(int index, ReadOnlyMemory<char> text, YAttributes? attributes = null)
     {
         // As in Yjs, the search marker is only used for inserts without explicit attributes.
-        if (string.IsNullOrEmpty(text))
+        if (text.IsEmpty)
         {
             return;
         }
@@ -307,7 +320,8 @@ public partial class YText
         }
         else
         {
-            AddPending(new PendingOperation(PendingKind.Insert, index, 0, null, text, attributes));
+            // ToString of a memory that spans a whole string is that string.
+            AddPending(new PendingOperation(PendingKind.Insert, index, 0, null, text.ToString(), attributes));
         }
     }
 

@@ -138,7 +138,7 @@ setting is Yjs' `set`), `TryGetValue(key, out value)` and `TryGetValue(key, snap
 
 ### YText
 
-`YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `Append(string, attributes?)`,
+`YText` (and `YXmlText`, which derives from it): `Length`, `Insert(index, string, attributes?)`, `Insert(index, ReadOnlyMemory<char>, attributes?)` (the characters go from the caller's memory into the document with no string in between), `Append(string, attributes?)`,
 `InsertEmbed(index, YValue, attributes?)`, `Remove(index, length)`, `Format(index, length, attributes)`, `ApplyDelta(IEnumerable<Delta>, sanitize)`,
 `ToDelta()`, `ToDelta(snapshot, previous?, computeYChange?)`, `ToRuns(snapshot?, previous?, computeYChange?)` (the delta's runs without their characters: a `TextRun(Length, Attributes, Embed)` each, `Length` in the index space of `YText.Length`, `Embed` null for text; no allocation by the text's size), `RemoveNonText()`, `ToString()`, `ToString(snapshot)`, `Substring(start, length)`
 (indexed as `Length` and `Insert` are: an embed in the range counts one and adds no character),

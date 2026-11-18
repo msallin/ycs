@@ -105,7 +105,7 @@ internal readonly partial struct ItemRef
     }
 
     /// <summary>Appends <paramref name="text"/> to a <see cref="SlotKind.String"/> item; the caller adjusts <see cref="Length"/>.</summary>
-    internal void AppendChars(string text)
+    internal void AppendChars(ReadOnlySpan<char> text)
     {
         TestHooks.Compact(_slab, true);
         if (Kind != SlotKind.String)

@@ -607,7 +607,7 @@ public partial class YText : YArrayBase
     private static YValue StandIn(YValue value, bool standIn) =>
         standIn && value.Kind is YValueKind.SharedType or YValueKind.Document ? YValue.Null : value;
 
-    private void InsertInTransaction(Transaction transaction, int index, string text, IDictionary<string, object?>? attributes)
+    private void InsertInTransaction(Transaction transaction, int index, ReadOnlyMemory<char> text, IDictionary<string, object?>? attributes)
     {
         var pos = FindPosition(transaction, index, useSearchMarker: attributes == null);
         if (attributes == null && pos.CurrentAttributes?.Count > 0)
@@ -616,7 +616,7 @@ public partial class YText : YArrayBase
             attributes = new Dictionary<string, object?>(pos.CurrentAttributes);
         }
 
-        InsertText(transaction, ref pos, text, attributes);
+        InsertText(transaction, ref pos, text.Span, attributes);
     }
 
     private void DeleteInTransaction(Transaction transaction, int index, int length)
@@ -815,9 +815,16 @@ public partial class YText : YArrayBase
     }
 
     /// <param name="attributes">The attributes of the text; null for none. Attributes at the position that are not in them are set to null in them, as in Yjs.</param>
-    private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, object? text, IDictionary<string, object?>? attributes)
+    private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, object? embed, IDictionary<string, object?>? attributes) =>
+        InsertContent(transaction, ref currPos, embed is string, embed, embed as string, attributes);
+
+    private void InsertText(Transaction transaction, ref ItemTextListPosition currPos, ReadOnlySpan<char> text, IDictionary<string, object?>? attributes) =>
+        InsertContent(transaction, ref currPos, isText: true, null, text, attributes);
+
+    /// <param name="isText">Whether <paramref name="chars"/> is the content; otherwise <paramref name="embed"/> is.</param>
+    private void InsertContent(Transaction transaction, ref ItemTextListPosition currPos, bool isText, object? embed, ReadOnlySpan<char> chars, IDictionary<string, object?>? attributes)
     {
-        if (text is YType nested)
+        if (embed is YType nested)
         {
             CheckCanInsert(nested);
         }
@@ -838,16 +845,15 @@ public partial class YText : YArrayBase
         var negatedAttributes = InsertAttributes(transaction, ref currPos, attributes);
 
         // Insert content (a text's content is made only when no run takes it).
-        var str = text as string;
         IContent? content = null;
         int length;
-        if (str != null)
+        if (isText)
         {
-            length = str.Length;
+            length = chars.Length;
         }
         else
         {
-            content = text is YType type ? new ContentType(type) : new ContentEmbed(Validated(text, doc.Limits.MaxDepth));
+            content = embed is YType type ? new ContentType(type) : new ContentEmbed(Validated(embed, doc.Limits.MaxDepth));
             length = content.Length;
         }
 
@@ -857,12 +863,12 @@ public partial class YText : YArrayBase
             currPos.Left = LeftOf(currPos.Left, currPos.Right);
         }
 
-        if (str != null && length > 0 && negatedAttributes == null && !currPos.Left.IsNull
+        if (isText && length > 0 && negatedAttributes == null && !currPos.Left.IsNull
             && currPos.Left.CanExtendRun(transaction, this, currPos.Right, SlotKind.String, ownClientId))
         {
             // Typing on at the end of this client's run: the run takes the text in place of a new item.
             var left = currPos.Left;
-            left.AppendChars(str);
+            left.AppendChars(chars);
             left.ExtendRun(transaction, length);
             currPos.Index += length;
             currPos.InsertNegatedAttributes(transaction, this, null);
@@ -870,8 +876,8 @@ public partial class YText : YArrayBase
         }
 
         var id = new ItemId(ownClientId, doc.Store.GetState(ownClientId));
-        currPos.Right = str != null
-            ? ItemRef.New(doc.Store.Slab, id, currPos.Left, currPos.Right, this, null, str.AsSpan())
+        currPos.Right = isText
+            ? ItemRef.New(doc.Store.Slab, id, currPos.Left, currPos.Right, this, null, chars)
             : ItemRef.New(doc.Store.Slab, id, currPos.Left, currPos.Right, this, null, content!);
         currPos.Right.Integrate(transaction, 0);
         currPos.Forward();
