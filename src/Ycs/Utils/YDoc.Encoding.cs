@@ -47,7 +47,7 @@ public sealed partial class YDoc
     public void ApplyUpdate(byte[] update, object? origin = null, UpdateLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(update, update.Length, false, origin!, limits!);
+        ApplyUpdate(update, 0, update.Length, false, origin!, limits!);
     }
 
     /// <inheritdoc cref="ApplyUpdate(byte[], object, UpdateLimits)"/>
@@ -55,7 +55,7 @@ public sealed partial class YDoc
     public void ApplyUpdate(byte[] update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        ApplyUpdate(update, update.Length, format.IsV2(), origin!, limits!);
+        ApplyUpdate(update, 0, update.Length, format.IsV2(), origin!, limits!);
     }
 
     /// <summary>
@@ -65,14 +65,61 @@ public sealed partial class YDoc
     public bool TryApplyUpdate(byte[] update, object? origin = null, UpdateLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return TryApply(update, update.Length, false, origin!, limits!);
+        return TryApply(update, 0, update.Length, false, origin!, limits!);
     }
 
     /// <inheritdoc cref="TryApplyUpdate(byte[], object, UpdateLimits)"/>
     public bool TryApplyUpdate(byte[] update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
     {
         ArgumentNullException.ThrowIfNull(update);
-        return TryApply(update, update.Length, format.IsV2(), origin!, limits!);
+        return TryApply(update, 0, update.Length, format.IsV2(), origin!, limits!);
+    }
+
+    /// <summary>
+    /// <see cref="ApplyUpdate(byte[], object, UpdateLimits)"/> for the <paramref name="count"/> bytes of <paramref name="update"/> from
+    /// <paramref name="offset"/>, read in place: a message that holds a header before the update needs no copy of the update.
+    /// Nothing keeps a reference to <paramref name="update"/> afterwards.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> and <paramref name="count"/> are not within <paramref name="update"/>.</exception>
+    public void ApplyUpdate(byte[] update, int offset, int count, object? origin = null, UpdateLimits? limits = null)
+    {
+        CheckRange(update, offset, count);
+        ApplyUpdate(update, offset, count, false, origin!, limits!);
+    }
+
+    /// <inheritdoc cref="ApplyUpdate(byte[], int, int, object, UpdateLimits)"/>
+    /// <param name="format">The encoding of the update.</param>
+    public void ApplyUpdate(byte[] update, int offset, int count, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    {
+        CheckRange(update, offset, count);
+        ApplyUpdate(update, offset, count, format.IsV2(), origin!, limits!);
+    }
+
+    /// <summary>
+    /// <see cref="TryApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/> for a range of an array, read in place like
+    /// <see cref="ApplyUpdate(byte[], int, int, object, UpdateLimits)"/>.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="offset"/> and <paramref name="count"/> are not within <paramref name="update"/>.</exception>
+    public bool TryApplyUpdate(byte[] update, int offset, int count, object? origin = null, UpdateLimits? limits = null)
+    {
+        CheckRange(update, offset, count);
+        return TryApply(update, offset, count, false, origin!, limits!);
+    }
+
+    /// <inheritdoc cref="TryApplyUpdate(byte[], int, int, object, UpdateLimits)"/>
+    /// <param name="format">The encoding of the update.</param>
+    public bool TryApplyUpdate(byte[] update, int offset, int count, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    {
+        CheckRange(update, offset, count);
+        return TryApply(update, offset, count, format.IsV2(), origin!, limits!);
+    }
+
+    private static void CheckRange(byte[] update, int offset, int count)
+    {
+        ArgumentNullException.ThrowIfNull(update);
+        ArgumentOutOfRangeException.ThrowIfNegative(offset);
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(count, update.Length - offset);
     }
 
     /// <summary>

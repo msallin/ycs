@@ -141,11 +141,11 @@ public sealed partial class YDoc
         }
     }
 
-    private bool TryApply(byte[] update, int count, bool v2, object? transactionOrigin, UpdateLimits? limits)
+    private bool TryApply(byte[] update, int offset, int count, bool v2, object? transactionOrigin, UpdateLimits? limits)
     {
         try
         {
-            ApplyUpdate(update, count, v2, transactionOrigin, limits);
+            ApplyUpdate(update, offset, count, v2, transactionOrigin, limits);
             return true;
         }
         catch (YUpdateException)
@@ -159,13 +159,13 @@ public sealed partial class YDoc
     /// it (<see cref="StructStore.ApplyUpdate"/>), which checks what depends on the document before it
     /// changes anything.
     /// </summary>
-    private void ApplyUpdate(byte[] buffer, int count, bool v2, object? transactionOrigin, UpdateLimits? limits)
+    private void ApplyUpdate(byte[] buffer, int offset, int count, bool v2, object? transactionOrigin, UpdateLimits? limits)
     {
         limits ??= _opts.Limits;
         UpdateReader.Lease update;
         try
         {
-            update = UpdateReader.Read(buffer, 0, count, v2, limits.MaxStructsPerUpdate, limits.MaxDepth);
+            update = UpdateReader.Read(buffer, offset, count, v2, limits.MaxStructsPerUpdate, limits.MaxDepth);
         }
         catch (Exception e) when (YUpdateException.IsDecodingFailure(e))
         {
@@ -208,7 +208,7 @@ public sealed partial class YDoc
         try
         {
             update.CopyTo(buffer);
-            ApplyUpdate(buffer, update.Length, v2, transactionOrigin, limits);
+            ApplyUpdate(buffer, 0, update.Length, v2, transactionOrigin, limits);
         }
         finally
         {
