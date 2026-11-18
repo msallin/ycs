@@ -562,7 +562,8 @@ members that expose a struct are:
   ([Compare](../bench/Ycs.Compare/README.md), "Final round"): `trace-replay` +20%, `encode-v1` +12 to 19%,
   `text-append-1txn-observed` +13%, `array-push-1txn` and `map-set-same` +10 to +11%, `text-append` +8%. The reads are
   closed: `read-array` and `read-map` were slow in `YValue.FromStored` (a call whose result the caller reloaded
-  through a store-forwarding stall), not in the slab, and now take less than with objects ("Reading an array and a map").
+  through a store-forwarding stall), not in the slab, and now take less than with objects ("Reading an array and a map"; on the dedicated runner `read-array` 0.53 and
+  `read-map` 0.91 of the object layout's time).
   The editing gaps are spread over the transaction with no phase above 10%; the encode gap is spread over the write of
   the structs, with no single cost in it, and is left: about 0.06 ms per encode of a 289 KB state, invisible in a join
   or a save. A v1 write path that bypasses `IUpdateEncoder` would close it at the cost of a second encoder; worth it

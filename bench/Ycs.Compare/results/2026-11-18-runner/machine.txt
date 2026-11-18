@@ -1,0 +1,14 @@
+commit 2f523a6f9bdc49bce44aa145583db37a3acda1ab baseline 044bb73
+date 2026-11-18T12:59:11 load 0.18 0.08 0.02
+Linux runner 6.8.0-124-generic #124-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 13:00:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+4
+CPU(s):                                  4
+Model name:                              AMD EPYC-Genoa Processor
+Thread(s) per core:                      1
+L2 cache:                                4 MiB (4 instances)
+L3 cache:                                64 MiB (2 instances)
+               total        used        free      shared  buff/cache   available
+Mem:           15992        1123        3256          82       12036       14869
+Swap:              0           0           0
+11.0.100
+v24.22.3

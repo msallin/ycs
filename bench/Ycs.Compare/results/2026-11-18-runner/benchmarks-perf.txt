@@ -1,0 +1,9 @@
+P1 delete 40,000 characters backwards, UndoManager attached            355 ms       14.3 MiB
+P1 undo 40,000 keystrokes                                              380 ms       50.7 MiB
+redo 40,000 keystrokes                                                 240 ms       62.4 MiB
+P2 40,000 edits at random places in one capture                       1354 ms       45.5 MiB
+P3 one transaction changes 16,000 maps under a deep observer            34 ms        9.3 MiB
+P4 Get(i) for every i of a ContentJSON item of 80,000 values            18 ms        0.0 MiB
+pending: 8,000 updates waiting for a missing client                     79 ms        6.7 MiB
+pending: 8,000 keystrokes delivered last first, then retried           148 ms       19.7 MiB
+pending: 8,000 keystrokes, the first withheld, then retried            122 ms       19.7 MiB

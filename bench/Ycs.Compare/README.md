@@ -52,6 +52,20 @@ string up to 42 characters encoded in one pass instead of count-then-encode, `in
 delete-set walk that reads `Clock` and does not build an id (0.88 to 0.83 ms). The remaining gap to the object layout
 (0.6 ms in 10 encodes, 12 %) is not in one place.
 
+On the dedicated runner (the round of the next section, rerun at 2f523a6 with the change; load average 0.2 at its start
+and 1.0 to 1.2 while it measured; everything in [`results/2026-11-18-runner/`](results/2026-11-18-runner/)), `ab.py 4 6`
+against 044bb73:
+
+| workload | 044bb73 (objects) | 7d994f4 (2026-11-17) | 2f523a6 | 2f523a6 / objects |
+| --- | ---: | ---: | ---: | ---: |
+| `read-array` | 7.6 ms | 20.7 ms | 4.0 ms | 0.53 |
+| `read-map` | 28.5 ms | 40.0 ms | 26.0 ms | 0.91 |
+| `encode-v1` | 7.2 ms | 8.2 ms | 8.6 ms | 1.19 |
+
+Against YDotNet in the same round, `read-array` is 25.3 times faster (was 4.8) and `read-map` 15.6 times (was 9.8). The
+other workloads of the round are within 5 % of the round of 2026-11-17 (`encode-v1` +5 % with its code unchanged: the noise
+between two rounds).
+
 ## Final round (2026-11-17, a dedicated runner)
 
 The whole of `bench/run-round.sh` at 7d994f4 on a machine that ran nothing else (a self-hosted GitHub Actions runner,
