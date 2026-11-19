@@ -2,8 +2,9 @@
 
 A benchmark of ycs (this repository, pure C#) against [YDotNet](https://github.com/y-crdt/ydotnet) 0.7.0, the
 .NET binding of yrs 0.26 (the Rust port of Yjs, called through P/Invoke). Same workloads, same inputs, same machine;
-every result is checked before it counts. The current results are those of 2026-11-18 at e794d65, in
-[`results/2026-11-18-e794d65/`](results/2026-11-18-e794d65/). Older rounds are in git history.
+every result is checked before it counts. The current results are those of 2026-11-19 at 655a751, in
+[`results/2026-11-19-655a751/`](results/2026-11-19-655a751/) (JIT; `aot/` and `aot-speed/` hold the same suite with every
+child a Native AOT build). Older rounds are in git history.
 
 ```bash
 bench/Ycs.Compare/run.sh            # everything: about 90 minutes; results in results/<UTC date>/
@@ -61,49 +62,49 @@ the first runs, the allocations and the state sizes are in `tables.md`. Every re
 
 | workload | ycs ms | YDotNet ms | faster | held MiB ycs / YDotNet |
 | --- | ---: | ---: | --- | ---: |
-| `text-append` | 27.8 | 3561 | ycs 128.0x | 0.6 / 0.6 |
-| `text-append-utf8` | 28.1 | 1812 | ycs 64.4x | 0.6 / 0.5 |
-| `text-append-1txn` | 18.1 | 25563 | ycs 1416.1x | 1.4 / 4.1 |
-| `text-append-1txn-25k` | 4.6 | 1422 | ycs 306.4x | 0.4 / 0.9 |
-| `text-append-1txn-observed` | 224 | 25522 | ycs 114.0x | 1.9 / 3.6 |
-| `text-append-1txn-observed-200k` | 457 | 119278 | ycs 260.7x | 4.5 / 6.9 |
-| `text-append-1txn-observed-400k` | 967 | 503642 | ycs 520.8x | 8.1 / 13.6 |
-| `text-append-1txn-observed-25k` | 55.2 | 1424 | ycs 25.8x | 0.6 / 1.0 |
-| `txn-empty` | 7.8 | 12.1 | ycs 1.5x | 0.0 / 0.0 |
-| `text-random` | 38.6 | 1741 | ycs 45.1x | 3.1 / 4.4 |
-| `text-random-100k` | 1253 | 150269 | ycs 120.0x | 20.7 / 22.3 |
-| `trace-replay` | 356 | 11957 | ycs 33.6x | 1.6 / 2.6 |
-| `concurrent-20` | 92.1 | 79.4 | YDotNet 1.2x | 14.2 / 25.4 |
-| `many-clients-200` | 1.9 | 2.3 | ycs 1.2x | 0.5 / 0.6 |
-| `many-clients-1000` | 7.4 | 24.5 | ycs 3.3x | 2.1 / 2.2 |
-| `apply-state-v1/ycs` | 72.0 | 48.2 | YDotNet 1.5x | 2.9 / 2.7 |
-| `apply-state-v1/yrs` | 72.4 | 48.6 | YDotNet 1.5x | 2.9 / 2.7 |
-| `apply-state-v2/ycs` | 73.5 | 50.1 | YDotNet 1.5x | 2.8 / 2.6 |
-| `apply-state-v2/yrs` | 72.9 | 50.4 | YDotNet 1.4x | 2.8 / 2.6 |
-| `apply-state-x100/ycs` | 856 | 721 | YDotNet 1.2x | 255.7 / 279.2 |
-| `apply-updates/ycs` | 269 | 366 | ycs 1.4x | 17.2 / 15.8 |
-| `apply-updates/yrs` | 272 | 366 | ycs 1.3x | 17.2 / 15.8 |
-| `apply-updates-1txn/yrs` | 159 | 1774 | ycs 11.2x | 27.6 / 21.0 |
-| `encode-v1` | 8.3 | 8.7 | ycs 1.1x | 1.6 / 2.5 |
-| `encode-v2` | 10.4 | 10.1 | YDotNet 1.0x | 2.3 / 2.5 |
-| `encode-sv` | 0.1 | 0.2 | ycs 2.3x | 2.7 / 2.5 |
-| `encode-diff` | 4.8 | 4.6 | YDotNet 1.0x | 2.1 / 2.5 |
-| `map-set-distinct` | 38.6 | 142 | ycs 3.7x | 24.9 / 30.9 |
-| `map-set-distinct-1txn` | 29.0 | 116 | ycs 4.0x | 24.9 / 30.9 |
-| `map-set-same` | 66.3 | 139 | ycs 2.1x | 0.1 / 0.0 |
-| `array-push` | 26.1 | 114 | ycs 4.4x | 10.4 / 8.2 |
-| `array-push-1txn` | 13.1 | 67273 | ycs 5145.6x | 10.4 / 8.8 |
-| `array-push-1txn-20k` | 2.7 | 2192 | ycs 814.8x | 1.9 / 1.8 |
-| `array-insert-random` | 180 | 21125 | ycs 117.6x | 10.4 / 15.9 |
-| `array-delete-random` | 182 | 25350 | ycs 139.2x | 10.9 / 14.6 |
-| `read-text` | 0.3 | 48.0 | ycs 141.5x | 3.1 / 2.7 |
-| `read-array` | 3.9 | 96.9 | ycs 24.7x | 4.1 / 3.0 |
-| `read-map` | 25.8 | 396 | ycs 15.4x | 20.1 / 28.0 |
-| `undo-type` | 31.0 | 160 | ycs 5.2x | 11.5 / 5.6 |
-| `undo-all` | 42.1 | 340 | ycs 8.1x | 12.1 / 7.7 |
-| `redo-all` | 46.6 | 83.5 | ycs 1.8x | 17.4 / 14.8 |
-| `observe-count` | 56.5 | 3590 | ycs 63.6x | 1.2 / 1.5 |
-| `observe-delta` | 92.7 | 5368 | ycs 57.9x | 1.2 / 0.7 |
+| `text-append` | 27.8 | 3561 | ycs 128.2x | 0.6 / 0.6 |
+| `text-append-utf8` | 27.3 | 1821 | ycs 66.8x | 0.6 / 0.5 |
+| `text-append-1txn` | 16.0 | 26275 | ycs 1643.3x | 1.4 / 4.1 |
+| `text-append-1txn-25k` | 4.5 | 1422 | ycs 313.2x | 0.4 / 0.9 |
+| `text-append-1txn-observed` | 226 | 26758 | ycs 118.2x | 1.9 / 3.6 |
+| `text-append-1txn-observed-200k` | 463 | 124566 | ycs 268.8x | 4.5 / 6.9 |
+| `text-append-1txn-observed-400k` | 962 | 519916 | ycs 540.6x | 8.1 / 13.6 |
+| `text-append-1txn-observed-25k` | 55.5 | 1428 | ycs 25.7x | 0.6 / 1.0 |
+| `txn-empty` | 8.1 | 12.1 | ycs 1.5x | 0.0 / 0.0 |
+| `text-random` | 37.2 | 1766 | ycs 47.5x | 3.1 / 4.4 |
+| `text-random-100k` | 1387 | 181384 | ycs 130.7x | 20.7 / 22.3 |
+| `trace-replay` | 360 | 12122 | ycs 33.7x | 1.6 / 2.6 |
+| `concurrent-20` | 67.0 | 79.9 | ycs 1.2x | 14.1 / 25.4 |
+| `many-clients-200` | 1.5 | 2.3 | ycs 1.5x | 0.5 / 0.6 |
+| `many-clients-1000` | 5.7 | 24.4 | ycs 4.3x | 2.0 / 2.2 |
+| `apply-state-v1/ycs` | 49.1 | 48.4 | YDotNet 1.0x | 2.8 / 2.7 |
+| `apply-state-v1/yrs` | 48.3 | 48.9 | ycs 1.0x | 2.8 / 2.7 |
+| `apply-state-v2/ycs` | 48.1 | 50.2 | ycs 1.0x | 2.7 / 2.6 |
+| `apply-state-v2/yrs` | 48.7 | 50.1 | ycs 1.0x | 2.7 / 2.6 |
+| `apply-state-x100/ycs` | 613 | 754 | ycs 1.2x | 243.7 / 280.1 |
+| `apply-updates/ycs` | 235 | 368 | ycs 1.6x | 17.2 / 15.8 |
+| `apply-updates/yrs` | 240 | 370 | ycs 1.5x | 17.2 / 15.8 |
+| `apply-updates-1txn/yrs` | 137 | 1794 | ycs 13.1x | 27.6 / 21.0 |
+| `encode-v1` | 8.2 | 8.9 | ycs 1.1x | 1.6 / 2.5 |
+| `encode-v2` | 10.2 | 10.2 | YDotNet 1.0x | 2.2 / 2.5 |
+| `encode-sv` | 0.1 | 0.2 | ycs 2.5x | 2.6 / 2.5 |
+| `encode-diff` | 4.9 | 4.6 | YDotNet 1.1x | 2.1 / 2.5 |
+| `map-set-distinct` | 41.0 | 144 | ycs 3.5x | 24.9 / 30.9 |
+| `map-set-distinct-1txn` | 31.0 | 126 | ycs 4.1x | 24.9 / 30.9 |
+| `map-set-same` | 67.0 | 139 | ycs 2.1x | 0.1 / 0.0 |
+| `array-push` | 25.5 | 115 | ycs 4.5x | 10.4 / 8.2 |
+| `array-push-1txn` | 12.4 | 69833 | ycs 5630.4x | 10.4 / 8.8 |
+| `array-push-1txn-20k` | 2.5 | 2200 | ycs 895.0x | 1.9 / 1.8 |
+| `array-insert-random` | 184 | 22230 | ycs 120.8x | 10.4 / 15.9 |
+| `array-delete-random` | 183 | 25429 | ycs 139.1x | 10.9 / 14.6 |
+| `read-text` | 0.3 | 48.2 | ycs 142.8x | 3.0 / 2.7 |
+| `read-array` | 4.0 | 102 | ycs 25.7x | 4.1 / 3.0 |
+| `read-map` | 26.2 | 407 | ycs 15.5x | 20.1 / 28.0 |
+| `undo-type` | 31.0 | 161 | ycs 5.2x | 11.5 / 5.6 |
+| `undo-all` | 43.3 | 366 | ycs 8.5x | 12.1 / 7.0 |
+| `redo-all` | 47.8 | 80.5 | ycs 1.7x | 17.4 / 14.8 |
+| `observe-count` | 56.5 | 3592 | ycs 63.5x | 1.2 / 1.5 |
+| `observe-delta` | 89.9 | 5437 | ycs 60.5x | 1.2 / 0.7 |
 
 **Native AOT** (`aot/measure.sh`, the same minimal program on each, linux-x64): ycs publishes with no trim or AOT
 warning, 2.8 MB; YDotNet 4.3 MB (its `libyrs.so` is 2.3 MB of it) with 3 trim warnings (IL2091). Self-contained
@@ -113,19 +114,73 @@ call fails with `DllNotFoundException` ("yrs"). ycs runs there (`samples/Ycs.Was
 
 ## Native AOT
 
-The same programs published with `PublishAot` (`COMPARE_CHILD=<AOT build> Ycs.Compare suite`: the driver stays JIT, every
-child process is the AOT binary, YDotNet's too), on the runner of 2026-11-19, 3 passes of 5 timed runs, in
-[`results/2026-11-19-aot-a038dac/`](results/2026-11-19-aot-a038dac/) (`tables.md`; `ab-jit-vs-aot.txt` is ycs's JIT build
-against its AOT build, interleaved, `ab.py 3 6`). Hostile cases not run.
+The same suite with every child process a Native AOT build (`COMPARE_CHILD=<AOT build> Ycs.Compare suite`: the driver stays JIT; YDotNet's
+children are AOT too), on the runner of 2026-11-19, 3 passes of 5 timed runs; `results/2026-11-19-655a751/aot/` is the default
+`PublishAot`, `aot-speed/` adds `-p:OptimizationPreference=Speed -p:IlcInstructionSet=native`. Hostile cases not run. Median ms:
 
-* **Steady state is slower in AOT: ycs 1.1 to 2.1x** (no tiered PGO: `text-append` 27.8 to 54.4 ms, `apply-updates` 276 to 483,
-  `map-set-distinct` 38.9 to 85.6, `array-push` 25.2 to 53.8, state loads 74 to 102, `trace-replay` 362 to 480; `read-array` 4.0 to
-  5.1; `undo-all` is 17 % faster). YDotNet's managed side slows too (`read-array` 97 to 715 ms).
-* **The first run is much faster**: `text-append` 335 ms (JIT) to 55.6, state load 455 to 110, `apply-state-x100` 1946 to 1297,
-  `concurrent-20` 484 to 137. A process that loads one state is faster in AOT end to end.
-* **Against YDotNet in AOT** the losses grow: state loads 2.0x (JIT 1.5x), `apply-state-x100` 1.6x, `concurrent-20` 1.5x,
-  `apply-updates` 1.3x (JIT: ycs 1.4x ahead), `encode-v1` 1.2x and `encode-v2` 1.5x (JIT: even). The wins stay (`text-append` 66x,
-  `trace-replay` 25x, `map-set-distinct` 2.8x, `array-push` 4.6x, `undo-all` 9.7x, `observe-delta` 33x).
+| workload | ycs JIT | ycs AOT | ycs AOT Speed + native | YDotNet JIT | YDotNet AOT | AOT: ycs against YDotNet | Speed + native: ycs against YDotNet |
+| --- | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| `text-append` | 27.8 | 51.3 | 48.2 | 3561 | 3621 | ycs 70.6x | ycs 75.3x |
+| `text-append-utf8` | 27.3 | 50.3 | 46.9 | 1821 | 1889 | ycs 37.6x | ycs 40.3x |
+| `text-append-1txn` | 16.0 | 26.2 | 22.3 | 26275 | 26004 | ycs 993x | ycs 1165x |
+| `text-append-1txn-25k` | 4.5 | 6.4 | 5.6 | 1422 | 1438 | ycs 225x | ycs 255x |
+| `text-append-1txn-observed` | 226 | 282 | 260 | 26758 | 25846 | ycs 91.7x | ycs 101x |
+| `text-append-1txn-observed-200k` | 463 | 577 | 528 | 124566 | 121833 | ycs 211x | ycs 231x |
+| `text-append-1txn-observed-400k` | 962 | 1166 | 1089 | 519916 | 513002 | ycs 440x | ycs 471x |
+| `text-append-1txn-observed-25k` | 55.5 | 70.6 | 64.2 | 1428 | 1428 | ycs 20.2x | ycs 21.9x |
+| `txn-empty` | 8.1 | 12.1 | 11.3 | 12.1 | 11.9 | YDotNet 1.02x | ycs 1.07x |
+| `text-random` | 37.2 | 43.9 | 44.1 | 1766 | 1803 | ycs 41.1x | ycs 40.5x |
+| `text-random-100k` | 1387 | 794 | 831 | 181384 | 172468 | ycs 217x | ycs 197x |
+| `trace-replay` | 360 | 477 | 449 | 12122 | 12246 | ycs 25.7x | ycs 27.1x |
+| `concurrent-20` | 67.0 | 88.8 | 82.5 | 79.9 | 78.5 | YDotNet 1.13x | YDotNet 1.05x |
+| `many-clients-200` | 1.5 | 1.8 | 1.7 | 2.3 | 2.3 | ycs 1.28x | ycs 1.35x |
+| `many-clients-1000` | 5.7 | 7.6 | 7.1 | 24.4 | 25.0 | ycs 3.29x | ycs 3.39x |
+| `apply-state-v1/ycs` | 49.1 | 68.9 | 60.5 | 48.4 | 48.3 | YDotNet 1.43x | YDotNet 1.24x |
+| `apply-state-v1/yrs` | 48.3 | 69.3 | 61.2 | 48.9 | 48.3 | YDotNet 1.43x | YDotNet 1.26x |
+| `apply-state-v2/ycs` | 48.1 | 68.8 | 62.2 | 50.2 | 50.5 | YDotNet 1.36x | YDotNet 1.21x |
+| `apply-state-v2/yrs` | 48.7 | 68.6 | 61.5 | 50.1 | 49.9 | YDotNet 1.37x | YDotNet 1.23x |
+| `apply-state-x100/ycs` | 613 | 883 | 811 | 754 | 760 | YDotNet 1.16x | YDotNet 1.08x |
+| `apply-updates/ycs` | 235 | 411 | 360 | 368 | 364 | YDotNet 1.13x | ycs 1.00x |
+| `apply-updates/yrs` | 240 | 418 | 355 | 370 | 367 | YDotNet 1.14x | ycs 1.02x |
+| `apply-updates-1txn/yrs` | 137 | 237 | 191 | 1794 | 1783 | ycs 7.52x | ycs 9.22x |
+| `encode-v1` | 8.2 | 13.1 | 13.3 | 8.9 | 11.0 | YDotNet 1.19x | YDotNet 1.20x |
+| `encode-v2` | 10.2 | 14.9 | 14.2 | 10.2 | 9.9 | YDotNet 1.51x | YDotNet 1.45x |
+| `encode-sv` | 0.1 | 0.1 | 0.1 | 0.2 | 0.3 | ycs 3.00x | ycs 3.00x |
+| `encode-diff` | 4.9 | 7.0 | 6.8 | 4.6 | 4.7 | YDotNet 1.49x | YDotNet 1.45x |
+| `map-set-distinct` | 41.0 | 81.2 | 73.2 | 144 | 225 | ycs 2.77x | ycs 3.06x |
+| `map-set-distinct-1txn` | 31.0 | 51.9 | 48.3 | 126 | 208 | ycs 4.01x | ycs 4.22x |
+| `map-set-same` | 67.0 | 127 | 112 | 139 | 218 | ycs 1.72x | ycs 1.98x |
+| `array-push` | 25.5 | 53.1 | 45.0 | 115 | 257 | ycs 4.84x | ycs 5.49x |
+| `array-push-1txn` | 12.4 | 23.9 | 19.1 | 69833 | 67405 | ycs 2820x | ycs 3490x |
+| `array-push-1txn-20k` | 2.5 | 4.6 | 3.6 | 2200 | 2263 | ycs 492x | ycs 623x |
+| `array-insert-random` | 184 | 206 | 200 | 22230 | 21389 | ycs 104x | ycs 94.3x |
+| `array-delete-random` | 183 | 218 | 205 | 25429 | 25591 | ycs 117x | ycs 117x |
+| `read-text` | 0.3 | 0.4 | 0.4 | 48.2 | 46.7 | ycs 117x | ycs 114x |
+| `read-array` | 4.0 | 5.1 | 6.0 | 102 | 718 | ycs 141x | ycs 117x |
+| `read-map` | 26.2 | 37.4 | 35.4 | 407 | 1165 | ycs 31.1x | ycs 32.5x |
+| `undo-type` | 31.0 | 28.2 | 25.2 | 161 | 178 | ycs 6.31x | ycs 6.98x |
+| `undo-all` | 43.3 | 37.9 | 34.0 | 366 | 340 | ycs 8.97x | ycs 10.3x |
+| `redo-all` | 47.8 | 45.6 | 41.5 | 80.5 | 83.5 | ycs 1.83x | ycs 2.00x |
+| `observe-count` | 56.5 | 105 | 93.1 | 3592 | 3613 | ycs 34.4x | ycs 38.9x |
+| `observe-delta` | 89.9 | 163 | 149 | 5437 | 5648 | ycs 34.7x | ycs 37.6x |
+
+* **Steady state is slower in AOT: ycs 1.1 to 2.1x** (no tiered profile-guided optimization, below). YDotNet's managed side slows too
+  (`read-array` 102 to 718 ms).
+* **The first run is much faster**: `text-append` 335 ms (JIT) to 51, a state load 476 to 85, `apply-state-x100` 1518 to 996,
+  `concurrent-20` 410 to 101. A process that loads one state is faster in AOT end to end.
+* **Against YDotNet in AOT** ycs wins what it wins on the JIT (`text-append` 71x, `trace-replay` 26x, `array-push` 4.8x,
+  `undo-all` 9x), is 1.4x behind on state loads (`Speed` and `native`: 1.2x), 1.2x on `apply-state-x100` (1.1x), 1.1x on
+  `concurrent-20` and `apply-updates` (level), and 1.2 and 1.5x on `encode-v1` and `encode-v2` (the same with the settings).
+* **Settings a consuming application can set** (the A/B of `results/2026-11-19-load-path-2d6c79a/aot-settings/`, ycs's default AOT build against
+  the variant, `ab.py 3 6`): `OptimizationPreference=Speed` is 3 to 15 % faster (`array-push` -11 %, `apply-updates` -10 %, a state load
+  -8 %, `encode-v1` +2 %), `IlcInstructionSet=native` alone 0 to 6 %, both together 7 to 15 %. `native` compiles for the machine that
+  publishes; name a set (`x86-x64-v3`) to publish for another.
+* **Why the rest**: the JIT with `DOTNET_TieredPGO=0` is 23 to 85 % slower (`text-append` +60 %, `array-push` +85 %, a state load
+  +23 %), and with `EnableAVX2=0` as well 23 to 92 %: most of the AOT gap is the missing profile (guarded devirtualization of
+  the interface and delegate calls), the instruction set about a tenth of it.
+* **Further improvement**: devirtualize the write path by hand, which closes most of `encode-v1` and `encode-v2` and part of the rest
+  (`IUpdateEncoder` as a struct-generic parameter, sealed v2 column encoders, no delegate call for the default garbage collection
+  filter): the open item in [section 5](../../docs/design-item-layout.md#5-open-items) of the design document.
 
 ## The load path (2026-11-19)
 
@@ -136,7 +191,7 @@ the garbage collection check runs only where a key can exist (`HasKeys`, `HasKey
 `GetItemCleanStart` returned and the struct `AddStruct` added, the plan keeps its clocks in an array by the table's client
 index, a section reserves room for the structs it announces, the staging table keeps 2 MiB between loads (docs: section 5).
 
-| workload | JIT before / after ms | AOT before / after ms | against YDotNet, JIT / AOT (was) |
+| workload | JIT before / after ms | AOT before / after ms | against YDotNet in this round, JIT / AOT |
 | --- | ---: | ---: | --- |
 | `apply-state-v1/ycs` | 76.4 / 47.7 (-38 %) | 102.3 / 71.1 (-31 %) | ycs 1.01x ahead / YDotNet 1.44x (JIT 1.5x, AOT 2.0x behind) |
 | `apply-state-v2/ycs` | 73.9 / 49.4 (-33 %) | 103.2 / 69.2 (-33 %) | ycs 1.01x ahead / YDotNet 1.35x |
@@ -147,36 +202,27 @@ index, a section reserves room for the structs it announces, the staging table k
 A state load allocates 38.1 to 16.2 MiB (of the 21.9 MiB less: the reserve 13, the larger retention 7, the rest 2); `apply-state-x100`
 480 to 452 MiB. The rest of the suite is within 3 % in both builds (`text-random` +3.3 % on JIT is the noise of its spread; AOT
 `text-append` -4.5 %, `encode-v1` -5 %). By commit, JIT state load: the check's gate -22 %, the hints -24 %, the plan array
--27 %, the reserve -33 %, the retention -35 %. The YDotNet side is the table above (JIT 2026-11-18, AOT 2026-11-19), not rerun.
-
-### Native AOT settings
-
-`aot-settings/`, the same workloads, ycs's AOT build default against the variant, `ab.py 3 6`: `OptimizationPreference=Speed` -3 to
--15 % (`array-push` -11 %, `apply-updates` -10 %, state load -8 %, `encode-v1` +2 %); `IlcInstructionSet=native` alone 0 to -6 %;
-both -7 to -15 %. The JIT with `DOTNET_TieredPGO=0` is 23 to 85 % slower (`text-append` +60 %, `array-push` +85 %, state load
-+23 %), and with `EnableAVX2=0` as well 23 to 92 %: most of the AOT gap is the missing profile (guarded devirtualization of
-the interface and delegate calls), the instruction set accounts for about a tenth of it. A consumer can set the first two;
-the library can devirtualize by hand (section 5 of the design document).
+-27 %, the reserve -33 %, the retention -35 %. The YDotNet side is the suite of this round (the table at the top and "Native AOT").
 
 ## Where ycs is slower now
 
 ### Against YDotNet
 
-Ratios are of the medians in the table above.
+Ratios are of the medians in the table above (JIT).
 
 | workload | ycs | YDotNet | ratio | cause |
 | --- | ---: | ---: | ---: | --- |
-| `apply-state-v1/ycs`, `apply-state-v2/ycs` (load a stored state, 10 times) | 72.0 / 73.5 ms | 48.2 / 50.1 ms | YDotNet 1.5x | ycs decodes into a staging table and then adopts each struct into the slab (38 MiB allocated per run); yrs does its work natively. The leaf order adds 7 to 10 % |
-| `apply-state-x100/ycs` (a state 100 times larger) | 856 ms | 721 ms | YDotNet 1.2x | the same, with the larger document |
-| `concurrent-20` (merge of 20 clients) | 92.1 ms | 79.4 ms | YDotNet 1.2x | the per-struct cost of a load, plus the leaf order's +10 %; ycs' first run is 484 ms against 100 ms (JIT) |
-| `encode-v2`, `encode-diff` | 10.4, 4.8 ms | 10.1, 4.6 ms | YDotNet 1.03, 1.04x | within the noise of the round |
+| `apply-state-v1/ycs` (load a stored state, 10 times) | 49.1 ms | 48.4 ms | YDotNet 1.01x | level; the other three state loads are 1.04x ahead (v2) to 1.2x ahead (x100) |
+| `encode-v2` | 10.2 ms | 10.2 ms | level | |
 
-The state loads are the one place where YDotNet is clearly ahead. The loaded document holds about the same (2.9 MiB against 2.7). The loads' gap shrank from 1.8x (2026-11-15) to
-1.5x. The first run of every ycs workload is much slower than YDotNet's (JIT; `tables.md`, "first run"): a process
-that loads one state pays it once.
+No workload is clearly slower on the JIT. The first run of every ycs workload is much slower than YDotNet's (JIT; `tables.md`,
+"first run": a state load 476 ms against 59, `concurrent-20` 410 against 100): a process that loads one state pays it once;
+a Native AOT build has no such run (above). In Native AOT, which has no profile, YDotNet is ahead on state loads (1.4x, 1.2x
+with `OptimizationPreference=Speed` and `IlcInstructionSet=native`) and on the encodes (1.2 and 1.5x): see "Native AOT".
 
-Tried on the load: the leaf order's per-call cost (see "Tried and dropped"). Not done: pending structs as a staging
-table, 32-bit clocks (design document, section 5).
+Before 2026-11-19 the state loads were 1.5x behind (72 against 48 ms): "The load path" below and
+[`docs/design-item-layout.md`](../../docs/design-item-layout.md#5-open-items) for what is left (a pooled staging table, 32-bit
+clocks, pending structs as a staging table, a struct-generic write path).
 
 ### Against the object layout (044bb73)
 

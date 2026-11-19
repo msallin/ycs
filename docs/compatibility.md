@@ -73,6 +73,10 @@ The automerge-paper editing trace (260k edits), `bench/Ycs.Benchmarks`, median o
 | encode the final document, v1, 10 times | 8.9 ms | 2.8 MiB |
 | decode the final document, v1, 10 times | 84 ms | 38 MiB |
 
+The decode row is from before the changes of 2026-11-19, which cut a state load from 76 to 48 ms and its allocation from 38 to 16 MiB
+([`bench/Ycs.Compare`](https://github.com/msallin/ycs/blob/modernize/bench/Ycs.Compare/README.md), "The load path"); the benchmark
+has not run since.
+
 Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
 `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`.
 
@@ -80,12 +84,12 @@ Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
 
 [YDotNet](https://github.com/y-crdt/ydotnet) is the .NET binding of yrs, the Rust port of Yjs. Both speak the same
 wire format. Measured on the same workloads ([`bench/Ycs.Compare`](https://github.com/msallin/ycs/blob/modernize/bench/Ycs.Compare/README.md),
-2026-11-18):
+2026-11-19):
 
 | | Ycs | YDotNet 0.7.0 |
 | --- | --- | --- |
 | Typing, keystroke by keystroke | 30 to 130 times faster (100,000 keystrokes at the end: 28 ms against 3.6 s) | |
-| Loading a whole document | | 1.2 to 1.5 times faster |
+| Loading a whole document | about even; up to 1.6 times faster when many updates are applied | 1.2 to 1.4 times faster in Native AOT (1.1 to 1.2 with `OptimizationPreference=Speed`) |
 | Encoding a whole document | about even | about even |
 | Native library | none | `libyrs`, through P/Invoke |
 | Native AOT | 2.35 MB, no warning | 4.29 MB, 3 trim warnings |
