@@ -144,7 +144,7 @@ index, a section reserves room for the structs it announces, the staging table k
 | `concurrent-20` | 92.2 / 67.8 (-26 %) | 125 / 88.0 (-30 %) | ycs 1.17x ahead / YDotNet 1.09x |
 | `apply-updates/ycs` | 272 / 237 (-13 %) | 482 / 416 (-14 %) | ycs 1.5x ahead / YDotNet 1.13x |
 
-A state load allocates 38.1 to 16.2 MiB (the reserve takes 12.5 of the 21.9, the larger retention the rest); `apply-state-x100`
+A state load allocates 38.1 to 16.2 MiB (of the 21.9 MiB less: the reserve 13, the larger retention 7, the rest 2); `apply-state-x100`
 480 to 452 MiB. The rest of the suite is within 3 % in both builds (`text-random` +3.3 % on JIT is the noise of its spread; AOT
 `text-append` -4.5 %, `encode-v1` -5 %). By commit, JIT state load: the check's gate -22 %, the hints -24 %, the plan array
 -27 %, the reserve -33 %, the retention -35 %. The YDotNet side is the table above (JIT 2026-11-18, AOT 2026-11-19), not rerun.
