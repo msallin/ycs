@@ -156,24 +156,6 @@ staging table). Held memory is 36 to 51 % lower on the documents that keep many 
 `map-set-distinct` 38.9 to 24.9, `concurrent-20` 29.1 to 14.2), higher on the array pushes. The open items are in the
 design document, [section 5](../../docs/design-item-layout.md#5-open-items).
 
-### Is the trade worth it
-
-Yes, for what ycs is for: a server or a client that holds many documents for a long time.
-
-* **The losses are small in absolute time.** The largest is `trace-replay`, +72 ms over the whole trace of about 260,000
-  edits, which is under 0.3 µs an edit. The encode costs 0.13 ms more for a 289 KB state. Typing is still 30 to 130 times
-  faster than on YDotNet.
-* **The gains are in memory.**
-  - A document that keeps many structs holds 36 to 51 % less, so a server keeps about twice the documents in the same memory.
-  - Allocation is 40 to 90 % lower on the editing workloads (`apply-updates` 59 to 12 MiB, `trace-replay` 43 to 25 MiB),
-    so there are fewer and shorter collections. Under many clients, that counts for more than a 10 % median.
-* **The layout made other workloads faster.** Random edits are 29 to 38 % faster, `map-set-distinct` 34 % and `read-array` 47 %.
-* **It would not pay off** for a single-threaded program that replays large traces in a loop and does not care about memory.
-
-What a user can notice is not in the table above. A state load is 1.5x slower than on YDotNet, for example a join to a
-large document. That cost comes from the staging table and the leaf order, not from the slot reads. It is the first
-place to work on, and the delete walk behind `trace-replay` is the second (a run index of deleted items).
-
 ## Why: the main changes and what each bought
 
 Each was measured against the commit before it with `ab.py`; the numbers are those of the run that decided it.
