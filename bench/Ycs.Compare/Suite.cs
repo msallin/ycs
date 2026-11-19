@@ -18,6 +18,10 @@ internal static class Suite
     private const long WorkloadRssLimit = 8L << 30;
     private const long HostileRssLimit = 4L << 30;
 
+    // COMPARE_CHILD: a build of this program (a Native AOT publish) that runs the children in place of this process; the
+    // driver stays as it is.
+    private static readonly string ChildBinary = Environment.GetEnvironmentVariable("COMPARE_CHILD");
+
     /// <param name="carryYrs">
     /// When set, YDotNet runs only the workloads in <paramref name="yrsControls"/> (to see how far the machine drifted):
     /// for the others its measurements are taken from <c>carryYrs/results.json</c> (marked carried) and the content
@@ -36,6 +40,7 @@ internal static class Suite
         {
             ["date"] = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm 'UTC'", CultureInfo.InvariantCulture),
             ["machine"] = Machine(),
+            ["children"] = ChildBinary == null ? "JIT (the driver's own build)" : "Native AOT (" + Path.GetFileName(ChildBinary) + ")",
             ["passes"] = passes,
             ["runs"] = runs,
             ["inputs"] = Inputs.Hash(),
@@ -250,13 +255,14 @@ internal static class Suite
     /// </summary>
     private static (JsonObject Json, string Failure) Spawn(string[] args, TimeSpan timeout, long rssLimit)
     {
-        var psi = new ProcessStartInfo(Environment.ProcessPath!)
+        var child = ChildBinary ?? Environment.ProcessPath!;
+        var psi = new ProcessStartInfo(child)
         {
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        if (Path.GetFileNameWithoutExtension(Environment.ProcessPath) == "dotnet")
+        if (ChildBinary == null && Path.GetFileNameWithoutExtension(Environment.ProcessPath) == "dotnet")
         {
             psi.ArgumentList.Add(Assembly.GetEntryAssembly()!.Location);
         }
