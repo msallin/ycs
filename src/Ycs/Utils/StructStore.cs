@@ -129,6 +129,9 @@ internal sealed partial class StructStore
 
         LogChange(structs, str.Id.Client);
         structs.Add(str);
+
+        // Where the item is, for the Refresh its own content's integration may ask for.
+        _knownIndex = structs.Count - 1;
         Version++;
         TestHooks.Compact(Slab, true);
     }
@@ -152,8 +155,9 @@ internal sealed partial class StructStore
         structs.Refresh(index);
     }
 
-    // The position of the struct that ApplyDeleteSet is deleting, so that Refresh(ItemRef) need not search for it:
-    // used only where the struct at it is the item, so a value left behind by a throwing delete is harmless.
+    // The position of a struct that is about to be refreshed (the one ApplyDeleteSet is deleting, the one GetItemCleanStart
+    // returned last, the one AddStruct added last), so that Refresh(ItemRef) need not search for it: used only where the
+    // struct at it is the item, so any value left behind is harmless.
     private int _knownIndex = -1;
 
     /// <summary>The list and position of <paramref name="item"/>, if the store holds it (a collected type's items it does not).</summary>
@@ -277,6 +281,9 @@ internal sealed partial class StructStore
 
         int indexCleanStart = FindIndexCleanStart(transaction, structs, clock);
         Debug.Assert(indexCleanStart >= 0 && indexCleanStart < structs.Count);
+
+        // The neighbour an integration relinks is mostly this one, which Refresh then need not search for.
+        _knownIndex = indexCleanStart;
         return structs[indexCleanStart];
     }
 
