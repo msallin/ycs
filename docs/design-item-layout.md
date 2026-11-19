@@ -556,6 +556,16 @@ members that expose a struct are:
   nested types.
 * **A load copies each String twice** (decoder buffer, table, arena) until the reader writes into the arena directly;
   deferred until measured.
+* **The staging table's buffers from `ArrayPool<T>.Shared`** instead of a 2 MiB thread-static retention
+  (`StagingTable.RetainedBytesCap`): the shared pool trims itself under memory pressure, so a thread holds nothing between
+  loads. Built the reserve at the section header and the larger cap instead (less code); measure whether a state far
+  above 2 MiB (`apply-state-x100`, 480 MiB allocated per run for 253 held) still loses to the large object heap, and
+  whether the cap's per-thread cost matters to a consumer with many decoding threads. A pooled array may be longer than
+  asked and is not zeroed: clear the used part on return.
+* **Encode generic over struct encoders** (`encode-v1` 1.2x and `encode-v2` 1.5x behind YDotNet in Native AOT): the
+  write path takes `IUpdateEncoder` as an interface (5 to 8 calls a struct), which tiered PGO devirtualizes on the JIT and
+  ILC cannot; the decoders are struct-generic already. Seal the v2 column encoders too. Measure the AOT settings first
+  (`OptimizationPreference=Speed`, `IlcInstructionSet=native`).
 * **The leaf order's cost where nothing splits**: `apply-state-v1` +7%, `apply-state-v2` +9%, `concurrent-20` +10% on
   the object layout; seven variants (the cursor not rewritten when unchanged, a plain binary search in the leaf, no
   pivot among the leaves, the pivot from 8 leaves on, a 32-bit division, the indexer's cursor test inlined, a flat form
