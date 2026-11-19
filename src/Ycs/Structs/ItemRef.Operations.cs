@@ -343,6 +343,11 @@ internal readonly partial struct ItemRef
             YType? mapParent = null;
             var previousCounted = false;
             var parentSub = ParentSub;
+            if (parentSub != null)
+            {
+                transaction.Doc.Store.HasKeyedItems = true;
+            }
+
             int leftHandle;
             int rightHandle;
             {

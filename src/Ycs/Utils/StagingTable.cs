@@ -240,7 +240,14 @@ internal sealed class StagingTable
         s.ParentClock = parent.Clock;
     }
 
-    public void SetParentSub(int i, string parentSub) => _structs[i].ParentSub = AddRef(parentSub);
+    /// <summary>Whether a struct of the table has a key (<see cref="SetParentSub"/> was called since the last <see cref="Reset"/>).</summary>
+    public bool HasKeys { get; private set; }
+
+    public void SetParentSub(int i, string parentSub)
+    {
+        _structs[i].ParentSub = AddRef(parentSub);
+        HasKeys = true;
+    }
 
     /// <summary>The content object of a Format, Embed, Binary, Json or Doc struct.</summary>
     public void SetCold(int i, object content) => _structs[i].Payload = AddRef(content);
@@ -408,6 +415,7 @@ internal sealed class StagingTable
         }
 
         _clientCount = 0;
+        HasKeys = false;
         var left = RetainedBytesCap;
         Keep(ref _structs, StructBytes, ref left);
         Keep(ref _chars, sizeof(char), ref left);

@@ -215,6 +215,9 @@ internal sealed partial class StructStore
     /// </summary>
     internal bool MaySplitMapValues { get; private set; }
 
+    /// <summary>Set once an item with a key was integrated, a deleted one too. Never reset.</summary>
+    internal bool HasKeyedItems { get; set; }
+
     private ItemRef SplitItem(Transaction transaction, ItemRef item, int diff)
     {
         if (item.Kind == SlotKind.String && char.IsHighSurrogate(item.Chars[diff - 1]))
@@ -388,7 +391,8 @@ internal sealed partial class StructStore
         var plan = _spare ?? new IntegrationPlan(this);
         _spare = null;
         plan.Plan(table, limits.MaxDepth);
-        if (transaction.Doc.GarbageCollection)
+        // Without a key in the update or in the store nothing can be a key's value, which is all the check looks for.
+        if (transaction.Doc.GarbageCollection && (table.HasKeys || HasKeyedItems))
         {
             plan.CheckGarbageCollection(transaction.Doc, ds, PendingDs);
         }
