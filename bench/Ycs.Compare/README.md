@@ -213,6 +213,11 @@ Each was measured against the commit before it with `ab.py`; the numbers are tho
 * **Removing the slab's bounds checks**: needs `Unsafe` or `MemoryMarshal` (banned). Reading each slot once per step took
   most of them away.
 * **An unchecked cast in `ItemRef`**: `Unsafe` is banned. An exact-type check made the observed typing 20 % slower.
+* **A memo of the last changed type in `AddChangedTypeToTransaction`** (a dictionary lookup per integrated struct, skipped
+  while a run lands in one type and key): on the runner, `ab.py 6 8`, state loads -4 % (75.0 to 72.0 ms), observed typing
+  -1 to -5 %, `text-random` +4 % and `text-append` +2 % (both inside their spread), the rest within 2 %. The 1.5x against
+  YDotNet stays. Not kept: the gain is about 3 %, for a field pair, a method and an invariant (cleared wherever an entry
+  leaves the changed set). The delete set is applied with a galloping search from the last index found already.
 * **Encode micro-variants** (one buffer check for both ids of a header, a short string in one pass, `in` parameters, a
   delete-set walk without building an id): none measurable.
 * **Smaller edits to the walks** (a memo of the last changed type, one slot read in `MarkDeleted` and `ExtendRun`, a lower
