@@ -539,14 +539,14 @@ structs costs the same):
 | --- | --- | --- | --- |
 | characters, one item each | 0.9 MB / 131 KB | 29 MiB | 12 MiB |
 | deleted items | 0.8 MB / 42 B | 32 MiB | 12 MiB |
-| shared types (`YText`, `YArray`, `YMap`; `YXmlElement`) | 0.8 MB / 36 B; 1 MB / 131 KB | 97 to 123 MiB | 57 to 75 MiB |
-| subdocuments | 5.8 MB / 5 MB | 178 MiB | 135 MiB |
+| shared types (`YText`, `YArray`, `YMap`; `YXmlElement`) | 0.8 MB / 36 B; 1 MB / 131 KB | 98 to 123 MiB | 58 to 76 MiB |
+| subdocuments | 5.8 MB / 5 MB | 173 MiB | 139 MiB |
 | shared types, pending | 0.8 MB / 35 B | 18 MiB | (encoded, 35 B; the table 2 MiB) |
-| an update that lets those integrate and brings 131,072 more that wait (the largest re-read) | 45 B | 137 MiB | 73 MiB |
+| an update that lets those integrate and brings 131,072 more that wait (the largest re-read) | 45 B | 139 MiB | 75 MiB |
 | GC structs, pending | 23 B | 18 MiB | (encoded) |
 
-So a small update makes a document allocate at most about 180 MiB and keep about 135 MiB (subdocuments; any other shape
-keeps at most 75 MiB), and `EncodeStateAsUpdate` with 131,072 shared types pending allocates about 2.5 MiB per call (every
+So a small update makes a document allocate at most about 180 MiB and keep about 140 MiB (subdocuments; any other shape
+keeps at most 76 MiB), and `EncodeStateAsUpdate` with 131,072 shared types pending allocates about 2.5 MiB per call (every
 joining peer). Halving the limits halves these.
 
 <a id="pending-structs-kept"></a>**Pending structs, kept.** Yjs keeps what waits as one encoded update and merges

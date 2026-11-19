@@ -63,16 +63,15 @@ as in Yjs.
 
 ## Performance
 
-The automerge-paper editing trace (260k edits), `bench/Ycs.Benchmarks`, median of 5 runs. The times are those of 2026-11-15
-(measured before the slab and the arenas; not repeated since, a clean timing round is still to come); the allocations are
-those of 2026-11-18 (the current layout; `bench/Ycs.Compare/results/2026-11-18-e794d65/benchmarks-trace.txt`):
+The automerge-paper editing trace (260k edits), `bench/Ycs.Benchmarks`, median of 5 runs, 2026-11-18 on a 4-core runner
+(`bench/Ycs.Compare/results/2026-11-18-e794d65/benchmarks-trace.txt`):
 
 | Operation | Time | Allocated |
 | --- | --- | --- |
-| replay the trace locally, one transaction per edit | 368 ms | 53 MiB |
-| apply the 260k v1 updates to a fresh document | 254 ms | 12 MiB |
-| encode the final document, v1, 10 times | 5.3 ms | 2.8 MiB |
-| decode the final document, v1, 10 times | 58 ms | 38 MiB |
+| replay the trace locally, one transaction per edit | 489 ms | 53 MiB |
+| apply the 260k v1 updates to a fresh document | 285 ms | 12 MiB |
+| encode the final document, v1, 10 times | 8.9 ms | 2.8 MiB |
+| decode the final document, v1, 10 times | 84 ms | 38 MiB |
 
 Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
 `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`.
