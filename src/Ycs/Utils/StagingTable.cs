@@ -69,8 +69,11 @@ internal struct StagedStruct
 /// </remarks>
 internal sealed class StagingTable
 {
-    /// <summary>The bytes <see cref="Reset"/> keeps across all buffers.</summary>
-    internal const int RetainedBytesCap = 256 * 1024;
+    /// <summary>
+    /// The bytes <see cref="Reset"/> keeps across all buffers: 2 MiB holds the table of a state of about 10,000 structs and
+    /// 100,000 characters (the editing trace's), which a thread then decodes again without reallocating it.
+    /// </summary>
+    internal const int RetainedBytesCap = 2 * 1024 * 1024;
 
     /// <summary>The size of a <see cref="StagedStruct"/>: four longs and eight ints.</summary>
     internal const int StructBytes = 64;
