@@ -211,6 +211,24 @@ if (!doc.TryApplyUpdate(fromPeer))
 
 What a hostile update can cost, and the limits that bound it: [Untrusted input and threads](untrusted-input.md).
 
+## Native AOT settings
+
+ycs publishes with no trim or AOT warning. Native AOT has no tiered profile-guided optimization, so its steady state is
+1.3 to 2 times slower than the JIT's on the editing workloads, and two publish settings of the consuming application recover
+part of that (3 to 15 % on the benchmarks of [`bench/Ycs.Compare`](../bench/Ycs.Compare/README.md)):
+
+```xml
+<PropertyGroup>
+  <PublishAot>true</PublishAot>
+  <OptimizationPreference>Speed</OptimizationPreference>
+  <IlcInstructionSet>native</IlcInstructionSet>
+</PropertyGroup>
+```
+
+`native` compiles for the machine that publishes, so use it only where that is the machine that runs the program (or name the
+set, for example `x86-x64-v3`). A process that loads one document is faster under AOT end to end, as it does not pay the JIT's
+first run.
+
 ## Next
 
 - [Networking](networking.md): connect to Yjs clients over WebSocket or SignalR.
