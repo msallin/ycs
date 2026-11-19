@@ -458,7 +458,7 @@ for everything else an update holds as an object: parent names, keys, cold objec
 addressed by a handle that must stay valid while it grows. A client's structs are one contiguous range in clock order
 (`BeginClient`, `RangeOf`, `FindByClock`, which keeps the last hit as its hint). No struct is an object. A table belongs
 to one owner (`UpdateReader`, one per thread and open lease; `UpdateOperations` rents others from the thread's pool) and
-is reset when it is released, keeping at most 256 KiB of buffers between all the tables kept; `Version` changes at every
+is reset when it is released, keeping at most 2 MiB of buffers between all the tables kept; `Version` changes at every
 reset and truncate, so a reader that kept an index can tell. Indexes, spans and refs are valid until the next add or
 reset (Debug poisons the buffers on a reset).
 
