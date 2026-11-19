@@ -278,7 +278,7 @@ public sealed partial class Snapshot : IEquatable<Snapshot>
         var table = StagingTable.Rent();
         try
         {
-            var cursor = EncodingUtils.StructCursor.Begin(ref decoder, update, table);
+            var cursor = EncodingUtils.StructCursor.Begin(ref decoder, update, table, reserve: true);
             while (cursor.NextStaged(ref decoder, update) >= 0)
             {
             }

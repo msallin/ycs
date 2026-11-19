@@ -212,6 +212,22 @@ public class StagingTableTests
     }
 
     [TestMethod]
+    public void Reserve_RoomForTheStructsToCome_KeepsTheStructBufferWhileTheyAreAdded()
+    {
+        var table = new StagingTable();
+        table.BeginClient(1, 0);
+        table.Reserve(1000);
+        var reserved = Field<Array>(table, "_structs");
+
+        for (var i = 0; i < 1000; i++)
+        {
+            AddRootItem(table, StagedKind.Any, 1);
+        }
+
+        Assert.AreEqual((1000, true), (reserved.Length, ReferenceEquals(reserved, Field<Array>(table, "_structs"))));
+    }
+
+    [TestMethod]
     public void Reset_SmallTable_KeepsItsBuffersAndBumpsTheVersion()
     {
         var table = new StagingTable();

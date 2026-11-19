@@ -292,6 +292,7 @@ internal static class EncodingUtils
     {
         private readonly long _sections;
         private readonly HashSet<long>? _clients;
+        private readonly bool _reserve;
         private StagingTable _staging;
         private long _section;
         private long _structsLeft;
@@ -305,8 +306,9 @@ internal static class EncodingUtils
         /// An empty table that takes the structs read: one client range per section, one staged struct per struct.
         /// The cursor only appends; the table's owner resets it.
         /// </param>
-        private StructCursor(StagingTable staging, long sections, HashSet<long>? clients)
+        private StructCursor(StagingTable staging, long sections, HashSet<long>? clients, bool reserve)
         {
+            _reserve = reserve;
             _staging = staging;
             _sections = sections;
             _clients = clients;
@@ -316,11 +318,15 @@ internal static class EncodingUtils
         /// Reads the number of sections from <paramref name="decoder"/>, which is then read through only by this cursor until
         /// <see cref="NextStaged"/> returns -1. <paramref name="input"/> is the input the decoder was made over.
         /// </summary>
-        public static StructCursor Begin<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable staging, HashSet<long>? seenClients = null)
+        /// <param name="reserve">
+        /// Whether the table keeps every struct (not one at a time, as a streaming reader's does): a section then
+        /// reserves room for the structs it announces, as far as the input can hold them.
+        /// </param>
+        public static StructCursor Begin<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable staging, HashSet<long>? seenClients = null, bool reserve = false)
             where TDecoder : struct, IUpdateDecoder
         {
             var sections = decoder.Reader.ReadVarUint(input);
-            return new StructCursor(staging, sections, sections > 1 ? seenClients ?? new HashSet<long>() : null);
+            return new StructCursor(staging, sections, sections > 1 ? seenClients ?? new HashSet<long>() : null, reserve);
         }
 
         /// <summary>Stages the structs from here on into <paramref name="staging"/>, which has begun the open client's range.</summary>
@@ -372,6 +378,12 @@ internal static class EncodingUtils
             if (numberOfStructs > 0)
             {
                 _staging.BeginClient(client, clock);
+                if (_reserve)
+                {
+                    // A struct takes two bytes of a v1 update at least (v2 packs runs into fewer), so a header that
+                    // announces more than that is not trusted for the allocation; the table still grows past it.
+                    _staging.Reserve((int)Math.Min(numberOfStructs, Math.Min(input.Length / 2, MaxReservedStructs)));
+                }
             }
 
             _structsLeft = numberOfStructs;
@@ -380,6 +392,9 @@ internal static class EncodingUtils
         }
     }
 
+    /// <summary>The most structs a section reserves room for in one step: 4 MiB of the staging table.</summary>
+    private const int MaxReservedStructs = 1 << 16;
+
     /// <summary>
     /// Reads a whole update: its structs into <paramref name="table"/> (as <see cref="StructCursor"/> does) and then its
     /// delete set into the empty <paramref name="ds"/> (as <see cref="DeleteSet.ReadInto"/> does).
@@ -387,7 +402,7 @@ internal static class EncodingUtils
     internal static void ReadUpdate<TDecoder>(ref TDecoder decoder, ReadOnlySpan<byte> input, StagingTable table, DeleteSet ds, HashSet<long>? seenClients, Stack<List<DeleteSet.DeleteItem>>? spareLists)
         where TDecoder : struct, IUpdateDecoder
     {
-        var cursor = StructCursor.Begin(ref decoder, input, table, seenClients);
+        var cursor = StructCursor.Begin(ref decoder, input, table, seenClients, reserve: true);
         while (cursor.NextStaged(ref decoder, input) >= 0)
         {
         }

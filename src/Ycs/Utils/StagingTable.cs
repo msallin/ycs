@@ -161,6 +161,16 @@ internal sealed class StagingTable
         _nextClock = clock;
     }
 
+    /// <summary>Makes room for <paramref name="structs"/> more structs, so that a section whose size is known grows the table once.</summary>
+    public void Reserve(int structs)
+    {
+        var needed = _count + structs;
+        if (needed > _structs.Length)
+        {
+            Array.Resize(ref _structs, Math.Max(needed, _structs.Length * 2));
+        }
+    }
+
     /// <summary>
     /// Stages a struct at the end of the open client's range. A String reserves <paramref name="length"/> characters
     /// (<see cref="Chars"/>), an Any <paramref name="length"/> values (<see cref="Values"/>). Parent, content object and
