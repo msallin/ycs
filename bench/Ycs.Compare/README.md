@@ -111,6 +111,22 @@ trimmed: 21.1 MB against 22.6 MB. Framework-dependent: 0.5 MB against 2.4 MB.
 **Browser wasm** (`wasm/probe.sh`): YDotNet publishes, but no package ships a browser-wasm build of yrs, so the first
 call fails with `DllNotFoundException` ("yrs"). ycs runs there (`samples/Ycs.WasmSample`).
 
+## Native AOT
+
+The same programs published with `PublishAot` (`COMPARE_CHILD=<AOT build> Ycs.Compare suite`: the driver stays JIT, every
+child process is the AOT binary, YDotNet's too), on the runner of 2026-11-19, 3 passes of 5 timed runs, in
+[`results/2026-11-19-aot-a038dac/`](results/2026-11-19-aot-a038dac/) (`tables.md`; `ab-jit-vs-aot.txt` is ycs's JIT build
+against its AOT build, interleaved, `ab.py 3 6`). Hostile cases not run.
+
+* **Steady state is slower in AOT: ycs 1.1 to 2.1x** (no tiered PGO: `text-append` 27.8 to 54.4 ms, `apply-updates` 276 to 483,
+  `map-set-distinct` 38.9 to 85.6, `array-push` 25.2 to 53.8, state loads 74 to 102, `trace-replay` 362 to 480; `read-array` 4.0 to
+  5.1; `undo-all` is 17 % faster). YDotNet's managed side slows too (`read-array` 97 to 715 ms).
+* **The first run is much faster**: `text-append` 335 ms (JIT) to 55.6, state load 455 to 110, `apply-state-x100` 1946 to 1297,
+  `concurrent-20` 484 to 137. A process that loads one state is faster in AOT end to end.
+* **Against YDotNet in AOT** the losses grow: state loads 2.0x (JIT 1.5x), `apply-state-x100` 1.6x, `concurrent-20` 1.5x,
+  `apply-updates` 1.3x (JIT: ycs 1.4x ahead), `encode-v1` 1.2x and `encode-v2` 1.5x (JIT: even). The wins stay (`text-append` 66x,
+  `trace-replay` 25x, `map-set-distinct` 2.8x, `array-push` 4.6x, `undo-all` 9.7x, `observe-delta` 33x).
+
 ## Where ycs is slower now
 
 ### Against YDotNet
