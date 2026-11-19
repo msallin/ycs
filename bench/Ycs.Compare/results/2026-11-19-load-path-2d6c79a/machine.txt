@@ -1,0 +1,14 @@
+commit 987f6e1a1b93fad65d4299f2eca693f6e6f61307
+Thu Nov 19 13:43:47 UTC 2026
+4
+1.63 1.26 1.31
+11.0.100
+987f6e1a ci: the load-path round (not for merging)
+fa8d238e ci: the load-path round (not for merging)
+2d6c79a1 docs: the staging table's retained bytes
+e993fb08 perf: the staging table keeps up to 2 MiB between loads, enough for a state of 10,000 structs
+97527921 perf: a section of an update reserves room for the structs it announces
+5adff0e5 perf: the integration plan keeps the clocks it plans in an array by the table's client index
+a2b82b79 perf: Refresh finds the neighbour GetItemCleanStart returned and the struct AddStruct added without a search
+06f2a2b4 perf: the garbage collection check of an update runs only where a key can exist
+df6a0dee bench: the comparison with Native AOT children, 2026-11-19 runner round

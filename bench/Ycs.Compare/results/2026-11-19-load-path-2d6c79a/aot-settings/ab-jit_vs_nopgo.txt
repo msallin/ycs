@@ -1,0 +1,16 @@
+text-append              base median      30.0 ms (min 27.5 max 40.8; pass medians 37.9, 30.0, 27.7)  alloc     0.57 MiB  held 0.6 MiB  peak RSS 61 MiB  load 0.99
+text-append              new  median      48.1 ms (min 46.4 max 63.0; pass medians 48.5, 47.3, 48.1)  alloc     0.58 MiB  held 0.4 MiB  peak RSS 57 MiB  load 0.99
+array-push               base median      25.5 ms (min 24.9 max 26.1; pass medians 25.4, 25.4, 25.6)  alloc     4.34 MiB  held 10.4 MiB  peak RSS 73 MiB  load 0.91
+array-push               new  median      47.3 ms (min 46.2 max 64.6; pass medians 46.7, 47.2, 54.0)  alloc     4.34 MiB  held 7.1 MiB  peak RSS 68 MiB  load 0.91
+map-set-distinct         base median      39.8 ms (min 37.3 max 51.5; pass medians 39.4, 42.5, 39.2)  alloc    22.57 MiB  held 24.9 MiB  peak RSS 99 MiB  load 1.00
+map-set-distinct         new  median      68.1 ms (min 63.0 max 94.0; pass medians 69.7, 68.7, 66.0)  alloc    22.57 MiB  held 9.3 MiB  peak RSS 98 MiB  load 1.00
+apply-state-v1/ycs       base median      76.0 ms (min 73.1 max 79.9; pass medians 78.3, 74.9, 75.3)  alloc    38.08 MiB  held 2.9 MiB  peak RSS 70 MiB  load 1.07
+apply-state-v1/ycs       new  median      93.6 ms (min 90.7 max 98.6; pass medians 94.7, 93.3, 93.3)  alloc    38.08 MiB  held 1.3 MiB  peak RSS 63 MiB  load 1.07
+apply-updates/ycs        base median     274.8 ms (min 266.0 max 297.3; pass medians 277.7, 273.9, 269.6)  alloc    11.95 MiB  held 17.2 MiB  peak RSS 104 MiB  load 1.13
+apply-updates/ycs        new  median     412.5 ms (min 398.1 max 433.4; pass medians 414.4, 412.2, 406.1)  alloc    11.95 MiB  held 1.3 MiB  peak RSS 97 MiB  load 1.12
+encode-v1                base median       8.4 ms (min 8.2 max 9.0; pass medians 8.7, 8.4, 8.3)  alloc     2.76 MiB  held 1.6 MiB  peak RSS 70 MiB  load 1.17
+encode-v1                new  median      12.5 ms (min 12.4 max 12.8; pass medians 12.5, 12.5, 12.6)  alloc     2.76 MiB  held 0.3 MiB  peak RSS 63 MiB  load 1.16
+trace-replay             base median     359.0 ms (min 349.8 max 387.9; pass medians 368.2, 364.4, 353.7)  alloc    24.86 MiB  held 1.6 MiB  peak RSS 207 MiB  load 1.10
+trace-replay             new  median     447.6 ms (min 442.2 max 512.6; pass medians 470.5, 447.6, 444.8)  alloc    24.86 MiB  held 0.3 MiB  peak RSS 203 MiB  load 1.09
+concurrent-20            base median      90.1 ms (min 88.3 max 108.6; pass medians 90.6, 89.8, 90.7)  alloc    14.24 MiB  held 14.2 MiB  peak RSS 86 MiB  load 1.07
+concurrent-20            new  median     112.2 ms (min 110.7 max 118.9; pass medians 111.8, 112.3, 112.3)  alloc    14.24 MiB  held 1.1 MiB  peak RSS 85 MiB  load 1.15

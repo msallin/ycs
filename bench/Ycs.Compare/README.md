@@ -127,6 +127,37 @@ against its AOT build, interleaved, `ab.py 3 6`). Hostile cases not run.
   `apply-updates` 1.3x (JIT: ycs 1.4x ahead), `encode-v1` 1.2x and `encode-v2` 1.5x (JIT: even). The wins stay (`text-append` 66x,
   `trace-replay` 25x, `map-set-distinct` 2.8x, `array-push` 4.6x, `undo-all` 9.7x, `observe-delta` 33x).
 
+## The load path (2026-11-19)
+
+Six changes to what a load does per struct, measured on the runner against `df6a0de` (the parent of the first), `ab.py 4 6`,
+interleaved, in [`results/2026-11-19-load-path-2d6c79a/`](results/2026-11-19-load-path-2d6c79a/) (`ab-jit-base-vs-cN.txt` is
+the base against the Nth commit, `commits.txt` their order):
+the garbage collection check runs only where a key can exist (`HasKeys`, `HasKeyedItems`), `Refresh` finds the neighbour
+`GetItemCleanStart` returned and the struct `AddStruct` added, the plan keeps its clocks in an array by the table's client
+index, a section reserves room for the structs it announces, the staging table keeps 2 MiB between loads (docs: section 5).
+
+| workload | JIT before / after ms | AOT before / after ms | against YDotNet, JIT / AOT (was) |
+| --- | ---: | ---: | --- |
+| `apply-state-v1/ycs` | 76.4 / 47.7 (-38 %) | 102.3 / 71.1 (-31 %) | ycs 1.01x ahead / YDotNet 1.44x (JIT 1.5x, AOT 2.0x behind) |
+| `apply-state-v2/ycs` | 73.9 / 49.4 (-33 %) | 103.2 / 69.2 (-33 %) | ycs 1.01x ahead / YDotNet 1.35x |
+| `apply-state-x100/ycs` | 905 / 648 (-28 %) | 1211 / 899 (-26 %) | ycs 1.11x ahead / YDotNet 1.17x |
+| `concurrent-20` | 92.2 / 67.8 (-26 %) | 125 / 88.0 (-30 %) | ycs 1.17x ahead / YDotNet 1.09x |
+| `apply-updates/ycs` | 272 / 237 (-13 %) | 482 / 416 (-14 %) | ycs 1.5x ahead / YDotNet 1.13x |
+
+A state load allocates 38.1 to 16.2 MiB (the reserve takes 12.5 of the 21.9, the larger retention the rest); `apply-state-x100`
+480 to 452 MiB. The rest of the suite is within 3 % in both builds (`text-random` +3.3 % on JIT is the noise of its spread; AOT
+`text-append` -4.5 %, `encode-v1` -5 %). By commit, JIT state load: the check's gate -22 %, the hints -24 %, the plan array
+-27 %, the reserve -33 %, the retention -35 %. The YDotNet side is the table above (JIT 2026-11-18, AOT 2026-11-19), not rerun.
+
+### Native AOT settings
+
+`aot-settings/`, the same workloads, ycs's AOT build default against the variant, `ab.py 3 6`: `OptimizationPreference=Speed` -3 to
+-15 % (`array-push` -11 %, `apply-updates` -10 %, state load -8 %, `encode-v1` +2 %); `IlcInstructionSet=native` alone 0 to -6 %;
+both -7 to -15 %. The JIT with `DOTNET_TieredPGO=0` is 23 to 85 % slower (`text-append` +60 %, `array-push` +85 %, state load
++23 %), and with `EnableAVX2=0` as well 23 to 92 %: most of the AOT gap is the missing profile (guarded devirtualization of
+the interface and delegate calls), the instruction set accounts for about a tenth of it. A consumer can set the first two;
+the library can devirtualize by hand (section 5 of the design document).
+
 ## Where ycs is slower now
 
 ### Against YDotNet
