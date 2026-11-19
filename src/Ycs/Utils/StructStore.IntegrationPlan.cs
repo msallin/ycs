@@ -44,7 +44,10 @@ internal sealed partial class StructStore
     internal sealed partial class IntegrationPlan
     {
         private readonly StructStore _store;
-        private readonly Dictionary<long, long> _state = new();
+
+        // Each client of the table's clock once the plan is carried out, by the client's index in the table: the store's
+        // state until a struct of the client is planned. Valid between Plan and Clear.
+        private long[] _state = [];
         private readonly List<(int Index, int Offset, bool Integrate)> _steps = new();
         private readonly Comparison<int> _byClientId;
 
@@ -87,7 +90,7 @@ internal sealed partial class StructStore
         public Dictionary<long, long>? Missing { get; private set; }
 
         /// <summary>A client's clock once the plan is carried out.</summary>
-        public long GetState(long client) => _state.TryGetValue(client, out var clock) ? clock : _store.GetState(client);
+        public long GetState(long client) => _table is { } table && table.FindClient(client) is >= 0 and var index ? _state[index] : _store.GetState(client);
 
         public void Execute(Transaction transaction)
         {
@@ -184,7 +187,6 @@ internal sealed partial class StructStore
         public void Clear()
         {
             _table = null;
-            _state.Clear();
             _steps.Clear();
             _stack.Clear();
             _clientsStructRefsIds.Clear();
@@ -211,10 +213,16 @@ internal sealed partial class StructStore
                 _clientsStructRefs = new ClientStructRefs[Math.Max(table.ClientCount, _clientsStructRefs.Length * 2)];
             }
 
+            if (_state.Length < table.ClientCount)
+            {
+                _state = new long[Math.Max(table.ClientCount, _state.Length * 2)];
+            }
+
             var clientsStructRefs = _clientsStructRefs;
             for (var c = 0; c < table.ClientCount; c++)
             {
                 clientsStructRefs[c] = default;
+                _state[c] = _store.GetState(table.ClientAt(c));
             }
 
             var planned = 0;
@@ -257,7 +265,7 @@ internal sealed partial class StructStore
                 if (head.Kind != StagedKind.Skip)
                 {
                     var headClient = table.ClientAt(head.Client);
-                    var offset = GetState(headClient) - head.Clock;
+                    var offset = _state[head.Client] - head.Clock;
                     if (offset < 0)
                     {
                         // Update from the same client is missing.
@@ -283,14 +291,14 @@ internal sealed partial class StructStore
                             if (clientsStructRefs[missing].End == clientsStructRefs[missing].Next)
                             {
                                 // This update message causally depends on another update message that doesn't exist yet.
-                                UpdateMissingSv(missingClient, GetState(missingClient));
+                                UpdateMissingSv(missingClient, _state[missing]);
                                 AddStackToRestSS();
                             }
                             else
                             {
                                 // Recorded now, as the walk may stop further on and then only records what its last struct
                                 // waits for: the retry check would not fire when this client's structs arrive (yjs/yjs#824).
-                                UpdateMissingSv(missingClient, GetState(missingClient));
+                                UpdateMissingSv(missingClient, _state[missing]);
                                 stackHead = clientsStructRefs[missing].Next++;
                                 continue;
                             }
@@ -304,7 +312,7 @@ internal sealed partial class StructStore
                             }
 
                             _steps.Add((stackHead, (int)offset, true));
-                            _state[headClient] = head.Clock + head.Length;
+                            _state[head.Client] = head.Clock + head.Length;
                         }
                         else if (head.Kind != StagedKind.GC)
                         {
@@ -369,17 +377,17 @@ internal sealed partial class StructStore
                 return -1;
             }
 
-            if (s.OriginClient >= 0 && s.OriginClient != s.Client && s.OriginClock >= GetState(Planned.ClientAt(s.OriginClient)))
+            if (s.OriginClient >= 0 && s.OriginClient != s.Client && s.OriginClock >= _state[s.OriginClient])
             {
                 return s.OriginClient;
             }
 
-            if (s.ROriginClient >= 0 && s.ROriginClient != s.Client && s.ROriginClock >= GetState(Planned.ClientAt(s.ROriginClient)))
+            if (s.ROriginClient >= 0 && s.ROriginClient != s.Client && s.ROriginClock >= _state[s.ROriginClient])
             {
                 return s.ROriginClient;
             }
 
-            if (s.ParentKind == StagedParent.Id && s.ParentClient != s.Client && s.ParentClock >= GetState(Planned.ClientAt(s.ParentClient)))
+            if (s.ParentKind == StagedParent.Id && s.ParentClient != s.Client && s.ParentClock >= _state[s.ParentClient])
             {
                 return s.ParentClient;
             }
