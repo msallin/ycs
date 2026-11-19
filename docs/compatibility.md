@@ -63,19 +63,15 @@ as in Yjs.
 
 ## Performance
 
-The automerge-paper editing trace (260k edits), `bench/Ycs.Benchmarks`, median of 5 runs, 2026-11-18 on a 4-core runner
-(`bench/Ycs.Compare/results/2026-11-18-e794d65/benchmarks-trace.txt`):
+The automerge-paper editing trace (260k edits), `bench/Ycs.Benchmarks`, median of 5 runs, 2026-11-19 on a 4-core runner
+(`bench/Ycs.Compare/results/2026-11-19-655a751/benchmarks-trace.txt`):
 
 | Operation | Time | Allocated |
 | --- | --- | --- |
-| replay the trace locally, one transaction per edit | 489 ms | 53 MiB |
-| apply the 260k v1 updates to a fresh document | 285 ms | 12 MiB |
-| encode the final document, v1, 10 times | 8.9 ms | 2.8 MiB |
-| decode the final document, v1, 10 times | 84 ms | 38 MiB |
-
-The decode row is from before the changes of 2026-11-19, which cut a state load from 76 to 48 ms and its allocation from 38 to 16 MiB
-([`bench/Ycs.Compare`](https://github.com/msallin/ycs/blob/modernize/bench/Ycs.Compare/README.md), "The load path"); the benchmark
-has not run since.
+| replay the trace locally, one transaction per edit | 488 ms | 53 MiB |
+| apply the 260k v1 updates to a fresh document | 244 ms | 12 MiB |
+| encode the final document, v1, 10 times | 9.5 ms | 2.8 MiB |
+| decode the final document, v1, 10 times | 52 ms | 16 MiB |
 
 Run it with `bench/Ycs.Benchmarks/get-trace.sh` and
 `dotnet run -c Release --project bench/Ycs.Benchmarks -- <trace.json.gz>`.

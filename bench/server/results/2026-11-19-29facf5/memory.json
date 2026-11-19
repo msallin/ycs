@@ -1,0 +1,180 @@
+{
+ "scenario": "memory",
+ "date": "2026-11-19T22:22:00.547Z",
+ "options": {
+  "_": [
+   "all"
+  ],
+  "server-cpus": "0-1",
+  "trace": "/home/runner-ycs/actions-runner/_work/_temp/round/work/automerge-paper.json.gz",
+  "out": "/home/runner-ycs/actions-runner/_work/_temp/round/server"
+ },
+ "machineBefore": {
+  "cpu": "AMD EPYC-Genoa Processor",
+  "logicalCores": 4,
+  "memoryBytes": 16769052672,
+  "kernel": "6.8.0-124-generic",
+  "node": "v24.22.3",
+  "dotnet": "11.0.100",
+  "serverCpus": "0-1",
+  "driverCpus": "2,3",
+  "driverWorkers": 2,
+  "loadAverage": [
+   1.9,
+   1.68,
+   1.45
+  ]
+ },
+ "servers": {
+  "ycs": {
+   "rooms": 100,
+   "roomTxns": 20000,
+   "roomStateBytes": 23490,
+   "roomTextChars": 14302,
+   "editorsPerRoom": 2,
+   "ratePerEditor": 2,
+   "durationS": 120,
+   "empty": {
+    "rssMiB": 63.26953125,
+    "managedBytes": 808208,
+    "heapSizeBytes": 925920,
+    "committedBytes": 3178496,
+    "rooms": 0
+   },
+   "built": {
+    "rssMiB": 113.046875,
+    "managedBytes": 21805696,
+    "heapSizeBytes": 21807816,
+    "committedBytes": 37646336,
+    "rooms": 100
+   },
+   "edited": {
+    "rssMiB": 184.7421875,
+    "managedBytes": 23251992,
+    "heapSizeBytes": 23472496,
+    "committedBytes": 94613504,
+    "rooms": 100
+   },
+   "perRoomKiB": {
+    "rssBuilt": 509.72,
+    "heapBuilt": 205.05359375,
+    "rssEdited": 1243.88,
+    "heapEdited": 219.177578125
+   },
+   "editing": {
+    "updatesSent": 48000,
+    "offeredUpdatesPerS": 400,
+    "deliveriesExpected": 48000,
+    "deliveries": 48000,
+    "echoes": 0,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 399.99190016402173,
+    "deliveriesPerS": 399.99190016402173,
+    "typingS": 120.0015,
+    "drainS": 0.00093,
+    "latency": {
+     "count": 47999,
+     "p50Ms": 0.26,
+     "p95Ms": 0.45,
+     "p99Ms": 0.59,
+     "maxMs": 26.54
+    },
+    "server": {
+     "cores": 0.11591431940169877,
+     "cpuSeconds": 13.91,
+     "cpuUsPerDelivery": 289.7916666666667,
+     "runQueueWaitS": 2.119729403,
+     "rssPeakMiB": 184.74609375,
+     "rssEndMiB": 184.74609375
+    },
+    "driver": {
+     "processCores": 0.09013282481029758,
+     "busiestWorkerCore": 0.04208139785169351,
+     "loopDelayP99Ms": 11.542527,
+     "loopDelayMaxMs": 30.146559
+    }
+   },
+   "valid": true,
+   "problems": []
+  },
+  "node": {
+   "rooms": 100,
+   "roomTxns": 20000,
+   "roomStateBytes": 23490,
+   "roomTextChars": 14302,
+   "editorsPerRoom": 2,
+   "ratePerEditor": 2,
+   "durationS": 120,
+   "empty": {
+    "rssMiB": 82.87109375,
+    "heapUsedBytes": 10225848,
+    "heapTotalBytes": 30277632,
+    "externalBytes": 4367684,
+    "arrayBuffersBytes": 242119,
+    "rooms": 0
+   },
+   "built": {
+    "rssMiB": 129.8828125,
+    "heapUsedBytes": 37549520,
+    "heapTotalBytes": 106823680,
+    "externalBytes": 8572129,
+    "arrayBuffersBytes": 3387832,
+    "rooms": 100
+   },
+   "edited": {
+    "rssMiB": 253.11328125,
+    "heapUsedBytes": 38170880,
+    "heapTotalBytes": 179699712,
+    "externalBytes": 4701086,
+    "arrayBuffersBytes": 373191,
+    "rooms": 100
+   },
+   "perRoomKiB": {
+    "rssBuilt": 481.4,
+    "heapBuilt": 307.891767578125,
+    "rssEdited": 1743.28,
+    "heapEdited": 276.15658203125
+   },
+   "editing": {
+    "updatesSent": 48000,
+    "offeredUpdatesPerS": 400,
+    "deliveriesExpected": 48000,
+    "deliveries": 48000,
+    "echoes": 48000,
+    "closedEarly": 0,
+    "deliveredUpdatesPerS": 399.9916335083324,
+    "deliveriesPerS": 399.9916335083324,
+    "typingS": 120.00221,
+    "drainS": 0.0003,
+    "latency": {
+     "count": 48000,
+     "p50Ms": 0.28,
+     "p95Ms": 0.54,
+     "p99Ms": 0.85,
+     "maxMs": 17.53
+    },
+    "server": {
+     "cores": 0.08033165306292343,
+     "cpuSeconds": 9.64,
+     "cpuUsPerDelivery": 200.83333333333334,
+     "runQueueWaitS": 0.6365821110000001,
+     "rssPeakMiB": 253.3359375,
+     "rssEndMiB": 253.11328125
+    },
+    "driver": {
+     "processCores": 0.09559467547803792,
+     "busiestWorkerCore": 0.04521472925857968,
+     "loopDelayP99Ms": 11.468799,
+     "loopDelayMaxMs": 32.669695
+    }
+   },
+   "valid": true,
+   "problems": []
+  }
+ },
+ "loadAverageAfter": [
+  0.44,
+  0.98,
+  1.2
+ ]
+}

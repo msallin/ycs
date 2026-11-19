@@ -12,7 +12,7 @@ are the measurements the layout was decided on. Results in [`results/`](results/
 [`2026-11-15.md`](results/2026-11-15.md), [`2026-11-15-small.md`](results/2026-11-15-small.md) and
 [`2026-11-16-edit.md`](results/2026-11-16-edit.md); the built layout in
 [`2026-11-17-8-14-small.md`](results/2026-11-17-8-14-small.md),
-[`2026-11-18-e794d65-small.md`](results/2026-11-18-e794d65-small.md) and [`2026-11-17-8-14-footprint.md`](results/2026-11-17-8-14-footprint.md).
+[`2026-11-19-29facf5-small.md`](results/2026-11-19-29facf5-small.md) and [`2026-11-17-8-14-footprint.md`](results/2026-11-17-8-14-footprint.md).
 
 ```bash
 bench/Ycs.Layout/run.sh                  # about 6 minutes; fetches the automerge-paper trace (see below)
@@ -130,29 +130,29 @@ client today, 351 (fixed) and 348 (geometric) designed.
   from about 10 structs and cost at most 215 bytes more below that.
 * **Many clients** are cheaper than today: a client's order is two arrays of 4, as today's list.
 
-## Small documents on the built layout (2026-11-18)
+## Small documents on the built layout (2026-11-19)
 
 `small` rerun on the built layout (slab, arenas, staging; `results/2026-11-17-8-12-small.md`, a30363f), for the comparison on the
 object layout (044bb73's tree built the same way, `results/2026-11-17-8-12-small-044bb73.md`) and after work package 8.14, which cut
 the fixed cost of a document (`results/2026-11-17-8-14-small.md`, load average 0.9), and now
-(`results/2026-11-18-e794d65-small.md`). The designed columns are the model's, which
+(`results/2026-11-19-29facf5-small.md`). The designed columns are the model's, which
 did not change. Bytes per document:
 
-| document | object layout | built layout, 8.12 | built layout, 8.14 | now (e794d65) | now / object | model, geometric pages |
+| document | object layout | built layout, 8.12 | built layout, 8.14 | now (29facf5) | now / object | model, geometric pages |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| empty, a root text | 1,296 | 2,068 | 1,304 | 1,348 | 1.04 | 1,304 |
+| empty, a root text | 1,296 | 2,068 | 1,304 | 1,352 | 1.04 | 1,304 |
 | text "hello" (one insert) | 3,113 | 6,025 | 3,329 | 3,321 | 1.07 | 3,256 |
 | 20 characters typed at random positions, 2 deleted | 8,576 | 8,696 | 7,256 | 7,112 | 0.83 | 4,440 |
 | 200 typed, 20 deleted (198 structs) | 49,888 | 28,592 | 27,656 | 27,512 | 0.55 | 19,672 |
-| 1,000 typed, 100 deleted | 227,216 | 97,128 | 94,696 | 94,552 | 0.42 | 75,016 |
+| 1,000 typed, 100 deleted | 227,216 | 97,128 | 94,696 | 94,511 | 0.42 | 75,016 |
 | 5,000 typed, 500 deleted | 1,086,745 | 431,169 | 430,969 | 430,825 | 0.40 | 390,489 |
 | 20,000 typed, 2,000 deleted | 4,310,177 | 1,686,986 | 1,686,786 | 1,686,642 | 0.39 | 1,557,901 |
 | empty, a root map | 1,184 | 1,944 | 1,176 | 1,216 | 1.03 | 1,176 |
 | map, 20 keys | 10,179 | 9,523 | 8,235 | 8,083 | 0.79 | 5,728 |
 | map, 1,000 keys | 355,906 | 195,242 | 186,290 | 186,138 | 0.52 | 150,272 |
 
-Many clients (20,000, one map entry each): 665 bytes per client on the object layout, 611 built (8.12), 590 built (8.14), 606 now
-(`results/2026-11-18-e794d65-small.md`: the change log of the transactions adds 15 bytes per client and 40 per empty
+Many clients (20,000, one map entry each): 665 bytes per client on the object layout, 611 built (8.12), 590 built (8.14), 605 now
+(`results/2026-11-19-29facf5-small.md`: the change log of the transactions adds 15 bytes per client and 40 per empty
 document; its array is allocated on the first change), 348 in the model. The built layout is at the model's figure from about 5,000 structs and pays from about 20 structs; now a
 document of one struct holds 208 bytes more than on the object layout (3,321 against 3,113; 216 at 8.14, see below), an empty
 document 52 bytes more and a root map 32 more.
@@ -209,8 +209,8 @@ the type table (the object layout names clients and parents by reference), and t
 page list and one 16-character page (the object layout keeps the string in the content object). The pooled transaction, 1.1 KB
 in either layout, is the largest single cost of a one-insert document; it is the transaction reuse that the hot paths rely on, so it stays.
 
-The subdocument case (`Ycs.Benchmarks limits`, 131,072 subdocuments in one update, `bench/Ycs.Compare/results/2026-11-18-e794d65/benchmarks-limits.txt`)
-is the same fixed cost multiplied: 284.4 MiB allocated and 240.8 kept (before the fixed costs were cut) became 173.4 and 138.8 (the object layout: 180.8 and 156.3).
+The subdocument case (`Ycs.Benchmarks limits`, 131,072 subdocuments in one update, `bench/Ycs.Compare/results/2026-11-19-655a751/benchmarks-limits.txt`)
+is the same fixed cost multiplied: 284.4 MiB allocated and 240.8 kept (before the fixed costs were cut) became 169.4 and 138.8 (the object layout: 180.8 and 156.3).
 
 ## Editing (2026-11-16)
 
