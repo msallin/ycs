@@ -556,12 +556,9 @@ members that expose a struct are:
   nested types.
 * **A load copies each String twice** (decoder buffer, table, arena) until the reader writes into the arena directly;
   deferred until measured.
-* **The staging table's buffers from `ArrayPool<T>.Shared`** instead of a 2 MiB thread-static retention
-  (`StagingTable.RetainedBytesCap`): the shared pool trims itself under memory pressure, so a thread holds nothing between
-  loads. Built the reserve at the section header and the larger cap instead (less code); measure whether a state far
-  above 2 MiB (`apply-state-x100`, 480 MiB allocated per run for 253 held) still loses to the large object heap, and
-  whether the cap's per-thread cost matters to a consumer with many decoding threads. A pooled array may be longer than
-  asked and is not zeroed: clear the used part on return.
+* **The staging table's buffers from `ArrayPool<T>.Shared`**: built and measured (branch `pooled-structs`, [Compare](../bench/Ycs.Compare/README.md),
+  "A larger reserve and a pooled table"): the allocation of a repeated 70 MiB table goes away, the time does not move. Not kept; revisit
+  for a thread that decodes very large states one after the other, and for many decoding threads, neither of which was measured.
 * **Encode generic over struct encoders** (`encode-v1` 1.2x and `encode-v2` 1.5x behind YDotNet in Native AOT): the
   write path takes `IUpdateEncoder` as an interface (5 to 8 calls a struct), which tiered PGO devirtualizes on the JIT and
   ILC cannot; the decoders are struct-generic already. Seal the v2 column encoders too. Measure the AOT settings first

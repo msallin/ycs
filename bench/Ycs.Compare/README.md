@@ -204,6 +204,19 @@ A state load allocates 38.1 to 16.2 MiB (of the 21.9 MiB less: the reserve 13, t
 `text-append` -4.5 %, `encode-v1` -5 %). By commit, JIT state load: the check's gate -22 %, the hints -24 %, the plan array
 -27 %, the reserve -33 %, the retention -35 %. The YDotNet side is the suite of this round (the table at the top and "Native AOT").
 
+### A larger reserve and a pooled table (2026-11-20)
+
+`apply-state-x100` (1.1 million structs in one update) allocated 452 MiB for 241 held: the section's reserve was capped at 65,536
+structs, and the staging table then doubled past it (248 MiB of struct arrays for a 70 MiB table). The reserve is now the announced
+count as far as the input can hold it (input bytes / 2; the update's struct limit bounds the count), so the table is made once.
+`ab.py 5 6` on the runner, `results/2026-11-20-6a12b9d/`: JIT 617 to 519 ms (-16 %), allocation 452 to 267 MiB; the AOT build (measured
+with the pooled build below) 871 to 778 ms (-11 %); every other workload within 2 % (state loads 47.4 to 47.9 ms).
+
+A pooled table (struct buffers of 2 MiB or more rented from `ArrayPool<T>.Shared` and returned at `Reset`) cut the allocation of a
+repeated large load from 267 to 200 MiB, and the time by nothing: 515 against 527 ms (+2.3 %), the state loads equal. Not kept: no gain
+for the code, the retained memory it would leave to the pool's trimming, and a buffer longer than asked. Open only for a thread that
+decodes states of 100 MB one after the other, which was not measured (many threads neither). The branch is `pooled-structs`.
+
 ## Where ycs is slower now
 
 ### Against YDotNet
