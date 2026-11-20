@@ -381,8 +381,9 @@ internal static class EncodingUtils
                 if (_reserve)
                 {
                     // A struct takes two bytes of a v1 update at least (v2 packs runs into fewer), so a header that
-                    // announces more than that is not trusted for the allocation; the table still grows past it.
-                    _staging.Reserve((int)Math.Min(numberOfStructs, Math.Min(input.Length / 2, MaxReservedStructs)));
+                    // announces more than that is not trusted for the allocation (the table still grows past it); the
+                    // update's struct limit has bounded the number already.
+                    _staging.Reserve((int)Math.Min(numberOfStructs, input.Length / 2));
                 }
             }
 
@@ -391,9 +392,6 @@ internal static class EncodingUtils
             _clock = clock;
         }
     }
-
-    /// <summary>The most structs a section reserves room for in one step: 4 MiB of the staging table.</summary>
-    private const int MaxReservedStructs = 1 << 16;
 
     /// <summary>
     /// Reads a whole update: its structs into <paramref name="table"/> (as <see cref="StructCursor"/> does) and then its

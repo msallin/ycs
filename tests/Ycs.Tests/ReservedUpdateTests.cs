@@ -28,4 +28,28 @@ public class ReservedUpdateTests
         var capacity = ((Array)typeof(StagingTable).GetField("_structs", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(table)!).Length;
         Assert.AreEqual((500, 500), (table.Count, capacity));
     }
+
+    [TestMethod]
+    public void ReadUpdate_MoreStructsThanAFixedStep_ReservesAllOfThem()
+    {
+        var source = new YDoc(new YDocOptions { ClientId = 7 });
+        var map = source.GetMap("m");
+        const int count = 70_000;
+        source.Transact(_ =>
+        {
+            for (var i = 0; i < count; i++)
+            {
+                map["k" + i] = (long)i;
+            }
+        });
+
+        var update = source.EncodeStateAsUpdate();
+        var table = new StagingTable();
+        var decoder = new UpdateDecoderV1(update, 1 << 20, UpdateLimits.DefaultMaxDepth);
+
+        EncodingUtils.ReadUpdate(ref decoder, update, table, new DeleteSet(), null, null);
+
+        var capacity = ((Array)typeof(StagingTable).GetField("_structs", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(table)!).Length;
+        Assert.AreEqual((count, count), (table.Count, capacity));
+    }
 }
