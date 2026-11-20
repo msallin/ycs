@@ -228,6 +228,24 @@ public class StagingTableTests
     }
 
     [TestMethod]
+    public void Reset_LargeStructBuffer_GoesBackToThePoolAndTheTableWorksAgain()
+    {
+        var table = new StagingTable();
+        table.BeginClient(1, 0);
+        var pooledFrom = StagingTable.RetainedBytesCap / StagingTable.StructBytes;
+        table.Reserve(pooledFrom + 1);
+        AddRootItem(table, StagedKind.Any, 1);
+
+        table.Reset();
+        var afterReset = Field<Array>(table, "_structs").Length;
+        table.BeginClient(2, 0);
+        AddRootItem(table, StagedKind.Any, 1);
+
+        Assert.AreEqual((0, 1), (afterReset, table.Count));
+        AssertSound(table);
+    }
+
+    [TestMethod]
     public void Reset_SmallTable_KeepsItsBuffersAndBumpsTheVersion()
     {
         var table = new StagingTable();

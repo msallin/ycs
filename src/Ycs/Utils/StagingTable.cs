@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 
@@ -167,11 +168,41 @@ internal sealed class StagingTable
     /// <summary>Makes room for <paramref name="structs"/> more structs, so that a section whose size is known grows the table once.</summary>
     public void Reserve(int structs)
     {
-        var needed = _count + structs;
-        if (needed > _structs.Length)
+        EnsureStructs(_count + structs);
+    }
+
+    // A struct buffer of PooledFrom structs or more comes from the shared array pool and goes back to it at Reset, so that a
+    // thread that decodes large states one after the other does not allocate (and zero) a table for each; the pool trims
+    // itself under memory pressure. Smaller buffers stay with the table, up to RetainedBytesCap.
+    private const int PooledFrom = RetainedBytesCap / StructBytes;
+
+    private bool _structsPooled;
+
+    private void EnsureStructs(int needed)
+    {
+        if (needed <= _structs.Length)
         {
-            Array.Resize(ref _structs, Math.Max(needed, _structs.Length * 2));
+            return;
         }
+
+        var size = Math.Max(needed, Math.Max(_structs.Length * 2, FirstCapacity));
+        var pooled = size >= PooledFrom;
+        var bigger = pooled ? ArrayPool<StagedStruct>.Shared.Rent(size) : new StagedStruct[size];
+        Array.Copy(_structs, bigger, _count);
+        ReleaseStructs();
+        _structs = bigger;
+        _structsPooled = pooled;
+    }
+
+    private void ReleaseStructs()
+    {
+        if (_structsPooled)
+        {
+            ArrayPool<StagedStruct>.Shared.Return(_structs);
+            _structsPooled = false;
+        }
+
+        _structs = [];
     }
 
     /// <summary>
@@ -189,7 +220,7 @@ internal sealed class StagingTable
         Debug.Assert(length > 0);
         if (_count == _structs.Length)
         {
-            Grow(ref _structs, FirstCapacity);
+            EnsureStructs(_count + 1);
         }
 
         var countable = kind is not (StagedKind.GC or StagedKind.Skip or StagedKind.Deleted or StagedKind.Format);
@@ -430,7 +461,15 @@ internal sealed class StagingTable
         _clientCount = 0;
         HasKeys = false;
         var left = RetainedBytesCap;
-        Keep(ref _structs, StructBytes, ref left);
+        if (_structsPooled)
+        {
+            ReleaseStructs();
+        }
+        else
+        {
+            Keep(ref _structs, StructBytes, ref left);
+        }
+
         Keep(ref _chars, sizeof(char), ref left);
         Keep(ref _values, IntPtr.Size, ref left);
         Keep(ref _refs, IntPtr.Size, ref left);

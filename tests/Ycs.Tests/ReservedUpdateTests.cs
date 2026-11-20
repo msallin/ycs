@@ -50,6 +50,7 @@ public class ReservedUpdateTests
         EncodingUtils.ReadUpdate(ref decoder, update, table, new DeleteSet(), null, null);
 
         var capacity = ((Array)typeof(StagingTable).GetField("_structs", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(table)!).Length;
-        Assert.AreEqual((count, count), (table.Count, capacity));
+        // A buffer this large is rented from the shared pool, which rounds up to a power of two.
+        Assert.AreEqual((count, true), (table.Count, capacity >= count && capacity < 2 * count));
     }
 }
