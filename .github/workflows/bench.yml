@@ -35,7 +35,28 @@ jobs:
           node-version: 24
 
       - name: Round
-        run: bench/run-round.sh "$RUNNER_TEMP/round" "${{ inputs.baseline || '044bb73' }}"
+        run: |
+          set -eu
+          OUT="$RUNNER_TEMP/round"; WORK="$OUT/work"
+          mkdir -p "$OUT" "$WORK"; export WORK TRACE="$WORK/automerge-paper.json.gz"
+          { echo "commit $(git rev-parse HEAD)"; date -u; nproc; cut -d' ' -f1-3 /proc/loadavg; dotnet --version; node --version; git log --oneline -8; } > "$OUT/machine.txt"
+          # the whole comparison on the JIT (as bench/Ycs.Compare/run.sh does: suite, hostile cases, the AOT and wasm probes)
+          bench/Ycs.Compare/run.sh "$OUT/jit" > "$OUT/jit.out" 2>&1 || true
+          # and with every child a Native AOT build (the Speed setting and the native instruction set: the consumer's best)
+          dotnet publish bench/Ycs.Compare -c Release -r linux-x64 -p:PublishAot=true -p:OptimizationPreference=Speed -p:IlcInstructionSet=native -o "$WORK/aot-speed" > "$OUT/aot-speed-publish.out" 2>&1
+          dotnet publish bench/Ycs.Compare -c Release -r linux-x64 -p:PublishAot=true -o "$WORK/aot" > "$OUT/aot-publish.out" 2>&1
+          J=bench/Ycs.Compare/bin/Release/net11.0/Ycs.Compare
+          COMPARE_CHILD="$WORK/aot/Ycs.Compare" $J suite --trace "$TRACE" --out "$OUT/aot" --work "$WORK/suite-aot" --passes 3 --runs 5 --no-hostile 2> "$OUT/aot.log" || true
+          COMPARE_CHILD="$WORK/aot-speed/Ycs.Compare" $J suite --trace "$TRACE" --out "$OUT/aot-speed" --work "$WORK/suite-aot-speed" --passes 3 --runs 5 --no-hostile 2> "$OUT/aot-speed.log" || true
+          # and the other benches of the repository
+          dotnet build bench/Ycs.Benchmarks -c Release > "$OUT/benchmarks-build.out" 2>&1
+          for mode in trace limits sizes perf; do
+            arg=$mode; [ "$mode" = trace ] && arg=$TRACE
+            dotnet run -c Release --no-build --project bench/Ycs.Benchmarks -- "$arg" > "$OUT/benchmarks-$mode.txt" 2>&1 || true
+          done
+          mkdir -p "$WORK/layout" && cp "$TRACE" "$WORK/layout/trace.json.gz"
+          dotnet run -c Release --project bench/Ycs.Layout -- "$WORK/layout" small > "$OUT/layout-small.txt" 2>&1 || true
+          bench/server/run.sh all --out "$OUT/server" > "$OUT/server.out" 2>&1 || true
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
