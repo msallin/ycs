@@ -1,0 +1,37 @@
+<Solution>
+  <Folder Name="/bench/">
+    <Project Path="bench/Ycs.Benchmarks/Ycs.Benchmarks.csproj" />
+    <Project Path="bench/server/host/Ycs.Server.BenchHost.csproj" />
+    <Project Path="bench/Ycs.Compare/Ycs.Compare.csproj" />
+    <Project Path="bench/Ycs.DecodeProbe/Ycs.DecodeProbe.csproj" />
+    <Project Path="bench/Ycs.Footprint/Ycs.Footprint.csproj" />
+    <Project Path="bench/Ycs.Layout/Ycs.Layout.csproj" />
+    <Project Path="bench/Ycs.Parity/Ycs.Parity.csproj" />
+  </Folder>
+  <Folder Name="/interop/">
+    <Project Path="interop/Ycs.Interop/Ycs.Interop.csproj" />
+    <Project Path="interop/Ycs.Positions.Interop/Ycs.Positions.Interop.csproj" />
+    <Project Path="interop/Ycs.Types.Interop/Ycs.Types.Interop.csproj" />
+    <Project Path="interop/Ycs.Updates.Interop/Ycs.Updates.Interop.csproj" />
+    <Project Path="interop/Ycs.Xml.Interop/Ycs.Xml.Interop.csproj" />
+  </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/Ycs.AotSample/Ycs.AotSample.csproj" />
+    <Project Path="samples/Ycs.Blazor/Ycs.Blazor.csproj" />
+    <Project Path="samples/Ycs.Client/Ycs.Client.csproj" />
+    <Project Path="samples/Ycs.Server/Ycs.Server.csproj" />
+    <Project Path="samples/Ycs.WasmSample/Ycs.WasmSample.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Ycs/Ycs.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Ycs.Budgets/Ycs.Budgets.csproj" />
+    <Project Path="tests/Ycs.Client.Tests/Ycs.Client.Tests.csproj" />
+    <Project Path="tests/Ycs.Corpus/Ycs.Corpus.csproj" />
+    <Project Path="tests/Ycs.Fuzz/Ycs.Fuzz.csproj" />
+    <Project Path="tests/Ycs.Properties/Ycs.Properties.csproj" />
+    <Project Path="tests/Ycs.Server.Tests/Ycs.Server.Tests.csproj" />
+    <Project Path="tests/Ycs.Tests/Ycs.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -63,7 +63,7 @@ For contributors:
 ## Build and test
 
 ```bash
-dotnet build Ycs.sln
+dotnet build Ycs.slnx
 dotnet test tests/Ycs.Tests -c Release       # the main suite; no Node needed
 ```
 

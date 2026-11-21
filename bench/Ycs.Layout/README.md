@@ -19,7 +19,7 @@ bench/Ycs.Layout/run.sh                  # about 6 minutes; fetches the automerg
 FIXTURES=/dir/with/trace.json.gz bench/Ycs.Layout/run.sh
 ```
 
-The project is in `Ycs.sln`, so CI builds it; CI does not run it. No dependency beyond ycs.
+The project is in `Ycs.slnx`, so CI builds it; CI does not run it. No dependency beyond ycs.
 
 ## Method
 

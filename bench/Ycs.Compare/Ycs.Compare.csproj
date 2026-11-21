@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    ycs against YDotNet (the .NET binding of yrs). Not in Ycs.sln: YDotNet and its native
+    ycs against YDotNet (the .NET binding of yrs). Not in Ycs.slnx: YDotNet and its native
     library are a dependency of this project only. Run with run.sh; results in README.md.
   -->
   <PropertyGroup>

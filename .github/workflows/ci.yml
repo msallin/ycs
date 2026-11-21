@@ -22,10 +22,10 @@ jobs:
           node-version: 24
 
       - name: Build
-        run: dotnet build Ycs.sln -c Release
+        run: dotnet build Ycs.slnx -c Release
 
       - name: Format (whitespace)
-        run: dotnet format whitespace Ycs.sln --verify-no-changes
+        run: dotnet format whitespace Ycs.slnx --verify-no-changes
 
       - name: Unit tests
         run: dotnet test tests/Ycs.Tests -c Release --no-build --blame-hang --blame-hang-timeout 10m

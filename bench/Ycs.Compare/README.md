@@ -22,7 +22,7 @@ workloads for two builds built from separate trees (how the changes below were m
 `COMPARE_ALLOC_TYPES=1` on a child prints its allocations by type to stderr. `run-round.sh` builds the baseline
 (default 044bb73, the last commit with items as objects) from `git archive` and writes `ab-<commit>.txt`.
 
-CI builds the project (it is in `Ycs.sln`) and does not run it. It is the only place YDotNet is referenced: neither
+CI builds the project (it is in `Ycs.slnx`) and does not run it. It is the only place YDotNet is referenced: neither
 `src`, the tests nor `bench/Ycs.Benchmarks` depends on a native library.
 
 ## Method
