@@ -132,7 +132,7 @@ public sealed partial class YDoc
     {
         try
         {
-            ApplyUpdate(update, v2, transactionOrigin, limits);
+            _ = ApplyUpdate(update, v2, transactionOrigin, limits);
             return true;
         }
         catch (YUpdateException)
@@ -144,9 +144,9 @@ public sealed partial class YDoc
     /// <summary>
     /// Decodes the whole update (structs and delete set) before the document is touched, then applies
     /// it (<see cref="StructStore.ApplyUpdate"/>), which checks what depends on the document before it
-    /// changes anything.
+    /// changes anything. Returns whether the document changed.
     /// </summary>
-    private void ApplyUpdate(ReadOnlySpan<byte> update, bool v2, object? transactionOrigin, UpdateLimits? limits)
+    private bool ApplyUpdate(ReadOnlySpan<byte> update, bool v2, object? transactionOrigin, UpdateLimits? limits)
     {
         limits ??= _opts.Limits;
         UpdateReader.Lease lease;
@@ -161,26 +161,44 @@ public sealed partial class YDoc
 
         // The decoded lists are reused for the next update once the lease is disposed; the structs
         // themselves are integrated (or encoded as pending) inside the transaction.
+        var changed = false;
         try
         {
-            Transact((store: Store, update: lease, limits), static (s, tr) =>
+            Transact(new ApplyState(Store, lease, limits, ref changed), static (s, tr) =>
             {
                 // As Yjs' readUpdateV2: also when this runs in the caller's transaction.
                 tr.Local = false;
-                s.store.IntegrationSteps = s.limits.MaxIntegrationSteps;
+                s.Store.IntegrationSteps = s.Limits.MaxIntegrationSteps;
                 try
                 {
-                    s.store.ApplyUpdate(tr, s.update.Staging, s.update.DeleteSet, s.limits);
+                    s.Changed = s.Store.ApplyUpdate(tr, s.Update.Staging, s.Update.DeleteSet, s.Limits);
                 }
                 finally
                 {
-                    s.store.IntegrationSteps = long.MaxValue;
+                    s.Store.IntegrationSteps = long.MaxValue;
                 }
             }, transactionOrigin, local: false);
         }
         finally
         {
             lease.Dispose();
+        }
+
+        return changed;
+    }
+
+    // The result comes back through a ref, not a field of the document: an observer that runs in the cleanup may apply
+    // another update to this document before this call returns.
+    private readonly ref struct ApplyState(StructStore store, UpdateReader.Lease update, UpdateLimits limits, ref bool changed)
+    {
+        public readonly StructStore Store = store;
+        public readonly UpdateReader.Lease Update = update;
+        public readonly UpdateLimits Limits = limits;
+        private readonly ref bool _changed = ref changed;
+
+        public bool Changed
+        {
+            set => _changed = value;
         }
     }
 

@@ -20,7 +20,11 @@ public enum SyncMessageType : uint
 /// <summary>What <see cref="SyncProtocol.ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object)"/> did with a message.</summary>
 /// <param name="Type">The type of the message.</param>
 /// <param name="Replied">Whether an answer was appended to the reply buffer: true for a step 1, false for the others.</param>
-public readonly record struct SyncReadResult(SyncMessageType Type, bool Replied);
+/// <param name="Changed">
+/// Whether the document changed (<see cref="YDoc.ApplyUpdate(ReadOnlySpan{byte}, UpdateFormat, object, UpdateLimits)"/>): false
+/// for a step 1, and for a step 2 or an update that brought nothing new, which a server need not save.
+/// </param>
+public readonly record struct SyncReadResult(SyncMessageType Type, bool Replied, bool Changed);
 
 /// <summary>
 /// The y-protocols 'sync' message format, which y-websocket and every other Yjs provider puts on the wire: a
@@ -113,7 +117,7 @@ public static class SyncProtocol
     /// Handles one sync message, as the y-websocket message type has been stripped from it: a step 1 appends the answer (a step 2) to
     /// <paramref name="reply"/>; a step 2 or an update is applied to <paramref name="doc"/> with
     /// <paramref name="origin"/> as the transaction origin, and writes nothing. The span is read in place. The result tells the type and whether
-    /// <paramref name="reply"/> got an answer.
+    /// <paramref name="reply"/> got an answer and whether the document changed.
     /// </summary>
     /// <exception cref="YUpdateException">
     /// The message is truncated or of an unknown type, or its update is malformed or beyond a limit of the
@@ -138,6 +142,7 @@ public static class SyncProtocol
         }
 
         var payload = message.Slice(position, (int)length);
+        var changed = false;
         switch (type)
         {
             case (uint)SyncMessageType.SyncStep1:
@@ -145,13 +150,13 @@ public static class SyncProtocol
                 break;
             case (uint)SyncMessageType.SyncStep2:
             case (uint)SyncMessageType.Update:
-                doc.ApplyUpdate(payload, format, origin);
+                changed = doc.ApplyUpdate(payload, format, origin);
                 break;
             default:
                 throw new YUpdateException($"Unknown sync message type: {type}.");
         }
 
-        return new SyncReadResult((SyncMessageType)type, type == (uint)SyncMessageType.SyncStep1);
+        return new SyncReadResult((SyncMessageType)type, type == (uint)SyncMessageType.SyncStep1, changed);
     }
 
     /// <inheritdoc cref="ReadSyncMessage(ReadOnlySpan{byte}, IBufferWriter{byte}, YDoc, object)"/>

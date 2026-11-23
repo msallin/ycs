@@ -20,13 +20,18 @@ public sealed partial class YDoc
     /// <param name="update">The update, in the original (v1) format.</param>
     /// <param name="origin">Stored on the transaction; observers and the undo manager see it.</param>
     /// <param name="limits">For this update instead of <see cref="YDocOptions.Limits"/>, e.g. <see cref="UpdateLimits.Unlimited"/> for a stored state the application trusts.</param>
+    /// <returns>
+    /// Whether the document changed: the update brought structs or deletions it did not have, also ones that wait for
+    /// structs not received yet. False when it held nothing new (a peer sent back what the document has), so that a
+    /// caller can skip saving it. Deletions that already wait count as a change.
+    /// </returns>
     /// <exception cref="YUpdateException">The update is malformed or beyond a limit; the document is unchanged unless <see cref="YUpdateException.PartlyApplied"/>.</exception>
-    public void ApplyUpdate(ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null) =>
+    public bool ApplyUpdate(ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null) =>
         ApplyUpdate(update, false, origin!, limits!);
 
     /// <inheritdoc cref="ApplyUpdate(ReadOnlySpan{byte}, object, UpdateLimits)"/>
     /// <param name="format">The encoding of <paramref name="update"/>.</param>
-    public void ApplyUpdate(ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null) =>
+    public bool ApplyUpdate(ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null) =>
         ApplyUpdate(update, format.IsV2(), origin!, limits!);
 
     /// <summary>

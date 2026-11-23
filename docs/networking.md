@@ -115,6 +115,9 @@ Awareness states expire after 30 s without renewal, as in y-protocols.
 **What it does not do.** It keeps documents in memory only, as long as the process runs: nothing is saved, and a
 room is never removed. It has no authentication. It runs on one machine. It is a sample and a test bed, not a
 hardened server; add persistence, access control and eviction before you put it on the internet.
+When you add persistence, save after a message whose `SyncReadResult.Changed` is true: a client's step 2 often sends
+back only what the room has. If a room's stored state fails to apply, refuse the room rather than open it empty, or
+the next save replaces the stored state with the little that clients send.
 
 ### Browser clients in JavaScript
 

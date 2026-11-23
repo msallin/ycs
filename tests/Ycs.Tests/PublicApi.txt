@@ -276,7 +276,8 @@ static class Ycs.SyncProtocol
     static void WriteUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> update)
 readonly struct Ycs.SyncReadResult : System.IEquatable<SyncReadResult>
     SyncMessageType Type { get; init; }
-    SyncReadResult(SyncMessageType Type, bool Replied)
+    SyncReadResult(SyncMessageType Type, bool Replied, bool Changed)
+    bool Changed { get; init; }
     bool Equals(SyncReadResult other)
     bool Replied { get; init; }
     override bool Equals(object obj)
@@ -284,7 +285,7 @@ readonly struct Ycs.SyncReadResult : System.IEquatable<SyncReadResult>
     override string ToString()
     static bool op_Equality(SyncReadResult left, SyncReadResult right)
     static bool op_Inequality(SyncReadResult left, SyncReadResult right)
-    void Deconstruct(out SyncMessageType Type, out bool Replied)
+    void Deconstruct(out SyncMessageType Type, out bool Replied, out bool Changed)
 readonly struct Ycs.TextRun : System.IEquatable<TextRun>
     TextRun(int Length, YAttributes? Attributes, YValue? Embed)
     YAttributes? Attributes { get; init; }
@@ -500,6 +501,8 @@ sealed class Ycs.YDoc
     YValue Meta { get; }
     YXmlFragment GetXmlFragment(string name = "")
     YXmlText GetXmlText(string name = "")
+    bool ApplyUpdate(System.ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
+    bool ApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null)
     bool AutoLoad { get; }
     bool GarbageCollection { get; }
     bool HasPending { get; }
@@ -523,8 +526,6 @@ sealed class Ycs.YDoc
     long ClientId { get; }
     string Guid { get; }
     string? CollectionId { get; }
-    void ApplyUpdate(System.ReadOnlySpan<byte> update, UpdateFormat format, object? origin = null, UpdateLimits? limits = null)
-    void ApplyUpdate(System.ReadOnlySpan<byte> update, object? origin = null, UpdateLimits? limits = null)
     void Destroy()
     void EncodeStateAsUpdate(System.Buffers.IBufferWriter<byte> destination, System.ReadOnlySpan<byte> stateVector = null, UpdateFormat format = 0)
     void EncodeStateVector(System.Buffers.IBufferWriter<byte> destination)

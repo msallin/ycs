@@ -69,7 +69,22 @@ public class SyncProtocolTests
         var first = SyncProtocol.ReadSyncMessage(step1.WrittenSpan, reply, server, "peer");
         var second = SyncProtocol.ReadSyncMessage(reply.WrittenSpan, new ArrayBufferWriter<byte>(), client, "server");
 
-        Assert.AreEqual((new SyncReadResult(SyncMessageType.SyncStep1, true), new SyncReadResult(SyncMessageType.SyncStep2, false), "ok"), (first, second, client.GetText("t").ToString()));
+        Assert.AreEqual((new SyncReadResult(SyncMessageType.SyncStep1, true, false), new SyncReadResult(SyncMessageType.SyncStep2, false, true), "ok"), (first, second, client.GetText("t").ToString()));
+    }
+
+    [TestMethod]
+    public void ReadSyncMessage_Step2WithNothingNew_ReportsUnchanged()
+    {
+        var server = new YDoc(new YDocOptions { ClientId = 1 });
+        server.GetText("t").Insert(0, "ok");
+        var client = new YDoc(new YDocOptions { ClientId = 2 });
+        client.ApplyUpdate(server.EncodeStateAsUpdate());
+        var step2 = new ArrayBufferWriter<byte>();
+        SyncProtocol.WriteSyncStep2(step2, client, server.EncodeStateVector());
+
+        var result = SyncProtocol.ReadSyncMessage(step2.WrittenSpan, new ArrayBufferWriter<byte>(), server, "peer");
+
+        Assert.AreEqual(new SyncReadResult(SyncMessageType.SyncStep2, false, false), result);
     }
 
     [TestMethod]
@@ -83,7 +98,7 @@ public class SyncProtocolTests
 
         var type = SyncProtocol.ReadSyncMessage(message, reply, doc, UpdateFormat.V2);
 
-        Assert.AreEqual((new SyncReadResult(SyncMessageType.Update, false), 0, "v2"), (type, reply.WrittenCount, doc.GetText("t").ToString()));
+        Assert.AreEqual((new SyncReadResult(SyncMessageType.Update, false, true), 0, "v2"), (type, reply.WrittenCount, doc.GetText("t").ToString()));
     }
 
     [TestMethod]

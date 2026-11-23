@@ -390,7 +390,8 @@ internal sealed partial class StructStore
     /// See docs/api.md, "Atomicity".
     /// </summary>
     /// <param name="retrying">For the pending structs themselves, which were admitted to pending when they arrived.</param>
-    internal void ApplyUpdate(Transaction transaction, StagingTable table, DeleteSet ds, UpdateLimits limits, bool retrying = false)
+    /// <returns>Whether the document changed: structs integrated, items deleted, or structs or deletions set aside to wait.</returns>
+    internal bool ApplyUpdate(Transaction transaction, StagingTable table, DeleteSet ds, UpdateLimits limits, bool retrying = false)
     {
         // The conflict resolution walks items: it must find the ones Yjs has.
         transaction.MaterializeRunExtensions();
@@ -420,7 +421,7 @@ internal sealed partial class StructStore
 
         var restMerged = !retrying && CheckPendingLimits(limits, retry, restUpdate, restStructs, plan, PendingDs.Growth(ds, plan));
 
-        plan.Execute(transaction);
+        var changed = plan.Execute(transaction) || restUpdate != null;
 
         // Clients whose structs all went pending got no list.
         ForgetReservations();
@@ -451,12 +452,12 @@ internal sealed partial class StructStore
         var waiting = PendingDs.TakeApplicable(this);
         var waitingKept = PendingDs.Count > 0;
         var additions = PendingDs.Additions;
-        ApplyDeleteSet(transaction, ds);
+        changed |= ApplyDeleteSet(transaction, ds);
         var updateLeft = PendingDs.Additions != additions;
         additions = PendingDs.Additions;
         if (waiting != null)
         {
-            ApplyDeleteSet(transaction, waiting);
+            changed |= ApplyDeleteSet(transaction, waiting);
         }
 
         if (updateLeft && (waitingKept || PendingDs.Additions != additions))
@@ -476,7 +477,7 @@ internal sealed partial class StructStore
             using var lease = UpdateReader.Read(update, v2: true, count, maxDepth: int.MaxValue);
             try
             {
-                ApplyUpdate(transaction, lease.Staging, lease.DeleteSet, limits, retrying: true);
+                changed |= ApplyUpdate(transaction, lease.Staging, lease.DeleteSet, limits, retrying: true);
             }
             catch (YUpdateException e) when (!e.PartlyApplied)
             {
@@ -498,8 +499,11 @@ internal sealed partial class StructStore
                 // The update stood whole; what somebody else sent earlier is gone, which the document reports:
                 // clients that were sent it as waiting structs may integrate it, under other limits.
                 transaction.Doc.InvokeOnPendingDropped(new PendingDrop(count, ClientsOf(lease.Staging)));
+                changed = true;
             }
         }
+
+        return changed;
     }
 
     // The clients that have structs in the table (not those only an origin names), in the order of their sections.
@@ -526,8 +530,10 @@ internal sealed partial class StructStore
     /// Deletes what <paramref name="ds"/> covers (Yjs' <c>readAndApplyDeleteSet</c>); what this store
     /// does not have yet is added to <see cref="PendingDs"/>.
     /// </summary>
-    private void ApplyDeleteSet(Transaction transaction, DeleteSet ds)
+    // Whether it deleted an item or set a range aside to wait (also one that already waits: Yjs merges those).
+    private bool ApplyDeleteSet(Transaction transaction, DeleteSet ds)
     {
+        var changed = false;
         foreach (var (client, deletes) in ds.Clients)
         {
             var state = GetState(client);
@@ -544,12 +550,14 @@ internal sealed partial class StructStore
                 if (clock >= state)
                 {
                     PendingDs.Add(client, clock, clockEnd - clock);
+                    changed = true;
                     continue;
                 }
 
                 if (state < clockEnd)
                 {
                     PendingDs.Add(client, state, clockEnd - state);
+                    changed = true;
                 }
 
                 var index = structs.FindIndex(clock, ref hint);
@@ -584,9 +592,12 @@ internal sealed partial class StructStore
                         _knownIndex = index - 1;
                         str.Delete(transaction);
                         _knownIndex = -1;
+                        changed = true;
                     }
                 }
             }
         }
+
+        return changed;
     }
 }

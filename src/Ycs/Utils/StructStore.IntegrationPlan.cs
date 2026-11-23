@@ -92,12 +92,17 @@ internal sealed partial class StructStore
         /// <summary>A client's clock once the plan is carried out.</summary>
         public long GetState(long client) => _table is { } table && table.FindClient(client) is >= 0 and var index ? _state[index] : _store.GetState(client);
 
-        public void Execute(Transaction transaction)
+        /// <summary>Carries out the plan; whether it integrated a struct (not only looked up those already known).</summary>
+        public bool Execute(Transaction transaction)
         {
+            var integrated = false;
             foreach (var (index, offset, integrate) in _steps)
             {
                 ItemRef.Adopt(Planned, index, transaction, offset, integrate);
+                integrated |= integrate;
             }
+
+            return integrated;
         }
 
         /// <summary>
